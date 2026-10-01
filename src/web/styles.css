@@ -2186,6 +2186,44 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 24px 22px;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--hairline);
+  text-align: left;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.login-card p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.login-error {
+  color: var(--danger);
+}
+
+.login-submit {
+  min-height: 40px;
+}
+
 .empty-main {
   display: flex;
   flex-direction: column;

@@ -1,24 +1,39 @@
 // Request trust and authentication.
-//  1. Host must be loopback or listed in ALLOWED_HOSTS; Origin must match Host;
-//     cross-site fetches are refused. Failures are 403 (DNS rebinding, CSRF).
-//  2. Non-loopback (Tailscale Serve) requests also need an allowed
-//     Tailscale-User-Login, fail closed when ALLOWED_TAILSCALE_USERS is unset.
-//  3. The printed launch token is exchanged on `GET /` for a signed,
-//     host-bound, HttpOnly SameSite=Strict cookie; /api without it is 401.
+//  1. Host must be loopback, listed in ALLOWED_HOSTS (Tailscale Serve), or,
+//     with HOST=0.0.0.0, one of this machine's LAN addresses/hostname. Origin
+//     must match Host; cross-site fetches are refused. Failures are 403
+//     (DNS rebinding, CSRF).
+//  2. Local use needs no sign-in: a request is local only when the TCP peer is
+//     loopback, the Host is loopback, and no proxy headers are present (so a
+//     LAN client faking `Host: 127.0.0.1`, or Tailscale Serve proxying over
+//     loopback, is never local).
+//  3. Everything else (LAN via HOST=0.0.0.0, Tailscale Serve) signs in with
+//     username and password (POST /api/login) and gets a signed, host-bound,
+//     HttpOnly, SameSite=Strict session cookie carrying the credential
+//     fingerprint, so changing the password signs every device out.
+//  4. If ALLOWED_TAILSCALE_USERS is set, Serve requests must also carry an
+//     allowed Tailscale-User-Login.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
+import { LoginLimiter, type PasswordAuth } from "./auth.js";
 
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "x-forwarded-host", "x-real-ip", "forwarded"];
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const FAIL_DELAY_MS = 400;
 
 export interface SecurityOptions {
   port: number;
   allowedHosts: string[];
   allowedTailscaleUsers: string[];
   secret: Buffer;
-  token: string;
+  /** Required for any non-local access; absent means local-only. */
+  password?: PasswordAuth;
+  /** HOST=0.0.0.0: hostnames of this machine reachable on the LAN. */
+  lanHosts?: () => Set<string>;
+  log?: (message: string) => void;
 }
 
 interface Authority {
@@ -37,27 +52,44 @@ export function parseAuthority(value: string | undefined): Authority | null {
   }
 }
 
-function send(res: Response, status: number, code: string, error: string): void {
-  res.status(status).type("application/json").send(JSON.stringify({ error, code }));
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  return address === "::1" || address.startsWith("127.") || address.startsWith("::ffff:127.");
+}
+
+function send(res: Response, status: number, code: string, error: string, extra: Record<string, unknown> = {}): void {
+  res.status(status).type("application/json").send(JSON.stringify({ error, code, ...extra }));
 }
 
 export class Security {
   readonly cookieName: string;
+  private readonly limiter = new LoginLimiter();
 
   constructor(private readonly options: SecurityOptions) {
     this.cookieName = `awui_${options.port}`;
   }
 
-  /** Classify a Host header: loopback, an allowed Serve host, or untrusted. */
-  classify(hostHeader: string | undefined): { kind: "loopback" | "remote"; authority: string } | null {
+  get username(): string | null {
+    return this.options.password?.username ?? null;
+  }
+
+  /** Classify a Host header: loopback, a LAN address (HOST=0.0.0.0), an allowed Serve host, or untrusted. */
+  classify(hostHeader: string | undefined): { kind: "loopback" | "lan" | "remote"; authority: string } | null {
     const auth = parseAuthority(hostHeader);
     if (!auth) return null;
-    if (LOOPBACK.has(auth.hostname)) return { kind: "loopback", authority: auth.authority };
+    if (LOOPBACK_HOSTS.has(auth.hostname)) return { kind: "loopback", authority: auth.authority };
     for (const entry of this.options.allowedHosts) {
       const matches = entry.includes(":") ? entry === auth.authority : entry === auth.hostname;
       if (matches) return { kind: "remote", authority: auth.authority };
     }
+    if (this.options.lanHosts?.().has(auth.hostname)) return { kind: "lan", authority: auth.authority };
     return null;
+  }
+
+  /** Same machine, direct connection, no proxy in between. */
+  isLocal(req: Request, hostKind: "loopback" | "lan" | "remote"): boolean {
+    if (hostKind !== "loopback" || !isLoopbackAddress(req.socket.remoteAddress)) return false;
+    return !PROXY_HEADERS.some((h) => req.headers[h] !== undefined);
   }
 
   /** Host / Origin / Sec-Fetch-Site / Tailscale identity. Applies to every request. */
@@ -82,18 +114,19 @@ export class Security {
     if (req.headers["sec-fetch-site"] === "cross-site") {
       return send(res, 403, "cross_site", "Cross-site request refused");
     }
-    if (host.kind === "remote") {
+    const local = this.isLocal(req, host.kind);
+    if (!local && !this.options.password) {
+      return send(res, 403, "remote_disabled", "Access from other devices needs a password: run `npm run set-password`");
+    }
+    if (host.kind === "remote" && this.options.allowedTailscaleUsers.length > 0) {
       const login = String(req.headers["tailscale-user-login"] ?? "").toLowerCase();
-      const allowed = this.options.allowedTailscaleUsers;
-      if (allowed.length === 0) {
-        return send(res, 403, "tailscale_users_unset", "Remote access is disabled until ALLOWED_TAILSCALE_USERS is set");
-      }
-      if (!login || !allowed.includes(login)) {
+      if (!login || !this.options.allowedTailscaleUsers.includes(login)) {
         return send(res, 403, "tailscale_user_denied", "This Tailscale user is not allowed");
       }
     }
     res.locals.hostKind = host.kind;
     res.locals.authority = host.authority;
+    res.locals.local = local;
     next();
   };
 
@@ -102,9 +135,8 @@ export class Security {
   }
 
   issueCookie(authority: string, secure: boolean, now = Date.now()): string {
-    const payload = Buffer.from(JSON.stringify({ v: 1, h: authority, iat: now, exp: now + COOKIE_MAX_AGE_MS })).toString(
-      "base64url",
-    );
+    const body = { v: 2, h: authority, iat: now, exp: now + COOKIE_MAX_AGE_MS, f: this.options.password?.fingerprint ?? "" };
+    const payload = Buffer.from(JSON.stringify(body)).toString("base64url");
     const value = `${payload}.${this.sign(payload)}`;
     const attrs = [`${this.cookieName}=${value}`, "Path=/", "HttpOnly", "SameSite=Strict", `Max-Age=${COOKIE_MAX_AGE_MS / 1000}`];
     if (secure) attrs.push("Secure");
@@ -122,7 +154,9 @@ export class Security {
     return null;
   }
 
-  isAuthenticated(req: Request, authority: string, now = Date.now()): boolean {
+  hasSession(req: Request, authority: string, now = Date.now()): boolean {
+    const password = this.options.password;
+    if (!password) return false;
     const value = this.readCookie(req);
     if (!value) return false;
     const dot = value.indexOf(".");
@@ -132,36 +166,52 @@ export class Security {
     const expected = Buffer.from(this.sign(payload));
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return false;
     try {
-      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { h?: string; exp?: number };
-      return data.h === authority && typeof data.exp === "number" && data.exp > now;
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { h?: string; exp?: number; f?: string };
+      // A cookie from before the password changed is void.
+      return data.h === authority && typeof data.exp === "number" && data.exp > now && data.f === password.fingerprint;
     } catch {
       return false;
     }
   }
 
-  tokenMatches(candidate: unknown): boolean {
-    if (typeof candidate !== "string") return false;
-    const a = Buffer.from(candidate);
-    const b = Buffer.from(this.options.token);
-    return a.length === b.length && timingSafeEqual(a, b);
-  }
-
-  /** `GET /?token=…`: trade the launch token for a cookie, redirect to the clean URL. */
-  exchange = (req: Request, res: Response, next: NextFunction): void => {
-    if (!("token" in req.query)) return next();
-    if (!this.tokenMatches(req.query.token)) {
-      res.status(401).type("text/plain").send("This link has expired. Open the link printed by the server.");
-      return;
-    }
-    const authority = res.locals.authority as string;
-    res.setHeader("Set-Cookie", this.issueCookie(authority, res.locals.hostKind === "remote"));
+  /** POST /api/login { username, password }. */
+  login = async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Cache-Control", "no-store");
-    res.redirect(302, "./");
+    const auth = this.options.password;
+    if (!auth) return send(res, 404, "not_found", "Password sign-in is not configured");
+    const address = req.socket.remoteAddress ?? "unknown";
+    const key = `${address}|${String(req.headers["tailscale-user-login"] ?? "")}`;
+    const wait = this.limiter.retryAfter(key);
+    if (wait > 0) {
+      res.setHeader("Retry-After", String(wait));
+      return send(res, 429, "locked", `Too many failed sign-ins. Try again in ${Math.ceil(wait / 60)} min.`, { retryAfter: wait });
+    }
+    const body = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    const username = typeof body.username === "string" ? body.username.slice(0, 128) : "";
+    const password = typeof body.password === "string" ? body.password.slice(0, 1024) : "";
+    const ok = await auth.verify(username, password);
+    if (!ok) {
+      this.limiter.fail(key);
+      this.options.log?.(`sign-in failed from ${address}`);
+      await new Promise((r) => setTimeout(r, FAIL_DELAY_MS));
+      return send(res, 401, "bad_credentials", "Wrong username or password");
+    }
+    this.limiter.succeed(key);
+    res.setHeader("Set-Cookie", this.issueCookie(res.locals.authority as string, res.locals.hostKind === "remote"));
+    res.json({ ok: true, username: auth.username });
   };
 
+  logout = (_req: Request, res: Response): void => {
+    res.setHeader("Set-Cookie", `${this.cookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true });
+  };
+
+  /** Local requests pass; everything else needs a password session. */
   requireAuth = (req: Request, res: Response, next: NextFunction): void => {
-    if (!this.isAuthenticated(req, res.locals.authority as string)) {
-      return send(res, 401, "unauthenticated", "Open the link printed by the server to sign this browser in");
+    if (res.locals.local === true) return next();
+    if (!this.hasSession(req, res.locals.authority as string)) {
+      return send(res, 401, "unauthenticated", "Sign in with your username and password", { auth: "password" });
     }
     next();
   };
@@ -186,8 +236,4 @@ export async function loadOrCreateSecret(stateDir: string): Promise<Buffer> {
   await fs.writeFile(tmp, secret.toString("hex"), { mode: 0o600 });
   await fs.rename(tmp, file);
   return secret;
-}
-
-export function newLaunchToken(): string {
-  return randomBytes(24).toString("base64url");
 }

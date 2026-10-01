@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Development: backend under `tsx watch` plus Vite (which proxies /api and the
-// token exchange to the backend). Prints the Vite URL carrying the token.
+// Development: backend under `tsx watch` plus Vite (which proxies /api to the
+// backend). Local use needs no sign-in.
 import { spawn } from "node:child_process";
 
 const port = process.env.PORT ?? "4783";
@@ -40,7 +40,6 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 run("server", "npx", ["tsx", "watch", "--clear-screen=false", "src/server/index.ts"], (line) => {
-  const match = /Local: http:\/\/127\.0\.0\.1:\d+\/\?token=([\w-]+)/.exec(line);
-  if (match) process.stdout.write(`\n  Dev UI: http://127.0.0.1:5173/?token=${match[1]}\n\n`);
+  if (/Local: http:\/\/127\.0\.0\.1:\d+\//.test(line)) process.stdout.write("\n  Dev UI: http://127.0.0.1:5173/\n\n");
 });
 run("vite", "npx", ["vite"]);

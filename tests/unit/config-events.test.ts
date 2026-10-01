@@ -11,6 +11,14 @@ describe("loadConfig", () => {
     expect(c.harnesses).toEqual(["pi", "omp"]);
   });
 
+  it("binds 127.0.0.1 unless HOST=0.0.0.0, and rejects anything else", () => {
+    expect(loadConfig({}).host).toBe("127.0.0.1");
+    expect(loadConfig({ HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
+    for (const bad of ["192.168.1.5", "::", "localhost"]) expect(() => loadConfig({ HOST: bad })).toThrow(ConfigError);
+    expect(loadConfig({ XDG_STATE_HOME: "/st" }).credentialsFile).toBe("/st/agent-web-ui/credentials.json");
+    expect(loadConfig({ AUTH_CREDENTIALS_FILE: "/run/secrets/awui" }).credentialsFile).toBe("/run/secrets/awui");
+  });
+
   it("validates PORT", () => {
     expect(loadConfig({ PORT: "5000" }).port).toBe(5000);
     for (const bad of ["80", "70000", "abc", "4783.5"]) expect(() => loadConfig({ PORT: bad })).toThrow(ConfigError);

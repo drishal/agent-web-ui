@@ -228,6 +228,8 @@ export interface ThemeInfo {
 
 export interface Bootstrap {
   version: string;
+  /** "local": this machine, no sign-in. "password": signed in from another device. */
+  auth: { mode: "local" | "password"; username: string | null; remoteEnabled: boolean };
   harnesses: HarnessStatus[];
   roots: string[];
   home: string;

@@ -20,8 +20,6 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": { target: backend, changeOrigin: false },
-      // The launch-token exchange lives on the backend's `GET /?token=…`.
-      "^/\\?token=": { target: backend, changeOrigin: false },
     },
   },
 });

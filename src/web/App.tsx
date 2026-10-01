@@ -15,6 +15,7 @@ import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
 import { Dialog } from "./components/Dialog.js";
 import { Loader } from "./components/Loader.js";
+import { LoginForm } from "./components/LoginForm.js";
 import { type SessionScope, Sidebar } from "./components/Sidebar.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore } from "./icons.js";
@@ -355,15 +356,7 @@ export function App() {
   // ---- render ---------------------------------------------------------------------------
 
   if (signedOut) {
-    return (
-      <div className="fullscreen-message">
-        <h1>This browser is not signed in</h1>
-        <p>
-          Open the link the server printed at startup (<code>Local: http://127.0.0.1:…/?token=…</code>). For autostart, find it with{" "}
-          <code>journalctl --user -u agent-web-ui</code>.
-        </p>
-      </div>
-    );
+    return <LoginForm />;
   }
   if (bootError) {
     return (
@@ -434,6 +427,10 @@ export function App() {
           save("chatScale", v);
         }}
         onPair={() => setPairOpen(true)}
+        signedInAs={boot.auth.mode === "password" ? boot.auth.username : null}
+        onSignOut={() => {
+          void api("/api/logout", { body: {} }).finally(() => window.location.reload());
+        }}
         onClose={() => setDrawerOpen(false)}
         version={boot.version}
       />
@@ -617,7 +614,10 @@ export function App() {
         <Dialog title="Pair a phone" onClose={() => setPairOpen(false)}>
           {boot.pairing.urls.length > 0 ? (
             <>
-              <p>Open this link once on your phone (over Tailscale). It signs that browser in for 30 days.</p>
+              <p>
+                Open one of these on your phone and sign in{boot.auth.username ? ` as “${boot.auth.username}”` : ""}. The session lasts 30
+                days; changing the password with <code>npm run set-password</code> signs every device out.
+              </p>
               {boot.pairing.urls.map((u) => (
                 <div key={u} className="pair-url">
                   <code>{u}</code>
@@ -626,12 +626,13 @@ export function App() {
                   </button>
                 </div>
               ))}
-              <p className="muted">The link stops working when the server restarts; devices already paired stay signed in.</p>
+              <p className="muted">LAN addresses are plain HTTP: prefer Tailscale when you are away from home.</p>
             </>
           ) : (
             <p>
-              Remote access is off. Set <code>ALLOWED_HOSTS</code> to your Tailscale Serve name and <code>ALLOWED_TAILSCALE_USERS</code> to your login, run{" "}
-              <code>tailscale serve --bg http://127.0.0.1:4783</code>, and restart the server.
+              Other devices are off. Set a login with <code>npm run set-password</code>, then restart with <code>HOST=0.0.0.0</code> for your
+              LAN, or with <code>ALLOWED_HOSTS=&lt;machine&gt;.&lt;tailnet&gt;.ts.net</code> plus{" "}
+              <code>tailscale serve --bg http://127.0.0.1:4783</code> for Tailscale.
             </p>
           )}
         </Dialog>

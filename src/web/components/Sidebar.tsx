@@ -106,6 +106,8 @@ export function Sidebar(props: {
   textScale: number;
   onTextScale: (scale: number) => void;
   onPair: () => void;
+  signedInAs: string | null;
+  onSignOut: () => void;
   onClose: () => void;
   version: string;
 }) {
@@ -264,6 +266,11 @@ export function Sidebar(props: {
           <button type="button" className="btn btn-small btn-ghost" onClick={props.onPair}>
             Pair phone
           </button>
+          {props.signedInAs ? (
+            <button type="button" className="btn btn-small btn-ghost" onClick={props.onSignOut} title={`Signed in as ${props.signedInAs}`}>
+              Sign out
+            </button>
+          ) : null}
           <span className="version foot-version">v{props.version}</span>
         </footer>
       </aside>

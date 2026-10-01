@@ -14,6 +14,7 @@
     "test:e2e": "npm run build && playwright test",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
+    "set-password": "node scripts/set-password.mjs",
     "smoke": "SMOKE=1 vitest run tests/smoke"
   },
   "dependencies": {

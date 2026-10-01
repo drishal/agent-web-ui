@@ -8,7 +8,9 @@ import { ChatManager } from "./chats/manager.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { liveOmpChildren } from "./harness/omp.js";
 import { HarnessRegistry } from "./harness/registry.js";
-import { loadOrCreateSecret, newLaunchToken, Security } from "./security.js";
+import { loadCredentials, PasswordAuth } from "./auth.js";
+import { cachedLanHosts, sampleLanHosts } from "./network.js";
+import { loadOrCreateSecret, Security } from "./security.js";
 import { ThemeStore } from "./theme.js";
 import { Workspaces } from "./workspaces.js";
 
@@ -42,13 +44,27 @@ async function main(): Promise<void> {
   const root = await findRoot();
   const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")) as { version: string };
   const secret = await loadOrCreateSecret(config.stateDir);
-  const token = newLaunchToken();
+  // Other devices (LAN via HOST=0.0.0.0, or Tailscale Serve) sign in with a
+  // password; this machine never needs to.
+  const remote = config.host === "0.0.0.0" || config.allowedHosts.length > 0;
+  let password: PasswordAuth | undefined;
+  try {
+    password = new PasswordAuth(await loadCredentials(config.credentialsFile));
+  } catch (error) {
+    if (remote) {
+      console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("agent-web-ui: HOST=0.0.0.0 and ALLOWED_HOSTS need a login for other devices; refusing to start.");
+      process.exit(1);
+    }
+  }
   const security = new Security({
     port: config.port,
     allowedHosts: config.allowedHosts,
     allowedTailscaleUsers: config.allowedTailscaleUsers,
     secret,
-    token,
+    ...(password ? { password } : {}),
+    ...(config.host === "0.0.0.0" ? { lanHosts: cachedLanHosts() } : {}),
+    log: (m) => console.error(`agent-web-ui: ${m}`),
   });
   const { workspaces, warnings } = await Workspaces.create(config.workspaceRoots, config.home);
   for (const w of warnings) console.error(`agent-web-ui: ${w}`);
@@ -67,7 +83,8 @@ async function main(): Promise<void> {
   const active = await theme.get();
   console.log(`  theme: ${active.name ?? "built-in light/dark"}`);
   const manager = new ChatManager();
-  const pairingUrls = config.allowedHosts.map((h) => `https://${h}/?token=${token}`);
+  const lanUrls = config.host === "0.0.0.0" ? sampleLanHosts().ipv4.map((ip) => `http://${ip}:${config.port}/`) : [];
+  const pairingUrls = [...lanUrls, ...config.allowedHosts.map((h) => `https://${h}/`)];
   const webDir = process.env.AWUI_WEB_DIR ?? path.join(root, "dist", "web");
   const app = createApp({
     version: pkg.version,
@@ -98,8 +115,13 @@ async function main(): Promise<void> {
   });
   server.listen(config.port, config.host, () => {
     console.log(`agent-web-ui ${pkg.version} listening on http://${config.host}:${config.port}`);
-    console.log(`Local: http://${config.host}:${config.port}/?token=${token}`);
-    for (const url of pairingUrls) console.log(`Serve: ${url}`);
+    console.log(`Local: http://127.0.0.1:${config.port}/ (no sign-in on this machine)`);
+    for (const url of lanUrls) console.log(`LAN:   ${url}`);
+    for (const h of config.allowedHosts) console.log(`Serve: https://${h}/`);
+    if (password && remote) console.log(`  other devices sign in as "${password.username}"`);
+    if (lanUrls.length > 0) {
+      console.log("  warning: LAN access is plain HTTP; the password and chats are not encrypted on the network. Prefer Tailscale.");
+    }
     if (!existsSync(path.join(webDir, "index.html"))) {
       console.log("  (no built UI found; run `npm run build`, or use `npm run dev`)");
     }

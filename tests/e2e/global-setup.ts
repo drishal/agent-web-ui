@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { E2E_PORT } from "../../playwright.config.js";
 
-/** Start the built server with fake harnesses; read the launch token from stdout. */
+/** Start the built server with fake harnesses on 127.0.0.1 (local use: no sign-in). */
 export default async function globalSetup(): Promise<() => Promise<void>> {
   const base = mkdtempSync(path.join(tmpdir(), "awui-e2e-"));
   const root = path.join(base, "workspaces");
@@ -25,21 +25,19 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
-  const token = await new Promise<string>((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`server did not start:\n${output}`)), 20_000);
     const onData = (chunk: Buffer) => {
       output += chunk.toString();
-      const m = /Local: http:\/\/127\.0\.0\.1:\d+\/\?token=([\w-]+)/.exec(output);
-      if (m?.[1]) {
+      if (/Local: http:\/\/127\.0\.0\.1:\d+\//.test(output)) {
         clearTimeout(timer);
-        resolve(m[1]);
+        resolve();
       }
     };
     server.stdout?.on("data", onData);
     server.stderr?.on("data", onData);
     server.once("exit", (code) => reject(new Error(`server exited (${code}):\n${output}`)));
   });
-  process.env.AWUI_E2E_TOKEN = token;
   process.env.AWUI_E2E_ROOT = root;
   return async () => {
     if (server.exitCode !== null) return;

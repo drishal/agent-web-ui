@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { newChat, send, sendAndWait, showSidebar, signInAndOpen, token } from "./helpers.js";
+import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const status = (page: Page) => page.getByTestId("chat-status");
 const answers = (page: Page) => page.getByTestId("answer");
@@ -13,18 +13,14 @@ async function openFold(page: Page, index = -1) {
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
 
-test("an unsigned browser gets the sign-in message, not the app", async ({ page }) => {
+test("this machine opens straight into the app: no token, no sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "This browser is not signed in" })).toBeVisible();
-  const res = await page.request.get("/api/bootstrap");
-  expect(res.status()).toBe(401);
-});
-
-test("the token link signs in and the URL is cleaned", async ({ page }) => {
-  await page.goto(`/?token=${token()}`);
-  await expect(page).toHaveURL(/\/$/);
-  expect(page.url()).not.toContain("token");
   await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toHaveCount(0);
+  const res = await page.request.get("/api/bootstrap");
+  expect(res.status()).toBe(200);
+  expect((await res.json()).auth.mode).toBe("local");
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
 test("a new chat opens as a hero composer; a turn folds its work above a plain answer", async ({ page }) => {

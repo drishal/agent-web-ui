@@ -6,6 +6,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { createApp } from "../../src/server/app.js";
+import { hashPassword, PasswordAuth } from "../../src/server/auth.js";
 import { ChatManager } from "../../src/server/chats/manager.js";
 import { FakeAdapter } from "../../src/server/harness/fake.js";
 import { HarnessRegistry } from "../../src/server/harness/registry.js";
@@ -13,7 +14,8 @@ import { Security } from "../../src/server/security.js";
 import { ThemeStore } from "../../src/server/theme.js";
 import { Workspaces } from "../../src/server/workspaces.js";
 
-export const TOKEN = "test-token-abcdefghijklmnopqrstuvwx";
+export const USER = "alice";
+export const PASS = "correct horse battery";
 
 export function tempDir(prefix = "awui-"): string {
   return mkdtempSync(path.join(tmpdir(), prefix));
@@ -36,6 +38,10 @@ export interface TestApp {
 export async function makeTestApp(options: {
   allowedHosts?: string[];
   allowedTailscaleUsers?: string[];
+  /** Configure a login so other devices can sign in. */
+  withPassword?: boolean;
+  /** Hostnames treated as this machine's LAN addresses (HOST=0.0.0.0). */
+  lanHosts?: string[];
   themeFile?: string | null;
   chunkDelayMs?: number;
   heartbeatMs?: number;
@@ -49,12 +55,14 @@ export async function makeTestApp(options: {
   registry.register(new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false } }));
   await registry.refreshStatus();
   const { workspaces } = await Workspaces.create([root], root);
+  const lan = options.lanHosts ? new Set(options.lanHosts) : null;
   const security = new Security({
     port: 4783,
     allowedHosts: options.allowedHosts ?? [],
     allowedTailscaleUsers: options.allowedTailscaleUsers ?? [],
     secret: randomBytes(32),
-    token: TOKEN,
+    ...(options.withPassword ? { password: new PasswordAuth(await hashPassword(USER, PASS)) } : {}),
+    ...(lan ? { lanHosts: () => lan } : {}),
   });
   const manager = new ChatManager();
   const app = createApp({
@@ -81,14 +89,10 @@ export async function makeTestApp(options: {
   return { app, server, port, close, manager, registry, root, project, security, fake };
 }
 
-/** A supertest agent that has exchanged the launch token for a cookie. */
+/** A supertest agent on this machine: local requests need no sign-in. */
 export async function signedIn(t: TestApp) {
   const agent = request.agent(t.server);
-  const res = await agent.get(`/?token=${TOKEN}`);
-  if (res.status !== 302) throw new Error(`token exchange failed: ${res.status}`);
-  const setCookie = res.headers["set-cookie"] as unknown as string[];
-  const cookie = (setCookie[0] ?? "").split(";")[0] ?? "";
-  return Object.assign(agent, { cookie });
+  return Object.assign(agent, { cookie: "" });
 }
 
 export interface SseMessage {

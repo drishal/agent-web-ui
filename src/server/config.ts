@@ -6,8 +6,10 @@ export const DEFAULT_PORT = 4783;
 
 export interface ServerConfig {
   port: number;
-  /** Literal bind address; deliberately not configurable. */
-  host: "127.0.0.1";
+  /** Bind address: 127.0.0.1 (token sign-in) or 0.0.0.0 (username/password sign-in). */
+  host: "127.0.0.1" | "0.0.0.0";
+  /** Password-mode credentials (scrypt hash written by `npm run set-password`). */
+  credentialsFile: string;
   workspaceRoots: string[];
   allowedHosts: string[];
   allowedTailscaleUsers: string[];
@@ -66,15 +68,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const xdgConfig = env.XDG_CONFIG_HOME || path.join(home, ".config");
   const xdgState = env.XDG_STATE_HOME || path.join(home, ".local", "state");
   const themeFile = env.THEME_FILE ? path.resolve(expandHome(env.THEME_FILE, home)) : null;
+  const host = env.HOST === undefined || env.HOST === "" ? "127.0.0.1" : env.HOST;
+  if (host !== "127.0.0.1" && host !== "0.0.0.0") {
+    throw new ConfigError("HOST must be 127.0.0.1 (default) or 0.0.0.0 (LAN, username/password sign-in)");
+  }
+  const stateDir = path.join(xdgState, "agent-web-ui");
   return {
     port,
-    host: "127.0.0.1",
+    host,
+    credentialsFile: env.AUTH_CREDENTIALS_FILE ? path.resolve(expandHome(env.AUTH_CREDENTIALS_FILE, home)) : path.join(stateDir, "credentials.json"),
     workspaceRoots: roots.length > 0 ? roots : [home],
     allowedHosts: list(env.ALLOWED_HOSTS).map(normalizeAuthority),
     allowedTailscaleUsers: list(env.ALLOWED_TAILSCALE_USERS).map((u) => u.toLowerCase()),
     themeFile: themeFile ?? path.join(xdgConfig, "agent-web-ui", "theme.yaml"),
     themeFileExplicit: themeFile !== null,
-    stateDir: path.join(xdgState, "agent-web-ui"),
+    stateDir,
     ompAgentDir: env.OMP_AGENT_DIR ? path.resolve(expandHome(env.OMP_AGENT_DIR, home)) : null,
     ompSessionDir: env.OMP_SESSION_DIR ? path.resolve(expandHome(env.OMP_SESSION_DIR, home)) : null,
     harnesses: list(env.AWUI_HARNESSES).length > 0 ? list(env.AWUI_HARNESSES) : ["pi", "omp"],

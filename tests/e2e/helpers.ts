@@ -1,7 +1,5 @@
 import { expect, type Page } from "@playwright/test";
 
-export const token = () => process.env.AWUI_E2E_TOKEN as string;
-
 /**
  * Make the sidebar usable. On phones it is a drawer; `isVisible()` is not a
  * reliable signal mid-transition, so decide by layout and the drawer's state.
@@ -14,10 +12,9 @@ export async function showSidebar(page: Page): Promise<void> {
   await expect(sidebar).toBeInViewport({ ratio: 0.95 });
 }
 
-/** Sign in with the launch token and open a project through the folder browser. */
+/** Open the app (this machine needs no sign-in) and pick a project through the folder browser. */
 export async function signInAndOpen(page: Page, project = "alpha"): Promise<void> {
-  await page.goto(`/?token=${token()}`);
-  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/");
   await showSidebar(page);
   await page.locator(".workspace-btn").click();
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });

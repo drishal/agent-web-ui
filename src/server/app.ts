@@ -83,6 +83,10 @@ export function createApp(deps: AppDeps) {
     res.json({ ok: true });
   });
 
+  // Sign-in for other devices; reachable without a session.
+  app.post("/api/login", express.json({ limit: "8kb" }), security.login);
+  app.post("/api/logout", security.logout);
+
   app.use("/api", security.requireAuth);
   app.use("/api", express.json({ limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4) / 1024) + 64}kb` }));
 
@@ -95,6 +99,11 @@ export function createApp(deps: AppDeps) {
     const t = await theme.get();
     const payload: Bootstrap = {
       version: deps.version,
+      auth: {
+        mode: res.locals.local === true ? "local" : "password",
+        username: security.username,
+        remoteEnabled: security.username !== null,
+      },
       harnesses: registry.status(),
       roots: workspaces.rootList,
       home: deps.home,
@@ -272,7 +281,6 @@ export function createApp(deps: AppDeps) {
     res.status(404).json({ error: "Not found", code: "not_found" });
   });
 
-  app.get("/", security.exchange);
   if (deps.webDir && existsSync(path.join(deps.webDir, "index.html"))) {
     const webDir = deps.webDir;
     app.use(express.static(webDir, { index: "index.html", maxAge: "1h", setHeaders: noStoreHtml }));

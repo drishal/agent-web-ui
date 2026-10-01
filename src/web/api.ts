@@ -34,7 +34,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     } catch {
       // non-JSON error body
     }
-    if (res.status === 401) for (const l of unauthorizedListeners) l();
+    if (res.status === 401 && path !== "/api/login") for (const l of unauthorizedListeners) l();
     throw new ApiError(res.status, data.code ?? `http_${res.status}`, data.error ?? res.statusText);
   }
   return (await res.json()) as T;
