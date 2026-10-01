@@ -13,11 +13,13 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextUsage,
   type HarnessCapabilities,
   type InteractionAnswer,
   type InteractionKind,
   type ModelInfo,
   type QueueState,
+  type TodoItem,
   type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems, normalizeAgentEvent } from "./agent-events.js";
@@ -665,6 +667,33 @@ class OmpLiveChat implements LiveChat {
       models: this.models,
       thinkingLevels: Array.isArray(levels?.levels) ? levels.levels.map(String) : [],
     };
+  }
+
+  async getContextUsage(): Promise<ContextUsage | null> {
+    const state = await this.live.command<Obj>("get_state");
+    const usage = state?.contextUsage;
+    if (!isObj(usage) || typeof usage.contextWindow !== "number") return null;
+    return {
+      tokens: typeof usage.tokens === "number" ? usage.tokens : null,
+      window: usage.contextWindow,
+      percent: typeof usage.percent === "number" ? usage.percent : null,
+    };
+  }
+
+  /** omp's todo phases (`get_state.todoPhases`), flattened. */
+  async getTodos(): Promise<TodoItem[]> {
+    const state = await this.live.command<Obj>("get_state");
+    const phases = Array.isArray(state?.todoPhases) ? state.todoPhases : [];
+    const out: TodoItem[] = [];
+    for (const phase of phases) {
+      if (!isObj(phase)) continue;
+      const name = typeof phase.name === "string" ? phase.name : undefined;
+      for (const task of Array.isArray(phase.tasks) ? phase.tasks : []) {
+        if (!isObj(task) || typeof task.content !== "string") continue;
+        out.push({ ...(name ? { phase: name } : {}), text: task.content.slice(0, 500), status: String(task.status ?? "pending") });
+      }
+    }
+    return out.slice(0, 100);
   }
 
   async prompt(text: string): Promise<void> {

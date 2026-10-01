@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../../src/server/config.js";
-import { boundText, historyToItems, normalizeAgentEvent } from "../../src/server/harness/agent-events.js";
+import { boundText, historyToItems, normalizeAgentEvent, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("loadConfig", () => {
@@ -71,6 +71,34 @@ describe("agent event normalization", () => {
     expect(items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "notice", "tool"]);
     expect(items[2]).toMatchObject({ status: "done", output: "data" });
     expect(items[4]).toMatchObject({ status: "error" });
+  });
+
+  it("categorizes tools for per-turn counts", () => {
+    const cases: Record<string, string> = {
+      read: "read", view: "read", edit: "edit", ast_edit: "edit", apply_patch: "edit", write: "write",
+      bash: "command", eval: "command", grep: "search", glob: "search", find: "search", ast_grep: "search",
+      ls: "search", web_search: "web", web_fetch: "web", ask: "other", todo: "other",
+    };
+    for (const [name, category] of Object.entries(cases)) expect(toolCategory(name), name).toBe(category);
+  });
+
+  it("summarizes calls by command, path, or query and lists paths", () => {
+    expect(toolSummary({ command: "npm  test\n--watch" })).toBe("npm test --watch");
+    expect(toolSummary({ path: "src/a.ts" })).toBe("src/a.ts");
+    expect(toolSummary({ paths: ["a", "b", "c"] })).toBe("a +2");
+    expect(toolSummary({ pattern: "TODO" })).toBe("TODO");
+    expect(toolPaths({ file_path: "/x/y.ts", edits: [{ path: "z.ts" }, "w.ts"] })).toEqual(["/x/y.ts", "z.ts", "w.ts"]);
+    expect(toolPaths("nope")).toEqual([]);
+  });
+
+  it("keeps harness timestamps on rebuilt history", () => {
+    const items = historyToItems([
+      { role: "user", content: "hi", timestamp: 1000 },
+      { role: "assistant", content: [{ type: "toolCall", id: "c", name: "edit", arguments: { path: "f.ts" } }], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "c", content: [], isError: false, timestamp: 5000 },
+    ]);
+    expect(items[0]).toMatchObject({ at: 1000 });
+    expect(items[1]).toMatchObject({ kind: "tool", category: "edit", summary: "f.ts", paths: ["f.ts"], at: 2000, endedAt: 5000 });
   });
 
   it("bounds text by keeping head and tail", () => {

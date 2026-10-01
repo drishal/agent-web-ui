@@ -68,7 +68,17 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect(kinds).toContain("tool");
     const reply = snap.items.find((i) => i.kind === "assistant" && i.text.startsWith("Echo"));
     expect(reply && reply.kind === "assistant" && reply.thinking).toBeTruthy();
-    expect(snap.items.find((i) => i.kind === "tool")).toMatchObject({ status: "done", name: "read" });
+    expect(snap.items.find((i) => i.kind === "tool")).toMatchObject({
+      status: "done",
+      name: "read",
+      category: "read",
+      summary: "README.md",
+      paths: ["README.md"],
+    });
+    const user = snap.items.find((i) => i.kind === "user");
+    expect(user?.at).toBeGreaterThan(0);
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "context"));
+    expect(t.manager.get(chat.chatId).snapshot().context?.tokens).toBeGreaterThan(0);
     // Monotonic event ids.
     const ids = sse.messages.filter((m) => m.id !== undefined).map((m) => m.id as number);
     expect([...ids].sort((a, b) => a - b)).toEqual(ids);
@@ -253,6 +263,21 @@ describe("chat lifecycle over HTTP + SSE", () => {
     await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
     const list = await agent.get(`/api/harnesses/fake/sessions?workspaceId=${ws.id}`);
     expect(JSON.stringify(list.body)).not.toMatch(/nonexistent|\.jsonl/);
+    sse.close();
+  });
+});
+
+describe("todos", () => {
+  it("publishes the harness todo list after a run", async () => {
+    t = await makeTestApp();
+    const agent = await signedIn(t);
+    const ws = (await agent.post("/api/workspaces/open").send({ path: t.project })).body as { id: string };
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    expect(chat.todos).toEqual([]);
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "make a todo list" });
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "todos"));
+    expect(t.manager.get(chat.chatId).snapshot().todos.map((x) => x.status)).toEqual(["completed", "in_progress", "pending"]);
     sse.close();
   });
 });

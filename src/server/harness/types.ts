@@ -3,12 +3,14 @@
 import type {
   ChatConfig,
   ChatItem,
+  ContextUsage,
   HarnessCapabilities,
   HarnessId,
   InteractionAnswer,
   InteractionRequest,
   ModelInfo,
   QueueState,
+  TodoItem,
   ToolsMode,
 } from "../../shared/protocol.js";
 
@@ -67,6 +69,10 @@ export interface LiveChat {
   /** Active branch only, rebuilt through the harness's public API. */
   history(): Promise<ChatItem[]>;
   getConfig(): Promise<ChatConfig>;
+  /** Context window occupancy, or null when the harness cannot tell. */
+  getContextUsage(): Promise<ContextUsage | null>;
+  /** The harness's own todo list, if it keeps one. */
+  getTodos(): Promise<TodoItem[]>;
   /** Resolves once the harness accepted the prompt; the run streams as events. */
   prompt(text: string): Promise<void>;
   steer(text: string): Promise<void>;

@@ -7,15 +7,17 @@ import type {
   ChatItem,
   ChatSnapshot,
   ChatStatus,
+  ContextUsage,
   InteractionAnswer,
   InteractionRequest,
   QueueState,
   SendMode,
+  TodoItem,
   ToolItem,
   ToolsMode,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
-import { boundText, stringifyArgs } from "../harness/agent-events.js";
+import { boundText, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import type { HarnessAdapter, HarnessEvent, LiveChat } from "../harness/types.js";
 
 export class ChatError extends Error {
@@ -69,6 +71,8 @@ export class Chat {
   private queue: QueueState = { steering: [], followUp: [] };
   private pending = new Map<string, InteractionRequest>();
   private extensionStatus: Record<string, string> = {};
+  private context: ContextUsage | null = null;
+  private todos: TodoItem[] = [];
   private config: ChatConfig;
   private log: Array<{ id: number; event: ChatEvent }> = [];
   private nextEventId = 1;
@@ -96,8 +100,15 @@ export class Chat {
   }
 
   static async open(chatId: string, adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
-    const [items, config] = await Promise.all([live.history(), live.getConfig()]);
+    const [items, config, context, todos] = await Promise.all([
+      live.history(),
+      live.getConfig(),
+      live.getContextUsage().catch(() => null),
+      live.getTodos().catch(() => []),
+    ]);
     const chat = new Chat(chatId, adapter, workspace, live, config);
+    chat.context = context;
+    chat.todos = todos;
     for (const item of items) chat.upsert(item);
     chat.title = live.title ?? chat.firstUserText() ?? "";
     chat.attach();
@@ -146,6 +157,8 @@ export class Chat {
       config: this.config,
       capabilities: this.adapter.capabilities,
       extensionStatus: { ...this.extensionStatus },
+      context: this.context,
+      todos: [...this.todos],
       generation: this.generation,
       lastEventId: this.nextEventId - 1,
     };
@@ -246,6 +259,7 @@ export class Chat {
       text: "",
       thinking: "",
       streaming: true,
+      at: Date.now(),
       ...(this.currentModel ? { model: this.currentModel } : {}),
     };
     this.currentAssistant = item.id;
@@ -255,12 +269,12 @@ export class Chat {
 
   private finishStreaming(): void {
     const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
-    if (current && current.kind === "assistant" && current.streaming) this.put({ ...current, streaming: false });
+    if (current && current.kind === "assistant" && current.streaming) this.put({ ...current, streaming: false, endedAt: Date.now() });
     this.currentAssistant = null;
   }
 
   private notice(level: "info" | "warning" | "error", text: string): void {
-    this.put({ kind: "notice", id: this.nextId("n"), level, text });
+    this.put({ kind: "notice", id: this.nextId("n"), level, text, at: Date.now() });
   }
 
   apply(event: HarnessEvent): void {
@@ -273,6 +287,7 @@ export class Chat {
           id: this.nextId("u"),
           text: event.text,
           ...(event.imageCount ? { imageCount: event.imageCount } : {}),
+          at: Date.now(),
         });
         if (!this.title) this.setTitle(event.text.slice(0, 80));
         break;
@@ -299,6 +314,7 @@ export class Chat {
           text: event.text || item.text,
           thinking: event.thinking || item.thinking,
           streaming: false,
+          endedAt: Date.now(),
           ...(event.error ? { error: event.error } : {}),
         });
         this.currentAssistant = null;
@@ -314,6 +330,10 @@ export class Chat {
           status: "running",
           output: "",
           truncated: false,
+          category: toolCategory(event.name),
+          summary: toolSummary(event.args),
+          paths: toolPaths(event.args),
+          at: Date.now(),
         };
         this.put(tool);
         break;
@@ -335,8 +355,26 @@ export class Chat {
         const base: ToolItem =
           item && item.kind === "tool"
             ? item
-            : { kind: "tool", id, name: "tool", args: "", status: "running", output: "", truncated: false };
-        this.put({ ...base, output: bounded.text, truncated: bounded.truncated, status: event.isError ? "error" : "done" });
+            : {
+                kind: "tool",
+                id,
+                name: "tool",
+                args: "",
+                status: "running",
+                output: "",
+                truncated: false,
+                category: "other",
+                summary: "",
+                paths: [],
+              };
+        this.put({
+          ...base,
+          output: bounded.text,
+          truncated: bounded.truncated,
+          status: event.isError ? "error" : "done",
+          endedAt: Date.now(),
+        });
+        if (base.name.toLowerCase().includes("todo")) void this.refreshTodos();
         break;
       }
       case "busy":
@@ -345,10 +383,15 @@ export class Chat {
       case "settled":
         this.finishStreaming();
         if (this.status !== "error") this.setStatus("idle");
+        void this.refreshContext();
+        void this.refreshTodos();
         break;
       case "compacting":
         if (event.active) this.setStatus("compacting");
-        else if (this.status === "compacting") this.setStatus("idle");
+        else {
+          if (this.status === "compacting") this.setStatus("idle");
+          void this.refreshContext();
+        }
         break;
       case "queue":
         this.queue = { steering: [...event.queue.steering], followUp: [...event.queue.followUp] };
@@ -390,6 +433,32 @@ export class Chat {
         this.notice("error", event.message);
         this.setStatus("error");
         break;
+    }
+  }
+
+  private async refreshContext(): Promise<void> {
+    const generation = this.generation;
+    try {
+      const context = await this.live.getContextUsage();
+      if (generation !== this.generation || this.status === "disposed") return;
+      if (JSON.stringify(context) === JSON.stringify(this.context)) return;
+      this.context = context;
+      this.emit({ type: "context", context });
+    } catch {
+      // usage is best-effort
+    }
+  }
+
+  private async refreshTodos(): Promise<void> {
+    const generation = this.generation;
+    try {
+      const todos = await this.live.getTodos();
+      if (generation !== this.generation || this.status === "disposed") return;
+      if (JSON.stringify(todos) === JSON.stringify(this.todos)) return;
+      this.todos = todos;
+      this.emit({ type: "todos", todos });
+    } catch {
+      // todos are best-effort
     }
   }
 

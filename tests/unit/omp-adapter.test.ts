@@ -136,6 +136,16 @@ describe("omp adapter (scripted omp)", () => {
     expect(chat.snapshot().items.filter((i) => i.kind === "user")).toHaveLength(2);
   });
 
+  it("reports omp context usage and flattens todo phases", async () => {
+    const { chat } = await openChat();
+    const snap = chat.snapshot();
+    expect(snap.context).toEqual({ tokens: 1200, window: 200000, percent: 0.6 });
+    expect(snap.todos).toEqual([
+      { phase: "Plan", text: "Inspect", status: "completed" },
+      { phase: "Plan", text: "Fix", status: "in_progress" },
+    ]);
+  });
+
   it("splits provider/model keys at the first slash only", async () => {
     const { chat } = await openChat();
     await chat.setConfig({ model: "fakeomp/org/m2" });

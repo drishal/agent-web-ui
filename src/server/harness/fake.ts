@@ -2,15 +2,17 @@
 // touches the network or a model. Prompt text selects scripted behaviour:
 //   "tool"  run a fake tool          "ask"   raise a confirm request first
 //   "fail"  end with an error        "slow"  stream many chunks
-//   "big"   produce oversized tool output
+//   "big"   produce oversized tool output    "edit"  edit a file (src/app.ts)
 import { randomUUID } from "node:crypto";
 import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextUsage,
   type HarnessCapabilities,
   type InteractionAnswer,
   type ModelInfo,
+  type TodoItem,
   type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems } from "./agent-events.js";
@@ -173,6 +175,24 @@ class FakeLiveChat implements LiveChat {
     };
   }
 
+  async getContextUsage(): Promise<ContextUsage | null> {
+    const tokens = this.session.messages.length * 850;
+    return { tokens, window: 100_000, percent: Math.min(100, (tokens / 100_000) * 100) };
+  }
+
+  async getTodos(): Promise<TodoItem[]> {
+    const wanted = this.session.messages.some((m) => {
+      const msg = m as { role?: string; content?: unknown };
+      return msg.role === "user" && typeof msg.content === "string" && /\btodo\b/i.test(msg.content);
+    });
+    if (!wanted) return [];
+    return [
+      { phase: "Plan", text: "Read the code", status: "completed" },
+      { phase: "Plan", text: "Write the fix", status: "in_progress" },
+      { phase: "Verify", text: "Run the tests", status: "pending" },
+    ];
+  }
+
   async prompt(text: string): Promise<void> {
     if (this.disposed) throw new Error("Chat is closed");
     if (this.running) throw new Error("Agent is busy");
@@ -282,14 +302,17 @@ class FakeLiveChat implements LiveChat {
     }
     try {
       if (/\bask\b/i.test(text)) {
-        const approved = await this.ask(signal);
+        // "ask twice" raises two requests at once (stacked approvals).
+        const asks = /\btwice\b/i.test(text) ? [this.ask(signal, "bash"), this.ask(signal, "read")] : [this.ask(signal)];
+        const approved = (await Promise.all(asks)).every(Boolean);
         if (!approved) {
           this.emit({ type: "notice", level: "warning", text: "Fake tool denied" });
           await this.reply(`Denied: ${text}`, signal);
           return;
         }
       }
-      if (/\btool\b|\bbig\b|\bask\b/i.test(text)) await this.tool(/\bbig\b/i.test(text), signal);
+      if (/\btool\b|\bbig\b|\bask\b/i.test(text)) await this.tool(/\bbig\b/i.test(text) ? "big" : "read", signal);
+      if (/\bedit\b/i.test(text)) await this.tool("edit", signal);
       if (/\bfail\b/i.test(text)) {
         this.emit({ type: "assistant_start", model: this.model });
         await this.pause(signal);
@@ -342,26 +365,28 @@ class FakeLiveChat implements LiveChat {
     this.emit({ type: "assistant_end", text: body, thinking });
   }
 
-  private async tool(big: boolean, signal: AbortSignal): Promise<void> {
+  private async tool(kind: "read" | "big" | "edit", signal: AbortSignal): Promise<void> {
     const toolCallId = randomUUID();
-    const args = { path: "README.md" };
+    const big = kind === "big";
+    const name = kind === "edit" ? "edit" : "read";
+    const args = kind === "edit" ? { path: `${this.session.cwd}/src/app.ts`, oldText: "a", newText: "b" } : { path: "README.md" };
     this.emit({ type: "assistant_start", model: this.model });
     this.record({
       role: "assistant",
-      content: [{ type: "toolCall", id: toolCallId, name: "read", arguments: args }],
+      content: [{ type: "toolCall", id: toolCallId, name, arguments: args }],
       stopReason: "toolUse",
     });
     this.emit({ type: "assistant_end", text: "", thinking: "" });
-    this.emit({ type: "tool_start", toolCallId, name: "read", args });
+    this.emit({ type: "tool_start", toolCallId, name, args });
     await this.pause(signal, 2);
     this.emit({ type: "tool_update", toolCallId, output: "partial output…" });
     await this.pause(signal, 2);
-    const output = big ? "x".repeat(200_000) : "# Fake README\nhello";
-    this.record({ role: "toolResult", toolCallId, toolName: "read", content: [{ type: "text", text: output }], isError: false });
+    const output = big ? "x".repeat(200_000) : kind === "edit" ? "Edited src/app.ts (+1 -1)" : "# Fake README\nhello";
+    this.record({ role: "toolResult", toolCallId, toolName: name, content: [{ type: "text", text: output }], isError: false });
     this.emit({ type: "tool_end", toolCallId, output, isError: false });
   }
 
-  private ask(signal: AbortSignal): Promise<boolean> {
+  private ask(signal: AbortSignal, tool = "read"): Promise<boolean> {
     const id = randomUUID();
     return new Promise<boolean>((resolve, reject) => {
       const onAbort = () => {
@@ -379,8 +404,8 @@ class FakeLiveChat implements LiveChat {
         request: {
           id,
           kind: "confirm",
-          title: "Allow tool: read",
-          message: "The fake agent wants to read README.md",
+          title: `Allow tool: ${tool}`,
+          message: tool === "bash" ? "npm test -- --watch=false" : "The fake agent wants to read README.md",
           createdAt: Date.now(),
         },
       });

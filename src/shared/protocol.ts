@@ -86,6 +86,8 @@ export interface UserItem {
   id: string;
   text: string;
   imageCount?: number;
+  /** Epoch ms when the harness recorded it, when known. */
+  at?: number;
 }
 
 export interface AssistantItem {
@@ -96,7 +98,11 @@ export interface AssistantItem {
   streaming: boolean;
   error?: string;
   model?: string;
+  at?: number;
+  endedAt?: number;
 }
+
+export type ToolCategory = "read" | "edit" | "write" | "command" | "search" | "web" | "other";
 
 export interface ToolItem {
   kind: "tool";
@@ -106,6 +112,13 @@ export interface ToolItem {
   status: "running" | "done" | "error";
   output: string;
   truncated: boolean;
+  category: ToolCategory;
+  /** One-line description: a path, command, or query. */
+  summary: string;
+  /** Files named in the arguments (absolute or as given). */
+  paths: string[];
+  at?: number;
+  endedAt?: number;
 }
 
 export interface NoticeItem {
@@ -113,6 +126,7 @@ export interface NoticeItem {
   id: string;
   level: "info" | "warning" | "error";
   text: string;
+  at?: number;
 }
 
 export interface RequestItem {
@@ -120,6 +134,7 @@ export interface RequestItem {
   id: string;
   request: InteractionRequest;
   outcome?: string;
+  at?: number;
 }
 
 export type ChatItem = UserItem | AssistantItem | ToolItem | NoticeItem | RequestItem;
@@ -148,6 +163,19 @@ export const interactionAnswerSchema = z.discriminatedUnion("kind", [
 ]);
 export type InteractionAnswer = z.infer<typeof interactionAnswerSchema>;
 
+export interface ContextUsage {
+  tokens: number | null;
+  window: number;
+  percent: number | null;
+}
+
+export interface TodoItem {
+  phase?: string;
+  text: string;
+  /** Harness status, e.g. pending, in_progress, completed. */
+  status: string;
+}
+
 export interface QueueState {
   steering: string[];
   followUp: string[];
@@ -167,6 +195,8 @@ export interface ChatSnapshot {
   config: ChatConfig;
   capabilities: HarnessCapabilities;
   extensionStatus: Record<string, string>;
+  context: ContextUsage | null;
+  todos: TodoItem[];
   generation: number;
   lastEventId: number;
 }
@@ -182,6 +212,8 @@ export type ChatEvent =
   | { type: "request"; request: InteractionRequest }
   | { type: "request_resolved"; requestId: string; outcome: string }
   | { type: "extension_status"; key: string; text: string | null }
+  | { type: "context"; context: ContextUsage | null }
+  | { type: "todos"; todos: TodoItem[] }
   | { type: "disposed"; reason: string };
 
 export interface ThemeInfo {

@@ -12,10 +12,12 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextUsage,
   type HarnessCapabilities,
   type InteractionAnswer,
   type InteractionKind,
   type ModelInfo,
+  type TodoItem,
   type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems, normalizeAgentEvent } from "./agent-events.js";
@@ -381,6 +383,17 @@ class PiLiveChat implements LiveChat {
       models: await this.availableModels(),
       thinkingLevels: this.session.supportsThinking() ? this.session.getAvailableThinkingLevels() : [],
     };
+  }
+
+  async getContextUsage(): Promise<ContextUsage | null> {
+    const usage = this.session.getContextUsage();
+    if (!usage) return null;
+    return { tokens: usage.tokens, window: usage.contextWindow, percent: usage.percent };
+  }
+
+  /** Pi has no built-in todo list. */
+  async getTodos(): Promise<TodoItem[]> {
+    return [];
   }
 
   async prompt(text: string): Promise<void> {

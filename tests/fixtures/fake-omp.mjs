@@ -127,6 +127,8 @@ if (args[0] === "acp") {
           isStreaming: running,
           isSettled: !running,
           dumpTools: (toolsFlag ? toolsFlag.split(",") : known).map((name) => ({ name, description: "" })),
+          contextUsage: { tokens: 1200, contextWindow: 200000, percent: 0.6 },
+          todoPhases: [{ name: "Plan", tasks: [{ content: "Inspect", status: "completed" }, { content: "Fix", status: "in_progress" }] }],
         });
       }
       case "get_available_models":
