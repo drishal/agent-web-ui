@@ -1,5 +1,23 @@
 {
   "extends": "./tsconfig.server.json",
-  "compilerOptions": { "noEmit": true, "rootDir": ".", "types": ["node"] },
-  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "tests/**/*.ts", "playwright.config.ts", "vite.config.ts", "vitest.config.ts"]
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "src/server/**/*.ts",
+    "src/shared/**/*.ts",
+    "tests/**/*.ts",
+    "playwright.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

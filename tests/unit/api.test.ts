@@ -168,6 +168,7 @@ describe("chat lifecycle over HTTP + SSE", () => {
       .body as ChatSnapshot;
     expect(reopened.chatId).not.toBe(chat.chatId);
     expect(reopened.items.filter((i) => i.kind === "user").map((i) => (i as { text: string }).text)).toEqual(["persist me"]);
+    expect(reopened.items.filter((i) => i.kind === "assistant").map((i) => (i as { text: string; error?: string }).error ?? "ok")).toEqual(["ok"]);
     expect((await agent.post("/api/chats/resume").send({ harnessId: "fake", workspaceId: ws.id, sessionId: "fake-b:x" })).status).toBe(400);
     expect((await agent.post("/api/chats/resume").send({ harnessId: "fake", workspaceId: ws.id, sessionId: "fake:unknown" })).status).toBe(404);
   });
@@ -178,7 +179,7 @@ describe("chat lifecycle over HTTP + SSE", () => {
     const sse = openSse(t, chat.chatId, agent.cookie);
     await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "please ask first" });
     await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "request"));
-    const request = (sse.chatEvents().find((e) => e.type === "request") as { request: { id: string } }).request;
+    const request = (sse.chatEvents().find((e) => e.type === "request") as unknown as { request: { id: string } }).request;
     // A reconnecting device sees the pending request in its snapshot.
     const other = openSse(t, chat.chatId, agent.cookie);
     await other.waitFor(() => other.chatEvents().some((e) => e.type === "snapshot"));

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "build": "vite build && tsc -p tsconfig.server.json",
