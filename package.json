@@ -1,0 +1,44 @@
+{
+  "name": "agent-web-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local, private web UI for Pi and omp coding-agent harnesses",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/server/index.js",
+    "smoke": "SMOKE=1 vitest run tests/smoke"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "express": "5.2.1",
+    "helmet": "8.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/express": "5.0.6",
+    "@types/node": "24.19.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/supertest": "7.2.1",
+    "@vitejs/plugin-react": "6.1.1",
+    "supertest": "7.3.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
+  }
+}

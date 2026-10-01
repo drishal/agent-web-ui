@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": { "noEmit": true, "rootDir": ".", "types": ["node"] },
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "tests/**/*.ts", "playwright.config.ts", "vite.config.ts", "vitest.config.ts"]
+}
