@@ -67,9 +67,10 @@ describe("omp adapter (scripted omp)", () => {
 
   it("spawns rpc-ui with read-only --tools and without Pi's PI_* overrides", async () => {
     const { chat } = await openChat();
-    const spawn = readState().spawns[0];
+    // spawns[0] is the --no-session probe that discovers available tools.
+    const spawn = readState().spawns.find((s) => !s.args.includes("--no-session"));
     expect(spawn?.args.slice(0, 2)).toEqual(["--mode", "rpc-ui"]);
-    expect(spawn?.args).toContain("--tools");
+    expect(spawn?.args[spawn.args.indexOf("--tools") + 1]).toBe("read,grep,glob,ask");
     expect(spawn?.envPiDir).toBeNull();
     expect(chat.snapshot().config).toMatchObject({ model: "fakeomp/m1", thinkingLevel: "low", toolsMode: "readOnly" });
     expect(JSON.stringify(chat.snapshot())).not.toMatch(/secret/);
@@ -124,7 +125,7 @@ describe("omp adapter (scripted omp)", () => {
     await until(() => chat.status === "idle");
     const before = live.nativeId;
     await chat.setConfig({ toolsMode: "full" });
-    const spawns = readState().spawns;
+    const spawns = readState().spawns.filter((s) => !s.args.includes("--no-session"));
     expect(spawns).toHaveLength(2);
     expect(spawns[1]?.args).toContain("--resume");
     expect(spawns[1]?.args).not.toContain("--tools");

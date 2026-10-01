@@ -47,6 +47,14 @@ if (args[0] === "acp") {
   });
 } else {
   const cwd = flag("--cwd");
+  const known = ["read", "grep", "glob", "bash", "edit", "ask"];
+  const toolsFlag = flag("--tools");
+  for (const tool of toolsFlag ? toolsFlag.split(",") : []) {
+    if (!known.includes(tool)) {
+      console.error(`Error: Unknown tool in --tools: ${tool}.\nRun \`omp --help\` for available flags.`);
+      process.exit(2);
+    }
+  }
   const resume = flag("--resume");
   const state = load();
   state.spawns.push({ args, envPiDir: process.env.PI_CODING_AGENT_DIR ?? null });
@@ -118,6 +126,7 @@ if (args[0] === "acp") {
           thinkingLevel: "low",
           isStreaming: running,
           isSettled: !running,
+          dumpTools: (toolsFlag ? toolsFlag.split(",") : known).map((name) => ({ name, description: "" })),
         });
       }
       case "get_available_models":

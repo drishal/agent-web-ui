@@ -34,7 +34,10 @@ import type {
 
 const run = promisify(execFile);
 export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.5";
+/** Candidate read-only tools; intersected with the tools omp reports for the workspace. */
 export const OMP_READ_ONLY_TOOLS = ["read", "grep", "find", "glob", "ast_grep", "ask", "think"];
+/** Used only if omp does not report its tool list (dumpTools). */
+const OMP_READ_ONLY_FALLBACK = ["read", "grep", "glob"];
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
@@ -345,7 +348,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsModelSelection: true,
   };
   private lister: AcpLister;
-  private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[] }>();
+  private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[]; tools: string[] }>();
 
   constructor(private readonly options: OmpOptions) {
     this.cliCommand = options.command ?? "omp";
@@ -398,7 +401,12 @@ export class OmpAdapter implements HarnessAdapter {
     return this.lister.list(cwd);
   }
 
-  private async probe(cwd: string): Promise<{ models: ModelInfo[]; levels: string[] }> {
+  /**
+   * One throwaway `--no-session` child per workspace (cached): models, thinking
+   * levels, and the tool names omp actually offers there. omp rejects unknown
+   * names in --tools, so read-only mode must only list tools that exist.
+   */
+  private async probe(cwd: string): Promise<{ models: ModelInfo[]; levels: string[]; tools: string[] }> {
     const cached = this.probeCache.get(cwd);
     if (cached && Date.now() - cached.at < 5 * 60_000) return cached;
     const rpc = new OmpRpc(this.cliCommand, ["--mode", "rpc-ui", "--no-session", "--cwd", cwd], this.env(), cwd, () => undefined, () => undefined);
@@ -406,8 +414,13 @@ export class OmpAdapter implements HarnessAdapter {
       await rpc.ready;
       const models = await rpc.command<Obj>("get_available_models");
       const levels = await rpc.command<Obj>("get_available_thinking_levels");
+      const state = await rpc.command<Obj>("get_state");
+      const tools = Array.isArray(state?.dumpTools)
+        ? state.dumpTools.map((t) => (isObj(t) && typeof t.name === "string" ? t.name : "")).filter(Boolean)
+        : [];
       const result = {
         at: Date.now(),
+        tools,
         models: (Array.isArray(models?.models) ? models.models : []).map(toModelInfo).filter((m): m is ModelInfo => m !== null),
         levels: Array.isArray(levels?.levels) ? levels.levels.map(String) : [],
       };
@@ -426,10 +439,16 @@ export class OmpAdapter implements HarnessAdapter {
     return (await this.probe(cwd)).levels;
   }
 
+  async readOnlyTools(cwd: string): Promise<string[]> {
+    const { tools } = await this.probe(cwd);
+    if (tools.length === 0) return OMP_READ_ONLY_FALLBACK;
+    return OMP_READ_ONLY_TOOLS.filter((t) => tools.includes(t));
+  }
+
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     const problem = this.workspaceProblem(req.cwd);
     if (problem) throw new Error(problem);
-    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.toolsMode);
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.toolsMode, () => this.readOnlyTools(req.cwd));
     await chat.start(req.resumeNativeId ?? null);
     return chat;
   }
@@ -460,6 +479,7 @@ class OmpLiveChat implements LiveChat {
     private readonly env: () => NodeJS.ProcessEnv,
     private readonly cwd: string,
     private toolsMode: ToolsMode,
+    private readonly readOnlyTools: () => Promise<string[]>,
   ) {}
 
   get nativeId(): string | null {
@@ -480,7 +500,7 @@ class OmpLiveChat implements LiveChat {
     const generation = ++this.generation;
     const args = ["--mode", "rpc-ui", "--cwd", this.cwd];
     if (resumeId) args.push("--resume", resumeId);
-    if (this.toolsMode === "readOnly") args.push("--tools", OMP_READ_ONLY_TOOLS.join(","));
+    if (this.toolsMode === "readOnly") args.push("--tools", (await this.readOnlyTools()).join(","));
     const rpc = new OmpRpc(
       this.command,
       args,
