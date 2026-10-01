@@ -52,12 +52,25 @@ Open it once; the browser trades the token for a cookie and the token disappears
 
 ## Using it
 
-- **Harness switcher:** Pi or omp. Switching changes which harness new and resumed chats use. Open chats stay on the harness that created them, and every session shows a badge for its harness.
-- **Project:** recent folders, a folder browser that walks `WORKSPACE_ROOTS` one level at a time, or a typed path.
-- **Sessions:** the harness's own session list for the project (switch the filter to *All* to see every harness). A green dot means the session is already open in this server; clicking it attaches to that chat instead of opening a second writer.
-- **Composer:** Enter sends (on touch devices Enter adds a newline and you tap Send). While a run is active you get **Steer** and **Follow-up**. A harness without steer only offers **Stop and send**, labelled exactly that. **Stop** shows *Stopping* until the harness has settled.
-- **Settings row:** model, thinking level (both listed by the harness), and **Read-only / Full** tools. New chats start read-only. Switching to Full always asks for confirmation.
-- **Approvals and dialogs** take over the composer until answered (see below).
+- **Sidebar.** New chat, the harness switcher, and the project come first. Below them sit session search and the sessions themselves: date headings when one harness is selected, harness groups with counts in the *All* view. A green dot means the session is already open in this server; clicking it attaches to that chat rather than opening a second writer. The footer holds the theme, the chat **text size** (scales the conversation and composer only, per device), and *Pair phone*.
+- **Harness switcher.** Pi or omp. Switching changes which harness new and resumed chats use; open chats stay on the harness that created them.
+- **Project.** Recent folders, a folder browser that walks `WORKSPACE_ROOTS` one level at a time, or a typed path.
+- **New chat.** Opens as a centred composer.
+- **Each turn** shows:
+  - your prompt as a bubble that stays pinned while you scroll through a long turn;
+  - one **"Worked for 12s · 3 reads, 1 edit"** line folding the agent's thinking, intermediate notes, tool calls, and approvals (open while running, collapsed after);
+  - the answer as plain text with a Copy button;
+  - a **Changed N files** list for edits and writes.
+- **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
+- **Composer card.**
+  - Model, thinking, and **Read-only / Full** sit inside the card. New chats start read-only, and switching to Full always asks first.
+  - The **context ring** shows how full the context window is.
+  - While a run is active you get **Steer**, **Follow-up**, and **Stop**. A harness without steer offers only **Stop and send**, labelled exactly that.
+  - Enter sends; on touch devices Enter adds a newline and you tap Send.
+- **Status stack** above the composer: queued steering/follow-up messages, the harness's todos (omp), and extension status. Hide it with the ridge (remembered per chat).
+- **Approvals and dialogs** take over the composer card. Several pending requests stack, the first answer wins, and Stop cancels them.
+- **Turn rail** on the right (wide screens): one mark per turn; hover for the prompt, click to jump.
+- **Status bar** at the bottom (desktop): connection, harness · model · thinking, project path, version. Phones show a banner only when the connection drops.
 - **Chat menu (⋯):** Rename, Compact context, Close chat.
 
 TUI-only slash commands are not emulated. New, Resume, Rename, Compact, model, thinking, and tools are the web actions.
@@ -217,7 +230,7 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, the full-tools confirmation, markdown safety, theme contrast, and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, the full-tools confirmation, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi and omp: discovery, a read-only session, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
@@ -225,6 +238,29 @@ systemctl --user stop agent-web-ui
 ```bash
 nix eval --raw ~/dotfiles/NixOS#nixosConfigurations.$(hostname).pkgs.playwright-driver.version
 ```
+
+## Design credits
+
+The interface borrows patterns, not code, from three MIT-licensed projects:
+
+- **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** (© 2026 DeepSeek):
+  - plain answers with user bubbles;
+  - the "Worked for …" process fold and its one-line disclosure rows;
+  - the tool input/output card;
+  - the composer card with settings inside and the centred empty-chat composer;
+  - approvals in the composer;
+  - the context ring and the turn rail;
+  - the neutral built-in palette.
+- **[OpenCode](https://github.com/anomalyco/opencode)** (© 2025 opencode): tool counts on the fold line, changed files per turn, and the Deny / Approve button order.
+- **[Hermes Desktop](https://github.com/NousResearch/hermes-agent/tree/main/apps/desktop)** (© 2025 Nous Research):
+  - "flat, not boxed";
+  - pinned prompts;
+  - the composer status stack with its ridge;
+  - stacked approval cards;
+  - red reserved for real failures;
+  - chat text size separate from page zoom;
+  - the bottom status bar;
+  - an animated loader instead of "Loading…".
 
 ## Not included (by design)
 
