@@ -123,6 +123,8 @@ export interface NoticeItem {
   level: "info" | "warning" | "error";
   text: string;
   at?: number;
+  /** Arrived while the agent was idle (e.g. extension notices on open): not part of any turn's work. */
+  ambient?: boolean;
 }
 
 export interface RequestItem {

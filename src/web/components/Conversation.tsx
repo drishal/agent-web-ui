@@ -297,7 +297,7 @@ const TurnView = memo(function TurnView({
     // Startup notices before any prompt: plain rows, no fold.
     return (
       <section className="turn turn-preamble">
-        {[...turn.process, ...turn.errors].map((item) => (
+        {[...turn.process, ...turn.errors, ...turn.after].map((item) => (
           <ProcessItem key={item.id} item={item} workspace={workspace} />
         ))}
       </section>
@@ -321,6 +321,13 @@ const TurnView = memo(function TurnView({
         <NoticeRow key={item.id} item={item} />
       ))}
       {turn.changedFiles.length > 0 && !turn.live ? <ChangedFiles files={turn.changedFiles} workspace={workspace} /> : null}
+      {turn.after.length > 0 ? (
+        <div className="turn-after">
+          {turn.after.map((item) => (
+            <NoticeRow key={item.id} item={item} />
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 });

@@ -12,6 +12,8 @@ export interface Turn {
   answer: AssistantItem | null;
   /** Error notices stay visible under the answer instead of inside the fold. */
   errors: NoticeItem[];
+  /** Notices that arrived while the agent was idle, shown after the turn. */
+  after: NoticeItem[];
   live: boolean;
   startedAt?: number;
   endedAt?: number;
@@ -50,9 +52,11 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     const answer = answerIndex >= 0 ? (rest[answerIndex] as AssistantItem) : null;
     const process: ChatItem[] = [];
     const errors: NoticeItem[] = [];
+    const after: NoticeItem[] = [];
     rest.forEach((item, i) => {
       if (i === answerIndex) return;
-      if (item.kind === "notice" && item.level === "error") errors.push(item);
+      if (item.kind === "notice" && item.ambient) after.push(item);
+      else if (item.kind === "notice" && item.level === "error") errors.push(item);
       else process.push(item);
     });
 
@@ -67,6 +71,8 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
           for (const p of item.paths) changed.add(p);
         }
       }
+      // Timing comes from the agent's own work, never from notices.
+      if (item.kind === "notice") continue;
       const a = "at" in item ? item.at : undefined;
       const e = "endedAt" in item ? item.endedAt : undefined;
       if (startedAt === undefined && a !== undefined) startedAt = a;
@@ -79,6 +85,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       process,
       answer,
       errors,
+      after,
       live,
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(endedAt !== undefined ? { endedAt } : {}),

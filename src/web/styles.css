@@ -1261,6 +1261,12 @@ pre {
   margin-top: 8px;
 }
 
+.turn-after {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+}
+
 .changed-list {
   margin: 0;
   padding: 0;

@@ -60,3 +60,22 @@ describe("buildTurns", () => {
     expect(relativePath("/other/a.ts", "/w")).toBe("/other/a.ts");
   });
 });
+
+describe("notices that arrive while idle", () => {
+  it("sit after the turn and never stretch its duration", () => {
+    const day = 86_400_000;
+    const items: ChatItem[] = [
+      { kind: "user", id: "u1", text: "old question", at: 1_000 },
+      { kind: "assistant", id: "a1", text: "", thinking: "hm", streaming: false, at: 2_000 },
+      { kind: "tool", id: "t1", name: "bash", args: "", status: "done", output: "", truncated: false, category: "command", summary: "", paths: [], at: 3_000, endedAt: 9_000 },
+      { kind: "assistant", id: "a2", text: "answer", thinking: "", streaming: false, at: 10_000 },
+      // Re-opened four days later: extension notices arrive while idle.
+      { kind: "notice", id: "n1", level: "info", text: "compaction-control: capped", at: 4 * day, ambient: true },
+      { kind: "notice", id: "n2", level: "warning", text: "trust skipped", at: 4 * day, ambient: true },
+    ];
+    const [turn] = buildTurns(items, "idle");
+    expect(turn?.after.map((n) => n.id)).toEqual(["n1", "n2"]);
+    expect(turn?.process.map((i) => i.id)).toEqual(["a1", "t1"]);
+    expect(formatDuration((turn?.endedAt ?? 0) - (turn?.startedAt ?? 0))).toBe("9s");
+  });
+});

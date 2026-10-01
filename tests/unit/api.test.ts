@@ -283,3 +283,26 @@ describe("todos", () => {
     sse.close();
   });
 });
+
+describe("ambient notices", () => {
+  it("marks notices raised while idle so they stay out of turns", async () => {
+    t = await makeTestApp();
+    const agent = await signedIn(t);
+    const ws = (await agent.post("/api/workspaces/open").send({ path: t.project })).body as { id: string };
+    const created = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const chat = t.manager.get(created.chatId);
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "ask please" });
+    await sse.waitFor(() => chat.snapshot().pending.length === 1);
+    await agent.post(`/api/chats/${chat.chatId}/requests/${chat.snapshot().pending[0]?.id}`).send({ answer: { kind: "confirm", confirmed: false } });
+    await sse.waitFor(() => chat.status === "idle");
+    // "Fake tool denied" came mid-run: part of the turn.
+    const denied = chat.snapshot().items.find((i) => i.kind === "notice" && i.text === "Fake tool denied");
+    expect(denied && denied.kind === "notice" && denied.ambient).toBeFalsy();
+    // A notice while idle (as extensions post on open) is ambient.
+    chat.apply({ type: "notice", level: "info", text: "extension says hi" });
+    const hi = chat.snapshot().items.find((i) => i.kind === "notice" && i.text === "extension says hi");
+    expect(hi && hi.kind === "notice" && hi.ambient).toBe(true);
+    sse.close();
+  });
+});

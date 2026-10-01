@@ -272,8 +272,10 @@ export class Chat {
     this.currentAssistant = null;
   }
 
-  private notice(level: "info" | "warning" | "error", text: string): void {
-    this.put({ kind: "notice", id: this.nextId("n"), level, text, at: Date.now() });
+  private notice(level: "info" | "warning" | "error", text: string, ambient?: boolean): void {
+    const busy = this.status === "running" || this.status === "stopping" || this.status === "compacting";
+    const between = ambient ?? !busy;
+    this.put({ kind: "notice", id: this.nextId("n"), level, text, at: Date.now(), ...(between ? { ambient: true } : {}) });
   }
 
   apply(event: HarnessEvent): void {
@@ -519,7 +521,7 @@ export class Chat {
     try {
       await this.live.prompt(text);
     } catch (error) {
-      this.notice("error", `Prompt rejected: ${errorMessage(error)}`);
+      this.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
       this.setStatus("idle");
       throw new ChatError(422, "prompt_rejected", errorMessage(error));
     }
