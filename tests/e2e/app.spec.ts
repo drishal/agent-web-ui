@@ -407,3 +407,27 @@ test("the sidebar is resizable by drag and keyboard, and remembers its width", a
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(handle).toBeHidden();
 });
+
+test("the model picker keeps its search and Current line intact when the list overflows", async ({ page }) => {
+  // A short window forces the list to scroll inside the minimum-height popover.
+  await page.setViewportSize({ width: 1360, height: 420 });
+  await signInAndOpen(page);
+  await newChat(page);
+  await page.getByTestId("model-picker").click();
+  const dialog = page.getByRole("dialog", { name: "Choose a model" });
+  await expect(dialog).toBeVisible();
+  const clipped = await dialog.evaluate((el) => {
+    const parts = [".model-search", ".model-current"].map((sel) => el.querySelector(sel) as HTMLElement);
+    const list = el.querySelector(".model-list") as HTMLElement;
+    return {
+      parts: parts.map((p) => ({ clipped: p.scrollHeight > p.clientHeight + 1, height: p.getBoundingClientRect().height })),
+      listScrolls: list.scrollHeight > list.clientHeight,
+    };
+  });
+  expect(clipped.listScrolls).toBe(true);
+  for (const part of clipped.parts) {
+    expect(part.clipped).toBe(false);
+    expect(part.height).toBeGreaterThan(24);
+  }
+  await expect(dialog.locator(".model-current")).toBeInViewport({ ratio: 1 });
+});

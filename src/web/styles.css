@@ -2534,6 +2534,7 @@ body.is-resizing {
 
 .model-search {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
@@ -2557,6 +2558,7 @@ body.is-resizing {
 }
 
 .model-current {
+  flex: none;
   padding: 7px 14px;
   border-bottom: 1px solid var(--hairline);
   font-size: 12px;

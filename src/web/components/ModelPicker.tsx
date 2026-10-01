@@ -10,6 +10,20 @@ import { load, save } from "../storage.js";
 
 const MAX_RECENT = 5;
 
+/** Visible vertical band for a popover under `el`: the viewport cut by any clipping ancestor. */
+function clipBand(el: HTMLElement): { top: number; bottom: number } {
+  let top = 0;
+  let bottom = window.innerHeight;
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(p).overflowY)) {
+      const r = p.getBoundingClientRect();
+      top = Math.max(top, r.top);
+      bottom = Math.min(bottom, r.bottom);
+    }
+  }
+  return { top, bottom };
+}
+
 function shortName(name: string): string {
   return name.length > 28 ? `${name.slice(0, 27)}…` : name;
 }
@@ -69,10 +83,12 @@ export function ModelPicker({
   useLayoutEffect(() => {
     if (!open || !trigger.current) return;
     const rect = trigger.current.getBoundingClientRect();
-    const above = rect.top - 16;
-    const below = window.innerHeight - rect.bottom - 16;
+    const band = clipBand(trigger.current);
+    const above = rect.top - band.top - 16;
+    const below = band.bottom - rect.bottom - 16;
     const useBelow = above < 280 && below > above;
-    setPlace({ below: useBelow, maxHeight: Math.max(200, Math.min(520, useBelow ? below : above)) });
+    // Fit the side it opens on; never taller than the room (that would push it off-screen).
+    setPlace({ below: useBelow, maxHeight: Math.max(120, Math.min(520, useBelow ? below : above)) });
     const start = flat.findIndex((m) => m.key === current);
     setActive(start >= 0 ? start : 0);
     input.current?.focus();
