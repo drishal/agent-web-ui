@@ -323,7 +323,9 @@ class FakeLiveChat implements LiveChat {
       this.emit({ type: "assistant_delta", field: "thinking", delta: chunk });
     }
     const body = `${text}\n\n${Array.from({ length: repeat }, (_, i) => `- line ${i + 1} with **markdown**`).join("\n")}`;
-    for (const chunk of chunks(body, Math.max(4, Math.ceil(body.length / 8)))) {
+    // "slow" streams many small chunks so tests can act while the run is live.
+    const size = repeat > 1 ? 24 : Math.max(4, Math.ceil(body.length / 8));
+    for (const chunk of chunks(body, size)) {
       await this.pause(signal);
       this.partial += chunk;
       this.emit({ type: "assistant_delta", field: "text", delta: chunk });

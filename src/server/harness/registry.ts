@@ -6,12 +6,15 @@ import { OmpAdapter } from "./omp.js";
 import { PiAdapter } from "./pi.js";
 import type { HarnessAdapter } from "./types.js";
 
+const fakeDelay = () => Number(process.env.AWUI_FAKE_DELAY_MS ?? 15);
+
 const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   pi: () => new PiAdapter(),
   omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home }),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
-  fake: () => new FakeAdapter(),
-  "fake-b": () => new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false } }),
+  fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay() }),
+  "fake-b": () =>
+    new FakeAdapter({ id: "fake-b", displayName: "Fake B", chunkDelayMs: fakeDelay(), capabilities: { supportsSteer: false } }),
 };
 
 export class HarnessRegistry {
