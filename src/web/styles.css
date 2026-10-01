@@ -308,6 +308,7 @@ pre {
 /* ---- sidebar -------------------------------------------------------------- */
 
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -593,6 +594,44 @@ pre {
 .badge-omp {
   background: color-mix(in srgb, var(--thinking) 18%, transparent);
   color: var(--thinking);
+}
+
+/* Resize handle on the sidebar's right edge. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.is-resizing .sidebar-resizer::after {
+  background: var(--accent);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* ---- header ------------------------------------------------------------------ */
@@ -2273,6 +2312,10 @@ pre {
 
   .foot-version {
     display: inline;
+  }
+
+  .sidebar-resizer {
+    display: none;
   }
 
   .sidebar {

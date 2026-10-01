@@ -17,6 +17,7 @@ import { Dialog } from "./components/Dialog.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { type SessionScope, Sidebar } from "./components/Sidebar.js";
+import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
@@ -78,6 +79,7 @@ export function App() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
   const [textScale, setTextScale] = useState<number>(() => load<number>("chatScale", 1));
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => clampSidebar(load<number>("sidebarWidth", SIDEBAR_DEFAULT)));
   const chatId = chat?.chatId ?? null;
 
   // ---- bootstrap -----------------------------------------------------------
@@ -121,6 +123,13 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Keep the sidebar inside its bounds when the window shrinks.
+  useEffect(() => {
+    const onResize = () => setSidebarWidth((w) => clampSidebar(w));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   // ---- chat text size (separate from page zoom, per device) -------------------
@@ -391,8 +400,15 @@ export function App() {
   const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
 
   return (
-    <div className="app">
+    <div className="app" style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}>
       <Sidebar
+        resizer={
+          <SidebarResizer
+            width={sidebarWidth}
+            onResize={setSidebarWidth}
+            onCommit={(w) => save("sidebarWidth", w === SIDEBAR_DEFAULT ? null : w)}
+          />
+        }
         open={drawerOpen}
         harnesses={boot.harnesses}
         harnessId={harnessId}

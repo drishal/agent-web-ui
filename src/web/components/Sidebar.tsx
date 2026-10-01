@@ -108,6 +108,8 @@ export function Sidebar(props: {
   onPair: () => void;
   signedInAs: string | null;
   onSignOut: () => void;
+  /** Drag handle on the right edge (wide screens). */
+  resizer?: React.ReactNode;
   onClose: () => void;
   version: string;
 }) {
@@ -273,6 +275,7 @@ export function Sidebar(props: {
           ) : null}
           <span className="version foot-version">v{props.version}</span>
         </footer>
+        {props.resizer}
       </aside>
     </>
   );
