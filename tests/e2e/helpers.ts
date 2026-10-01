@@ -5,6 +5,8 @@ import { expect, type Page } from "@playwright/test";
  * reliable signal mid-transition, so decide by layout and the drawer's state.
  */
 export async function showSidebar(page: Page): Promise<void> {
+  // Wait for the app shell; before bootstrap finishes neither layout exists yet.
+  await expect(page.locator(".chat-header")).toBeVisible();
   const menu = page.getByRole("button", { name: "Open menu" });
   if (!(await menu.isVisible())) return;
   const sidebar = page.locator(".sidebar");

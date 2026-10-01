@@ -69,7 +69,10 @@ Other devices get a sign-in form; this machine still opens directly.
   - a **Changed N files** list for edits and writes.
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Composer card.**
-  - Model and thinking sit inside the card. Tools are never narrowed: every chat uses the harness's normal tool set, extension tools included.
+  - Model and thinking sit inside the card. The **model picker** is a searchable popover (a bottom sheet on phones):
+    - matching ignores punctuation and spacing, across provider, name, and id, so `gpt55` finds GPT-5.5;
+    - models are grouped by provider, with recently used ones first and the current one checked;
+    - ↑/↓, Page Up/Down, Enter, and Esc work from the search box. Tools are never narrowed: every chat uses the harness's normal tool set, extension tools included.
   - The **context ring** shows how full the context window is.
   - While a run is active you get **Steer**, **Follow-up**, and **Stop**. A harness without steer offers only **Stop and send**, labelled exactly that.
   - Enter sends; on touch devices Enter adds a newline and you tap Send.
@@ -249,7 +252,7 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
@@ -269,11 +272,13 @@ The interface borrows patterns, not code, from three MIT-licensed projects:
   - the composer card with settings inside and the centred empty-chat composer;
   - approvals in the composer;
   - the context ring and the turn rail;
+  - the model picker anchored to the composer, with pinned provider headings;
   - the neutral built-in palette.
-- **[OpenCode](https://github.com/anomalyco/opencode)** (© 2025 opencode): tool counts on the fold line, changed files per turn, and the Deny / Approve button order.
+- **[OpenCode](https://github.com/anomalyco/opencode)** (© 2025 opencode): tool counts on the fold line, changed files per turn, the Deny / Approve button order, and model search that ignores punctuation, with recents.
 - **[Hermes Desktop](https://github.com/NousResearch/hermes-agent/tree/main/apps/desktop)** (© 2025 Nous Research):
   - "flat, not boxed";
   - pinned prompts;
+  - the model picker's "Current" line;
   - the composer status stack with its ridge;
   - stacked approval cards;
   - red reserved for real failures;

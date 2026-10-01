@@ -2,10 +2,7 @@
 // Harness). Tools are never narrowed: each harness keeps its normal tool set.
 import type { ChatState } from "../chat-state.js";
 import { IconChevronDown } from "../icons.js";
-
-function shortModel(name: string): string {
-  return name.length > 28 ? `${name.slice(0, 27)}…` : name;
-}
+import { ModelPicker } from "./ModelPicker.js";
 
 export function ComposerControls({
   chat,
@@ -17,27 +14,17 @@ export function ComposerControls({
   const caps = chat.capabilities;
   const idle = chat.status === "idle" || chat.status === "error";
   const { config } = chat;
-  const modelKnown = config.model !== null && config.models.some((m) => m.key === config.model);
 
   return (
     <div className="composer-controls">
       {caps.supportsModelSelection ? (
-        <label className="pill-select">
-          <select
-            aria-label="Model"
-            value={config.model ?? ""}
-            disabled={!idle || config.models.length === 0}
-            onChange={(e) => void onConfig({ model: e.target.value })}
-          >
-            {!modelKnown ? <option value={config.model ?? ""}>{config.model ?? "No model"}</option> : null}
-            {config.models.map((m) => (
-              <option key={m.key} value={m.key}>
-                {shortModel(m.name === m.id ? m.key : m.name)}
-              </option>
-            ))}
-          </select>
-          <IconChevronDown size={12} />
-        </label>
+        <ModelPicker
+          models={config.models}
+          current={config.model}
+          harnessId={chat.harnessId}
+          disabled={!idle}
+          onSelect={(model) => void onConfig({ model })}
+        />
       ) : null}
       {caps.supportsThinkingLevel && config.thinkingLevels.length > 0 ? (
         <label className="pill-select">

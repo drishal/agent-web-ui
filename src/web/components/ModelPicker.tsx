@@ -1,0 +1,224 @@
+// Searchable model picker anchored to the composer's model pill (DeepSeek
+// Harness's composer seat), with Hermes's "Current" line and OpenCode-style
+// matching plus recents. Combobox + listbox semantics; on phones it opens as
+// a bottom sheet.
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ModelInfo } from "../../shared/protocol.js";
+import { IconCheck, IconChevronDown, IconSearch } from "../icons.js";
+import { groupModels, type ModelGroup } from "../model-search.js";
+import { load, save } from "../storage.js";
+
+const MAX_RECENT = 5;
+
+function shortName(name: string): string {
+  return name.length > 28 ? `${name.slice(0, 27)}…` : name;
+}
+
+export function ModelPicker({
+  models,
+  current,
+  harnessId,
+  disabled,
+  onSelect,
+}: {
+  models: ModelInfo[];
+  current: string | null;
+  harnessId: string;
+  disabled: boolean;
+  onSelect: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [place, setPlace] = useState<{ below: boolean; maxHeight: number }>({ below: false, maxHeight: 520 });
+  const wrap = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const recentKey = `recentModels.${harnessId}`;
+  const currentModel = models.find((m) => m.key === current);
+  const label = currentModel ? currentModel.name : (current ?? "No model");
+
+  const sections = useMemo<Array<ModelGroup & { recent?: boolean }>>(() => {
+    if (!open) return [];
+    const groups = groupModels(models, query, current);
+    if (query.trim()) return groups;
+    const recent = load<string[]>(recentKey, [])
+      .filter((k) => k !== current)
+      .map((k) => models.find((m) => m.key === k))
+      .filter((m): m is ModelInfo => m !== undefined)
+      .slice(0, MAX_RECENT);
+    return recent.length > 0 ? [{ provider: "Recent", models: recent, recent: true }, ...groups] : groups;
+  }, [open, models, query, current, recentKey]);
+  const flat = useMemo(() => sections.flatMap((s) => s.models), [sections]);
+
+  const close = (refocus = true) => {
+    setOpen(false);
+    setQuery("");
+    if (refocus) trigger.current?.focus();
+  };
+
+  const choose = (model: ModelInfo) => {
+    const recent = [model.key, ...load<string[]>(recentKey, []).filter((k) => k !== model.key)].slice(0, 8);
+    save(recentKey, recent);
+    close();
+    if (model.key !== current) onSelect(model.key);
+  };
+
+  // Place above the pill unless there is too little room; size to the space.
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) return;
+    const rect = trigger.current.getBoundingClientRect();
+    const above = rect.top - 16;
+    const below = window.innerHeight - rect.bottom - 16;
+    const useBelow = above < 280 && below > above;
+    setPlace({ below: useBelow, maxHeight: Math.max(200, Math.min(520, useBelow ? below : above)) });
+    const start = flat.findIndex((m) => m.key === current);
+    setActive(start >= 0 ? start : 0);
+    input.current?.focus();
+    // Runs only when the picker opens.
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listId}-opt-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, listId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) close(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setActive((i) => Math.min(i + 1, flat.length - 1));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setActive((i) => Math.max(i - 1, 0));
+        break;
+      case "PageDown":
+        e.preventDefault();
+        setActive((i) => Math.min(i + 8, flat.length - 1));
+        break;
+      case "PageUp":
+        e.preventDefault();
+        setActive((i) => Math.max(i - 8, 0));
+        break;
+      case "Enter": {
+        e.preventDefault();
+        const model = flat[active];
+        if (model) choose(model);
+        break;
+      }
+      case "Escape":
+        e.preventDefault();
+        close();
+        break;
+      case "Tab":
+        close(false);
+        break;
+      default:
+        break;
+    }
+  };
+
+  let index = -1;
+  return (
+    <div className="model-picker" ref={wrap}>
+      <button
+        ref={trigger}
+        type="button"
+        className="pill-trigger"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Model: ${label}`}
+        title={currentModel ? `${currentModel.name} · ${currentModel.provider}` : label}
+        disabled={disabled || models.length === 0}
+        data-testid="model-picker"
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        <span className="pill-label">{shortName(label)}</span>
+        <IconChevronDown size={12} />
+      </button>
+      {open ? (
+        <>
+          <div className="model-backdrop" aria-hidden="true" onClick={() => close(false)} />
+          <div
+            className={`model-pop${place.below ? " is-below" : ""}`}
+            role="dialog"
+            aria-label="Choose a model"
+            style={{ ["--pop-max-h" as string]: `${place.maxHeight}px` }}
+          >
+            <div className="model-search">
+              <IconSearch size={14} />
+              <input
+                ref={input}
+                role="combobox"
+                aria-expanded="true"
+                aria-controls={listId}
+                aria-autocomplete="list"
+                aria-activedescendant={flat.length > 0 ? `${listId}-opt-${active}` : undefined}
+                aria-label="Search models"
+                placeholder="Search models"
+                autoComplete="off"
+                spellCheck={false}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onKeyDown}
+              />
+              <span className="model-count" aria-live="polite">
+                {flat.length}
+              </span>
+            </div>
+            {currentModel ? (
+              <div className="model-current">
+                Current <strong>{currentModel.name}</strong> · {currentModel.provider}
+              </div>
+            ) : null}
+            <div className="model-list" id={listId} role="listbox" aria-label="Models">
+              {sections.map((section) => (
+                <div key={section.provider} role="group" aria-label={section.provider} className="model-group">
+                  <div className="model-group-head" aria-hidden="true">
+                    <span>{section.provider}</span>
+                    <span>{section.models.length}</span>
+                  </div>
+                  {section.models.map((model) => {
+                    index += 1;
+                    const i = index;
+                    return (
+                      <div
+                        key={`${section.provider}:${model.key}`}
+                        id={`${listId}-opt-${i}`}
+                        role="option"
+                        aria-selected={i === active}
+                        className={`model-option${i === active ? " is-active" : ""}${model.key === current ? " is-current" : ""}`}
+                        onPointerMove={() => setActive(i)}
+                        onClick={() => choose(model)}
+                      >
+                        <span className="model-name">{model.name}</span>
+                        {model.name !== model.id ? <span className="model-id">{section.recent ? model.key : model.id}</span> : null}
+                        {model.reasoning ? <span className="model-tag">thinking</span> : null}
+                        {model.key === current ? <IconCheck size={13} className="model-check" /> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {flat.length === 0 ? <div className="model-empty">No models match “{query}”</div> : null}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}

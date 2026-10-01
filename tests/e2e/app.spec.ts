@@ -147,13 +147,71 @@ test("reload re-attaches, and the session list resumes the same live chat", asyn
 test("model and thinking changes apply while idle", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await page.getByRole("combobox", { name: "Model" }).selectOption("fake/slow");
+  await page.getByTestId("model-picker").click();
+  await page.getByRole("combobox", { name: "Search models" }).fill("slow");
+  await expect(page.getByRole("dialog", { name: "Choose a model" }).getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
   await page.getByRole("combobox", { name: "Thinking" }).selectOption("high");
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "Model" })).toHaveValue("fake/slow");
+  await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
   await expect(page.getByRole("combobox", { name: "Thinking" })).toHaveValue("high");
   await expect(page.getByTestId("connection")).toContainText("Connected");
   await expect(page.locator(".status-bar")).toContainText("Fake · Fake Slow · high");
+});
+
+test("the model picker searches across providers, remembers recents, and works by keyboard", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const picker = page.getByTestId("model-picker");
+  await picker.click();
+  const dialog = page.getByRole("dialog", { name: "Choose a model" });
+  await expect(dialog).toContainText("Current Fake Echo · fake");
+  const search = page.getByRole("combobox", { name: "Search models" });
+  await expect(search).toBeFocused();
+  // Grouped by provider, the current provider first.
+  await expect(dialog.getByRole("group")).toHaveCount(3);
+  await expect(dialog.getByRole("group").first()).toHaveAccessibleName("fake");
+  // Punctuation-insensitive: "gpt55" finds GPT-5.5 and GPT-5.5 Mini.
+  await search.fill("gpt55");
+  await expect(dialog.getByRole("option")).toHaveText([/GPT-5\.5/, /GPT-5\.5 Mini/]);
+  await page.keyboard.press("ArrowDown");
+  await expect(dialog.getByRole("option", { selected: true })).toContainText("GPT-5.5 Mini");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(picker).toHaveAccessibleName("Model: GPT-5.5 Mini");
+  await expect(picker).toBeFocused();
+  // Recently used models show first next time (excluding the current one).
+  await picker.click();
+  await search.fill("glm flash");
+  await page.keyboard.press("Enter");
+  await expect(picker).toHaveAccessibleName("Model: GLM-5.3-Flash");
+  await picker.click();
+  await expect(dialog.getByRole("group").first()).toHaveAccessibleName("Recent");
+  await expect(dialog.getByRole("group").first().getByRole("option")).toHaveText([/GPT-5\.5 Mini/]);
+  await search.fill("zzz");
+  await expect(dialog).toContainText("No models match “zzz”");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  // Clicking outside closes it too.
+  await picker.click();
+  await page.locator(".chat-header").click({ position: { x: 20, y: 20 } });
+  await expect(dialog).toBeHidden();
+});
+
+test("the model picker opens as a bottom sheet on phones", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.getByTestId("model-picker").click();
+  const dialog = page.getByRole("dialog", { name: "Choose a model" });
+  await expect(dialog).toBeInViewport();
+  const box = (await dialog.boundingBox()) as { x: number; y: number; width: number; height: number };
+  expect(box.x).toBeLessThanOrEqual(9);
+  expect(box.x + box.width).toBeGreaterThanOrEqual(381);
+  await dialog.getByRole("option", { name: /GLM-5\.3-Flash/ }).click();
+  await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: GLM-5.3-Flash");
 });
 
 test("markdown never renders raw HTML or unsafe links", async ({ page }) => {

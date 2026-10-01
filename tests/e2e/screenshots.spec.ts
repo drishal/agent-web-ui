@@ -63,3 +63,20 @@ test("capture ripple", async ({ page }) => {
     await page.mouse.up();
   }
 });
+
+for (const [name, viewport] of [
+  ["desktop", { width: 1360, height: 860 }],
+  ["phone", { width: 390, height: 844 }],
+] as const) {
+  test(`capture model picker ${name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await signInAndOpen(page);
+    if (name !== "desktop") await page.keyboard.press("Escape");
+    await newChat(page);
+    await sendAndWait(page, "hello");
+    await page.getByTestId("model-picker").click();
+    await page.screenshot({ path: `${dir}/picker-${name}-open.png` });
+    await page.getByRole("combobox", { name: "Search models" }).fill("gpt");
+    await page.screenshot({ path: `${dir}/picker-${name}-search.png` });
+  });
+}
