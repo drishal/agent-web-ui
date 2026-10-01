@@ -13,10 +13,12 @@ import type {
 import { api, ApiError, errorText, onUnauthorized } from "./api.js";
 import { applyEvents, type ChatState } from "./chat-state.js";
 import { Composer } from "./components/Composer.js";
-import { Controls } from "./components/Controls.js";
 import { Conversation } from "./components/Conversation.js";
 import { Dialog } from "./components/Dialog.js";
+import { Loader } from "./components/Loader.js";
 import { type SessionScope, Sidebar } from "./components/Sidebar.js";
+import { StatusBar } from "./components/StatusBar.js";
+import { IconMenu, IconMore } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { ChatStream, type ConnectionState } from "./stream.js";
@@ -34,11 +36,11 @@ const STATUS_LABEL: Record<string, string> = {
   disposed: "Closed",
 };
 
-const CONN_LABEL: Record<ConnectionState, string> = {
+const CONN_BANNER: Record<ConnectionState, string> = {
   connecting: "Connecting",
   connected: "Connected",
   reconnecting: "Reconnecting",
-  disconnected: "Disconnected",
+  disconnected: "Offline — waiting for the connection",
 };
 
 function chatIdFromHash(): string | null {
@@ -75,6 +77,7 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
+  const [textScale, setTextScale] = useState<number>(() => load<number>("chatScale", 1));
   const chatId = chat?.chatId ?? null;
 
   // ---- bootstrap -----------------------------------------------------------
@@ -119,6 +122,12 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  // ---- chat text size (separate from page zoom, per device) -------------------
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--chat-scale", String(textScale));
+  }, [textScale]);
 
   // ---- theme ------------------------------------------------------------------
 
@@ -369,7 +378,11 @@ export function App() {
     );
   }
   if (!boot) {
-    return <div className="fullscreen-message muted">Loading…</div>;
+    return (
+      <div className="fullscreen-message">
+        <Loader label="Connecting to the server" />
+      </div>
+    );
   }
 
   const currentHarness = boot.harnesses.find((h) => h.id === harnessId);
@@ -383,7 +396,7 @@ export function App() {
           ? "Opening…"
           : null;
   const chatHarness = chat ? boot.harnesses.find((h) => h.id === chat.harnessId) : undefined;
-  const statusEntries = chat ? Object.entries(chat.extensionStatus).filter(([k]) => !k.startsWith("widget:")) : [];
+  const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
 
   return (
     <div className="app">
@@ -416,6 +429,11 @@ export function App() {
           setThemeMode(m);
           storeThemeMode(m);
         }}
+        textScale={textScale}
+        onTextScale={(v) => {
+          setTextScale(v);
+          save("chatScale", v);
+        }}
         onPair={() => setPairOpen(true)}
         onClose={() => setDrawerOpen(false)}
         version={boot.version}
@@ -424,7 +442,7 @@ export function App() {
       <main className="main">
         <header className="chat-header">
           <button type="button" className="icon-btn drawer-open" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
-            ☰
+            <IconMenu size={18} />
           </button>
           <div className="chat-title">
             <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "Agent Web UI"}</h1>
@@ -433,9 +451,6 @@ export function App() {
                 <span className={`badge badge-${chat.harnessId}`}>{chatHarness?.displayName ?? chat.harnessId}</span>
                 <span className={`status status-${chat.status}`} data-testid="chat-status">
                   {STATUS_LABEL[chat.status] ?? chat.status}
-                </span>
-                <span className={`conn conn-${conn}`} data-testid="connection" aria-live="polite">
-                  {CONN_LABEL[conn]}
                 </span>
                 <span className="chat-path" title={chat.workspace.path}>
                   {chat.workspace.name}
@@ -446,7 +461,7 @@ export function App() {
           {chat && chat.status !== "disposed" ? (
             <div className="menu">
               <button type="button" className="icon-btn" aria-label="Chat actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((v) => !v)}>
-                ⋯
+                <IconMore size={18} />
               </button>
               {menuOpen ? (
                 <>
@@ -485,14 +500,9 @@ export function App() {
           ) : null}
         </header>
 
-        {chat ? <Controls chat={chat} onConfig={configure} /> : null}
-        {chat && statusEntries.length > 0 ? (
-          <div className="ext-status" aria-label="Extension status">
-            {statusEntries.slice(0, 4).map(([k, v]) => (
-              <span key={k} className="ext-chip" title={`${k}: ${v}`}>
-                {v}
-              </span>
-            ))}
+        {chat && conn !== "connected" && conn !== "connecting" ? (
+          <div className={`conn-banner conn-${conn}`} role="status">
+            {CONN_BANNER[conn]}…
           </div>
         ) : null}
         {chat && chat.config.models.length === 0 && chat.capabilities.supportsModelSelection ? (
@@ -509,21 +519,51 @@ export function App() {
           </div>
         ) : null}
 
-        {chat ? (
-          <>
-            <Conversation
-              items={chat.items}
-              empty={
-                <div className="empty">
-                  <p>
-                    New {chatHarness?.displayName ?? ""} chat in <strong>{chat.workspace.name}</strong>.
-                  </p>
-                  <p className="muted">Tools start read-only. Switch to Full above when you want the agent to change things.</p>
+        {chat && !hasPrompt ? (
+          <div className="hero">
+            <div className="hero-inner">
+              {chat.items.length > 0 ? (
+                <div className="hero-notices">
+                  {chat.items.map((item) =>
+                    item.kind === "notice" ? (
+                      <div key={item.id} className={`notice-row notice-${item.level}`}>
+                        <span className="notice-text">{item.text}</span>
+                      </div>
+                    ) : null,
+                  )}
                 </div>
-              }
-            />
+              ) : null}
+              <h2 className="hero-title">
+                What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
+              </h2>
+              <p className="hero-sub muted">Tools start read-only. Switch to Full below when you want it to change things.</p>
+              {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
+              <Composer
+                key={chat.chatId}
+                hero
+                chat={chat}
+                maxChars={boot.limits.maxMessageChars}
+                placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
+                onSend={send}
+                onStop={stop}
+                onAnswer={answer}
+                onConfig={configure}
+              />
+            </div>
+          </div>
+        ) : chat ? (
+          <>
+            <Conversation items={chat.items} status={chat.status} workspace={chat.workspace.path} />
             {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
-            <Composer chat={chat} maxChars={boot.limits.maxMessageChars} onSend={send} onStop={stop} onAnswer={answer} />
+            <Composer
+              key={chat.chatId}
+              chat={chat}
+              maxChars={boot.limits.maxMessageChars}
+              onSend={send}
+              onStop={stop}
+              onAnswer={answer}
+              onConfig={configure}
+            />
           </>
         ) : (
           <div className="empty empty-main">
@@ -556,6 +596,7 @@ export function App() {
           </div>
         )}
       </main>
+      <StatusBar conn={conn} chat={chat} harnessName={chatHarness?.displayName ?? null} version={boot.version} />
 
       {pickerOpen ? <WorkspacePicker recent={recent} onOpen={(p) => void openWorkspace(p)} onClose={() => setPickerOpen(false)} error={pickerError} /> : null}
       {renameOpen && chat ? (

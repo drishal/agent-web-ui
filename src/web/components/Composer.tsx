@@ -1,23 +1,35 @@
+// The composer card (DeepSeek Harness): text on top, settings and actions in
+// the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { InteractionAnswer, SendMode, ToolsMode } from "../../shared/protocol.js";
 import type { ChatState } from "../chat-state.js";
-import type { InteractionAnswer, SendMode } from "../../shared/protocol.js";
+import { IconArrowUp, IconStop, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
-import { RequestCard } from "./RequestCard.js";
+import { ApprovalStack } from "./ApprovalStack.js";
+import { ComposerControls } from "./ComposerControls.js";
+import { ContextRing } from "./ContextRing.js";
+import { StatusStack } from "./StatusStack.js";
 
 const coarsePointer = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
 export function Composer({
   chat,
   maxChars,
+  hero,
+  placeholder,
   onSend,
   onStop,
   onAnswer,
+  onConfig,
 }: {
   chat: ChatState;
   maxChars: number;
+  hero?: boolean;
+  placeholder?: string;
   onSend: (text: string, mode: SendMode) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
+  onConfig: (patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }) => Promise<void>;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -29,11 +41,6 @@ export function Composer({
   const stopping = chat.status === "stopping";
   const busy = running || stopping || chat.status === "compacting";
   const closed = chat.status === "disposed";
-  const pending = chat.pending[0];
-
-  useEffect(() => {
-    setText(load<string>(draftKey, ""));
-  }, [draftKey]);
 
   useEffect(() => {
     save(draftKey, text);
@@ -43,7 +50,7 @@ export function Composer({
     const el = area.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
   }, [text]);
 
   const submit = useCallback(
@@ -62,8 +69,6 @@ export function Composer({
     [onSend, sending, text],
   );
 
-  const primaryMode: SendMode = busy ? (caps.supportsSteer ? "steer" : "stopAndSend") : "normal";
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || coarsePointer()) return;
     e.preventDefault();
@@ -71,107 +76,86 @@ export function Composer({
     else if (caps.supportsSteer && running) void submit("steer");
   };
 
-  if (pending && !closed) {
-    return (
-      <div className="composer composer-request">
-        <RequestCard
-          key={pending.id}
-          request={pending}
+  const tooLong = text.length > maxChars;
+  const empty = !text.trim();
+  const pending = closed ? [] : chat.pending;
+
+  return (
+    <div className={`composer${hero ? " is-hero" : ""}`}>
+      <StatusStack chatId={chat.chatId} queue={chat.queue} todos={chat.todos} extensionStatus={chat.extensionStatus} />
+      {pending.length > 0 ? (
+        <ApprovalStack
+          pending={pending}
           busy={answering}
-          onAnswer={async (answer) => {
+          stopping={stopping}
+          onStop={onStop}
+          onAnswer={async (request, answer) => {
             setAnswering(true);
-            await onAnswer(pending.id, answer);
+            await onAnswer(request.id, answer);
             setAnswering(false);
           }}
         />
-        {chat.pending.length > 1 ? <p className="composer-hint">{chat.pending.length - 1} more waiting</p> : null}
-        <div className="composer-row">
-          <button type="button" className="btn btn-danger" onClick={onStop} disabled={stopping}>
-            {stopping ? "Stopping…" : "Stop"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const queued = [...chat.queue.steering.map((t) => ({ t, k: "Steering" })), ...chat.queue.followUp.map((t) => ({ t, k: "Queued" }))];
-  const tooLong = text.length > maxChars;
-
-  return (
-    <div className="composer">
-      {queued.length > 0 ? (
-        <ul className="queue" aria-label="Queued messages">
-          {queued.map((q, i) => (
-            <li key={`${q.k}${i}`} className="queue-chip">
-              <span className="queue-kind">{q.k}</span>
-              <span className="queue-text">{q.t}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className="composer-box">
-        <textarea
-          ref={area}
-          className="composer-input"
-          rows={1}
-          value={text}
-          disabled={closed}
-          placeholder={closed ? "This chat is closed" : busy ? (caps.supportsSteer ? "Steer the agent, or queue a follow-up…" : "The agent is working…") : "Message the agent…"}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          aria-label="Message"
-          enterKeyHint={coarsePointer() ? "enter" : "send"}
-        />
-        <div className="composer-row">
-          {tooLong ? <span className="composer-hint is-error">Too long ({text.length.toLocaleString()} / {maxChars.toLocaleString()})</span> : <span className="composer-hint">{busy ? statusHint(chat.status) : ""}</span>}
-          <div className="composer-buttons">
-            {busy ? (
-              <>
-                {caps.supportsSteer ? (
-                  <button type="button" className="btn" disabled={!text.trim() || sending || !running || tooLong} onClick={() => void submit("steer")}>
-                    Steer
+      ) : (
+        <div className={`composer-card${closed ? " is-closed" : ""}`}>
+          <textarea
+            ref={area}
+            className="composer-input"
+            rows={hero ? 2 : 1}
+            value={text}
+            disabled={closed}
+            placeholder={
+              closed
+                ? "This chat is closed"
+                : busy
+                  ? caps.supportsSteer
+                    ? "Steer the agent, or queue a follow-up…"
+                    : "The agent is working…"
+                  : (placeholder ?? "Message the agent…")
+            }
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKeyDown}
+            aria-label="Message"
+            enterKeyHint={coarsePointer() ? "enter" : "send"}
+          />
+          <div className="composer-bar">
+            <ComposerControls chat={chat} onConfig={onConfig} />
+            <div className="composer-actions">
+              {tooLong ? (
+                <span className="composer-error">
+                  {text.length.toLocaleString()} / {maxChars.toLocaleString()}
+                </span>
+              ) : null}
+              <ContextRing context={chat.context} />
+              {busy ? (
+                <>
+                  {caps.supportsSteer ? (
+                    <button type="button" className="pill-btn" disabled={empty || sending || !running || tooLong} onClick={() => void submit("steer")}>
+                      Steer
+                    </button>
+                  ) : null}
+                  {caps.supportsFollowUp ? (
+                    <button type="button" className="pill-btn" disabled={empty || sending || !running || tooLong} onClick={() => void submit("followUp")}>
+                      Follow-up
+                    </button>
+                  ) : null}
+                  {!caps.supportsSteer ? (
+                    <button type="button" className="pill-btn" disabled={empty || sending || stopping || tooLong} onClick={() => void submit("stopAndSend")}>
+                      Stop and send
+                    </button>
+                  ) : null}
+                  <button type="button" className="round-btn is-stop" onClick={onStop} disabled={stopping} aria-label="Stop the agent">
+                    {stopping ? <Spinner size={14} /> : <IconStop size={14} />}
                   </button>
-                ) : null}
-                {caps.supportsFollowUp ? (
-                  <button type="button" className="btn" disabled={!text.trim() || sending || !running || tooLong} onClick={() => void submit("followUp")}>
-                    Follow-up
-                  </button>
-                ) : null}
-                {!caps.supportsSteer ? (
-                  <button type="button" className="btn" disabled={!text.trim() || sending || stopping || tooLong} onClick={() => void submit("stopAndSend")}>
-                    Stop and send
-                  </button>
-                ) : null}
-                <button type="button" className="btn btn-danger" onClick={onStop} disabled={stopping} aria-label="Stop the agent">
-                  {stopping ? "Stopping…" : "Stop"}
+                </>
+              ) : (
+                <button type="button" className="round-btn" aria-label="Send" disabled={empty || sending || closed || tooLong} onClick={() => void submit("normal")}>
+                  <IconArrowUp size={16} />
                 </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!text.trim() || sending || closed || tooLong}
-                onClick={() => void submit(primaryMode)}
-              >
-                Send
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
-}
-
-function statusHint(status: ChatState["status"]): string {
-  switch (status) {
-    case "running":
-      return "Working…";
-    case "stopping":
-      return "Stopping…";
-    case "compacting":
-      return "Compacting…";
-    default:
-      return "";
-  }
 }

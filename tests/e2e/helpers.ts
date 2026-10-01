@@ -30,7 +30,10 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
 export async function newChat(page: Page, harness?: string): Promise<void> {
   await showSidebar(page);
   if (harness) await page.getByRole("radio", { name: harness, exact: true }).click();
-  await page.getByRole("button", { name: "+ New chat" }).click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  // A fresh chat always opens as the hero; wait for it rather than for "Idle",
+  // which the previous chat may already show.
+  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
   await expect(page.getByTestId("chat-status")).toHaveText("Idle");
   await expect(page.getByTestId("connection")).toHaveText("Connected");
 }
@@ -38,4 +41,14 @@ export async function newChat(page: Page, harness?: string): Promise<void> {
 export async function send(page: Page, text: string): Promise<void> {
   await page.getByRole("textbox", { name: "Message" }).fill(text);
   await page.getByRole("button", { name: "Send", exact: true }).click();
+}
+
+/** Send and wait until that turn's answer has finished (not just the "Idle" label). */
+export async function sendAndWait(page: Page, text: string): Promise<void> {
+  const turns = page.getByTestId("turn");
+  const before = await turns.count();
+  await send(page, text);
+  await expect(turns).toHaveCount(before + 1, { timeout: 15_000 });
+  await expect(turns.last().getByTestId("answer")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
 }

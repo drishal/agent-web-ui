@@ -1,7 +1,17 @@
-import { expect, test } from "@playwright/test";
-import { newChat, send, signInAndOpen, token } from "./helpers.js";
+import { expect, type Page, test } from "@playwright/test";
+import { newChat, send, sendAndWait, showSidebar, signInAndOpen, token } from "./helpers.js";
 
-const status = (page: import("@playwright/test").Page) => page.getByTestId("chat-status");
+const status = (page: Page) => page.getByTestId("chat-status");
+const answers = (page: Page) => page.getByTestId("answer");
+const prompts = (page: Page) => page.getByTestId("user-prompt");
+
+/** Open a finished turn's "Worked for …" fold. */
+async function openFold(page: Page, index = -1) {
+  const toggles = page.getByTestId("process-toggle");
+  const toggle = index < 0 ? toggles.last() : toggles.nth(index);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
 
 test("an unsigned browser gets the sign-in message, not the app", async ({ page }) => {
   await page.goto("/");
@@ -17,18 +27,26 @@ test("the token link signs in and the URL is cleaned", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
 });
 
-test("open a project, chat, and see streamed thinking, markdown, and a tool row", async ({ page }) => {
+test("a new chat opens as a hero composer; a turn folds its work above a plain answer", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
+  await expect(page.getByRole("heading", { name: /What should Fake do in alpha\?/ })).toBeVisible();
   await expect(page.getByText("Tools start read-only")).toBeVisible();
-  await send(page, "hello tool **bold**");
-  await expect(status(page)).toHaveText("Working");
-  await expect(page.locator(".tool .tool-name", { hasText: "read" })).toBeVisible();
-  await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  const reply = page.locator(".msg-assistant").last();
-  await expect(reply.locator("strong", { hasText: "bold" })).toBeVisible();
-  await expect(reply.locator(".thinking summary")).toHaveText(/Thinking/);
-  await expect(page.locator(".tool-done")).toHaveCount(1);
+  await sendAndWait(page, "hello tool **bold**");
+  await expect(prompts(page)).toHaveText(["hello tool **bold**"]);
+  await expect(answers(page).last().locator("strong", { hasText: "bold" })).toBeVisible();
+  const toggle = page.getByTestId("process-toggle").last();
+  await expect(toggle).toHaveText(/Worked for \d+s · 1 read/);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await openFold(page);
+  const row = page.getByTestId("tool-row").last();
+  await expect(row).toHaveAttribute("data-tool", "read");
+  await expect(row).toHaveAttribute("data-status", "done");
+  await expect(row).toContainText("README.md");
+  await row.getByRole("button").first().click();
+  await expect(row.locator(".io-card")).toContainText("# Fake README");
+  await expect(page.getByTestId("thought-row").last()).toContainText("Thought");
+  await expect(page.getByRole("button", { name: "Copy reply" }).last()).toBeVisible();
 });
 
 test("switch harness without reloading; capabilities change the composer", async ({ page }) => {
@@ -40,27 +58,25 @@ test("switch harness without reloading; capabilities change the composer", async
   await expect(page.getByRole("button", { name: "Steer" })).toHaveCount(0);
   await page.getByRole("textbox", { name: "Message" }).fill("change of plan");
   await page.getByRole("button", { name: "Stop and send" }).click();
-  await expect(page.locator(".msg-assistant").last()).toContainText("Echo: change of plan", { timeout: 15_000 });
+  await expect(answers(page).last()).toContainText("Echo: change of plan", { timeout: 15_000 });
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  // Switching back: the open chat stays on Fake B; new chats use Fake.
   await page.getByRole("radio", { name: "Fake", exact: true }).click();
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
 });
 
-test("steer and follow-up while running, with a visible queue", async ({ page }) => {
+test("steer and follow-up while running, shown in the status stack", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
   await send(page, "slow work");
   const box = page.getByRole("textbox", { name: "Message" });
   await box.fill("then summarize");
   await page.getByRole("button", { name: "Follow-up" }).click();
-  await expect(page.locator(".queue-chip", { hasText: "then summarize" })).toBeVisible();
+  await expect(page.getByTestId("queue-row").filter({ hasText: "then summarize" })).toBeVisible();
   await box.fill("focus on tests");
   await page.getByRole("button", { name: "Steer" }).click();
   await expect(status(page)).toHaveText("Idle", { timeout: 20_000 });
-  const users = page.locator(".msg-user .msg-user-text");
-  await expect(users).toHaveText(["slow work", "focus on tests", "then summarize"]);
-  await expect(page.locator(".queue-chip")).toHaveCount(0);
+  await expect(prompts(page)).toHaveText(["slow work", "focus on tests", "then summarize"]);
+  await expect(page.getByTestId("queue-row")).toHaveCount(0);
 });
 
 test("stop shows Stopping, then settles with the turn marked stopped", async ({ page }) => {
@@ -71,22 +87,25 @@ test("stop shows Stopping, then settles with the turn marked stopped", async ({ 
   await page.getByRole("button", { name: "Stop the agent" }).click();
   await expect(status(page)).toHaveText(/Stopping|Idle/);
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  await expect(page.locator(".msg-error.is-stopped")).toHaveText("Stopped");
+  await expect(page.locator(".stopped-pill")).toHaveText("Stopped");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
 });
 
-test("an approval request takes over the composer and is recorded", async ({ page }) => {
+test("an approval takes over the composer and is recorded in the turn", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
   await send(page, "ask before reading");
-  const card = page.locator(".request-card");
+  const card = page.getByTestId("approval-card");
+  await expect(card).toContainText("Waiting for approval");
   await expect(card).toContainText("Allow tool: read");
   await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+  await expect(card.getByRole("button")).toHaveText(["Stop", "Deny", "Approve"]);
   await card.getByRole("button", { name: "Approve" }).click();
   await expect(card).toHaveCount(0);
-  await expect(page.locator(".request-record")).toContainText("Approved");
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  await expect(page.locator(".tool-done")).toHaveCount(1);
+  await openFold(page);
+  await expect(page.getByTestId("request-row")).toContainText("Approved");
+  await expect(page.locator('[data-testid="tool-row"][data-status="done"]')).toHaveCount(1);
 });
 
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
@@ -96,53 +115,55 @@ test("reconnects after going offline without duplicating messages", async ({ pag
   await expect(status(page)).toHaveText("Working");
   await context.setOffline(true);
   await expect(page.getByTestId("connection")).toHaveText("Disconnected");
+  await expect(page.locator(".conn-banner")).toBeVisible();
   await page.waitForTimeout(800);
   await context.setOffline(false);
   await expect(page.getByTestId("connection")).toHaveText("Connected", { timeout: 15_000 });
   await expect(status(page)).toHaveText("Idle", { timeout: 20_000 });
-  await expect(page.locator(".msg-user")).toHaveCount(1);
-  await expect(page.locator(".msg-assistant")).toHaveCount(1);
-  const text = await page.locator(".msg-assistant .md").innerText();
+  await expect(prompts(page)).toHaveCount(1);
+  await expect(answers(page)).toHaveCount(1);
+  const text = await answers(page).first().innerText();
   expect(text.match(/Echo: slow stream/g)).toHaveLength(1);
 });
 
 test("reload re-attaches, and the session list resumes the same live chat", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await send(page, "remember me");
-  // Wait for the finished reply, not just "Idle" (which shows until the first event).
-  await expect(page.locator(".msg-assistant .md")).toContainText("Echo: remember me", { timeout: 15_000 });
-  await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
+  await sendAndWait(page, "remember me");
   const url = page.url();
   await page.reload();
   expect(page.url()).toBe(url);
-  await expect(page.locator(".msg-user .msg-user-text")).toHaveText(["remember me"]);
+  await expect(prompts(page)).toHaveText(["remember me"]);
   const row = page.locator(".session", { hasText: "remember me" });
   await expect(row).toBeVisible();
   await expect(row.locator(".live-dot")).toBeVisible();
   await row.click();
-  await expect(page.locator(".msg-user .msg-user-text")).toHaveText(["remember me"]);
-  // Close it, then resume: rebuilt from the harness's own history.
+  await expect(prompts(page)).toHaveText(["remember me"]);
   await page.getByRole("button", { name: "Chat actions" }).click();
   await page.getByRole("menuitem", { name: "Close chat" }).click();
   await expect(page.getByRole("heading", { name: "alpha", level: 2 })).toBeVisible();
   await page.locator(".session", { hasText: "remember me" }).click();
-  await expect(page.locator(".msg-user .msg-user-text")).toHaveText(["remember me"]);
-  await expect(page.locator(".msg-assistant")).toContainText("Echo: remember me");
+  await expect(prompts(page)).toHaveText(["remember me"]);
+  await expect(answers(page)).toContainText("Echo: remember me");
 });
 
 test("full tools need an explicit confirmation", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await page.getByRole("button", { name: "Full", exact: true }).click();
+  const toggle = page.getByTestId("tools-toggle");
+  await expect(toggle).toHaveAccessibleName("Tools: Read-only");
+  await toggle.click();
   const dialog = page.getByRole("dialog", { name: "Enable full tools?" });
   await expect(dialog).toContainText("as you");
   await dialog.getByRole("button", { name: "Keep read-only" }).click();
-  await expect(page.getByRole("button", { name: "Read-only" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Full", exact: true }).click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
   await page.getByRole("dialog", { name: "Enable full tools?" }).getByRole("button", { name: "Enable full tools" }).click();
-  await expect(page.getByRole("button", { name: "Full", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".notice-warning", { hasText: "Full tools enabled" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle).toHaveAccessibleName("Tools: Full");
+  await expect(page.locator(".notice-row.notice-warning", { hasText: "Full tools enabled" })).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });
 
 test("model and thinking changes apply while idle", async ({ page }) => {
@@ -153,19 +174,64 @@ test("model and thinking changes apply while idle", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Model" })).toHaveValue("fake/slow");
   await expect(page.getByRole("combobox", { name: "Thinking" })).toHaveValue("high");
+  await expect(page.getByTestId("connection")).toContainText("Connected");
+  await expect(page.locator(".status-bar")).toContainText("Fake · Fake Slow · high");
 });
 
 test("markdown never renders raw HTML or unsafe links", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await send(page, 'x [bad](javascript:alert(1)) [ok](https://example.com) <img src=x onerror="window.pwned=1"> ![pic](https://example.com/p.png)');
-  await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  const md = page.locator(".msg-assistant .md").last();
+  await sendAndWait(page, 'x [bad](javascript:alert(1)) [ok](https://example.com) <img src=x onerror="window.pwned=1"> ![pic](https://example.com/p.png)');
+  const md = answers(page).last().locator(".md");
   await expect(md.locator("a", { hasText: "ok" })).toHaveAttribute("href", "https://example.com");
   await expect(md.locator("a", { hasText: "bad" })).toHaveCount(0);
   await expect(md.locator("img")).toHaveCount(0);
   await expect(md.locator(".md-image")).toHaveText("[image: pic]");
   expect(await page.evaluate(() => (window as unknown as { pwned?: number }).pwned)).toBeUndefined();
+});
+
+test("todos from the harness show in the status stack, which can be hidden", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "make a todo list");
+  const stack = page.getByTestId("status-stack");
+  await expect(stack).toContainText("Todos");
+  await expect(stack).toContainText("1/3");
+  await expect(stack.locator(".stack-row")).toHaveCount(3);
+  await stack.getByRole("button", { name: "Hide status" }).click();
+  await expect(stack.locator(".stack-row")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("status-stack").getByRole("button", { name: "Show status" })).toBeVisible();
+});
+
+test("context ring, edited files, and the turn rail", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "please edit the app");
+  await expect(page.getByTestId("changed-files")).toContainText("Changed 1 file");
+  await expect(page.getByTestId("changed-files")).toContainText("src/app.ts");
+  await expect(page.getByTestId("process-toggle").last()).toHaveText(/1 edit/);
+  await expect(page.getByTestId("context-ring")).toBeVisible();
+  await expect(page.getByTestId("context-ring")).toHaveAccessibleName(/% of context used · .* tokens/);
+  await sendAndWait(page, "second turn");
+  await sendAndWait(page, "third turn");
+  const rail = page.getByRole("navigation", { name: "Jump to turn" });
+  await expect(rail.getByRole("button")).toHaveCount(3);
+  await rail.getByRole("button", { name: /Turn 1: please edit the app/ }).click();
+  await expect(prompts(page).first()).toBeInViewport();
+});
+
+test("chat text size scales the conversation only", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "size check");
+  const size = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="user-prompt"]') as Element).fontSize));
+  const sidebarSize = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".session-title") as Element).fontSize));
+  const before = await size();
+  const sidebarBefore = await sidebarSize();
+  await page.getByRole("combobox", { name: "Chat text size" }).selectOption({ label: "Larger" });
+  await expect.poll(size).toBeGreaterThan(before * 1.15);
+  expect(await sidebarSize()).toBe(sidebarBefore);
 });
 
 test("the stylix theme file drives colors and passes contrast", async ({ page }) => {
@@ -204,14 +270,45 @@ for (const viewport of [
     await expect(page.locator(".sidebar")).not.toBeInViewport();
     await newChat(page);
     await expect(page.locator(".sidebar")).not.toBeInViewport();
-    await send(page, "hello from the phone");
-    await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
+    await expect(page.locator(".status-bar")).toBeHidden();
+    await sendAndWait(page, "hello from the phone tool");
     await expect(page.getByRole("textbox", { name: "Message" })).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeInViewport();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    await page.getByRole("button", { name: "Open menu" }).click();
-    await expect(page.locator(".sidebar")).toBeInViewport();
+    await expect(page.getByRole("navigation", { name: "Jump to turn" })).toBeHidden();
+    await showSidebar(page);
     await page.keyboard.press("Escape");
     await expect(page.locator(".sidebar")).not.toBeInViewport();
   });
 }
+
+test("several pending requests stack; answering the front one reveals the next", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "ask twice please");
+  const card = page.getByTestId("approval-card");
+  await expect(card).toContainText("1 more");
+  await expect(card).toHaveClass(/behind-1/);
+  const first = (await card.locator(".approval-headline").innerText()).trim();
+  await card.getByRole("button", { name: "Approve" }).click();
+  await expect(card.locator(".approval-headline")).not.toHaveText(first);
+  await expect(card).not.toContainText("more");
+  await card.getByRole("button", { name: "Approve" }).click();
+  await expect(card).toHaveCount(0);
+  await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
+});
+
+test("the All view groups sessions by harness with counts", async ({ page }) => {
+  await signInAndOpen(page, "beta");
+  await newChat(page, "Fake B");
+  await sendAndWait(page, "from b");
+  await newChat(page, "Fake");
+  await sendAndWait(page, "from a");
+  await page.getByRole("radio", { name: "All" }).click();
+  const groups = page.locator(".session-group");
+  await expect(groups).toHaveCount(2);
+  await expect(groups.locator(".group-head")).toHaveText([/Fake\s*\d+/, /Fake B\s*\d+/]);
+  await page.getByRole("radio", { name: "Fake", exact: true }).nth(1).click();
+  await expect(page.locator(".date-divider").first()).toHaveText(/Today|Open/);
+});

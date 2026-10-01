@@ -57,6 +57,10 @@ function apply(state: ChatState | null, event: ChatEvent): ChatState | null {
       else extensionStatus[event.key] = event.text;
       return { ...state, extensionStatus };
     }
+    case "context":
+      return { ...state, context: event.context };
+    case "todos":
+      return { ...state, todos: event.todos };
     case "disposed":
       return { ...state, status: "disposed", gone: event.reason };
     default:
