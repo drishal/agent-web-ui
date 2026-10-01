@@ -13,7 +13,6 @@ import {
   type InteractionAnswer,
   type ModelInfo,
   type TodoItem,
-  type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems } from "./agent-events.js";
 import type {
@@ -66,7 +65,6 @@ export class FakeAdapter implements HarnessAdapter {
       supportsSteer: true,
       supportsFollowUp: true,
       supportsThinkingLevel: true,
-      supportsReadOnlyTools: true,
       supportsCompact: true,
       supportsExtensions: true,
       supportsInteractiveRequests: true,
@@ -121,7 +119,7 @@ export class FakeAdapter implements HarnessAdapter {
       session = { nativeId: randomUUID(), cwd: req.cwd, title: "", messages: [], updatedAt: new Date() };
       this.sessions.set(session.nativeId, session);
     }
-    return new FakeLiveChat(session, req.toolsMode, this.chunkDelayMs);
+    return new FakeLiveChat(session, this.chunkDelayMs);
   }
 
   async shutdown(): Promise<void> {}
@@ -140,7 +138,6 @@ class FakeLiveChat implements LiveChat {
 
   constructor(
     private readonly session: FakeSession,
-    private toolsMode: ToolsMode,
     private readonly delayMs: number,
   ) {}
 
@@ -169,7 +166,6 @@ class FakeLiveChat implements LiveChat {
     return {
       model: this.model,
       thinkingLevel: this.thinkingLevel,
-      toolsMode: this.toolsMode,
       models: FAKE_MODELS,
       thinkingLevels: FAKE_THINKING,
     };
@@ -234,7 +230,7 @@ class FakeLiveChat implements LiveChat {
     await this.running?.catch(() => undefined);
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }): Promise<void> {
+  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     if (this.running) throw new Error("Agent is busy");
     if (patch.model !== undefined) {
       if (!FAKE_MODELS.some((m) => m.key === patch.model)) throw new Error("Unknown model");
@@ -244,7 +240,6 @@ class FakeLiveChat implements LiveChat {
       if (!FAKE_THINKING.includes(patch.thinkingLevel)) throw new Error("Unknown thinking level");
       this.thinkingLevel = patch.thinkingLevel;
     }
-    if (patch.toolsMode !== undefined) this.toolsMode = patch.toolsMode;
     this.emit({ type: "config", config: await this.getConfig() });
   }
 

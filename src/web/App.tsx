@@ -7,7 +7,6 @@ import type {
   SendMode,
   SessionSummary,
   ThemeInfo,
-  ToolsMode,
   WorkspaceInfo,
 } from "../shared/protocol.js";
 import { api, ApiError, errorText, onUnauthorized } from "./api.js";
@@ -321,7 +320,7 @@ export function App() {
     }
   };
 
-  const configure = async (patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }) => {
+  const configure = async (patch: { model?: string; thinkingLevel?: string }) => {
     if (!chat) return;
     try {
       await api(`/api/chats/${chat.chatId}/config`, { method: "PATCH", body: patch });
@@ -536,7 +535,7 @@ export function App() {
               <h2 className="hero-title">
                 What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
               </h2>
-              <p className="hero-sub muted">Tools start read-only. Switch to Full below when you want it to change things.</p>
+              <p className="hero-sub muted">It runs with its normal tools, as you, in this folder.</p>
               {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
               <Composer
                 key={chat.chatId}

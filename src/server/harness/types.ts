@@ -11,7 +11,6 @@ import type {
   ModelInfo,
   QueueState,
   TodoItem,
-  ToolsMode,
 } from "../../shared/protocol.js";
 
 export interface HarnessDiscovery {
@@ -34,7 +33,6 @@ export interface OpenChatRequest {
   cwd: string;
   /** Native id from this adapter's own listSessions(). */
   resumeNativeId?: string;
-  toolsMode: ToolsMode;
 }
 
 /** Normalized events every adapter emits. */
@@ -79,7 +77,7 @@ export interface LiveChat {
   followUp(text: string): Promise<void>;
   /** Aborts the run, clears queues where supported, resolves when idle. */
   abort(): Promise<void>;
-  setConfig(patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }): Promise<void>;
+  setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void>;
   rename(name: string): Promise<void>;
   compact(instructions?: string): Promise<void>;
   /** Returns false when the request is unknown or already resolved. */

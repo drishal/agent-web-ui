@@ -1,7 +1,7 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { InteractionAnswer, SendMode, ToolsMode } from "../../shared/protocol.js";
+import type { InteractionAnswer, SendMode } from "../../shared/protocol.js";
 import type { ChatState } from "../chat-state.js";
 import { IconArrowUp, IconStop, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
@@ -29,7 +29,7 @@ export function Composer({
   onSend: (text: string, mode: SendMode) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
-  onConfig: (patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }) => Promise<void>;
+  onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));

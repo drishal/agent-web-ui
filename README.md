@@ -63,7 +63,7 @@ Open it once; the browser trades the token for a cookie and the token disappears
   - a **Changed N files** list for edits and writes.
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Composer card.**
-  - Model, thinking, and **Read-only / Full** sit inside the card. New chats start read-only, and switching to Full always asks first.
+  - Model and thinking sit inside the card. Tools are never narrowed: every chat uses the harness's normal tool set, extension tools included.
   - The **context ring** shows how full the context window is.
   - While a run is active you get **Steer**, **Follow-up**, and **Stop**. A harness without steer offers only **Stop and send**, labelled exactly that.
   - Enter sends; on touch devices Enter adds a newline and you tap Send.
@@ -106,7 +106,7 @@ src/web/                    React + Vite client
 A third harness is a new file plus a registry entry:
 
 1. Implement `HarnessAdapter` and `LiveChat` from `src/server/harness/types.ts` in `src/server/harness/<name>.ts`. Normalize everything into `HarnessEvent`. Never pass SDK or wire types further out.
-2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared (steer, follow-up, thinking, read-only tools, compact, rename, model selection, interactive requests).
+2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared (steer, follow-up, thinking, compact, rename, model selection, interactive requests).
 3. Add one line to `factories` in `src/server/harness/registry.ts`, and its name to `AWUI_HARNESSES` if it should not be on by default.
 4. Run the contract tests against it. `tests/unit/api.test.ts` exercises the same chat flows the fake adapter supports.
 
@@ -136,7 +136,7 @@ Pi runs in-process through the pinned SDK (`createAgentSessionServices` → `cre
 
 **Trust.** The SDK trusts project folders by default; the Pi CLI does not. This adapter mirrors the CLI and never prompts: it uses the stored decision in Pi's trust store, then your `defaultProjectTrust` setting, and otherwise does not trust the folder. A skipped folder shows a notice telling you to run `pi` there once.
 
-Read-only = `read, grep, find, ls`. Full = Pi's normal active set (your `defaultTools` plus extension tools). Model and thinking changes use `persist: false`, so the web UI never rewrites your Pi defaults.
+Tools are Pi's normal active set (your `defaultTools` plus extension tools); this host never narrows them. Model and thinking changes use `persist: false`, so the web UI never rewrites your Pi defaults.
 
 ### omp
 
@@ -144,7 +144,7 @@ omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported int
 
 - **Listing:** omp's RPC has no session listing, so a short-lived `omp acp` process answers `session/list` and exits after 60 s idle.
 - **Resume:** `--resume <id>` with `--cwd`. The adapter checks that omp opened exactly that session.
-- **Read-only tools:** omp refuses unknown names in `--tools`. A cached `--no-session` probe reads `get_state.dumpTools` and passes only the tools that exist, from `read, grep, find, glob, ast_grep, ask, think`. omp's RPC has no tool-switch command, so changing Read-only ↔ Full restarts the child on the same session (only while idle).
+- **Tools:** omp starts with its normal tool set. The app never passes `--tools`.
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
 - **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp **18.4.5**; other versions show a warning.
 
@@ -173,7 +173,7 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 - Credentials are never read, returned, or logged. Each harness uses its own local auth, and there is no browser login form.
 - No shell endpoint. Strict CSP (`'self'` only, no inline script or style, no CDNs), `Referrer-Policy: no-referrer`, and `frame-ancestors 'none'`.
 - Markdown: raw HTML is dropped. Links are limited to `http`/`https`/`mailto`, and remote images are not loaded.
-- **Neither Pi nor omp sandboxes itself.** They run as you. Read-only is a tool allowlist, not an OS sandbox, and **Tailscale is network access, not a sandbox.** Anyone who can use this UI can make the agent run commands as you.
+- **Neither Pi nor omp sandboxes itself.** They run as you with their full tool set, and **Tailscale is network access, not a sandbox.** Anyone who can use this UI can make the agent run commands as you.
 
 ## Tailscale
 
@@ -230,8 +230,8 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, the full-tools confirmation, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, and 390×844 and 320 px layouts.
-- `npm run smoke` runs the real Pi and omp: discovery, a read-only session, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, and 390×844 and 320 px layouts.
+- `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
 

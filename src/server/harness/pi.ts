@@ -18,7 +18,6 @@ import {
   type InteractionKind,
   type ModelInfo,
   type TodoItem,
-  type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems, normalizeAgentEvent } from "./agent-events.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
@@ -33,7 +32,6 @@ import type {
 } from "./types.js";
 
 const run = promisify(execFile);
-export const PI_READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
 const SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
 
 type AgentSession = pi.AgentSession;
@@ -70,7 +68,6 @@ export class PiAdapter implements HarnessAdapter {
     supportsSteer: true,
     supportsFollowUp: true,
     supportsThinkingLevel: true,
-    supportsReadOnlyTools: true,
     supportsCompact: true,
     supportsExtensions: true,
     supportsInteractiveRequests: true,
@@ -224,7 +221,7 @@ export class PiAdapter implements HarnessAdapter {
     if (modelFallbackMessage) notices.push({ type: "notice", level: "warning", text: modelFallbackMessage });
     const chat = new PiLiveChat(session, services);
     for (const n of notices) chat.emitNow(n);
-    await chat.init(req.toolsMode);
+    await chat.init();
     return chat;
   }
 
@@ -235,8 +232,6 @@ class PiLiveChat implements LiveChat {
   private hub = new EventHub();
   private dialogs = new DialogTracker(this.hub);
   private unsubscribe: () => void;
-  private fullTools: string[] = [];
-  private toolsMode: ToolsMode = "readOnly";
   private models: ModelInfo[] | null = null;
 
   constructor(
@@ -252,22 +247,14 @@ class PiLiveChat implements LiveChat {
     this.hub.emit(event);
   }
 
-  async init(toolsMode: ToolsMode): Promise<void> {
+  /** Pi keeps its normal tool set (defaultTools plus extension tools); this host never narrows it. */
+  async init(): Promise<void> {
     await this.session.bindExtensions({
       uiContext: this.uiContext(),
       mode: "rpc",
       onError: (err) =>
         this.hub.emit({ type: "notice", level: "error", text: `Extension error (${err.event}): ${err.error}` }),
     });
-    this.fullTools = this.session.getActiveToolNames();
-    this.applyTools(toolsMode);
-  }
-
-  private applyTools(mode: ToolsMode): void {
-    const available = new Set(this.session.getAllTools().map((t) => t.name));
-    const names = mode === "full" ? this.fullTools : PI_READ_ONLY_TOOLS.filter((n) => available.has(n));
-    this.session.setActiveToolsByName(names);
-    this.toolsMode = mode;
   }
 
   private dialog(kind: InteractionKind, fields: Partial<pi.ExtensionUIContext> & Record<string, unknown>, opts?: {
@@ -379,7 +366,6 @@ class PiLiveChat implements LiveChat {
     return {
       model: model ? `${model.provider}/${model.id}` : null,
       thinkingLevel: this.session.supportsThinking() ? this.session.thinkingLevel : null,
-      toolsMode: this.toolsMode,
       models: await this.availableModels(),
       thinkingLevels: this.session.supportsThinking() ? this.session.getAvailableThinkingLevels() : [],
     };
@@ -438,7 +424,7 @@ class PiLiveChat implements LiveChat {
     if (this.session.isIdle) this.hub.emit({ type: "settled" });
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }): Promise<void> {
+  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     if (patch.model !== undefined) {
       const models = await this.session.modelRuntime.getAvailable();
       const model = models.find((m) => `${(m as PiModel).provider}/${(m as PiModel).id}` === patch.model);
@@ -452,7 +438,6 @@ class PiLiveChat implements LiveChat {
         persist: false,
       });
     }
-    if (patch.toolsMode !== undefined) this.applyTools(patch.toolsMode);
   }
 
   async rename(name: string): Promise<void> {

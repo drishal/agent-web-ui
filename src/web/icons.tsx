@@ -117,18 +117,6 @@ export const IconMore = (p: IconProps) => (
     <circle cx="12.5" cy="8" r="0.9" fill="currentColor" />
   </Svg>
 );
-export const IconLock = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="3.25" y="7" width="9.5" height="7" rx="1.75" />
-    <path d="M5.25 7V5a2.75 2.75 0 015.5 0v2" />
-  </Svg>
-);
-export const IconUnlock = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="3.25" y="7" width="9.5" height="7" rx="1.75" />
-    <path d="M5.25 7V5a2.75 2.75 0 015.25-1.1" />
-  </Svg>
-);
 export const IconWarning = (p: IconProps) => (
   <Svg {...p}>
     <path d="M8 2l6.25 11H1.75z" />

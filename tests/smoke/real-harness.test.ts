@@ -46,17 +46,16 @@ const harnesses: Array<[string, () => HarnessAdapter]> = [
 
 for (const [name, make] of harnesses) {
   describe.skipIf(!enabled || !installed(name))(`${name} (real)`, () => {
-    it("discovers, opens a read-only session, reports config, and disposes (no model call)", async () => {
+    it("discovers, opens a session with the harness's normal tools, reports config, and disposes (no model call)", async () => {
       const adapter = make();
       const discovery = await adapter.discover();
       expect(discovery.available).toBe(true);
       const cwd = workspace();
-      const live = await adapter.openChat({ cwd, toolsMode: "readOnly" });
+      const live = await adapter.openChat({ cwd });
       const chat = await Chat.open("smoke", adapter, { id: "w", path: cwd, name: "project" }, live);
       const snap = chat.snapshot();
       // Extensions may post startup notices; there must be no conversation yet.
       expect(snap.items.filter((i) => i.kind !== "notice")).toEqual([]);
-      expect(snap.config.toolsMode).toBe("readOnly");
       expect(snap.config.models.length).toBeGreaterThan(0);
       expect(JSON.stringify(snap)).not.toMatch(/api[_-]?key|Bearer |sk-[A-Za-z0-9]{10}/i);
       await chat.dispose("smoke done");
@@ -74,7 +73,7 @@ for (const [name, make] of harnesses) {
     it.skipIf(!model)(`prompt -> stream -> stop with ${model ?? "(SMOKE_MODEL unset)"}`, async () => {
       const adapter = make();
       const cwd = workspace();
-      const live = await adapter.openChat({ cwd, toolsMode: "readOnly" });
+      const live = await adapter.openChat({ cwd });
       const chat = await Chat.open("smoke", adapter, { id: "w", path: cwd, name: "project" }, live);
       await chat.setConfig({ model: model as string });
       await chat.send("Count slowly from 1 to 200, one number per line.", "normal");
@@ -87,7 +86,7 @@ for (const [name, make] of harnesses) {
       const fresh = make();
       const listed = await fresh.listSessions(cwd);
       expect(listed.map((s) => s.nativeId)).toContain(nativeId);
-      const resumed = await fresh.openChat({ cwd, toolsMode: "readOnly", resumeNativeId: nativeId });
+      const resumed = await fresh.openChat({ cwd, resumeNativeId: nativeId });
       expect(resumed.nativeId).toBe(nativeId);
       expect((await resumed.history()).some((i) => i.kind === "user")).toBe(true);
       await resumed.dispose();
@@ -121,7 +120,7 @@ describe.skipIf(!enabled)("pi resume across restart (session written via Pi's ow
       const adapter = new PiAdapter();
       const listed = await adapter.listSessions(cwd);
       expect(listed).toHaveLength(1);
-      const live = await adapter.openChat({ cwd, toolsMode: "readOnly", resumeNativeId: listed[0]?.nativeId as string });
+      const live = await adapter.openChat({ cwd, resumeNativeId: listed[0]?.nativeId as string });
       const items = await live.history();
       expect(items.map((i) => i.kind)).toEqual(["user", "assistant"]);
       expect(items[1]).toMatchObject({ text: "fixture answer" });

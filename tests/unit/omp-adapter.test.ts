@@ -43,7 +43,7 @@ const readState = () => JSON.parse(readFileSync(state, "utf8")) as {
 };
 
 async function openChat(resumeNativeId?: string) {
-  const live = await adapter.openChat({ cwd: project, toolsMode: "readOnly", ...(resumeNativeId ? { resumeNativeId } : {}) });
+  const live = await adapter.openChat({ cwd: project, ...(resumeNativeId ? { resumeNativeId } : {}) });
   open.push(live);
   const ws: WorkspaceInfo = { id: "w", path: project, name: "proj" };
   return { live, chat: await Chat.open("c1", adapter, ws, live) };
@@ -65,14 +65,17 @@ describe("omp adapter (scripted omp)", () => {
     expect(adapter.workspaceProblem(project)).toBeNull();
   });
 
-  it("spawns rpc-ui with read-only --tools and without Pi's PI_* overrides", async () => {
+  it("spawns one rpc-ui child with omp's normal tools and without Pi's PI_* overrides", async () => {
     const { chat } = await openChat();
-    // spawns[0] is the --no-session probe that discovers available tools.
-    const spawn = readState().spawns.find((s) => !s.args.includes("--no-session"));
+    const spawns = readState().spawns;
+    expect(spawns).toHaveLength(1);
+    const spawn = spawns[0];
     expect(spawn?.args.slice(0, 2)).toEqual(["--mode", "rpc-ui"]);
-    expect(spawn?.args[spawn.args.indexOf("--tools") + 1]).toBe("read,grep,glob,ask");
+    expect(spawn?.args).not.toContain("--tools");
+    expect(spawn?.args).not.toContain("--no-session");
     expect(spawn?.envPiDir).toBeNull();
-    expect(chat.snapshot().config).toMatchObject({ model: "fakeomp/m1", thinkingLevel: "low", toolsMode: "readOnly" });
+    expect(chat.snapshot().config).toMatchObject({ model: "fakeomp/m1", thinkingLevel: "low" });
+    expect(chat.snapshot().config).not.toHaveProperty("toolsMode");
     expect(JSON.stringify(chat.snapshot())).not.toMatch(/secret/);
     await until(() => chat.snapshot().extensionStatus.plan === "ready");
   });
@@ -119,21 +122,12 @@ describe("omp adapter (scripted omp)", () => {
     expect(resumed.snapshot().items.filter((i) => i.kind === "user").map((i) => (i as { text: string }).text)).toEqual(["remember this"]);
   });
 
-  it("restarts the child on the same session to change the tool set", async () => {
-    const { chat, live } = await openChat();
-    await chat.send("first", "normal");
+  it("changes model and thinking in place, without restarting omp", async () => {
+    const { chat } = await openChat();
+    await chat.setConfig({ thinkingLevel: "high" });
+    await chat.send("after config", "normal");
     await until(() => chat.status === "idle");
-    const before = live.nativeId;
-    await chat.setConfig({ toolsMode: "full" });
-    const spawns = readState().spawns.filter((s) => !s.args.includes("--no-session"));
-    expect(spawns).toHaveLength(2);
-    expect(spawns[1]?.args).toContain("--resume");
-    expect(spawns[1]?.args).not.toContain("--tools");
-    expect(live.nativeId).toBe(before);
-    expect(chat.snapshot().config.toolsMode).toBe("full");
-    await chat.send("second", "normal");
-    await until(() => chat.status === "idle");
-    expect(chat.snapshot().items.filter((i) => i.kind === "user")).toHaveLength(2);
+    expect(readState().spawns).toHaveLength(1);
   });
 
   it("reports omp context usage and flattens todo phases", async () => {

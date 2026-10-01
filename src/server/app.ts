@@ -170,7 +170,7 @@ export function createApp(deps: AppDeps) {
     const input = body(createChatSchema, req);
     const adapter = availableAdapter(input.harnessId);
     const ws = await workspaces.get(input.workspaceId);
-    const chat = await manager.create(adapter, ws, input.toolsMode ?? "readOnly");
+    const chat = await manager.create(adapter, ws);
     res.status(201).json(chat.snapshot());
   });
 

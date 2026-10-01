@@ -31,7 +31,8 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await signInAndOpen(page);
   await newChat(page);
   await expect(page.getByRole("heading", { name: /What should Fake do in alpha\?/ })).toBeVisible();
-  await expect(page.getByText("Tools start read-only")).toBeVisible();
+  await expect(page.getByText("It runs with its normal tools")).toBeVisible();
+  await expect(page.getByTestId("tools-toggle")).toHaveCount(0);
   await sendAndWait(page, "hello tool **bold**");
   await expect(prompts(page)).toHaveText(["hello tool **bold**"]);
   await expect(answers(page).last().locator("strong", { hasText: "bold" })).toBeVisible();
@@ -145,25 +146,6 @@ test("reload re-attaches, and the session list resumes the same live chat", asyn
   await page.locator(".session", { hasText: "remember me" }).click();
   await expect(prompts(page)).toHaveText(["remember me"]);
   await expect(answers(page)).toContainText("Echo: remember me");
-});
-
-test("full tools need an explicit confirmation", async ({ page }) => {
-  await signInAndOpen(page);
-  await newChat(page);
-  const toggle = page.getByTestId("tools-toggle");
-  await expect(toggle).toHaveAccessibleName("Tools: Read-only");
-  await toggle.click();
-  const dialog = page.getByRole("dialog", { name: "Enable full tools?" });
-  await expect(dialog).toContainText("as you");
-  await dialog.getByRole("button", { name: "Keep read-only" }).click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await toggle.click();
-  await page.getByRole("dialog", { name: "Enable full tools?" }).getByRole("button", { name: "Enable full tools" }).click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await expect(toggle).toHaveAccessibleName("Tools: Full");
-  await expect(page.locator(".notice-row.notice-warning", { hasText: "Full tools enabled" })).toBeVisible();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });
 
 test("model and thinking changes apply while idle", async ({ page }) => {

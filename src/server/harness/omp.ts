@@ -20,7 +20,6 @@ import {
   type ModelInfo,
   type QueueState,
   type TodoItem,
-  type ToolsMode,
 } from "../../shared/protocol.js";
 import { historyToItems, normalizeAgentEvent } from "./agent-events.js";
 import { EventHub } from "./event-hub.js";
@@ -36,10 +35,6 @@ import type {
 
 const run = promisify(execFile);
 export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.5";
-/** Candidate read-only tools; intersected with the tools omp reports for the workspace. */
-export const OMP_READ_ONLY_TOOLS = ["read", "grep", "find", "glob", "ast_grep", "ask", "think"];
-/** Used only if omp does not report its tool list (dumpTools). */
-const OMP_READ_ONLY_FALLBACK = ["read", "grep", "glob"];
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
@@ -342,7 +337,6 @@ export class OmpAdapter implements HarnessAdapter {
     supportsSteer: true,
     supportsFollowUp: true,
     supportsThinkingLevel: true,
-    supportsReadOnlyTools: true,
     supportsCompact: true,
     supportsExtensions: true,
     supportsInteractiveRequests: true,
@@ -350,7 +344,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsModelSelection: true,
   };
   private lister: AcpLister;
-  private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[]; tools: string[] }>();
+  private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[] }>();
 
   constructor(private readonly options: OmpOptions) {
     this.cliCommand = options.command ?? "omp";
@@ -403,12 +397,8 @@ export class OmpAdapter implements HarnessAdapter {
     return this.lister.list(cwd);
   }
 
-  /**
-   * One throwaway `--no-session` child per workspace (cached): models, thinking
-   * levels, and the tool names omp actually offers there. omp rejects unknown
-   * names in --tools, so read-only mode must only list tools that exist.
-   */
-  private async probe(cwd: string): Promise<{ models: ModelInfo[]; levels: string[]; tools: string[] }> {
+  /** One throwaway `--no-session` child per workspace (cached) for models and thinking levels. */
+  private async probe(cwd: string): Promise<{ models: ModelInfo[]; levels: string[] }> {
     const cached = this.probeCache.get(cwd);
     if (cached && Date.now() - cached.at < 5 * 60_000) return cached;
     const rpc = new OmpRpc(this.cliCommand, ["--mode", "rpc-ui", "--no-session", "--cwd", cwd], this.env(), cwd, () => undefined, () => undefined);
@@ -416,13 +406,8 @@ export class OmpAdapter implements HarnessAdapter {
       await rpc.ready;
       const models = await rpc.command<Obj>("get_available_models");
       const levels = await rpc.command<Obj>("get_available_thinking_levels");
-      const state = await rpc.command<Obj>("get_state");
-      const tools = Array.isArray(state?.dumpTools)
-        ? state.dumpTools.map((t) => (isObj(t) && typeof t.name === "string" ? t.name : "")).filter(Boolean)
-        : [];
       const result = {
         at: Date.now(),
-        tools,
         models: (Array.isArray(models?.models) ? models.models : []).map(toModelInfo).filter((m): m is ModelInfo => m !== null),
         levels: Array.isArray(levels?.levels) ? levels.levels.map(String) : [],
       };
@@ -441,16 +426,10 @@ export class OmpAdapter implements HarnessAdapter {
     return (await this.probe(cwd)).levels;
   }
 
-  async readOnlyTools(cwd: string): Promise<string[]> {
-    const { tools } = await this.probe(cwd);
-    if (tools.length === 0) return OMP_READ_ONLY_FALLBACK;
-    return OMP_READ_ONLY_TOOLS.filter((t) => tools.includes(t));
-  }
-
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     const problem = this.workspaceProblem(req.cwd);
     if (problem) throw new Error(problem);
-    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.toolsMode, () => this.readOnlyTools(req.cwd));
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd);
     await chat.start(req.resumeNativeId ?? null);
     return chat;
   }
@@ -473,15 +452,12 @@ class OmpLiveChat implements LiveChat {
   private models: ModelInfo[] | null = null;
   private sessionId: string | null = null;
   private sessionName: string | null = null;
-  private hasMessages = false;
   private disposed = false;
 
   constructor(
     private readonly command: string,
     private readonly env: () => NodeJS.ProcessEnv,
     private readonly cwd: string,
-    private toolsMode: ToolsMode,
-    private readonly readOnlyTools: () => Promise<string[]>,
   ) {}
 
   get nativeId(): string | null {
@@ -497,12 +473,11 @@ class OmpLiveChat implements LiveChat {
     return this.rpc;
   }
 
-  /** Spawn (or respawn) the omp child; events from older children are ignored. */
+  /** Spawn the omp child with its normal tool set (no --tools); stale-child events are ignored. */
   async start(resumeId: string | null): Promise<void> {
     const generation = ++this.generation;
     const args = ["--mode", "rpc-ui", "--cwd", this.cwd];
     if (resumeId) args.push("--resume", resumeId);
-    if (this.toolsMode === "readOnly") args.push("--tools", (await this.readOnlyTools()).join(","));
     const rpc = new OmpRpc(
       this.command,
       args,
@@ -525,7 +500,6 @@ class OmpLiveChat implements LiveChat {
       if (resumeId && sessionId !== resumeId) throw new Error("omp opened a different session than requested");
       this.sessionId = sessionId;
       this.sessionName = typeof state?.sessionName === "string" && state.sessionName ? state.sessionName : null;
-      this.hasMessages = typeof state?.messageCount === "number" && state.messageCount > 0;
       if (sessionId) this.hub.emit({ type: "session", nativeId: sessionId });
     } catch (error) {
       await rpc.kill();
@@ -553,9 +527,6 @@ class OmpLiveChat implements LiveChat {
           steering: Array.isArray(frame.steering) ? frame.steering.map(String) : [],
           followUp: Array.isArray(frame.followUp) ? frame.followUp.map(String) : [],
         };
-        break;
-      case "message_start":
-        this.hasMessages = true;
         break;
       case "session_info_changed":
         if (typeof frame.name === "string") this.sessionName = frame.name;
@@ -663,7 +634,6 @@ class OmpLiveChat implements LiveChat {
     return {
       model: model?.key ?? null,
       thinkingLevel: typeof state?.thinkingLevel === "string" ? state.thinkingLevel : null,
-      toolsMode: this.toolsMode,
       models: this.models,
       thinkingLevels: Array.isArray(levels?.levels) ? levels.levels.map(String) : [],
     };
@@ -716,7 +686,7 @@ class OmpLiveChat implements LiveChat {
     await rpc.command("abort");
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }): Promise<void> {
+  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     if (patch.model !== undefined) {
       const slash = patch.model.indexOf("/");
       if (slash <= 0) throw new Error("Model must be provider/id");
@@ -724,16 +694,6 @@ class OmpLiveChat implements LiveChat {
     }
     if (patch.thinkingLevel !== undefined) {
       await this.live.command("set_thinking_level", { level: patch.thinkingLevel });
-    }
-    if (patch.toolsMode !== undefined && patch.toolsMode !== this.toolsMode) {
-      // omp's RPC has no tool-set command; restart the child on the same session
-      // with the new --tools list. Only valid while idle (enforced by Chat).
-      this.toolsMode = patch.toolsMode;
-      const resumeId = this.hasMessages ? this.sessionId : null;
-      const old = this.rpc;
-      this.rpc = null;
-      await old?.kill();
-      await this.start(resumeId);
     }
   }
 

@@ -1,10 +1,7 @@
-// Model, thinking, and tools live inside the composer card's bottom row
-// (DeepSeek Harness), instead of a separate settings strip.
-import { useState } from "react";
-import type { ToolsMode } from "../../shared/protocol.js";
+// Model and thinking live inside the composer card's bottom row (DeepSeek
+// Harness). Tools are never narrowed: each harness keeps its normal tool set.
 import type { ChatState } from "../chat-state.js";
-import { IconChevronDown, IconLock, IconUnlock } from "../icons.js";
-import { Dialog } from "./Dialog.js";
+import { IconChevronDown } from "../icons.js";
 
 function shortModel(name: string): string {
   return name.length > 28 ? `${name.slice(0, 27)}…` : name;
@@ -15,14 +12,12 @@ export function ComposerControls({
   onConfig,
 }: {
   chat: ChatState;
-  onConfig: (patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }) => Promise<void>;
+  onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
 }) {
-  const [confirmFull, setConfirmFull] = useState(false);
   const caps = chat.capabilities;
   const idle = chat.status === "idle" || chat.status === "error";
   const { config } = chat;
   const modelKnown = config.model !== null && config.models.some((m) => m.key === config.model);
-  const full = config.toolsMode === "full";
 
   return (
     <div className="composer-controls">
@@ -60,44 +55,6 @@ export function ComposerControls({
           </select>
           <IconChevronDown size={12} />
         </label>
-      ) : null}
-      {caps.supportsReadOnlyTools ? (
-        <button
-          type="button"
-          className={`pill-toggle${full ? " is-full" : ""}`}
-          aria-label={`Tools: ${full ? "Full" : "Read-only"}`}
-          aria-pressed={full}
-          data-testid="tools-toggle"
-          disabled={!idle}
-          onClick={() => (full ? void onConfig({ toolsMode: "readOnly" }) : setConfirmFull(true))}
-        >
-          {full ? <IconUnlock size={13} /> : <IconLock size={13} />}
-          <span>{full ? "Full" : "Read-only"}</span>
-        </button>
-      ) : null}
-      {confirmFull ? (
-        <Dialog title="Enable full tools?" onClose={() => setConfirmFull(false)}>
-          <p>
-            With full tools the agent can run shell commands and edit or delete files <strong>as you</strong>, in{" "}
-            <code>{chat.workspace.path}</code> and anywhere else your user can reach.
-          </p>
-          <p className="muted">Read-only is a tool allowlist, not a sandbox. Neither mode isolates the agent from your system.</p>
-          <div className="dialog-actions">
-            <button type="button" className="btn" onClick={() => setConfirmFull(false)}>
-              Keep read-only
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => {
-                setConfirmFull(false);
-                void onConfig({ toolsMode: "full" });
-              }}
-            >
-              Enable full tools
-            </button>
-          </div>
-        </Dialog>
       ) : null}
     </div>
   );

@@ -2,7 +2,7 @@
 // native session: `harnessId + nativeId -> chatId`. Another terminal or
 // process running the same harness is NOT locked out (documented in README).
 import { randomUUID } from "node:crypto";
-import type { ToolsMode, WorkspaceInfo } from "../../shared/protocol.js";
+import type { WorkspaceInfo } from "../../shared/protocol.js";
 import type { HarnessAdapter } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
 
@@ -63,12 +63,12 @@ export class ChatManager {
     for (const [k, id] of this.bySession) if (id === chat.chatId) this.bySession.delete(k);
   }
 
-  async create(adapter: HarnessAdapter, workspace: WorkspaceInfo, toolsMode: ToolsMode): Promise<Chat> {
+  async create(adapter: HarnessAdapter, workspace: WorkspaceInfo): Promise<Chat> {
     const problem = adapter.workspaceProblem(workspace.path);
     if (problem) throw new ChatError(422, "workspace_unsupported", problem);
     let live;
     try {
-      live = await adapter.openChat({ cwd: workspace.path, toolsMode });
+      live = await adapter.openChat({ cwd: workspace.path });
     } catch (error) {
       throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to start: ${errorMessage(error)}`);
     }
@@ -93,7 +93,7 @@ export class ChatManager {
       }
       let live;
       try {
-        live = await adapter.openChat({ cwd: workspace.path, resumeNativeId: nativeId, toolsMode: "readOnly" });
+        live = await adapter.openChat({ cwd: workspace.path, resumeNativeId: nativeId });
       } catch (error) {
         throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to resume: ${errorMessage(error)}`);
       }

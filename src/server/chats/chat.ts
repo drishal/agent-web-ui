@@ -14,7 +14,6 @@ import type {
   SendMode,
   TodoItem,
   ToolItem,
-  ToolsMode,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
 import { boundText, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
@@ -540,7 +539,7 @@ export class Chat {
     if (this.status === "stopping") this.setStatus("idle");
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string; toolsMode?: ToolsMode }): Promise<void> {
+  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     this.assertOpen();
     if (this.status !== "idle" && this.status !== "error") {
       throw new ChatError(409, "busy", "Settings can only change while the agent is idle");
@@ -552,9 +551,6 @@ export class Chat {
     if (patch.thinkingLevel !== undefined && !caps.supportsThinkingLevel) {
       throw new ChatError(400, "unsupported", "This harness has no thinking levels");
     }
-    if (patch.toolsMode !== undefined && !caps.supportsReadOnlyTools) {
-      throw new ChatError(400, "unsupported", "This harness has no read-only mode");
-    }
     try {
       await this.live.setConfig(patch);
     } catch (error) {
@@ -562,12 +558,6 @@ export class Chat {
     }
     this.config = await this.live.getConfig();
     this.emit({ type: "config", config: this.config });
-    if (patch.toolsMode) {
-      this.notice(
-        patch.toolsMode === "full" ? "warning" : "info",
-        patch.toolsMode === "full" ? "Full tools enabled for this chat" : "Read-only tools enabled for this chat",
-      );
-    }
   }
 
   async rename(name: string): Promise<void> {

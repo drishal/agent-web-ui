@@ -56,7 +56,7 @@ describe("chat lifecycle over HTTP + SSE", () => {
     const created = await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id });
     expect(created.status).toBe(201);
     const chat = created.body as ChatSnapshot;
-    expect(chat.config.toolsMode).toBe("readOnly");
+    expect(chat.config).not.toHaveProperty("toolsMode");
     const sse = openSse(t, chat.chatId, agent.cookie);
     await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "snapshot"));
     const sent = await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "hello tool" });
@@ -223,9 +223,11 @@ describe("chat lifecycle over HTTP + SSE", () => {
   it("changes config only while idle and validates values", async () => {
     const { agent, ws } = await setup({ chunkDelayMs: 20 });
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
-    const ok = await agent.patch(`/api/chats/${chat.chatId}/config`).send({ model: "fake/slow", thinkingLevel: "high", toolsMode: "full" });
+    const ok = await agent.patch(`/api/chats/${chat.chatId}/config`).send({ model: "fake/slow", thinkingLevel: "high" });
     expect(ok.status).toBe(200);
-    expect(ok.body).toMatchObject({ model: "fake/slow", thinkingLevel: "high", toolsMode: "full" });
+    expect(ok.body).toMatchObject({ model: "fake/slow", thinkingLevel: "high" });
+    // There is no tool-narrowing mode to switch to.
+    expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ toolsMode: "readOnly" })).status).toBe(400);
     expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ model: "nope/x" })).status).toBe(422);
     expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({})).status).toBe(400);
     await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "slow" });

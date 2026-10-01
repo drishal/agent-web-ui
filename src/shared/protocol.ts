@@ -9,7 +9,6 @@ export interface HarnessCapabilities {
   supportsSteer: boolean;
   supportsFollowUp: boolean;
   supportsThinkingLevel: boolean;
-  supportsReadOnlyTools: boolean;
   supportsCompact: boolean;
   supportsExtensions: boolean;
   supportsInteractiveRequests: boolean;
@@ -60,8 +59,6 @@ export interface SessionSummary {
   liveChatId?: string;
 }
 
-export type ToolsMode = "readOnly" | "full";
-
 export type ChatStatus = "starting" | "idle" | "running" | "stopping" | "compacting" | "error" | "disposed";
 
 export interface ModelInfo {
@@ -76,7 +73,6 @@ export interface ModelInfo {
 export interface ChatConfig {
   model: string | null;
   thinkingLevel: string | null;
-  toolsMode: ToolsMode;
   models: ModelInfo[];
   thinkingLevels: string[];
 }
@@ -244,7 +240,6 @@ export const openWorkspaceSchema = z.object({ path: z.string().min(1).max(4096) 
 export const createChatSchema = z.object({
   harnessId: z.string().min(1).max(64),
   workspaceId: z.string().min(1).max(128),
-  toolsMode: z.enum(["readOnly", "full"]).optional(),
 });
 export const resumeChatSchema = z.object({
   harnessId: z.string().min(1).max(64),
@@ -259,9 +254,8 @@ export const patchConfigSchema = z
   .object({
     model: z.string().min(1).max(512).optional(),
     thinkingLevel: z.string().min(1).max(32).optional(),
-    toolsMode: z.enum(["readOnly", "full"]).optional(),
   })
-  .refine((v) => v.model !== undefined || v.thinkingLevel !== undefined || v.toolsMode !== undefined, {
+  .refine((v) => v.model !== undefined || v.thinkingLevel !== undefined, {
     message: "empty patch",
   });
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(200) });
