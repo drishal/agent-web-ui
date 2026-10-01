@@ -294,3 +294,30 @@ test("the All view groups sessions by harness with counts", async ({ page }) => 
   await page.getByRole("radio", { name: "Fake", exact: true }).nth(1).click();
   await expect(page.locator(".date-divider").first()).toHaveText(/Today|Open/);
 });
+
+test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {
+  await signInAndOpen(page);
+  const btn = page.getByRole("button", { name: "Refresh sessions" });
+  const box = (await btn.boundingBox()) as { x: number; y: number; width: number; height: number };
+  const px = box.x + 6;
+  const py = box.y + box.height / 2;
+  await page.mouse.move(px, py);
+  await page.mouse.down();
+  const ink = btn.locator(".ripple");
+  await expect(ink).toHaveCount(1);
+  const inkBox = (await ink.boundingBox()) as { x: number; y: number; width: number; height: number };
+  expect(Math.abs(inkBox.x + inkBox.width / 2 - px)).toBeLessThan(3);
+  expect(Math.abs(inkBox.y + inkBox.height / 2 - py)).toBeLessThan(3);
+  await expect(btn).toHaveAccessibleName("Refresh sessions");
+  await page.mouse.up();
+  await expect(ink).toHaveCount(0, { timeout: 3000 });
+  await btn.focus();
+  await page.keyboard.press("Enter");
+  await expect(ink).toHaveCount(1);
+  await expect(ink).toHaveCount(0, { timeout: 3000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(ink).toHaveCount(0);
+  expect(await btn.locator(".ripple").count()).toBe(0);
+});

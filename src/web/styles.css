@@ -2330,3 +2330,54 @@ pre {
     display: none;
   }
 }
+
+/* ---- Material-style ink ripple (ripple.ts) --------------------------------- */
+
+.ripple-pos {
+  position: relative;
+}
+
+.ripple-host {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.ripple {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.16;
+  pointer-events: none;
+  transform: scale(0);
+  animation: ripple-grow 450ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  transition: opacity 280ms ease-out;
+}
+
+.ripple.is-out {
+  opacity: 0;
+}
+
+.btn-primary > .ripple,
+.btn-danger > .ripple,
+.round-btn > .ripple {
+  opacity: 0.26;
+}
+
+.btn-primary > .ripple.is-out,
+.btn-danger > .ripple.is-out,
+.round-btn > .ripple.is-out {
+  opacity: 0;
+}
+
+@keyframes ripple-grow {
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ripple {
+    display: none;
+  }
+}

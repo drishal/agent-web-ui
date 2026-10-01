@@ -72,6 +72,7 @@ Open it once; the browser trades the token for a cookie and the token disappears
 - **Turn rail** on the right (wide screens): one mark per turn; hover for the prompt, click to jump.
 - **Status bar** at the bottom (desktop): connection, harness · model · thinking, project path, version. Phones show a banner only when the connection drops.
 - **Chat menu (⋯):** Rename, Compact context, Close chat.
+- **Buttons** show a Material-style ink ripple: it grows from where you press, fades on release, starts from the centre for Enter/Space, and is off when your system asks for reduced motion.
 
 TUI-only slash commands are not emulated. New, Resume, Rename, Compact, model, thinking, and tools are the web actions.
 
@@ -230,7 +231,7 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers sign-in, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
