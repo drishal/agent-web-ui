@@ -1,0 +1,154 @@
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import request from "supertest";
+import { createApp } from "../../src/server/app.js";
+import { ChatManager } from "../../src/server/chats/manager.js";
+import { FakeAdapter } from "../../src/server/harness/fake.js";
+import { HarnessRegistry } from "../../src/server/harness/registry.js";
+import { Security } from "../../src/server/security.js";
+import { ThemeStore } from "../../src/server/theme.js";
+import { Workspaces } from "../../src/server/workspaces.js";
+
+export const TOKEN = "test-token-abcdefghijklmnopqrstuvwx";
+
+export function tempDir(prefix = "awui-"): string {
+  return mkdtempSync(path.join(tmpdir(), prefix));
+}
+
+export interface TestApp {
+  app: ReturnType<typeof createApp>;
+  /** Listening server: cookies are bound to host:port, so reuse one port. */
+  server: http.Server;
+  port: number;
+  close(): Promise<void>;
+  manager: ChatManager;
+  registry: HarnessRegistry;
+  root: string;
+  project: string;
+  security: Security;
+  fake: FakeAdapter;
+}
+
+export async function makeTestApp(options: {
+  allowedHosts?: string[];
+  allowedTailscaleUsers?: string[];
+  themeFile?: string | null;
+  chunkDelayMs?: number;
+  heartbeatMs?: number;
+} = {}): Promise<TestApp> {
+  const root = tempDir();
+  const project = path.join(root, "proj");
+  mkdirSync(project);
+  const registry = new HarnessRegistry();
+  const fake = new FakeAdapter({ chunkDelayMs: options.chunkDelayMs ?? 2 });
+  registry.register(fake);
+  registry.register(new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false } }));
+  await registry.refreshStatus();
+  const { workspaces } = await Workspaces.create([root], root);
+  const security = new Security({
+    port: 4783,
+    allowedHosts: options.allowedHosts ?? [],
+    allowedTailscaleUsers: options.allowedTailscaleUsers ?? [],
+    secret: randomBytes(32),
+    token: TOKEN,
+  });
+  const manager = new ChatManager();
+  const app = createApp({
+    version: "test",
+    home: root,
+    registry,
+    manager,
+    workspaces,
+    security,
+    theme: new ThemeStore(options.themeFile ?? null, options.themeFile != null, () => undefined),
+    pairingUrls: [],
+    webDir: null,
+    heartbeatMs: options.heartbeatMs ?? 20_000,
+    log: () => undefined,
+  });
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const close = async () => {
+    await manager.shutdown();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  };
+  return { app, server, port, close, manager, registry, root, project, security, fake };
+}
+
+/** A supertest agent that has exchanged the launch token for a cookie. */
+export async function signedIn(t: TestApp) {
+  const agent = request.agent(t.server);
+  const res = await agent.get(`/?token=${TOKEN}`);
+  if (res.status !== 302) throw new Error(`token exchange failed: ${res.status}`);
+  const setCookie = res.headers["set-cookie"] as unknown as string[];
+  const cookie = (setCookie[0] ?? "").split(";")[0] ?? "";
+  return Object.assign(agent, { cookie });
+}
+
+export interface SseMessage {
+  id?: number;
+  event: string;
+  data: unknown;
+}
+
+/** Minimal SSE reader for tests. */
+export function openSse(t: TestApp, chatId: string, cookie: string, lastEventId?: number) {
+  const messages: SseMessage[] = [];
+  let ended = false;
+  const query = lastEventId !== undefined ? `?lastEventId=${lastEventId}` : "";
+  const req = http.get(
+    { host: "127.0.0.1", port: t.port, path: `/api/chats/${chatId}/events${query}`, headers: { cookie } },
+    (res) => {
+      let buf = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => {
+        buf += chunk;
+        let idx: number;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const raw = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const msg: SseMessage = { event: "message", data: null };
+          let data = "";
+          for (const line of raw.split("\n")) {
+            if (line.startsWith("id: ")) msg.id = Number(line.slice(4));
+            else if (line.startsWith("event: ")) msg.event = line.slice(7);
+            else if (line.startsWith("data: ")) data += line.slice(6);
+          }
+          if (data) {
+            msg.data = JSON.parse(data);
+            messages.push(msg);
+          }
+        }
+      });
+      res.on("end", () => {
+        ended = true;
+      });
+    },
+  );
+  req.on("error", () => {
+    ended = true;
+  });
+  const chatEvents = () => messages.filter((m) => m.event === "chat").map((m) => m.data as { type: string } & Record<string, unknown>);
+  return {
+    messages,
+    chatEvents,
+    get ended() {
+      return ended;
+    },
+    lastId: () => [...messages].reverse().find((m) => m.id !== undefined)?.id,
+    close: () => req.destroy(),
+    async waitFor(predicate: () => boolean, timeoutMs = 8000): Promise<void> {
+      const start = Date.now();
+      while (!predicate()) {
+        if (Date.now() - start > timeoutMs) throw new Error("timed out waiting for SSE condition");
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    },
+  };
+}
