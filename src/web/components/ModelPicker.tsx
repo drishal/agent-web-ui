@@ -268,7 +268,7 @@ export function ModelPicker({
                             {model.levels[model.levels.length - 1]}
                           </span>
                         ) : null}
-                        {model.key === current ? <IconCheck size={13} className="model-check" /> : null}
+                        <span className="model-check">{model.key === current ? <IconCheck size={13} /> : null}</span>
                       </div>
                     );
                   })}

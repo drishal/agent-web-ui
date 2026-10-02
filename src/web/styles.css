@@ -2957,6 +2957,11 @@ body.is-resizing {
 }
 
 .model-option.is-active {
+  background: var(--hover);
+}
+
+/* The model in use: the same selected fill the sidebar gives the open session. */
+.model-option.is-current {
   background: var(--active);
 }
 
@@ -2997,12 +3002,16 @@ body.is-resizing {
 
 .model-check {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
   margin-left: auto;
   color: var(--accent);
 }
 
 .model-tag + .model-check {
-  margin-left: 4px;
+  margin-left: 8px;
 }
 
 .model-empty {
