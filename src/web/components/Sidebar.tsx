@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { HarnessStatus, SessionSummary, WorkspaceInfo } from "../../shared/protocol.js";
-import { IconChevronDown, IconFolder, IconPlus, IconSearch } from "../icons.js";
+import type { HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
+import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch } from "../icons.js";
+import { dateBucket, groupByProject, type ProjectGroup, type SessionScope } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
 
-export type SessionScope = "harness" | "all";
+/** Sessions shown per project before "Show N more". */
+const VISIBLE_CURRENT = 8;
+const VISIBLE_OTHER = 4;
 
 export const TEXT_SCALES: Array<[string, number]> = [
   ["Small", 0.92],
@@ -25,20 +28,6 @@ function relativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function dateBucket(iso: string | null): string {
-  if (!iso) return "Older";
-  const then = new Date(iso);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const day = 86_400_000;
-  const t = then.getTime();
-  if (t >= today.getTime()) return "Today";
-  if (t >= today.getTime() - day) return "Yesterday";
-  if (t >= today.getTime() - 7 * day) return "Previous 7 days";
-  if (t >= today.getTime() - 30 * day) return "Previous 30 days";
-  return "Older";
-}
-
 function SessionRow({
   s,
   active,
@@ -46,7 +35,7 @@ function SessionRow({
   showBadge,
   onOpen,
 }: {
-  s: SessionSummary;
+  s: ProjectSession;
   active: boolean;
   harnessName: string;
   showBadge: boolean;
@@ -55,10 +44,10 @@ function SessionRow({
   return (
     <li>
       <button type="button" className={`session${active ? " is-active" : ""}`} onClick={onOpen} aria-current={active ? "true" : undefined}>
+        {showBadge ? <span className={`harness-dot harness-${s.harnessId}`} role="img" aria-label={harnessName} title={harnessName} /> : null}
         <span className="session-title">{s.title}</span>
         <span className="session-meta">
           {s.liveChatId ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
-          {showBadge ? <span className={`badge badge-${s.harnessId}`}>{harnessName}</span> : null}
           <span className="session-time">{relativeTime(s.updatedAt)}</span>
         </span>
       </button>
@@ -66,16 +55,81 @@ function SessionRow({
   );
 }
 
-function HarnessGroup({ name, count, children }: { name: string; count: number; children: React.ReactNode }) {
+/** One project: header (collapse, new chat here), date-divided sessions, "Show N more". */
+function ProjectGroupView({
+  group,
+  searching,
+  isActive,
+  harnessName,
+  showBadges,
+  canStartChat,
+  onOpen,
+  onNewChat,
+}: {
+  group: ProjectGroup;
+  searching: boolean;
+  isActive: (s: ProjectSession) => boolean;
+  harnessName: (id: string) => string;
+  showBadges: boolean;
+  canStartChat: boolean;
+  onOpen: (s: ProjectSession) => void;
+  onNewChat: (ws: WorkspaceInfo) => void;
+}) {
   const [open, setOpen] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  const { workspace, sessions, current } = group;
+  const limit = current ? VISIBLE_CURRENT : VISIBLE_OTHER;
+  const shown = searching || showAll ? sessions : sessions.slice(0, limit);
+  const hidden = sessions.length - shown.length;
+
+  const rows: React.ReactNode[] = [];
+  let bucket = "";
+  for (const s of shown) {
+    const b = s.liveChatId && !s.updatedAt ? "Open" : dateBucket(s.updatedAt);
+    if (b !== bucket) {
+      bucket = b;
+      rows.push(
+        <li key={`d-${b}`} className="date-divider" role="presentation">
+          {b}
+        </li>,
+      );
+    }
+    rows.push(<SessionRow key={s.id} s={s} active={isActive(s)} harnessName={harnessName(s.harnessId)} showBadge={showBadges} onOpen={() => onOpen(s)} />);
+  }
+
   return (
-    <li className={`session-group${open ? " is-open" : ""}`}>
-      <button type="button" className="group-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <IconChevronDown size={12} className="group-chevron" />
-        <span>{name}</span>
-        <span className="group-count">{count}</span>
-      </button>
-      {open ? <ul className="session-sublist">{children}</ul> : null}
+    <li className={`project-group${open ? " is-open" : ""}${current ? " is-current" : ""}`} data-testid="project-group">
+      <div className="project-head">
+        <button type="button" className="project-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={workspace.path}>
+          <IconChevronDown size={12} className="group-chevron" />
+          <IconFolder size={14} />
+          <span className="project-name">{workspace.name}</span>
+          <span className="group-count">{sessions.length}</span>
+        </button>
+        <button
+          type="button"
+          className="icon-btn project-new"
+          aria-label={`New chat in ${workspace.name}`}
+          title={`New chat in ${workspace.name}`}
+          disabled={!canStartChat}
+          onClick={() => onNewChat(workspace)}
+        >
+          <IconPlus size={13} />
+        </button>
+      </div>
+      {open ? (
+        <ul className="session-sublist">
+          {rows}
+          {sessions.length === 0 ? <li className="sidebar-note">No sessions here yet</li> : null}
+          {hidden > 0 ? (
+            <li>
+              <button type="button" className="show-more" onClick={() => setShowAll(true)}>
+                <IconMore size={13} /> Show {hidden} more in {workspace.name}
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
     </li>
   );
 }
@@ -89,7 +143,10 @@ export function Sidebar(props: {
   onPickWorkspace: () => void;
   onNewChat: () => void;
   newChatDisabled: string | null;
-  sessions: SessionSummary[];
+  /** A chat can start in some project (harness available, nothing opening). */
+  canStartChat: boolean;
+  onNewChatIn: (ws: WorkspaceInfo) => void;
+  overview: SessionsOverview;
   sessionsError: string | null;
   sessionsLoading: boolean;
   scope: SessionScope;
@@ -98,7 +155,7 @@ export function Sidebar(props: {
   onQuery: (q: string) => void;
   activeSessionId: string | null;
   activeChatId: string | null;
-  onOpenSession: (s: SessionSummary) => void;
+  onOpenSession: (s: ProjectSession) => void;
   onRefresh: () => void;
   themeMode: ThemeMode;
   schemeName: string | null;
@@ -115,7 +172,16 @@ export function Sidebar(props: {
 }) {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
   const names = useMemo(() => new Map(props.harnesses.map((h) => [h.id as string, h.displayName])), [props.harnesses]);
-  const filtered = props.sessions.filter((s) => !props.query || s.title.toLowerCase().includes(props.query.toLowerCase()));
+  const groups = useMemo(
+    () =>
+      groupByProject(props.overview, {
+        currentId: props.workspace?.id ?? null,
+        harnessId: props.harnessId,
+        scope: props.scope,
+        query: props.query,
+      }),
+    [props.overview, props.workspace, props.harnessId, props.scope, props.query],
+  );
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
   const onCloseRef = useRef(props.onClose);
@@ -132,39 +198,9 @@ export function Sidebar(props: {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const isActive = (s: SessionSummary) =>
+  const isActive = (s: ProjectSession) =>
     (props.activeSessionId !== null && s.id === props.activeSessionId) || (s.liveChatId !== undefined && s.liveChatId === props.activeChatId);
-
-  let list: React.ReactNode;
-  if (props.scope === "all") {
-    const byHarness = new Map<string, SessionSummary[]>();
-    for (const s of filtered) byHarness.set(s.harnessId, [...(byHarness.get(s.harnessId) ?? []), s]);
-    list = [...byHarness.entries()].map(([id, group]) => (
-      <HarnessGroup key={id} name={names.get(id) ?? id} count={group.length}>
-        {group.map((s) => (
-          <SessionRow key={s.id} s={s} active={isActive(s)} harnessName={names.get(s.harnessId) ?? s.harnessId} showBadge={false} onOpen={() => props.onOpenSession(s)} />
-        ))}
-      </HarnessGroup>
-    ));
-  } else {
-    const nodes: React.ReactNode[] = [];
-    let bucket = "";
-    for (const s of filtered) {
-      const b = s.liveChatId && !s.updatedAt ? "Open" : dateBucket(s.updatedAt);
-      if (b !== bucket) {
-        bucket = b;
-        nodes.push(
-          <li key={`d-${b}`} className="date-divider" role="presentation">
-            {b}
-          </li>,
-        );
-      }
-      nodes.push(
-        <SessionRow key={s.id} s={s} active={isActive(s)} harnessName={names.get(s.harnessId) ?? s.harnessId} showBadge={false} onOpen={() => props.onOpenSession(s)} />,
-      );
-    }
-    list = nodes;
-  }
+  const searching = props.query.trim() !== "";
 
   return (
     <>
@@ -193,6 +229,7 @@ export function Sidebar(props: {
               disabled={!h.available}
               onClick={() => props.onHarness(h.id)}
             >
+              <span className={`harness-dot harness-${h.id}`} aria-hidden="true" />
               {h.displayName}
             </button>
           ))}
@@ -237,10 +274,22 @@ export function Sidebar(props: {
             </button>
           </div>
           {props.sessionsError ? <p className="sidebar-note is-warning">{props.sessionsError}</p> : null}
-          <ul className="session-list" aria-busy={props.sessionsLoading}>
-            {list}
-            {!props.sessionsLoading && props.workspace && filtered.length === 0 && !props.sessionsError ? (
-              <li className="sidebar-note">{props.query ? "No matching sessions" : "No sessions in this folder yet"}</li>
+          <ul className="session-list" aria-busy={props.sessionsLoading} aria-label="Sessions by project">
+            {groups.map((g) => (
+              <ProjectGroupView
+                key={g.workspace.id}
+                group={g}
+                searching={searching}
+                isActive={isActive}
+                harnessName={(id) => names.get(id) ?? id}
+                showBadges={props.scope === "all"}
+                canStartChat={props.canStartChat}
+                onOpen={props.onOpenSession}
+                onNewChat={props.onNewChatIn}
+              />
+            ))}
+            {!props.sessionsLoading && groups.length === 0 && !props.sessionsError ? (
+              <li className="sidebar-note">{searching ? "No matching sessions" : "No sessions yet. Choose a folder and start a chat."}</li>
             ) : null}
           </ul>
         </div>

@@ -4,8 +4,9 @@ import type {
   ChatEvent,
   ChatSnapshot,
   InteractionAnswer,
+  ProjectSession,
   SendMode,
-  SessionSummary,
+  SessionsOverview,
   ThemeInfo,
   WorkspaceInfo,
 } from "../shared/protocol.js";
@@ -16,11 +17,12 @@ import { Conversation } from "./components/Conversation.js";
 import { Dialog } from "./components/Dialog.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
-import { type SessionScope, Sidebar } from "./components/Sidebar.js";
+import { Sidebar } from "./components/Sidebar.js";
 import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
+import type { SessionScope } from "./session-groups.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { ChatStream, type ConnectionState } from "./stream.js";
 import { applyTheme, fetchTheme, storedThemeMode, storeThemeMode, type ThemeMode } from "./theme.js";
@@ -65,10 +67,10 @@ export function App() {
   const [recent, setRecent] = useState<string[]>(() => load<string[]>("recentWorkspaces", []));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [overview, setOverview] = useState<SessionsOverview>({ workspaces: [], sessions: [], errors: [] });
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [scope, setScope] = useState<SessionScope>(() => load<SessionScope>("sessionScope", "harness"));
+  const [scope, setScope] = useState<SessionScope>(() => load<SessionScope>("sessionScope", "all"));
   const [query, setQuery] = useState("");
   const [chat, setChat] = useState<ChatState | null>(null);
   const [conn, setConn] = useState<ConnectionState>("disconnected");
@@ -194,35 +196,24 @@ export function App() {
 
   const available = useMemo(() => boot?.harnesses.filter((h) => h.available) ?? [], [boot]);
 
+  // Every harness, every project; the sidebar filters by harness and groups by project.
+  const sessionsRequest = useRef(0);
   const refreshSessions = useCallback(async () => {
-    if (!workspace || !harnessId) {
-      setSessions([]);
-      return;
-    }
+    if (!boot) return;
+    const seq = ++sessionsRequest.current;
     setSessionsLoading(true);
-    const ids = scope === "all" ? available.map((h) => h.id as string) : [harnessId];
-    const errors: string[] = [];
-    const lists = await Promise.all(
-      ids.map(async (id) => {
-        try {
-          return (await api<{ sessions: SessionSummary[] }>(`/api/harnesses/${id}/sessions?workspaceId=${workspace.id}`)).sessions;
-        } catch (e) {
-          if (e instanceof ApiError && e.code === "unknown_workspace") {
-            try {
-              setWorkspace(await api<WorkspaceInfo>("/api/workspaces/open", { body: { path: workspace.path } }));
-            } catch {
-              // handled by the next refresh
-            }
-          }
-          errors.push(scope === "all" ? `${id}: ${errorText(e)}` : errorText(e));
-          return [];
-        }
-      }),
-    );
-    setSessions(lists.flat().sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
-    setSessionsError(errors.length > 0 ? errors.join(" · ") : null);
-    setSessionsLoading(false);
-  }, [workspace, harnessId, scope, available]);
+    try {
+      // Passing the current project also re-registers it after a server restart.
+      const next = await api<SessionsOverview>(`/api/sessions${workspace ? `?path=${encodeURIComponent(workspace.path)}` : ""}`);
+      if (seq !== sessionsRequest.current) return;
+      setOverview(next);
+      setSessionsError(next.errors.length > 0 ? next.errors.join(" · ") : null);
+    } catch (e) {
+      if (seq === sessionsRequest.current) setSessionsError(errorText(e));
+    } finally {
+      if (seq === sessionsRequest.current) setSessionsLoading(false);
+    }
+  }, [boot, workspace]);
 
   useEffect(() => {
     void refreshSessions();
@@ -271,12 +262,22 @@ export function App() {
     setDrawerOpen(false);
   };
 
-  const newChat = async () => {
-    if (!workspace || !harnessId) return;
+  /** Make `ws` the current project, registering it with the server again if needed. */
+  const enterWorkspace = async (ws: WorkspaceInfo): Promise<WorkspaceInfo> => {
+    if (ws.id === workspace?.id) return ws;
+    const opened = await api<WorkspaceInfo>("/api/workspaces/open", { body: { path: ws.path } });
+    setWorkspace(opened);
+    setRecent(rememberWorkspace(opened.path));
+    return opened;
+  };
+
+  const newChat = async (target: WorkspaceInfo | null = workspace) => {
+    if (!target || !harnessId) return;
     setOpening(true);
     setBanner(null);
     try {
-      showChat(await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: workspace.id } }));
+      const ws = await enterWorkspace(target);
+      showChat(await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } }));
       void refreshSessions();
     } catch (e) {
       setBanner({ level: "error", text: errorText(e) });
@@ -286,13 +287,15 @@ export function App() {
     }
   };
 
-  const openSession = async (s: SessionSummary) => {
-    if (!workspace) return;
+  const openSession = async (s: ProjectSession) => {
+    const target = overview.workspaces.find((w) => w.id === s.workspaceId);
+    if (!target) return;
     setOpening(true);
     setBanner(null);
     try {
+      const ws = await enterWorkspace(target);
       if (s.liveChatId) showChat(await api<ChatSnapshot>(`/api/chats/${s.liveChatId}`));
-      else showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: workspace.id, sessionId: s.id } }));
+      else showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }));
     } catch (e) {
       setBanner({ level: "error", text: errorText(e) });
       setDrawerOpen(false);
@@ -420,7 +423,9 @@ export function App() {
         }}
         onNewChat={() => void newChat()}
         newChatDisabled={newChatDisabled}
-        sessions={sessions}
+        canStartChat={Boolean(currentHarness?.available) && !opening}
+        onNewChatIn={(ws) => void newChat(ws)}
+        overview={overview}
         sessionsError={sessionsError}
         sessionsLoading={sessionsLoading}
         scope={scope}
@@ -582,7 +587,7 @@ export function App() {
             {!workspace ? (
               <>
                 <h2>Choose a project</h2>
-                <p className="muted">Pick a folder inside your workspace roots to list and start sessions.</p>
+                <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
                 <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
                   Choose folder
                 </button>

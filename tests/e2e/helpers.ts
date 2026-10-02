@@ -28,7 +28,7 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
 
 export async function newChat(page: Page, harness?: string): Promise<void> {
   await showSidebar(page);
-  if (harness) await page.getByRole("radio", { name: harness, exact: true }).click();
+  if (harness) await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: harness, exact: true }).click();
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   // A fresh chat always opens as the hero; wait for it rather than for "Idle",
   // which the previous chat may already show.

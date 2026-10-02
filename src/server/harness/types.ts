@@ -29,6 +29,11 @@ export interface NativeSessionSummary {
   messageCount?: number;
 }
 
+export interface RecentNativeSession extends NativeSessionSummary {
+  /** The project the session belongs to. */
+  cwd: string;
+}
+
 export interface OpenChatRequest {
   cwd: string;
   /** Native id from this adapter's own listSessions(). */
@@ -99,6 +104,8 @@ export interface HarnessAdapter {
   listModels(cwd: string): Promise<ModelInfo[]>;
   listThinkingLevels(cwd: string): Promise<string[]>;
   listSessions(cwd: string): Promise<NativeSessionSummary[]>;
+  /** The newest sessions across every project, newest first. */
+  listRecentSessions(limit: number): Promise<RecentNativeSession[]>;
   openChat(req: OpenChatRequest): Promise<LiveChat>;
   /** Kill helper processes; called on server shutdown. */
   shutdown(): Promise<void>;

@@ -32,6 +32,7 @@ import type {
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
+  RecentNativeSession,
 } from "./types.js";
 
 const run = promisify(execFile);
@@ -39,6 +40,8 @@ export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
+/** omp's ACP `session/list` page size. */
+const ACP_SESSION_PAGE = 50;
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -280,21 +283,24 @@ class AcpLister {
     this.idleTimer.unref();
   }
 
-  list(cwd: string): Promise<NativeSessionSummary[]> {
+  /** Sessions in `cwd`, or across every project (newest first) when it is omitted. */
+  list(cwd?: string, maxPages = 20): Promise<RecentNativeSession[]> {
     const job = this.chain.then(async () => {
       await this.start();
       this.touch();
-      const out: NativeSessionSummary[] = [];
+      const out: RecentNativeSession[] = [];
       let cursor: string | undefined;
-      for (let page = 0; page < 20; page++) {
-        const result = (await this.call("session/list", { cwd, ...(cursor ? { cursor } : {}) })) as Obj;
+      for (let page = 0; page < maxPages; page++) {
+        const result = (await this.call("session/list", { ...(cwd ? { cwd } : {}), ...(cursor ? { cursor } : {}) })) as Obj;
         const sessions = Array.isArray(result?.sessions) ? result.sessions : [];
         for (const s of sessions) {
           if (!isObj(s) || typeof s.sessionId !== "string") continue;
-          if (typeof s.cwd === "string" && s.cwd !== cwd) continue;
+          if (cwd && typeof s.cwd === "string" && s.cwd !== cwd) continue;
+          const sessionCwd = typeof s.cwd === "string" ? s.cwd : "";
           const meta = isObj(s._meta) ? s._meta : {};
           out.push({
             nativeId: s.sessionId,
+            cwd: sessionCwd,
             title: typeof s.title === "string" && s.title ? s.title : "Untitled",
             updatedAt: typeof s.updatedAt === "string" ? new Date(s.updatedAt) : null,
             ...(typeof meta.messageCount === "number" ? { messageCount: meta.messageCount } : {}),
@@ -396,6 +402,11 @@ export class OmpAdapter implements HarnessAdapter {
 
   async listSessions(cwd: string): Promise<NativeSessionSummary[]> {
     return this.lister.list(cwd);
+  }
+
+  async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
+    const pages = Math.max(1, Math.ceil(limit / ACP_SESSION_PAGE));
+    return (await this.lister.list(undefined, pages)).filter((s) => s.cwd).slice(0, limit);
   }
 
   /** One throwaway `--no-session` child per workspace (cached) for models and thinking levels. */

@@ -335,18 +335,43 @@ test("several pending requests stack; answering the front one reveals the next",
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
 });
 
-test("the All view groups sessions by harness with counts", async ({ page }) => {
+test("the sidebar lists every project's sessions and opens them across projects", async ({ page }) => {
   await signInAndOpen(page, "beta");
   await newChat(page, "Fake B");
-  await sendAndWait(page, "from b");
-  await newChat(page, "Fake");
-  await sendAndWait(page, "from a");
-  await page.getByRole("radio", { name: "All" }).click();
-  const groups = page.locator(".session-group");
-  await expect(groups).toHaveCount(2);
-  await expect(groups.locator(".group-head")).toHaveText([/Fake\s*\d+/, /Fake B\s*\d+/]);
-  await page.getByRole("radio", { name: "Fake", exact: true }).nth(1).click();
-  await expect(page.locator(".date-divider").first()).toHaveText(/Today|Open/);
+  await sendAndWait(page, "xproj one");
+  for (const text of ["xproj two", "xproj three", "xproj four", "xproj five"]) {
+    await newChat(page, "Fake");
+    await sendAndWait(page, text);
+  }
+  // From another project, beta's sessions are still listed under their own folder.
+  await signInAndOpen(page, "alpha");
+  const scope = page.getByRole("radiogroup", { name: "Which sessions" });
+  await scope.getByRole("radio", { name: "All" }).click();
+  const groups = page.getByTestId("project-group");
+  await expect(groups.first().locator(".project-name")).toHaveText("alpha");
+  const beta = groups.filter({ has: page.locator(".project-name", { hasText: /^beta$/ }) });
+  await expect(beta.locator(".session-title").first()).toHaveText("xproj five");
+  await expect(beta.locator(".date-divider").first()).toHaveText("Today");
+
+  // Other projects show their newest few, then "Show N more".
+  await expect(beta.locator(".session")).toHaveCount(4);
+  await beta.getByRole("button", { name: /^Show \d+ more in beta$/ }).click();
+  await expect(beta.locator(".session")).toHaveCount(Number(await beta.locator(".group-count").innerText()));
+  await expect(beta.locator(".session", { hasText: "xproj one" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake B");
+
+  // Searching covers every project; the harness scope hides the other harness.
+  await page.getByRole("searchbox", { name: "Search sessions" }).fill("xproj one");
+  await expect(page.locator(".session")).toHaveCount(1);
+  await scope.getByRole("radio", { name: "Fake", exact: true }).click();
+  await expect(page.locator(".session")).toHaveCount(0);
+  await expect(page.getByText("No matching sessions")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search sessions" }).fill("");
+
+  // Opening a session from another project switches to that project.
+  await beta.locator(".session", { hasText: "xproj four" }).click();
+  await expect(prompts(page)).toHaveText(["xproj four"]);
+  await expect(page.locator(".workspace-name")).toHaveText("beta");
+  await expect(groups.first().locator(".project-name")).toHaveText("beta");
 });
 
 test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {

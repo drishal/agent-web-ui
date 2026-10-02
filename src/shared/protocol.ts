@@ -59,6 +59,21 @@ export interface SessionSummary {
   liveChatId?: string;
 }
 
+/** A session together with the project it belongs to. */
+export interface ProjectSession extends SessionSummary {
+  workspaceId: string;
+}
+
+/** The sidebar's list: recent sessions from every project, plus all of the current one's. */
+export interface SessionsOverview {
+  /** Every project referenced by `sessions`, and the current project. */
+  workspaces: WorkspaceInfo[];
+  /** Newest first. */
+  sessions: ProjectSession[];
+  /** One line per harness that could not list its sessions. */
+  errors: string[];
+}
+
 export type ChatStatus = "starting" | "idle" | "running" | "stopping" | "compacting" | "error" | "disposed";
 
 export interface ModelInfo {

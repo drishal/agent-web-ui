@@ -23,6 +23,7 @@ import type {
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
+  RecentNativeSession,
 } from "./types.js";
 
 const FAKE_MODELS: ModelInfo[] = [
@@ -111,6 +112,14 @@ export class FakeAdapter implements HarnessAdapter {
         updatedAt: s.updatedAt,
         messageCount: s.messages.length,
       }));
+  }
+
+  async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
+    return [...this.sessions.values()]
+      .filter((s) => s.messages.length > 0)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, limit)
+      .map((s) => ({ nativeId: s.nativeId, cwd: s.cwd, title: s.title, updatedAt: s.updatedAt, messageCount: s.messages.length }));
   }
 
   async openChat(req: OpenChatRequest): Promise<LiveChat> {

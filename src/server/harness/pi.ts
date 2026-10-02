@@ -29,6 +29,7 @@ import type {
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
+  RecentNativeSession,
 } from "./types.js";
 
 const run = promisify(execFile);
@@ -40,6 +41,15 @@ type PiModel = { provider: string; id: string; name?: string; reasoning?: boolea
 
 function expandTilde(p: string): string {
   return p === "~" || p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(1)) : p;
+}
+
+function summarize(info: pi.SessionInfo): NativeSessionSummary {
+  return {
+    nativeId: info.id,
+    title: info.name || info.firstMessage.slice(0, 80) || "Untitled",
+    updatedAt: info.modified,
+    messageCount: info.messageCount,
+  };
 }
 
 function toModelInfo(m: PiModel): ModelInfo {
@@ -158,12 +168,18 @@ export class PiAdapter implements HarnessAdapter {
     return infos
       .filter((info) => !info.cwd || info.cwd === cwd)
       .sort((a, b) => b.modified.getTime() - a.modified.getTime())
-      .map((info) => ({
-        nativeId: info.id,
-        title: info.name || info.firstMessage.slice(0, 80) || "Untitled",
-        updatedAt: info.modified,
-        messageCount: info.messageCount,
-      }));
+      .map(summarize);
+  }
+
+  async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
+    const agentDir = pi.getAgentDir();
+    // Global settings only; a project's own sessionDir is covered by listSessions(cwd).
+    const infos = await pi.SessionManager.listAll(this.sessionDirFor(agentDir, agentDir, false));
+    return infos
+      .filter((info) => info.cwd)
+      .sort((a, b) => b.modified.getTime() - a.modified.getTime())
+      .slice(0, limit)
+      .map((info) => ({ ...summarize(info), cwd: info.cwd }));
   }
 
   private async services(cwd: string): Promise<{ services: Services; notices: HarnessEvent[]; trusted: boolean }> {

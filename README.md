@@ -63,7 +63,7 @@ Any of these can go in `.env`; a variable already set in the environment wins ov
 
 ## Using it
 
-- **Sidebar.** New chat, the harness switcher, and the project come first. Below them sit session search and the sessions themselves: date headings when one harness is selected, harness groups with counts in the *All* view. A green dot means the session is already open in this server; clicking it attaches to that chat rather than opening a second writer. The footer holds the theme, the chat **text size** (scales the conversation and composer only, per device), and *Pair phone*. Drag the sidebar's right edge to resize it (200–560 px, remembered per device). The handle also takes arrow keys (Shift for bigger steps) and Home/End, and double-clicking resets it.
+- **Sidebar.** New chat, the harness switcher, and the project come first. Below them sit session search and the sessions of **every project**, grouped by folder like Hermes Desktop: the current project first, then the rest by their newest session, each with Today / Yesterday / Earlier this week / month headings and *Show N more in …*. Search covers all projects, and the harness switch filters them (*All* marks each row with a harness dot; the Pi/omp switch is the legend). Clicking a session in another project switches to that project, and a project row's **+** starts a new chat there. Only folders inside `WORKSPACE_ROOTS` that the harness can open are listed. A green dot means the session is already open in this server; clicking it attaches to that chat rather than opening a second writer. The footer holds the theme, the chat **text size** (scales the conversation and composer only, per device), and *Pair phone*. Drag the sidebar's right edge to resize it (200–560 px, remembered per device). The handle also takes arrow keys (Shift for bigger steps) and Home/End, and double-clicking resets it.
 - **Harness switcher.** Pi or omp. Switching changes which harness new and resumed chats use; open chats stay on the harness that created them.
 - **Project.** Recent folders, a folder browser that walks `WORKSPACE_ROOTS` one level at a time, or a typed path.
 - **New chat.** Opens as a centred composer.
@@ -140,7 +140,7 @@ The natural generic adapter is the [Agent Client Protocol](https://agentclientpr
 | `plan`, `usage_update` | notices |
 | `session/request_permission` | `request` (InteractionRequest) |
 | `session/load` replay | `history()` |
-| `session/list` | `listSessions()` |
+| `session/list` | `listSessions()` / `listRecentSessions()` |
 | `session/cancel` | `abort()` |
 | session config options | model / thinking / mode |
 
@@ -158,7 +158,7 @@ Tools are Pi's normal active set (your `defaultTools` plus extension tools); thi
 
 omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported into this Node server. Each live chat therefore runs the **installed** `omp` in `--mode rpc-ui`, one child process per chat. `rpc-ui` is the mode with tool-approval and extension-UI requests over the protocol; plain `rpc` has no UI, so approvals would fail closed.
 
-- **Listing:** omp's RPC has no session listing, so a short-lived `omp acp` process answers `session/list` and exits after 60 s idle.
+- **Listing:** omp's RPC has no session listing, so a short-lived `omp acp` process answers `session/list` (with a `cwd` for one project, without one for the sidebar's newest sessions across projects) and exits after 60 s idle.
 - **Resume:** `--resume <id>` with `--cwd`. The adapter checks that omp opened exactly that session.
 - **Tools:** omp starts with its normal tool set. The app never passes `--tools`.
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
@@ -257,7 +257,7 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `.env` (kept across restarts, revoked by a new password), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `.env` (kept across restarts, revoked by a new password), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:

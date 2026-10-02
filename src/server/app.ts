@@ -14,15 +14,22 @@ import {
   patchConfigSchema,
   renameSchema,
   resumeChatSchema,
+  type ProjectSession,
   sendMessageSchema,
+  type SessionsOverview,
   type SessionSummary,
+  type WorkspaceInfo,
 } from "../shared/protocol.js";
 import { ChatError, errorMessage } from "./chats/chat.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
+import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import type { Workspaces } from "./workspaces.js";
+
+/** How many of each harness's newest sessions the sidebar sees across projects. */
+const RECENT_SESSIONS_PER_HARNESS = 200;
 
 export interface AppDeps {
   version: string;
@@ -173,6 +180,75 @@ export function createApp(deps: AppDeps) {
       });
     }
     res.json({ sessions });
+  });
+
+  // The sidebar's list: each harness's newest sessions across projects, every
+  // session of the current project (`?path=`), and live chats not saved yet.
+  // Projects outside WORKSPACE_ROOTS, or that a harness cannot open, are left out.
+  app.get("/api/sessions", async (req, res) => {
+    const resolved = new Map<string, Promise<WorkspaceInfo | null>>();
+    const workspaceFor = (cwd: string) => {
+      let ws = resolved.get(cwd);
+      if (!ws) {
+        ws = workspaces.open(cwd).catch(() => null);
+        resolved.set(cwd, ws);
+      }
+      return ws;
+    };
+    const current = typeof req.query.path === "string" && req.query.path ? await workspaceFor(req.query.path) : null;
+    const projects = new Map<string, WorkspaceInfo>(current ? [[current.id, current]] : []);
+    const sessions = new Map<string, ProjectSession>();
+    const add = (adapter: HarnessAdapter, s: NativeSessionSummary, ws: WorkspaceInfo) => {
+      const id = `${adapter.id}:${s.nativeId}`;
+      if (sessions.has(id)) return;
+      const live = manager.liveChatFor(adapter.id, s.nativeId);
+      projects.set(ws.id, ws);
+      sessions.set(id, {
+        id,
+        harnessId: adapter.id,
+        title: s.title,
+        updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
+        ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
+        ...(live ? { liveChatId: live.chatId } : {}),
+        workspaceId: ws.id,
+      });
+    };
+    const errors: string[] = [];
+    const adapters = registry.list().filter((a) => registry.isAvailable(a.id));
+    await Promise.all(
+      adapters.map(async (adapter) => {
+        try {
+          const here = current && !adapter.workspaceProblem(current.path) ? await adapter.listSessions(current.path) : [];
+          if (current) for (const s of here) add(adapter, s, current);
+          for (const s of await adapter.listRecentSessions(RECENT_SESSIONS_PER_HARNESS)) {
+            const ws = await workspaceFor(s.cwd);
+            if (ws && !adapter.workspaceProblem(ws.path)) add(adapter, s, ws);
+          }
+        } catch (error) {
+          errors.push(`${adapter.displayName}: ${errorMessage(error)}`);
+        }
+      }),
+    );
+    for (const chat of manager.list()) {
+      if (chat.status === "disposed") continue;
+      const id = chat.sessionId ?? `${chat.harnessId}:live-${chat.chatId}`;
+      if (sessions.has(id)) continue;
+      projects.set(chat.workspace.id, chat.workspace);
+      sessions.set(id, {
+        id,
+        harnessId: chat.harnessId,
+        title: chat.title || "New chat",
+        updatedAt: new Date(chat.lastActivity).toISOString(),
+        liveChatId: chat.chatId,
+        workspaceId: chat.workspace.id,
+      });
+    }
+    const overview: SessionsOverview = {
+      workspaces: [...projects.values()],
+      sessions: [...sessions.values()].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
+      errors,
+    };
+    res.json(overview);
   });
 
   app.post("/api/chats", async (req, res) => {

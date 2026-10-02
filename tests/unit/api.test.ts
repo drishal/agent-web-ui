@@ -1,7 +1,7 @@
 import { mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ChatSnapshot } from "../../src/shared/protocol.js";
+import type { ChatSnapshot, SessionsOverview } from "../../src/shared/protocol.js";
 import { makeTestApp, openSse, signedIn, tempDir, type TestApp } from "../helpers/app.js";
 
 let t: TestApp | null = null;
@@ -266,6 +266,39 @@ describe("chat lifecycle over HTTP + SSE", () => {
     const list = await agent.get(`/api/harnesses/fake/sessions?workspaceId=${ws.id}`);
     expect(JSON.stringify(list.body)).not.toMatch(/nonexistent|\.jsonl/);
     sse.close();
+  });
+});
+
+describe("sessions across projects", () => {
+  it("lists every project's recent sessions, newest first, and leaves out folders outside the roots", async () => {
+    const { agent, t } = await setup();
+    const other = path.join(t.root, "other");
+    mkdirSync(other);
+    const outside = tempDir("awui-outside-");
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
+    for (const [nativeId, cwd, title, age] of [
+      ["a1", t.project, "Fix the build", 5],
+      ["b1", other, "Write docs", 1],
+      ["x1", outside, "Somewhere else", 0],
+      ["gone", path.join(t.root, "deleted"), "Removed project", 2],
+    ] as const) {
+      t.fake.sessions.set(nativeId, { nativeId, cwd, title, messages: [{}], updatedAt: minutesAgo(age) });
+    }
+
+    const body = (await agent.get("/api/sessions").expect(200)).body as SessionsOverview;
+    expect(body.errors).toEqual([]);
+    const project = (id: string) => body.workspaces.find((w) => w.id === id)?.name;
+    expect(body.sessions.map((s) => [s.title, project(s.workspaceId)])).toEqual([
+      ["Write docs", "other"],
+      ["Fix the build", "proj"],
+    ]);
+    expect(JSON.stringify(body)).not.toContain(outside);
+
+    // The current project is listed even before it has sessions.
+    const empty = path.join(t.root, "empty");
+    mkdirSync(empty);
+    const current = (await agent.get(`/api/sessions?path=${encodeURIComponent(empty)}`).expect(200)).body as SessionsOverview;
+    expect(current.workspaces.map((w) => w.name)).toContain("empty");
   });
 });
 

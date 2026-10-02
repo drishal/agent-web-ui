@@ -462,43 +462,143 @@ pre {
 }
 
 .date-divider {
-  padding: 12px 8px 4px;
-  font-size: 11px;
+  padding: 8px 10px 3px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.group-head {
+/* Project groups (Hermes Desktop): a folder row with its sessions on a rail below. */
+.project-group + .project-group {
+  margin-top: 6px;
+}
+
+.project-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 28px;
-  margin-top: 6px;
-  padding: 0 8px;
+  gap: 2px;
+  border-radius: var(--r-sm);
+}
+
+.project-head:hover {
+  background: var(--hover);
+}
+
+.project-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px 0 6px;
   border: 0;
   background: none;
-  font-size: 11.5px;
+  color: var(--text-2);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
+  text-align: left;
+}
+
+.project-group.is-current .project-toggle {
+  color: var(--text);
+}
+
+.project-group.is-current .project-toggle svg:not(.group-chevron) {
+  color: var(--accent);
+}
+
+.project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-chevron {
+  flex: none;
+  color: var(--muted);
   transition: transform 0.12s ease;
 }
 
-.session-group:not(.is-open) .group-chevron {
+.project-group:not(.is-open) .group-chevron {
   transform: rotate(-90deg);
 }
 
 .group-count {
   margin-left: auto;
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.project-head .project-new {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+}
+
+.project-head:hover .project-new,
+.project-head .project-new:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .project-head .project-new {
+    opacity: 1;
+  }
+}
+
+.project-group .session-sublist {
+  margin-left: 12px;
+  padding-left: 6px;
+  border-left: 1px solid var(--hairline);
+}
+
+/* Which harness a session belongs to (All view); the Pi/omp switch doubles as the legend. */
+.harness-dot {
+  flex: none;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.harness-pi {
+  background: var(--link);
+}
+
+.harness-omp {
+  background: var(--thinking);
+}
+
+.segmented .harness-dot {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.show-more {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.show-more:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .session {
