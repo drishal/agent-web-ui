@@ -471,6 +471,26 @@ test("buttons show a Material ripple from the press point; reduced motion turns 
   expect(await btn.locator(".ripple").count()).toBe(0);
 });
 
+test("the sidebar collapses and expands from its header, and stays that way", async ({ page }) => {
+  await signInAndOpen(page);
+  const sidebar = page.locator(".sidebar");
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(sidebar).toBeHidden();
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeFocused();
+  const mainLeft = () => page.locator(".main").evaluate((el) => el.getBoundingClientRect().left);
+  await expect.poll(mainLeft).toBeLessThan(2);
+  await page.reload();
+  await expect(page.locator(".chat-header")).toBeVisible();
+  await expect(sidebar).toBeHidden();
+  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(sidebar).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).toHaveCount(0);
+  await expect.poll(mainLeft).toBeGreaterThan(200);
+  // Phones keep the drawer: no collapse toggle there.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeHidden();
+});
+
 test("the sidebar is resizable by drag and keyboard, and remembers its width", async ({ page }) => {
   await page.goto("/");
   const sidebar = page.locator(".sidebar");

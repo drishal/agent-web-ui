@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
-import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch } from "../icons.js";
+import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSidebar } from "../icons.js";
 import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
 
@@ -192,6 +192,8 @@ export function Sidebar(props: {
   /** Drag handle on the right edge (wide screens). */
   resizer?: React.ReactNode;
   onClose: () => void;
+  /** Wide screens: fold the sidebar away (the chat header gets the expand button). */
+  onCollapse: () => void;
   version: string;
 }) {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
@@ -231,6 +233,15 @@ export function Sidebar(props: {
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">
           <span className="brand">Agent Web UI</span>
+          <button
+            type="button"
+            className="icon-btn sidebar-collapse"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            onClick={props.onCollapse}
+          >
+            <IconSidebar size={16} />
+          </button>
           <button type="button" className="icon-btn drawer-close" aria-label="Close menu" onClick={props.onClose}>
             <IconChevronDown size={16} className="rotate-90" />
           </button>

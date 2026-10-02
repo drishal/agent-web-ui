@@ -21,7 +21,7 @@ import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
-import { IconMenu, IconMore } from "./icons.js";
+import { IconMenu, IconMore, IconSidebar } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { isBusy } from "./session-groups.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -85,6 +85,10 @@ export function App() {
   const [pairOpen, setPairOpen] = useState(false);
   const [textScale, setTextScale] = useState<number>(() => load<number>("chatScale", 1));
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => clampSidebar(load<number>("sidebarWidth", SIDEBAR_DEFAULT)));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => load<boolean>("sidebarCollapsed", false));
+  // Animate only the toggle; resizing by drag must follow the pointer exactly.
+  const [sidebarToggling, setSidebarToggling] = useState(false);
+  const toggleTimer = useRef<number | null>(null);
   const chatId = chat?.chatId ?? null;
 
   // ---- bootstrap -----------------------------------------------------------
@@ -243,6 +247,16 @@ export function App() {
   }, [backgroundBusy, refreshSessions]);
 
   // ---- actions -------------------------------------------------------------------------
+
+  /** Fold the sidebar away or back (wide screens); focus follows to the other toggle. */
+  const collapseSidebar = (collapsed: boolean) => {
+    setSidebarToggling(true);
+    if (toggleTimer.current !== null) window.clearTimeout(toggleTimer.current);
+    toggleTimer.current = window.setTimeout(() => setSidebarToggling(false), 250);
+    setSidebarCollapsed(collapsed);
+    save("sidebarCollapsed", collapsed || null);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(collapsed ? ".sidebar-expand" : ".sidebar-collapse")?.focus());
+  };
 
   const chooseHarness = (id: string) => {
     setHarnessId(id);
@@ -409,7 +423,10 @@ export function App() {
   const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
 
   return (
-    <div className="app" style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}>
+    <div
+      className={`app${sidebarCollapsed ? " is-collapsed" : ""}${sidebarToggling ? " is-toggling" : ""}`}
+      style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}
+    >
       <Sidebar
         resizer={
           <SidebarResizer
@@ -458,6 +475,7 @@ export function App() {
           void api("/api/logout", { body: {} }).finally(() => window.location.reload());
         }}
         onClose={() => setDrawerOpen(false)}
+        onCollapse={() => collapseSidebar(true)}
         version={boot.version}
       />
 
@@ -466,6 +484,11 @@ export function App() {
           <button type="button" className="icon-btn drawer-open" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
             <IconMenu size={18} />
           </button>
+          {sidebarCollapsed ? (
+            <button type="button" className="icon-btn sidebar-expand" aria-label="Expand sidebar" title="Expand sidebar" onClick={() => collapseSidebar(false)}>
+              <IconSidebar size={16} />
+            </button>
+          ) : null}
           <div className="chat-title">
             <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "Agent Web UI"}</h1>
             {chat ? (

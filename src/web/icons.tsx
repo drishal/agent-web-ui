@@ -134,6 +134,13 @@ export const IconFolder = (p: IconProps) => (
     <path d="M1.75 4.25a1.5 1.5 0 011.5-1.5h3l1.5 1.75h5a1.5 1.5 0 011.5 1.5v6.25a1.5 1.5 0 01-1.5 1.5h-9.5a1.5 1.5 0 01-1.5-1.5z" />
   </Svg>
 );
+/** A window with its left panel marked: collapse / expand the sidebar. */
+export const IconSidebar = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.75" />
+    <path d="M6 2.75v10.5M3.5 5.5h1M3.5 7.5h1" />
+  </Svg>
+);
 export const IconImage = (p: IconProps) => (
   <Svg {...p}>
     <rect x="2" y="2.75" width="12" height="10.5" rx="1.75" />

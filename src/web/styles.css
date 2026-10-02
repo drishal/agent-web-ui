@@ -2573,6 +2573,37 @@ body.is-resizing {
   display: none;
 }
 
+/* Collapsible sidebar (wide screens only; phones keep the drawer). */
+@media (min-width: 820px) {
+  .app.is-toggling {
+    transition: grid-template-columns 0.18s ease;
+  }
+
+  .app.is-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .app.is-collapsed .sidebar {
+    visibility: hidden;
+    border-right-width: 0;
+  }
+
+  .sidebar {
+    transition: visibility 0.18s;
+  }
+
+  .sidebar-expand {
+    margin-left: -8px;
+  }
+}
+
+@media (max-width: 819px) {
+  .sidebar-collapse,
+  .sidebar-expand {
+    display: none;
+  }
+}
+
 @media (max-width: 1099px) {
   .turn-rail {
     display: none;
