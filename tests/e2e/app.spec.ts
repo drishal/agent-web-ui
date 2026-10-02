@@ -345,8 +345,6 @@ test("the sidebar lists every project's sessions and opens them across projects"
   }
   // From another project, beta's sessions are still listed under their own folder.
   await signInAndOpen(page, "alpha");
-  const scope = page.getByRole("radiogroup", { name: "Which sessions" });
-  await scope.getByRole("radio", { name: "All" }).click();
   const groups = page.getByTestId("project-group");
   await expect(groups.first().locator(".project-name")).toHaveText("alpha");
   const beta = groups.filter({ has: page.locator(".project-name", { hasText: /^beta$/ }) });
@@ -359,12 +357,12 @@ test("the sidebar lists every project's sessions and opens them across projects"
   await expect(beta.locator(".session")).toHaveCount(Number(await beta.locator(".group-count").innerText()));
   await expect(beta.locator(".session", { hasText: "xproj one" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake B");
 
-  // Searching covers every project; the harness scope hides the other harness.
+  // Searching covers every project and every harness.
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("xproj one");
   await expect(page.locator(".session")).toHaveCount(1);
-  await scope.getByRole("radio", { name: "Fake", exact: true }).click();
-  await expect(page.locator(".session")).toHaveCount(0);
+  await page.getByRole("searchbox", { name: "Search sessions" }).fill("no such session anywhere");
   await expect(page.getByText("No matching sessions")).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Which sessions" })).toHaveCount(0);
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("");
 
   // Opening a session from another project switches to that project.

@@ -22,7 +22,7 @@ import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/Side
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
-import { isBusy, type SessionScope } from "./session-groups.js";
+import { isBusy } from "./session-groups.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { ChatStream, type ConnectionState } from "./stream.js";
 import { applyTheme, fetchTheme, storedThemeMode, storeThemeMode, type ThemeMode } from "./theme.js";
@@ -73,7 +73,6 @@ export function App() {
   const [overview, setOverview] = useState<SessionsOverview>({ workspaces: [], sessions: [], errors: [] });
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [scope, setScope] = useState<SessionScope>(() => load<SessionScope>("sessionScope", "all"));
   const [query, setQuery] = useState("");
   const [chat, setChat] = useState<ChatState | null>(null);
   const [conn, setConn] = useState<ConnectionState>("disconnected");
@@ -247,11 +246,6 @@ export function App() {
   const chooseHarness = (id: string) => {
     setHarnessId(id);
     save("harness", id);
-  };
-
-  const chooseScope = (s: SessionScope) => {
-    setScope(s);
-    save("sessionScope", s);
   };
 
   const openWorkspace = async (path: string) => {
@@ -439,8 +433,6 @@ export function App() {
         overview={overview}
         sessionsError={sessionsError}
         sessionsLoading={sessionsLoading}
-        scope={scope}
-        onScope={chooseScope}
         query={query}
         onQuery={setQuery}
         activeSessionId={chat?.sessionId ?? null}

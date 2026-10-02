@@ -441,8 +441,17 @@ pre {
 .sessions-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
+}
+
+.sessions-head .search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.sessions-head .icon-btn {
+  width: 32px;
+  height: 32px;
 }
 
 .session-list,

@@ -24,21 +24,21 @@ const overview: SessionsOverview = {
 
 describe("groupByProject", () => {
   it("puts the current project first, then projects by their newest session", () => {
-    const groups = groupByProject(overview, { currentId: "webui", harnessId: "pi", scope: "all", query: "" });
+    const groups = groupByProject(overview, { currentId: "webui", query: "" });
     expect(groups.map((g) => [g.workspace.name, g.current, g.sessions.map((x) => x.id)])).toEqual([
       ["webui", true, ["w1"]],
       ["dotfiles", false, ["d1", "d2"]],
     ]);
   });
 
-  it("filters by harness and by search, dropping empty projects but keeping the current one", () => {
-    const pi = groupByProject(overview, { currentId: "notes", harnessId: "pi", scope: "harness", query: "" });
-    expect(pi.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([
+  it("mixes harnesses, keeps the empty current project, and drops projects a search leaves empty", () => {
+    const all = groupByProject(overview, { currentId: "notes", query: "" });
+    expect(all.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([
       ["notes", []],
+      ["dotfiles", ["d1", "d2"]],
       ["webui", ["w1"]],
-      ["dotfiles", ["d2"]],
     ]);
-    const search = groupByProject(overview, { currentId: "notes", harnessId: "pi", scope: "all", query: "  WAYBAR " });
+    const search = groupByProject(overview, { currentId: "notes", query: "  WAYBAR " });
     expect(search.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([["dotfiles", ["d1"]]]);
   });
 });

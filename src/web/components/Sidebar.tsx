@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch } from "../icons.js";
-import { dateBucket, groupByProject, isBusy, type ProjectGroup, type SessionScope } from "../session-groups.js";
+import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
 
 /** Sessions shown per project before "Show N more". */
@@ -38,14 +38,12 @@ function SessionRow({
   active,
   working,
   harnessName,
-  showBadge,
   onOpen,
 }: {
   s: ProjectSession;
   active: boolean;
   working: boolean;
   harnessName: string;
-  showBadge: boolean;
   onOpen: () => void;
 }) {
   return (
@@ -57,10 +55,10 @@ function SessionRow({
         aria-current={active ? "true" : undefined}
       >
         {working ? (
-          <WorkingRing harnessId={s.harnessId} colored={showBadge} />
-        ) : showBadge ? (
+          <WorkingRing harnessId={s.harnessId} colored />
+        ) : (
           <span className={`harness-dot harness-${s.harnessId}`} role="img" aria-label={harnessName} title={harnessName} />
-        ) : null}
+        )}
         <span className="session-title">{s.title}</span>
         <span className="session-meta">
           {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
@@ -78,7 +76,6 @@ function ProjectGroupView({
   isActive,
   isWorking,
   harnessName,
-  showBadges,
   canStartChat,
   onOpen,
   onNewChat,
@@ -88,7 +85,6 @@ function ProjectGroupView({
   isActive: (s: ProjectSession) => boolean;
   isWorking: (s: ProjectSession) => boolean;
   harnessName: (id: string) => string;
-  showBadges: boolean;
   canStartChat: boolean;
   onOpen: (s: ProjectSession) => void;
   onNewChat: (ws: WorkspaceInfo) => void;
@@ -119,7 +115,6 @@ function ProjectGroupView({
         active={isActive(s)}
         working={isWorking(s)}
         harnessName={harnessName(s.harnessId)}
-        showBadge={showBadges}
         onOpen={() => onOpen(s)}
       />,
     );
@@ -178,8 +173,6 @@ export function Sidebar(props: {
   overview: SessionsOverview;
   sessionsError: string | null;
   sessionsLoading: boolean;
-  scope: SessionScope;
-  onScope: (scope: SessionScope) => void;
   query: string;
   onQuery: (q: string) => void;
   activeSessionId: string | null;
@@ -207,11 +200,9 @@ export function Sidebar(props: {
     () =>
       groupByProject(props.overview, {
         currentId: props.workspace?.id ?? null,
-        harnessId: props.harnessId,
-        scope: props.scope,
         query: props.query,
       }),
-    [props.overview, props.workspace, props.harnessId, props.scope, props.query],
+    [props.overview, props.workspace, props.query],
   );
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
@@ -288,19 +279,11 @@ export function Sidebar(props: {
         </button>
 
         <div className="sessions">
-          <label className="search-field">
-            <IconSearch size={14} />
-            <input type="search" placeholder="Search sessions" value={props.query} onChange={(e) => props.onQuery(e.target.value)} aria-label="Search sessions" />
-          </label>
           <div className="sessions-head">
-            <div className="segmented segmented-small" role="radiogroup" aria-label="Which sessions">
-              <button type="button" role="radio" aria-checked={props.scope === "harness"} className={props.scope === "harness" ? "is-active" : ""} onClick={() => props.onScope("harness")}>
-                {current?.displayName ?? "This"}
-              </button>
-              <button type="button" role="radio" aria-checked={props.scope === "all"} className={props.scope === "all" ? "is-active" : ""} onClick={() => props.onScope("all")}>
-                All
-              </button>
-            </div>
+            <label className="search-field">
+              <IconSearch size={14} />
+              <input type="search" placeholder="Search sessions" value={props.query} onChange={(e) => props.onQuery(e.target.value)} aria-label="Search sessions" />
+            </label>
             <button type="button" className="icon-btn" aria-label="Refresh sessions" onClick={props.onRefresh}>
               ↻
             </button>
@@ -315,7 +298,6 @@ export function Sidebar(props: {
                 isActive={isActive}
                 isWorking={isWorking}
                 harnessName={(id) => names.get(id) ?? id}
-                showBadges={props.scope === "all"}
                 canStartChat={props.canStartChat}
                 onOpen={props.onOpenSession}
                 onNewChat={props.onNewChatIn}

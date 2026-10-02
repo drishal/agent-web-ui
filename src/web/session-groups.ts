@@ -2,8 +2,6 @@
 // project first, then projects by their newest session.
 import type { ChatStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
 
-export type SessionScope = "harness" | "all";
-
 const BUSY: ReadonlySet<ChatStatus> = new Set(["starting", "running", "stopping", "compacting"]);
 
 /** A live chat that is doing something (the sidebar's working spinner). */
@@ -20,13 +18,12 @@ export interface ProjectGroup {
 
 export function groupByProject(
   overview: SessionsOverview,
-  opts: { currentId: string | null; harnessId: string | null; scope: SessionScope; query: string },
+  opts: { currentId: string | null; query: string },
 ): ProjectGroup[] {
   const q = opts.query.trim().toLowerCase();
   const groups = new Map<string, ProjectGroup>();
   for (const ws of overview.workspaces) groups.set(ws.id, { workspace: ws, sessions: [], current: ws.id === opts.currentId });
   for (const s of overview.sessions) {
-    if (opts.scope === "harness" && s.harnessId !== opts.harnessId) continue;
     if (q && !s.title.toLowerCase().includes(q)) continue;
     groups.get(s.workspaceId)?.sessions.push(s);
   }
