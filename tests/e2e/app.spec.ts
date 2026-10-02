@@ -169,6 +169,8 @@ test("the model picker searches across providers, remembers recents, and works b
   await expect(dialog).toContainText("Current Fake Echo · fake");
   const search = page.getByRole("combobox", { name: "Search models" });
   await expect(search).toBeFocused();
+  await page.getByRole("button", { name: "Refresh models" }).click();
+  await expect(dialog.getByRole("option", { name: /Fake Fresh/ })).toBeVisible();
   // Grouped by provider, the current provider first.
   await expect(dialog.getByRole("group")).toHaveCount(3);
   await expect(dialog.getByRole("group").first()).toHaveAccessibleName("fake");

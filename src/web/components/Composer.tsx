@@ -22,6 +22,7 @@ export function Composer({
   onStop,
   onAnswer,
   onConfig,
+  onRefreshModels,
 }: {
   chat: ChatState;
   maxChars: number;
@@ -31,6 +32,7 @@ export function Composer({
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
+  onRefreshModels: () => Promise<void>;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -228,7 +230,7 @@ export function Composer({
                 e.target.value = "";
               }}
             />
-            <ComposerControls chat={chat} onConfig={onConfig} />
+            <ComposerControls chat={chat} onConfig={onConfig} onRefreshModels={onRefreshModels} />
             <div className="composer-actions">
               {tooLong ? (
                 <span className="composer-error">

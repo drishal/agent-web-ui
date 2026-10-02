@@ -339,6 +339,12 @@ export function createApp(deps: AppDeps) {
     res.json(chat.snapshot().config);
   });
 
+  app.post("/api/chats/:id/models/refresh", async (req, res) => {
+    const chat = manager.get(req.params.id);
+    await chat.refreshModels();
+    res.json(chat.snapshot().config);
+  });
+
   app.post("/api/chats/:id/rename", async (req, res) => {
     const chat = manager.get(req.params.id);
     await chat.rename(body(renameSchema, req).name);

@@ -624,6 +624,13 @@ export class Chat {
     this.emit({ type: "config", config: this.config });
   }
 
+  async refreshModels(): Promise<void> {
+    this.assertOpen();
+    await this.live.refreshModels();
+    this.config = await this.live.getConfig();
+    this.emit({ type: "config", config: this.config });
+  }
+
   async rename(name: string): Promise<void> {
     this.assertOpen();
     if (!this.adapter.capabilities.supportsRename) throw new ChatError(400, "unsupported", "Rename is not supported");

@@ -105,6 +105,8 @@ export interface LiveChat {
   /** Aborts the run, clears queues where supported, resolves when idle. */
   abort(): Promise<void>;
   setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void>;
+  /** Drop cached models so the next getConfig() sees new ones (local servers, catalogs, config edits). */
+  refreshModels(): Promise<void>;
   rename(name: string): Promise<void>;
   compact(instructions?: string): Promise<void>;
   /** Returns false when the request is unknown or already resolved. */

@@ -39,6 +39,8 @@ const run = promisify(execFile);
 const SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
 /** How long closing a chat waits for extensions' session_shutdown handlers. */
 const EXTENSION_SHUTDOWN_MS = 5_000;
+/** How long a model-list refresh waits for remote catalogs. */
+const MODEL_REFRESH_MS = 15_000;
 
 type AgentSession = pi.AgentSession;
 type Services = Awaited<ReturnType<typeof pi.createAgentSessionServices>>;
@@ -388,6 +390,13 @@ class PiLiveChat implements LiveChat {
       this.models = (await this.session.modelRuntime.getAvailable()).map((m) => toModelInfo(m as PiModel));
     }
     return this.models;
+  }
+
+  async refreshModels(): Promise<void> {
+    // Catalogs and provider availability, network allowed; bounded so the button never hangs.
+    const refresh = this.session.modelRuntime.refresh({ allowNetwork: true, force: true }).catch(() => undefined);
+    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, MODEL_REFRESH_MS).unref())]);
+    this.models = null;
   }
 
   async getConfig(): Promise<ChatConfig> {

@@ -7,9 +7,11 @@ import { ModelPicker } from "./ModelPicker.js";
 export function ComposerControls({
   chat,
   onConfig,
+  onRefreshModels,
 }: {
   chat: ChatState;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
+  onRefreshModels: () => Promise<void>;
 }) {
   const caps = chat.capabilities;
   const idle = chat.status === "idle" || chat.status === "error";
@@ -24,6 +26,7 @@ export function ComposerControls({
           harnessId={chat.harnessId}
           disabled={!idle}
           onSelect={(model) => void onConfig({ model })}
+          onRefresh={onRefreshModels}
         />
       ) : null}
       {caps.supportsThinkingLevel && config.thinkingLevels.length > 0 ? (

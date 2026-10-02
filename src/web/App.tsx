@@ -337,6 +337,16 @@ export function App() {
     }
   };
 
+  const refreshModels = async (): Promise<void> => {
+    if (!chat) return;
+    try {
+      // The new list arrives as a config event.
+      await api(`/api/chats/${chat.chatId}/models/refresh`, { body: {} });
+    } catch (e) {
+      setBanner({ level: "error", text: errorText(e) });
+    }
+  };
+
   const stop = () => {
     if (!chat) return;
     setChat((prev) => (prev && prev.status !== "idle" ? { ...prev, status: "stopping" } : prev));
@@ -590,6 +600,7 @@ export function App() {
                 maxChars={boot.limits.maxMessageChars}
                 placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
                 onSend={send}
+                onRefreshModels={refreshModels}
                 onStop={stop}
                 onAnswer={answer}
                 onConfig={configure}
@@ -605,6 +616,7 @@ export function App() {
               chat={chat}
               maxChars={boot.limits.maxMessageChars}
               onSend={send}
+              onRefreshModels={refreshModels}
               onStop={stop}
               onAnswer={answer}
               onConfig={configure}

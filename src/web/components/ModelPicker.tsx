@@ -4,7 +4,7 @@
 // a bottom sheet.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ModelInfo } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconSearch } from "../icons.js";
+import { IconCheck, IconChevronDown, IconRefresh, IconSearch, Spinner } from "../icons.js";
 import { groupModels, type ModelGroup } from "../model-search.js";
 import { load, save } from "../storage.js";
 
@@ -34,12 +34,15 @@ export function ModelPicker({
   harnessId,
   disabled,
   onSelect,
+  onRefresh,
 }: {
   models: ModelInfo[];
   current: string | null;
   harnessId: string;
   disabled: boolean;
   onSelect: (key: string) => void;
+  /** Re-read the harness's models (new local servers, catalogs, config edits). */
+  onRefresh: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -48,6 +51,8 @@ export function ModelPicker({
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const listId = useId();
   const recentKey = `recentModels.${harnessId}`;
   const currentModel = models.find((m) => m.key === current);
@@ -138,7 +143,11 @@ export function ModelPicker({
         close();
         break;
       case "Tab":
-        close(false);
+        // Tab reaches the refresh button; past it, the picker closes.
+        if (!e.shiftKey && refreshButton.current && !refreshButton.current.disabled) {
+          e.preventDefault();
+          refreshButton.current.focus();
+        } else close(false);
         break;
       default:
         break;
@@ -195,6 +204,36 @@ export function ModelPicker({
               <span className="model-count" aria-live="polite">
                 {flat.length}
               </span>
+              <button
+                ref={refreshButton}
+                type="button"
+                className="icon-btn model-refresh"
+                aria-label="Refresh models"
+                title="Refresh models"
+                disabled={refreshing}
+                onClick={async () => {
+                  setRefreshing(true);
+                  try {
+                    await onRefresh();
+                  } finally {
+                    setRefreshing(false);
+                    input.current?.focus();
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    close();
+                  } else if (e.key === "Tab") {
+                    if (e.shiftKey) {
+                      e.preventDefault();
+                      input.current?.focus();
+                    } else close(false);
+                  }
+                }}
+              >
+                {refreshing ? <Spinner size={13} /> : <IconRefresh size={14} />}
+              </button>
             </div>
             {currentModel ? (
               <div className="model-current">

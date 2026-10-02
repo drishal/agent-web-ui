@@ -759,6 +759,11 @@ class OmpLiveChat implements LiveChat {
     return historyToItems(Array.isArray(data?.messages) ? data.messages : []);
   }
 
+  /** omp has no refresh command; get_available_models waits for its own background refresh. */
+  async refreshModels(): Promise<void> {
+    this.models = null;
+  }
+
   async getConfig(): Promise<ChatConfig> {
     const rpc = this.live;
     const state = await rpc.command<Obj>("get_state");

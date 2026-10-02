@@ -176,11 +176,18 @@ class FakeLiveChat implements LiveChat {
     return historyToItems(this.session.messages);
   }
 
+  /** Tests: a refresh "discovers" one more model. */
+  private refreshed = false;
+
+  async refreshModels(): Promise<void> {
+    this.refreshed = true;
+  }
+
   async getConfig(): Promise<ChatConfig> {
     return {
       model: this.model,
       thinkingLevel: this.thinkingLevel,
-      models: FAKE_MODELS,
+      models: this.refreshed ? [...FAKE_MODELS, { key: "fake/fresh", provider: "fake", id: "fresh", name: "Fake Fresh" }] : FAKE_MODELS,
       thinkingLevels: FAKE_THINKING,
     };
   }

@@ -242,6 +242,16 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ thinkingLevel: "off" })).status).toBe(409);
   });
 
+  it("refresh reports models discovered after the cache drop", async () => {
+    const { agent, ws } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    expect(chat.config.models.map((m) => m.key)).not.toContain("fake/fresh");
+    const refreshed = await agent.post(`/api/chats/${chat.chatId}/models/refresh`).send({});
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.models.map((m: { key: string }) => m.key)).toContain("fake/fresh");
+    expect(refreshed.body.model).toBe(chat.config.model);
+  });
+
   it("bounds oversized tool output", async () => {
     const { agent, ws, t } = await setup();
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;

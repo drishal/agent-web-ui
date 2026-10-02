@@ -2867,6 +2867,16 @@ body.is-resizing {
   font-variant-numeric: tabular-nums;
 }
 
+.model-search .model-refresh {
+  width: 26px;
+  height: 26px;
+  margin-right: -4px;
+}
+
+.model-search .model-refresh:disabled {
+  opacity: 0.55;
+}
+
 .model-current {
   flex: none;
   padding: 7px 14px;
