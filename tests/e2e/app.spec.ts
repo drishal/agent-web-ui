@@ -243,6 +243,10 @@ test("todos from the harness show in the status stack, which can be hidden", asy
 test("context ring, edited files, and the turn rail", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
+  // A fresh chat shows what fills the window, not zero-filled token and timing sections.
+  await page.getByTestId("context-ring").click();
+  await expect(page.getByRole("dialog", { name: "Context and usage" }).getByRole("region")).toHaveCount(1);
+  await page.keyboard.press("Escape");
   await sendAndWait(page, "please edit the app");
   await expect(page.getByTestId("changed-files")).toContainText("Changed 1 file");
   await expect(page.getByTestId("changed-files")).toContainText("src/app.ts");
@@ -253,6 +257,7 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await page.getByTestId("context-ring").click();
   const panel = page.getByRole("dialog", { name: "Context and usage" });
   await expect(panel.getByRole("region", { name: "Context" })).toContainText(/of context used/);
+  await expect(panel).not.toContainText("~");
   await expect(panel.locator(".usage-label")).toContainText(["System prompt", "Tool definitions", "Messages", "Cache hit"]);
   await expect(panel.getByRole("region", { name: "Tokens" })).toContainText("Tokens this session");
   await expect(panel.getByRole("region", { name: "Session" })).toContainText(/1 turn · \d+ steps?/);

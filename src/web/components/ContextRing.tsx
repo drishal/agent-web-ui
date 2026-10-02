@@ -33,9 +33,9 @@ const SWATCH: Record<string, string> = {
 const FALLBACK = ["var(--accent)", "var(--danger)", "var(--text-2)"];
 const swatch = (c: ContextCategory, i: number) => SWATCH[c.id] ?? FALLBACK[i % FALLBACK.length];
 
-function Row({ label, value, color }: { label: string; value: string; color?: string | undefined }) {
+function Row({ label, value, color, title }: { label: string; value: string; color?: string | undefined; title?: string }) {
   return (
-    <div className="usage-row">
+    <div className="usage-row" title={title}>
       <span className="usage-label">
         {color ? <span className="usage-swatch" style={{ background: color }} aria-hidden="true" /> : null}
         {label}
@@ -78,6 +78,8 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
   const inputTotal = usage ? uncached + usage.cachedInput : 0;
   const cacheHit = inputTotal > 0 && usage ? `${Math.round((usage.cachedInput / inputTotal) * 100)}%` : "—";
   const timed = usage !== null && (usage.llmMs !== null || usage.tokensPerSecond !== null);
+  // A fresh session has nothing to report but zeros; show those sections after its first model call.
+  const used = usage !== null && usage.steps > 0 ? usage : null;
 
   return (
     <div className="context-ring-wrap" ref={wrap}>
@@ -114,7 +116,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
                 <strong>{pct < 1 ? "<1" : Math.round(pct)}%</strong> of context used
               </span>
               <span className="usage-value">
-                {context.tokens !== null ? `~${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}
+                {context.tokens !== null ? `${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}
               </span>
             </div>
             <div className="usage-bar" aria-hidden="true">
@@ -127,35 +129,35 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
               )}
             </div>
             {categories.map((x, i) => (
-              <Row key={x.id} label={x.label} value={`~${compact(x.tokens)}`} color={swatch(x, i)} />
+              <Row key={x.id} label={x.label} value={compact(x.tokens)} color={swatch(x, i)} title={`${full(x.tokens)} tokens (estimated)`} />
             ))}
           </section>
 
-          {usage ? (
+          {used ? (
             <section className="usage-section" aria-label="Tokens">
               <div className="usage-head">
                 <span>Tokens this session</span>
-                <span className="usage-value">{full(inputTotal + usage.output)}</span>
+                <span className="usage-value">{full(inputTotal + used.output)}</span>
               </div>
               <Row label="Cache hit" value={cacheHit} />
               <Row label="Uncached input" value={full(uncached)} />
-              <Row label="Cached input" value={full(usage.cachedInput)} />
-              <Row label="Output" value={full(usage.output)} />
-              {usage.cost !== null ? <Row label="Cost" value={`$${usage.cost.toFixed(usage.cost < 1 ? 4 : 2)}`} /> : null}
+              <Row label="Cached input" value={full(used.cachedInput)} />
+              <Row label="Output" value={full(used.output)} />
+              {used.cost !== null ? <Row label="Cost" value={`$${used.cost.toFixed(used.cost < 1 ? 4 : 2)}`} /> : null}
             </section>
           ) : null}
 
-          {usage ? (
+          {used ? (
             <section className="usage-section" aria-label="Session">
               <div className="usage-head">
                 <span>Session</span>
                 <span className="usage-value">
-                  {usage.turns} {usage.turns === 1 ? "turn" : "turns"} · {usage.steps} {usage.steps === 1 ? "step" : "steps"}
+                  {used.turns} {used.turns === 1 ? "turn" : "turns"} · {used.steps} {used.steps === 1 ? "step" : "steps"}
                 </span>
               </div>
-              <Row label="LLM time" value={usage.llmMs !== null ? duration(usage.llmMs) : "—"} />
-              <Row label="Avg time to first token" value={usage.ttftMs !== null ? duration(usage.ttftMs) : "—"} />
-              <Row label="Tokens per second" value={usage.tokensPerSecond !== null ? `${usage.tokensPerSecond} tok/s` : "—"} />
+              <Row label="LLM time" value={used.llmMs !== null ? duration(used.llmMs) : "—"} />
+              <Row label="Avg time to first token" value={used.ttftMs !== null ? duration(used.ttftMs) : "—"} />
+              <Row label="Tokens per second" value={used.tokensPerSecond !== null ? `${used.tokensPerSecond} tok/s` : "—"} />
               {!timed ? <p className="usage-note">Timing is measured from runs this server watches.</p> : null}
             </section>
           ) : null}
