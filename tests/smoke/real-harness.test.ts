@@ -9,6 +9,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
+import { HermesAdapter, liveHermesChildren } from "../../src/server/harness/hermes.js";
 import { liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import { PiAdapter } from "../../src/server/harness/pi.js";
 import type { HarnessAdapter } from "../../src/server/harness/types.js";
@@ -42,6 +43,7 @@ async function until(predicate: () => boolean, ms: number) {
 const harnesses: Array<[string, () => HarnessAdapter]> = [
   ["pi", () => new PiAdapter()],
   ["omp", () => new OmpAdapter({ agentDir: null, sessionDir: null, home: homedir() })],
+  ["hermes", () => new HermesAdapter()],
 ];
 
 for (const [name, make] of harnesses) {
@@ -61,6 +63,7 @@ for (const [name, make] of harnesses) {
       await chat.dispose("smoke done");
       await adapter.shutdown();
       expect(liveOmpChildren()).toBe(0);
+      expect(liveHermesChildren()).toBe(0);
     }, 60_000);
 
     it("lists sessions for a workspace through the harness's own API", async () => {

@@ -1,19 +1,20 @@
 # agent-web-ui
 
-A local, private, responsive web UI for the **Pi** and **omp** (oh-my-pi) coding-agent harnesses. Use it from your desktop browser or, through Tailscale Serve, from your phone.
+A local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), and **Hermes** (hermes-agent) coding-agent harnesses. Use it from your desktop browser or, through Tailscale Serve, from your phone.
 
 The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits session files and keeps no second transcript database.
 
 ```
 browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAdapter
-                                                        ├─ Pi   (in-process SDK, @earendil-works/pi-coding-agent 1.0.0)
-                                                        ├─ omp  (child process: `omp --mode rpc-ui`, one per live chat)
-                                                        └─ fake (tests only)
+                                                        ├─ Pi     (in-process SDK, @earendil-works/pi-coding-agent 1.0.0)
+                                                        ├─ omp    (child process: `omp --mode rpc-ui`, one per live chat)
+                                                        ├─ Hermes (child process: `python -m tui_gateway.entry`, one per live chat)
+                                                        └─ fake   (tests only)
 ```
 
 ## Install and run
 
-Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi` and/or `omp` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
+Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, and/or `hermes` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
 
 ```bash
 npm ci
@@ -40,7 +41,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `npm run typecheck` | Strict TypeScript for server, web, and tests |
 | `npm test` | Vitest unit and integration tests. Uses only fake and scripted harnesses, so no model tokens are spent. |
 | `npm run test:e2e` | Builds, then runs Playwright (Chromium) against the fake harnesses |
-| `npm run smoke` | Opt-in checks against the real installed Pi and omp (see [Testing](#testing)) |
+| `npm run smoke` | Opt-in checks against the real installed Pi, omp, and Hermes (see [Testing](#testing)) |
 | `npm run build` / `npm start` | Production build, then a single process serving UI and API |
 
 ### Configuration (`.env` or environment)
@@ -105,6 +106,7 @@ src/server/
   harness/agent-events.ts   Pi-family event + transcript normalization (shared by pi/omp)
   harness/pi.ts             Pi adapter (SDK)
   harness/omp.ts            omp adapter (rpc-ui child process, ACP lister)
+  harness/hermes.ts         Hermes adapter (tui_gateway JSON-RPC child process)
   harness/fake.ts           deterministic adapter for tests
   chats/chat.ts             one live chat: state fold, event log, SSE fan-out, commands
   chats/manager.ts          chat registry, one live writer per native session
@@ -116,7 +118,7 @@ src/server/
 src/web/                    React + Vite client
 ```
 
-**Single writer.** `chatId → live session` and `harnessId + native session id → chatId` mean the same session is never opened twice in this process. For omp that also means never two child processes. A second tab or device attaches to the existing chat as another SSE subscriber. **Another terminal or process running `pi`/`omp` is not locked out.** Avoid driving the same session from a terminal while it is open here.
+**Single writer.** `chatId → live session` and `harnessId + native session id → chatId` mean the same session is never opened twice in this process. For omp that also means never two child processes. A second tab or device attaches to the existing chat as another SSE subscriber. **Another terminal or process running `pi`/`omp`/`hermes` is not locked out.** Avoid driving the same session from a terminal while it is open here.
 
 **Run lifecycle.** A run is not marked complete at a message end or a bare `agent_end`. Pi's `agent_settled` and omp's `session_settled`/`prompt_result.sessionSettled` decide it. Sends return `202` once the harness accepts them; output streams over SSE.
 
@@ -169,6 +171,16 @@ omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported int
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
 - **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp 18.4.5 and checked against **18.4.10** (which only adds commands); other versions show a warning.
 
+### Hermes
+
+Each live chat runs Hermes's own gateway, `python -m tui_gateway.entry`, as a child process and speaks its newline-delimited JSON-RPC over stdio. That is the transport the Hermes TUI and its dashboard chat tab use.
+
+- **Environment:** the TUI starts the gateway with its own environment, and it runs under the `hermes` launcher, so the gateway inherits what the launcher sets up. On Nix that is `HERMES_PYTHON`, `HERMES_BUNDLED_PLUGINS`/`SKILLS`/`LOCALES`, `HERMES_INSTALL_ROOT`, and a `PYTHONPATH` with plugin dependencies such as mnemosyne. This server is not started by the launcher, so it replays the launcher's setup once (everything before its final `exec`, under the launcher's own shell) and starts the gateway with the result. An explicit `HERMES_PYTHON` skips this; a launcher that is not a shell wrapper falls back to `python3` on `PATH`.
+- **Sessions:** `session.create` / `session.resume` / `session.close`; listing comes from `projects.tree` rows in a short-lived probe child. Opening a chat without sending anything leaves no session in Hermes's history.
+- **Runs:** `prompt.submit` (images via `image.attach_bytes`), streamed as `message.*`, `reasoning.delta`, and `tool.*` events; `session.interrupt` stops. Steer and follow-up both submit, and the gateway decides whether to queue.
+- **Decisions:** `approval` and `clarify` server requests become approval and dialog cards. Prompts this UI cannot serve (sudo, secrets, vault, previews) are declined with a notice.
+- **Config:** model and reasoning via `config.set` on Hermes's effort ladder (`none` … `max`); rename, compact (`session.compress`), todos, usage, and context come from the gateway. Hermes publishes no per-model effort levels, so its models carry no level chip.
+
 ### Approvals and extension dialogs
 
 Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `yolo`, as configured; this app never changes it or passes `--auto-approve`). Dialogs come from Pi or omp extensions (`select`, `confirm`, `input`, `editor`). Both become one `interaction_request`:
@@ -179,17 +191,17 @@ Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `y
 
 ### Config dirs
 
-| | Pi | omp |
-|---|---|---|
-| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) |
-| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) |
+| | Pi | omp | Hermes |
+|---|---|---|---|
+| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` |
+| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) |
 
-omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app never writes inside `~/.pi` or `~/.omp`, and the browser never sees agent dirs or session file paths.
+omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app never writes inside `~/.pi`, `~/.omp`, or `~/.hermes`, and the browser never sees agent dirs or session file paths.
 
 ## Security
 
 - Binds `127.0.0.1` by default, or `0.0.0.0` with `HOST=0.0.0.0`. No CORS. `Host` must be loopback, in `ALLOWED_HOSTS`, or (with `HOST=0.0.0.0`) one of this machine's own LAN addresses or hostname. `Origin` must match `Host`, and `Sec-Fetch-Site: cross-site` is refused. These failures return `403`, which also blocks DNS rebinding and cross-site requests against the open local mode.
-- **This machine needs no sign-in.** A request counts as local only when the TCP peer is loopback, the Host is loopback, and no proxy headers (`X-Forwarded-*`, `Forwarded`, `Tailscale-User-*`) are present. So a LAN client faking `Host: 127.0.0.1`, or Tailscale Serve proxying over loopback, is never local. The trade-off: any process or user on this machine can drive the agent through the UI. That is the same reach they already have by running `pi`/`omp` as you.
+- **This machine needs no sign-in.** A request counts as local only when the TCP peer is loopback, the Host is loopback, and no proxy headers (`X-Forwarded-*`, `Forwarded`, `Tailscale-User-*`) are present. So a LAN client faking `Host: 127.0.0.1`, or Tailscale Serve proxying over loopback, is never local. The trade-off: any process or user on this machine can drive the agent through the UI. That is the same reach they already have by running `pi`/`omp`/`hermes` as you.
 - **Other devices sign in** with `AUTH_USERNAME`/`AUTH_PASSWORD` from `.env`, or the login from `npm run set-password`:
   - `set-password` stores only a salted scrypt hash, mode 0600. `AUTH_PASSWORD` is plaintext in `.env` (forced to mode 0600) and is hashed in memory with a salt derived from the cookie secret, so restarts keep devices signed in.
   - Sign-in issues an HMAC-signed cookie bound to that `host:port` and to the credential fingerprint: `HttpOnly`, `SameSite=Strict`, ~30 days, and `Secure` on Serve hosts. Changing the password signs every device out.
@@ -262,9 +274,9 @@ systemctl --user stop agent-web-ui
 
 ## Testing
 
-- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
+- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), and the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing).
 - `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `.env` (kept across restarts, revoked by a new password), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), images (paste, drop, picker, remove, vision warning, send), the working spinner, and 390×844 and 320 px layouts.
-- `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
+- `npm run smoke` runs the real Pi, omp, and Hermes: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
 

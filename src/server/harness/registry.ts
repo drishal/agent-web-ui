@@ -2,6 +2,7 @@
 import { asHarnessId, type HarnessId, type HarnessStatus } from "../../shared/protocol.js";
 import type { ServerConfig } from "../config.js";
 import { FakeAdapter } from "./fake.js";
+import { HermesAdapter } from "./hermes.js";
 import { OmpAdapter } from "./omp.js";
 import { PiAdapter } from "./pi.js";
 import type { HarnessAdapter } from "./types.js";
@@ -11,6 +12,7 @@ const fakeDelay = () => Number(process.env.AWUI_FAKE_DELAY_MS ?? 15);
 const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   pi: () => new PiAdapter(),
   omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home }),
+  hermes: () => new HermesAdapter(),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
   fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay() }),
   "fake-b": () =>

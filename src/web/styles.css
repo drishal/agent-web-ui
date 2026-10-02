@@ -585,6 +585,10 @@ pre {
   background: var(--thinking);
 }
 
+.harness-hermes {
+  background: var(--orange);
+}
+
 .segmented .harness-dot {
   margin-right: 6px;
   vertical-align: 1px;
@@ -616,6 +620,10 @@ pre {
 
 .working-ring[data-harness="omp"] {
   color: var(--thinking);
+}
+
+.working-ring[data-harness="hermes"] {
+  color: var(--orange);
 }
 
 .project-toggle .working-ring {
@@ -735,6 +743,11 @@ pre {
 .badge-omp {
   background: color-mix(in srgb, var(--thinking) 18%, transparent);
   color: var(--thinking);
+}
+
+.badge-hermes {
+  background: color-mix(in srgb, var(--orange) 16%, transparent);
+  color: var(--orange);
 }
 
 /* Resize handle on the sidebar's right edge. */
