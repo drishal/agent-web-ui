@@ -150,8 +150,11 @@ describe("credentials and secrets", () => {
     const auth = new PasswordAuth(creds);
     expect(await auth.verify("alice", "s3cret-passphrase")).toBe(true);
     expect(await auth.verify("alice", "s3cret-passphras")).toBe(false);
+    // Any non-empty password is accepted; an empty one is not.
+    execFileSync(process.execPath, [script, "alice", "--stdin"], { input: "short\n", env: { ...process.env, AUTH_CREDENTIALS_FILE: file }, stdio: "pipe" });
+    expect(await new PasswordAuth(await loadCredentials(file)).verify("alice", "short")).toBe(true);
     expect(() =>
-      execFileSync(process.execPath, [script, "alice", "--stdin"], { input: "short\n", env: { ...process.env, AUTH_CREDENTIALS_FILE: file }, stdio: "pipe" }),
+      execFileSync(process.execPath, [script, "alice", "--stdin"], { input: "\n", env: { ...process.env, AUTH_CREDENTIALS_FILE: file }, stdio: "pipe" }),
     ).toThrow();
   });
 

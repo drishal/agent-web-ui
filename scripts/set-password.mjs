@@ -11,7 +11,6 @@ import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCb);
 const PARAMS = { N: 1 << 15, r: 8, p: 1, keylen: 64 };
-const MIN_LENGTH = 8;
 
 const args = process.argv.slice(2);
 const fromStdin = args.includes("--stdin");
@@ -74,7 +73,7 @@ try {
     const again = await ask("Repeat password: ", true);
     if (password !== again) throw new Error("Passwords do not match");
   }
-  if (password.length < MIN_LENGTH) throw new Error(`Password must be at least ${MIN_LENGTH} characters`);
+  if (!password) throw new Error("Password cannot be empty");
   const salt = randomBytes(16);
   const key = await scrypt(password, salt, PARAMS.keylen, { N: PARAMS.N, r: PARAMS.r, p: PARAMS.p, maxmem: 256 * PARAMS.N * PARAMS.r });
   const record = { v: 1, username, salt: salt.toString("base64"), hash: key.toString("base64"), ...PARAMS };

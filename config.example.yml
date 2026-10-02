@@ -12,7 +12,7 @@ port: 4783
 host: 127.0.0.1
 
 # Login for other devices: needed for host 0.0.0.0 or allowed_hosts, ignored
-# otherwise; this machine never signs in. Password at least 8 characters.
+# otherwise; this machine never signs in.
 # Changing it signs every device out. The file is kept at mode 0600, and the
 # password never reaches the agents' environment. To keep only a hash on
 # disk instead, leave password out and run `npm run set-password`.

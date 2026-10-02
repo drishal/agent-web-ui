@@ -32,7 +32,6 @@ export class ConfigError extends Error {}
 
 /** Same rules as `npm run set-password`. */
 export const USERNAME_PATTERN = /^[A-Za-z0-9._@-]{1,64}$/;
-export const MIN_PASSWORD_LENGTH = 8;
 
 export function expandHome(p: string, home = homedir()): string {
   if (p === "~") return home;
@@ -87,9 +86,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     const username = (env.AUTH_USERNAME ?? "").trim();
     if (!USERNAME_PATTERN.test(username)) {
       throw new ConfigError("auth.password (AUTH_PASSWORD) needs auth.username (AUTH_USERNAME): 1-64 letters, digits, or . _ @ -");
-    }
-    if (env.AUTH_PASSWORD.length < MIN_PASSWORD_LENGTH) {
-      throw new ConfigError(`auth.password (AUTH_PASSWORD) must be at least ${MIN_PASSWORD_LENGTH} characters`);
     }
     login = { username, password: env.AUTH_PASSWORD };
   }

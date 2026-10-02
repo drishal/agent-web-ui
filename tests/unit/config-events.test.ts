@@ -28,7 +28,7 @@ describe("loadConfig", () => {
     });
     expect(() => loadConfig({ AUTH_PASSWORD: "long enough" })).toThrow(/AUTH_USERNAME/);
     expect(() => loadConfig({ AUTH_USERNAME: "two words", AUTH_PASSWORD: "long enough" })).toThrow(ConfigError);
-    expect(() => loadConfig({ AUTH_USERNAME: "drishal", AUTH_PASSWORD: "short" })).toThrow(/at least 8/);
+    expect(loadConfig({ AUTH_USERNAME: "drishal", AUTH_PASSWORD: "short" }).login).toEqual({ username: "drishal", password: "short" });
   });
 
   it("validates PORT", () => {

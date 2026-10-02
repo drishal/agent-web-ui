@@ -53,7 +53,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 |---|---|---|
 | `port` | `4783` | 1024–65535. |
 | `host` | `127.0.0.1` | `127.0.0.1` (this machine only, no sign-in) or `0.0.0.0` (LAN; other devices sign in). Nothing else is accepted. |
-| `auth.username`, `auth.password` | — | Login for other devices (password ≥ 8 chars). `host: 0.0.0.0` and `allowed_hosts` need a login (this or `set-password`), otherwise the server refuses to start. A `config.yml` holding a password is kept at mode 0600, and the password never enters the server's environment, so the agents' shells never see it. |
+| `auth.username`, `auth.password` | — | Login for other devices. `host: 0.0.0.0` and `allowed_hosts` need a login (this or `set-password`), otherwise the server refuses to start. A `config.yml` holding a password is kept at mode 0600, and the password never enters the server's environment, so the agents' shells never see it. |
 | `workspace_roots` | home dir | Projects must be inside a root, checked by realpath, so symlink and `..` escapes are refused. |
 | `allowed_hosts` | — | Extra `Host` values (e.g. your `*.ts.net` Serve name). |
 | `allowed_tailscale_users` | — | Optional Tailscale logins; when set, Serve requests must also carry one of them. |
