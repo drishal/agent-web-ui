@@ -1,0 +1,38 @@
+# agent-web-ui settings: copy to ~/.config/agentwebui/config.yml.
+# Every key is optional. Restart the server after changing port, host, auth,
+# or the lists (systemctl --user restart agent-web-ui); theme and
+# autocollapse_sidebar apply on the next page load. Environment variables
+# (PORT, HOST, AUTH_USERNAME, ...) win over this file.
+
+# Port for the UI and API (1024-65535).
+port: 4783
+
+# 127.0.0.1: this machine only, no sign-in.
+# 0.0.0.0:   also on the LAN (open the port in the firewall); other devices sign in.
+host: 127.0.0.1
+
+# Login for other devices: needed for host 0.0.0.0 or allowed_hosts, ignored
+# otherwise; this machine never signs in. Password at least 8 characters.
+# Changing it signs every device out. The file is kept at mode 0600, and the
+# password never reaches the agents' environment. To keep only a hash on
+# disk instead, leave password out and run `npm run set-password`.
+auth:
+  username: you
+  password: ""
+
+# Folders projects may be opened from (default: your home directory).
+# workspace_roots: [~/code, ~/dotfiles]
+
+# Extra Host names to accept, e.g. your Tailscale Serve name.
+# allowed_hosts: [machine.tailnet.ts.net]
+# Optional: Serve requests must also come from one of these Tailscale logins.
+# allowed_tailscale_users: [you@example.com]
+
+# The default look on every device: system (follow light/dark), light, dark,
+# or custom (theme.yml in this folder: a base16/base24 scheme). The theme menu
+# can still change it per device until this value changes.
+theme: system
+
+# Fold the sidebar away in narrow windows (below 1200 px; phones use the
+# drawer anyway). A sidebar you collapsed yourself stays collapsed.
+autocollapse_sidebar: true

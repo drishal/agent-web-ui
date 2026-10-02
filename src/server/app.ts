@@ -29,6 +29,7 @@ import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
 import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
+import { readUserConfig, uiSettings } from "./user-config.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -44,6 +45,8 @@ export interface AppDeps {
   theme: ThemeStore;
   pairingUrls: string[];
   webDir: string | null;
+  /** Where config.yml lives; its browser settings are re-read on every page load. */
+  configDir?: string | null;
   heartbeatMs?: number;
   log?: (message: string) => void;
 }
@@ -105,6 +108,15 @@ export function createApp(deps: AppDeps) {
   });
   app.use("/api", (req, res, next) => (req.method === "POST" && /^\/chats\/[^/]+\/messages$/.test(req.path) ? messageJson : textJson)(req, res, next));
 
+  // A broken config.yml keeps the defaults here; the server logged why at startup.
+  const browserSettings = () => {
+    try {
+      return uiSettings(readUserConfig(deps.configDir ?? null)?.config);
+    } catch {
+      return uiSettings(undefined);
+    }
+  };
+
   let statusAt = 0;
   app.get("/api/bootstrap", async (req, res) => {
     if (Date.now() - statusAt > 60_000 || req.query.refresh === "1") {
@@ -123,6 +135,7 @@ export function createApp(deps: AppDeps) {
       roots: workspaces.rootList,
       home: deps.home,
       theme: { active: t.name ?? "built-in", ...(t.problem ? { problem: t.problem } : {}) },
+      ui: browserSettings(),
       pairing: { urls: deps.pairingUrls },
       limits: { maxMessageChars: MAX_MESSAGE_CHARS },
     };

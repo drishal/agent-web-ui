@@ -14,8 +14,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const server: ChildProcess = spawn(process.execPath, ["dist/server/server/index.js"], {
     env: {
       ...process.env,
-      // Never pick up the developer's own .env (HOST, login).
-      AWUI_ENV_FILE: "",
+      // Never pick up the developer's own config.yml (host, login, theme).
+      AWUI_CONFIG_DIR: "",
       PORT: String(E2E_PORT),
       AWUI_HARNESSES: "fake,fake-b",
       AWUI_FAKE_DELAY_MS: "30",

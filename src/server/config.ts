@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { configDir, THEME_FILE } from "./user-config.js";
 
 export const DEFAULT_PORT = 4783;
 
@@ -15,6 +16,8 @@ export interface ServerConfig {
   workspaceRoots: string[];
   allowedHosts: string[];
   allowedTailscaleUsers: string[];
+  /** ~/.config/agentwebui (config.yml, theme.yml), or null when ignored. */
+  configDir: string | null;
   themeFile: string | null;
   themeFileExplicit: boolean;
   stateDir: string;
@@ -76,17 +79,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const themeFile = env.THEME_FILE ? path.resolve(expandHome(env.THEME_FILE, home)) : null;
   const host = env.HOST === undefined || env.HOST === "" ? "127.0.0.1" : env.HOST;
   if (host !== "127.0.0.1" && host !== "0.0.0.0") {
-    throw new ConfigError("HOST must be 127.0.0.1 (default) or 0.0.0.0 (LAN, username/password sign-in)");
+    throw new ConfigError("host (HOST) must be 127.0.0.1 (default) or 0.0.0.0 (LAN, username/password sign-in)");
   }
   const stateDir = path.join(xdgState, "agent-web-ui");
   let login: ServerConfig["login"] = null;
   if (env.AUTH_PASSWORD) {
     const username = (env.AUTH_USERNAME ?? "").trim();
     if (!USERNAME_PATTERN.test(username)) {
-      throw new ConfigError("AUTH_PASSWORD needs AUTH_USERNAME (1-64 letters, digits, or . _ @ -)");
+      throw new ConfigError("auth.password (AUTH_PASSWORD) needs auth.username (AUTH_USERNAME): 1-64 letters, digits, or . _ @ -");
     }
     if (env.AUTH_PASSWORD.length < MIN_PASSWORD_LENGTH) {
-      throw new ConfigError(`AUTH_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      throw new ConfigError(`auth.password (AUTH_PASSWORD) must be at least ${MIN_PASSWORD_LENGTH} characters`);
     }
     login = { username, password: env.AUTH_PASSWORD };
   }
@@ -98,7 +101,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     workspaceRoots: roots.length > 0 ? roots : [home],
     allowedHosts: list(env.ALLOWED_HOSTS).map(normalizeAuthority),
     allowedTailscaleUsers: list(env.ALLOWED_TAILSCALE_USERS).map((u) => u.toLowerCase()),
-    themeFile: themeFile ?? path.join(xdgConfig, "agent-web-ui", "theme.yaml"),
+    configDir: configDir(env),
+    themeFile: themeFile ?? path.join(configDir(env) ?? path.join(xdgConfig, "agentwebui"), THEME_FILE),
     themeFileExplicit: themeFile !== null,
     stateDir,
     ompAgentDir: env.OMP_AGENT_DIR ? path.resolve(expandHome(env.OMP_AGENT_DIR, home)) : null,

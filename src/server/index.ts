@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { ChatManager } from "./chats/manager.js";
 import { ConfigError, loadConfig } from "./config.js";
-import { type LoadedEnvFile, loadEnvFile } from "./env-file.js";
 import { liveOmpChildren } from "./harness/omp.js";
 import { HarnessRegistry } from "./harness/registry.js";
 import { hashPassword, loadCredentials, PasswordAuth } from "./auth.js";
 import { cachedLanHosts, sampleLanHosts } from "./network.js";
 import { loadOrCreateSecret, Security } from "./security.js";
 import { ThemeStore } from "./theme.js";
+import { configDir, configEnv, readUserConfig, UserConfigError } from "./user-config.js";
 import { Workspaces } from "./workspaces.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,19 +36,14 @@ async function findRoot(): Promise<string> {
 
 async function main(): Promise<void> {
   const root = await findRoot();
-  const envFile = process.env.AWUI_ENV_FILE ?? path.join(root, ".env");
-  let settings: LoadedEnvFile | null = null;
-  try {
-    settings = envFile ? loadEnvFile(envFile) : null;
-  } catch (error) {
-    console.error(`agent-web-ui: cannot read ${envFile}: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(EXIT_CONFIG);
-  }
+  let settings: ReturnType<typeof readUserConfig> = null;
   let config;
   try {
-    config = loadConfig();
+    settings = readUserConfig(configDir());
+    // Real environment variables win over config.yml; the password never enters process.env.
+    config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });
   } catch (error) {
-    if (error instanceof ConfigError) {
+    if (error instanceof ConfigError || error instanceof UserConfigError) {
       console.error(`agent-web-ui: ${error.message}`);
       process.exit(EXIT_CONFIG);
     }
@@ -56,7 +51,7 @@ async function main(): Promise<void> {
   }
   // The agents' shells inherit process.env; the password must not reach them.
   delete process.env.AUTH_PASSWORD;
-  if (settings) console.log(`  settings: ${settings.file} (${settings.applied.join(", ") || "nothing new"})`);
+  if (settings) console.log(`  settings: ${settings.file}`);
   if (settings?.tightened) console.log(`  ${settings.file} holds a password; its mode is now 0600`);
   const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")) as { version: string };
   const secret = await loadOrCreateSecret(config.stateDir);
@@ -76,7 +71,7 @@ async function main(): Promise<void> {
       if (remote) {
         console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
         console.error(
-          "agent-web-ui: HOST=0.0.0.0 and ALLOWED_HOSTS need a login for other devices (AUTH_USERNAME and AUTH_PASSWORD in .env, or `npm run set-password`); refusing to start.",
+          "agent-web-ui: host 0.0.0.0 and allowed_hosts need a login for other devices (auth.username and auth.password in config.yml, or `npm run set-password`); refusing to start.",
         );
         process.exit(EXIT_CONFIG);
       }
@@ -121,6 +116,7 @@ async function main(): Promise<void> {
     theme,
     pairingUrls,
     webDir,
+    configDir: config.configDir,
     ...(process.env.AWUI_HEARTBEAT_MS ? { heartbeatMs: Number(process.env.AWUI_HEARTBEAT_MS) } : {}),
   });
 

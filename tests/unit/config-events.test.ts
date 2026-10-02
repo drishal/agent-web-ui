@@ -50,7 +50,7 @@ describe("loadConfig", () => {
 
   it("uses XDG dirs for theme and state", () => {
     const c = loadConfig({ XDG_CONFIG_HOME: "/cfg", XDG_STATE_HOME: "/st" });
-    expect(c.themeFile).toBe("/cfg/agent-web-ui/theme.yaml");
+    expect(c.themeFile).toBe("/cfg/agentwebui/theme.yml");
     expect(c.themeFileExplicit).toBe(false);
     expect(c.stateDir).toBe("/st/agent-web-ui");
   });

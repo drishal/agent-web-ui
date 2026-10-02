@@ -3,12 +3,15 @@
 // backend). Local use needs no sign-in.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { parseEnv } from "node:util";
+import { homedir } from "node:os";
+import path from "node:path";
+import { parse } from "yaml";
 
-// The backend reads .env itself; Vite needs its PORT to proxy to it.
-const envFile = process.env.AWUI_ENV_FILE ?? ".env";
-const fileEnv = envFile && existsSync(envFile) ? parseEnv(readFileSync(envFile, "utf8")) : {};
-const port = process.env.PORT ?? fileEnv.PORT ?? "4783";
+// The backend reads config.yml itself; Vite needs its port to proxy to it.
+const dir = process.env.AWUI_CONFIG_DIR ?? path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"), "agentwebui");
+const file = dir ? path.join(dir, "config.yml") : "";
+const fromFile = file && existsSync(file) ? parse(readFileSync(file, "utf8"))?.port : undefined;
+const port = process.env.PORT ?? (fromFile !== undefined ? String(fromFile) : "4783");
 const children = [];
 
 function run(name, command, args, onLine) {

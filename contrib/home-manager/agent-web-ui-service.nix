@@ -14,14 +14,14 @@ in
 {
   systemd.user.services.agent-web-ui = {
     Unit = {
-      Description = "Agent Web UI for Pi and omp";
+      Description = "Agent Web UI for Pi, omp, and Hermes";
       # No build yet (or no checkout on this machine): skip instead of restart-looping.
       ConditionPathExists = "${appDir}/dist/server/server/index.js";
     };
     Service = {
       ExecStart = "${lib.getExe pkgs.nodejs} ${appDir}/dist/server/server/index.js";
       WorkingDirectory = appDir;
-      # PORT, HOST and the login come from ${appDir}/.env; anything set here
+      # Port, host and the login come from ~/.config/agentwebui/config.yml; anything set here
       # would override that file.
       Environment = [
         # The shell's toolset: pi and omp live outside the Nix profile, and the

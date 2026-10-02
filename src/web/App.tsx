@@ -103,7 +103,7 @@ export function App() {
         if (cancelled) return;
         setBoot(b);
         setThemeInfo(t);
-        setThemeMode(storedThemeMode(t));
+        setThemeMode(storedThemeMode(t, b.ui.theme));
         setHarnessId((prev) => {
           const available = b.harnesses.filter((h) => h.available);
           if (prev && available.some((h) => h.id === prev)) return prev;

@@ -19,7 +19,7 @@ function sandbox(): { dir: string; env: NodeJS.ProcessEnv } {
   mkdirSync(path.join(root, "proj"), { recursive: true });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    AWUI_ENV_FILE: "",
+    AWUI_CONFIG_DIR: "",
     AWUI_HARNESSES: "fake",
     WORKSPACE_ROOTS: root,
     XDG_STATE_HOME: path.join(dir, "state"),
@@ -98,7 +98,7 @@ test.describe("other devices (HOST=0.0.0.0)", () => {
   });
 });
 
-test.describe("settings and login from a .env file", () => {
+test.describe("settings and login from config.yml", () => {
   test.skip(!lanIp, "no LAN IPv4 address on this machine");
   let server: ChildProcess | null = null;
   const base = `http://${lanIp}:${ENV_PORT}`;
@@ -107,18 +107,18 @@ test.describe("settings and login from a .env file", () => {
     await stopServer(server);
   });
 
-  test("PORT, HOST and the login come from .env, and a restart keeps devices signed in", async ({ page }) => {
+  test("port, host and the login come from config.yml, and a restart keeps devices signed in", async ({ page }) => {
     const { dir, env } = sandbox();
-    const envFile = path.join(dir, ".env");
-    writeFileSync(
-      envFile,
-      `# test settings\nPORT=${ENV_PORT}\nHOST=0.0.0.0\nAUTH_USERNAME=bob\nAUTH_PASSWORD="env password 123"\n`,
-      { mode: 0o644 },
-    );
-    const withFile = { ...env, AWUI_ENV_FILE: envFile };
+    const configDir = path.join(dir, "agentwebui");
+    mkdirSync(configDir);
+    const configFile = path.join(configDir, "config.yml");
+    const settings = (password: string) =>
+      `# test settings\nport: ${ENV_PORT}\nhost: 0.0.0.0\nauth:\n  username: bob\n  password: "${password}"\n`;
+    writeFileSync(configFile, settings("env password 123"), { mode: 0o644 });
+    const withFile = { ...env, AWUI_CONFIG_DIR: configDir };
     server = await startServer(withFile, ENV_PORT);
     // It holds a password, so the server narrowed it to the owner.
-    expect(statSync(envFile).mode & 0o777).toBe(0o600);
+    expect(statSync(configFile).mode & 0o777).toBe(0o600);
 
     await page.goto(`${base}/`);
     await page.getByLabel("Username").fill("bob");
@@ -133,7 +133,7 @@ test.describe("settings and login from a .env file", () => {
 
     // A changed password signs that device out.
     await stopServer(server);
-    writeFileSync(envFile, `PORT=${ENV_PORT}\nHOST=0.0.0.0\nAUTH_USERNAME=bob\nAUTH_PASSWORD=another-password\n`);
+    writeFileSync(configFile, settings("another-password"));
     server = await startServer(withFile, ENV_PORT);
     await page.reload();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();

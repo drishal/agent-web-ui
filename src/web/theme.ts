@@ -1,6 +1,6 @@
 // Theme application through the CSSOM (style.setProperty), never injected
 // <style> text, so the CSP needs no 'unsafe-inline'.
-import type { ThemeInfo } from "../shared/protocol.js";
+import type { Bootstrap, ThemeInfo } from "../shared/protocol.js";
 import { api } from "./api.js";
 import { load, save } from "./storage.js";
 
@@ -43,10 +43,28 @@ export function applyTheme(mode: ThemeMode, info: ThemeInfo | null): void {
   setMetaThemeColor(useScheme ? info?.themeColor ?? null : null);
 }
 
-export function storedThemeMode(info: ThemeInfo | null): ThemeMode {
+type ThemeChoice = Bootstrap["ui"]["theme"];
+
+/** config.yml's theme as a mode; "custom" needs a theme.yml to show. */
+function configMode(choice: ThemeChoice, info: ThemeInfo | null): ThemeMode | null {
+  if (choice === "custom") return info?.source === "file" ? "scheme" : "system";
+  return choice;
+}
+
+/**
+ * This device's theme: its own pick from the menu, else config.yml's theme,
+ * else theme.yml when there is one. A changed config.yml theme wins once, so
+ * editing the file is never shadowed by an old pick.
+ */
+export function storedThemeMode(info: ThemeInfo | null, choice: ThemeChoice = null): ThemeMode {
+  if (choice !== null && choice !== load<ThemeChoice>("themeConfig", null)) {
+    save("themeConfig", choice);
+    save("theme", null);
+  }
+  const fallback = configMode(choice, info) ?? (info?.source === "file" ? "scheme" : "system");
   const stored = load<ThemeMode | null>("theme", null);
-  if (stored === "scheme" && info?.source !== "file") return "system";
-  return stored ?? (info?.source === "file" ? "scheme" : "system");
+  if (stored === "scheme" && info?.source !== "file") return fallback === "scheme" ? "system" : fallback;
+  return stored ?? fallback;
 }
 
 export function storeThemeMode(mode: ThemeMode): void {
