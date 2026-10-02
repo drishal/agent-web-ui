@@ -53,7 +53,8 @@ const estimateText = (text: string) => Math.ceil(text.length / 4);
 function summarize(info: pi.SessionInfo): NativeSessionSummary {
   return {
     nativeId: info.id,
-    title: info.name || info.firstMessage.slice(0, 80) || "Untitled",
+    // "(no messages)" is Pi's label for a session whose first user message has no text.
+    title: info.name || (info.firstMessage === "(no messages)" ? "" : info.firstMessage.slice(0, 80)) || "Untitled",
     updatedAt: info.modified,
     messageCount: info.messageCount,
   };
