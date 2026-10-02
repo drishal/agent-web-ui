@@ -37,6 +37,8 @@ import type {
 
 const run = promisify(execFile);
 const SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
+/** How long closing a chat waits for extensions' session_shutdown handlers. */
+const EXTENSION_SHUTDOWN_MS = 5_000;
 
 type AgentSession = pi.AgentSession;
 type Services = Awaited<ReturnType<typeof pi.createAgentSessionServices>>;
@@ -523,6 +525,13 @@ class PiLiveChat implements LiveChat {
     this.dialogs.cancelAll();
     this.unsubscribe();
     this.hub.clear();
+    // As Pi's own runtime does on quit: extensions stop what they started
+    // (language servers, MCP servers, background tasks); session.dispose() alone does not tell them.
+    const runner = this.session.extensionRunner;
+    if (runner.hasHandlers("session_shutdown")) {
+      const shutdown = runner.emit({ type: "session_shutdown", reason: "quit" }).catch(() => undefined);
+      await Promise.race([shutdown, new Promise((resolve) => setTimeout(resolve, EXTENSION_SHUTDOWN_MS).unref())]);
+    }
     this.session.dispose();
     void this.services;
   }
