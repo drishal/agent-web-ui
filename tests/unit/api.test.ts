@@ -242,6 +242,13 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ thinkingLevel: "off" })).status).toBe(409);
   });
 
+  it("lists the chat harness's / commands", async () => {
+    const { agent, ws } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const res = await agent.get(`/api/chats/${chat.chatId}/commands`).expect(200);
+    expect(res.body.commands.map((c: { name: string }) => c.name)).toEqual(["fake-status", "skill:review"]);
+  });
+
   it("refresh reports models discovered after the cache drop", async () => {
     const { agent, ws } = await setup();
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;

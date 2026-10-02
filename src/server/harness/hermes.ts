@@ -23,9 +23,10 @@ import {
   type ImageAttachment,
   type InteractionAnswer,
   type ModelInfo,
+  type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { boundText, stringifyArgs, toolCategory, toolPaths, toolSummary } from "./agent-events.js";
+import { boundText, commandOutputEvents, stringifyArgs, toolCategory, toolPaths, toolSummary } from "./agent-events.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -133,6 +134,16 @@ interface Frame {
   error?: { code?: number; message?: string };
 }
 
+/** A gateway error with its JSON-RPC code (4018: "run this through command.dispatch"). */
+class HermesRpcError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | undefined,
+  ) {
+    super(message);
+  }
+}
+
 /** JSON-RPC over one child's stdio: requests we send, events and server requests we receive. */
 class HermesRpc {
   readonly child: ChildProcessWithoutNullStreams;
@@ -182,7 +193,7 @@ class HermesRpc {
         this.pending.delete(String(frame.id));
         if (entry) {
           clearTimeout(entry.timer);
-          if (frame.error) entry.reject(new Error(frame.error.message ?? `hermes error ${frame.error.code ?? ""}`.trim()));
+          if (frame.error) entry.reject(new HermesRpcError(frame.error.message ?? `hermes error ${frame.error.code ?? ""}`.trim(), frame.error.code));
           else entry.resolve(frame.result);
         }
         return;
@@ -673,12 +684,58 @@ class HermesLiveChat implements LiveChat {
 
   async prompt(text: string, images: ImageAttachment[] = []): Promise<void> {
     const id = this.requireSession();
+    if (images.length === 0 && /^\/\S/.test(text.trim())) return this.slash(id, text.trim());
     for (const image of images) {
       await this.live.request("image.attach_bytes", { session_id: id, content_base64: image.data, filename: `pasted.${image.mimeType.split("/")[1] ?? "png"}` });
     }
     await this.live.request("prompt.submit", { session_id: id, text });
     // The gateway never echoes the user row, so the manager learns about it here.
     this.emit({ type: "user_message", text, ...(images.length > 0 ? { imageCount: images.length } : {}) });
+  }
+
+  /**
+   * "/" commands never go through prompt.submit; the Hermes TUI runs them as
+   * slash.exec (built-ins answer with output), which sends skills and plugins
+   * on to command.dispatch (error 4018). A dispatch that returns a message
+   * (send, skill) submits it as a normal turn; anything else is output.
+   */
+  private async slash(id: string, text: string): Promise<void> {
+    try {
+      const done = await this.live.request<Obj>("slash.exec", { session_id: id, command: text });
+      return this.commandOutput(text, str(done?.output));
+    } catch (error) {
+      if (!(error instanceof HermesRpcError && error.code === 4018)) throw error;
+    }
+    const name = text.slice(1).split(/\s+/)[0] ?? "";
+    const arg = text.slice(1 + name.length).trim();
+    const result = await this.live.request<Obj>("command.dispatch", { session_id: id, name, arg });
+    const message = str(result?.message);
+    if ((result?.type === "send" || result?.type === "skill") && message) {
+      await this.live.request("prompt.submit", { session_id: id, text: message });
+      this.emit({ type: "user_message", text });
+      return;
+    }
+    this.commandOutput(text, str(result?.output) || (result?.type === "prefill" ? str(result?.text) : ""));
+  }
+
+  /** A command that ran without a model turn: the command as the prompt, its output, then idle. */
+  private commandOutput(command: string, output: string): void {
+    this.emit({ type: "user_message", text: command });
+    for (const event of commandOutputEvents(output)) this.emit(event);
+    this.emit({ type: "settled" });
+  }
+
+  /** Hermes's own completion list for "/", the one its TUI shows. */
+  async listCommands(): Promise<SlashCommand[]> {
+    const result = await this.live.request<Obj>("complete.slash", { text: "/", session_id: this.runtimeId ?? "" });
+    const items = Array.isArray(result?.items) ? result.items : [];
+    return items.flatMap((item): SlashCommand[] => {
+      if (!isObj(item)) return [];
+      const name = str(item.text).trim().replace(/^\//, "");
+      if (!name) return [];
+      const meta = str(item.meta);
+      return [{ name, ...(meta ? { description: meta } : {}), source: str(item.kind) || "command" }];
+    });
   }
 
   async steer(text: string, images?: ImageAttachment[]): Promise<void> {

@@ -251,8 +251,17 @@ describe("omp adapter (scripted omp)", () => {
     const { chat } = await openChat();
     await chat.send("/context", "normal");
     await until(() => chat.status === "idle");
-    const notice = chat.snapshot().items.find((i) => i.kind === "notice");
-    expect(notice).toMatchObject({ text: expect.stringContaining("Context window: 200000 tokens") });
+    const items = chat.snapshot().items;
+    expect(items.find((i) => i.kind === "user")).toMatchObject({ text: "/context" });
+    expect(items.find((i) => i.kind === "assistant")).toMatchObject({ text: expect.stringContaining("Context window: 200000 tokens") });
+  });
+
+  it("lists the commands omp runs over RPC", async () => {
+    const { live } = await openChat();
+    expect((await live.listCommands()).map((c) => [c.name, c.source])).toEqual([
+      ["context", "builtin"],
+      ["usage", "builtin"],
+    ]);
   });
 
   it("splits provider/model keys at the first slash only", async () => {

@@ -23,9 +23,10 @@ import {
   type InteractionKind,
   type ModelInfo,
   type QueueState,
+  type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { historyToItems, normalizeAgentEvent } from "./agent-events.js";
+import { commandOutputEvents, historyToItems, normalizeAgentEvent } from "./agent-events.js";
 import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -641,6 +642,8 @@ class OmpLiveChat implements LiveChat {
   /** Whether /context is an omp builtin (checked once), the pending probe, and their queue. */
   private contextBuiltin: Promise<boolean> | null = null;
   private contextProbe: ((text: string) => void) | null = null;
+  /** Output of a "/" command in flight, held until omp says whether it ran locally. */
+  private commandOutput: string[] | null = null;
   private contextChain: Promise<unknown> = Promise.resolve();
   private models: ModelInfo[] | null = null;
   private sessionId: string | null = null;
@@ -718,7 +721,10 @@ class OmpLiveChat implements LiveChat {
       case "command_output":
         // Output of a builtin slash command: the context probe's, or one the user typed.
         if (this.contextProbe) this.contextProbe(String(frame.text ?? ""));
-        else if (typeof frame.text === "string" && frame.text.trim()) this.hub.emit({ type: "notice", level: "info", text: frame.text });
+        else if (typeof frame.text === "string" && frame.text.trim()) {
+          if (this.commandOutput) this.commandOutput.push(frame.text);
+          else this.hub.emit({ type: "notice", level: "info", text: frame.text });
+        }
         return;
       case "queue_update":
         this.queue = {
@@ -902,6 +908,23 @@ class OmpLiveChat implements LiveChat {
     };
   }
 
+  /** omp lists only commands that run over RPC: builtins with a text handler, skills, extensions, files, MCP prompts. */
+  async listCommands(): Promise<SlashCommand[]> {
+    const data = await this.live.command<Obj>("get_available_commands");
+    return (Array.isArray(data?.commands) ? data.commands : []).flatMap((c): SlashCommand[] => {
+      if (!isObj(c) || typeof c.name !== "string") return [];
+      const hint = isObj(c.input) && typeof c.input.hint === "string" ? c.input.hint : "";
+      return [
+        {
+          name: c.name,
+          ...(typeof c.description === "string" && c.description ? { description: c.description } : {}),
+          ...(hint ? { hint } : {}),
+          source: typeof c.source === "string" ? c.source : "builtin",
+        },
+      ];
+    });
+  }
+
   /** omp's todo phases (`get_state.todoPhases`), flattened. */
   async getTodos(): Promise<TodoItem[]> {
     const state = await this.live.command<Obj>("get_state");
@@ -919,9 +942,22 @@ class OmpLiveChat implements LiveChat {
   }
 
   async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
-    const result = await this.live.command<Obj>("prompt", withImages(text, images));
-    // A builtin slash command (/context, /usage…) runs locally: no run, so no prompt_result to settle on.
-    if (isObj(result) && result.agentInvoked === false) this.hub.emit({ type: "settled" });
+    // A "/" command may run locally; its output comes before the response that says so.
+    this.commandOutput = text.trim().startsWith("/") ? [] : null;
+    let result: Obj | undefined;
+    try {
+      result = await this.live.command<Obj>("prompt", withImages(text, images));
+    } finally {
+      const outputs = this.commandOutput ?? [];
+      this.commandOutput = null;
+      // A builtin (/context, /usage...) runs locally: no turn and no prompt_result, so show the
+      // command as the prompt, then its output, and settle here.
+      if (isObj(result) && result.agentInvoked === false) {
+        this.hub.emit({ type: "user_message", text: text.trim() });
+        for (const event of commandOutputEvents(outputs.join("\n\n"))) this.hub.emit(event);
+        this.hub.emit({ type: "settled" });
+      } else for (const output of outputs) this.hub.emit({ type: "notice", level: "info", text: output });
+    }
   }
 
   async steer(text: string, images?: ImageAttachment[]): Promise<void> {

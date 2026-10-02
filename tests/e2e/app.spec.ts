@@ -441,6 +441,35 @@ test("a working session spins in the sidebar, also while another chat is open", 
   await expect(row.locator(".live-dot")).toBeVisible();
 });
 
+test("/ opens the command menu: it filters, completes, runs, and closes", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const box = page.getByRole("textbox", { name: "Message" });
+  const menu = page.getByRole("listbox", { name: "Commands" });
+  await box.fill("/");
+  await expect(menu.getByRole("option")).toHaveText([/^\/new/, /^\/compact/, /^\/rename/, /^\/fake-status/, /^\/skill:review/]);
+  // Typing filters; Enter completes the highlighted command, a second Enter runs it.
+  await box.pressSequentially("fake");
+  await expect(menu.getByRole("option")).toHaveCount(1);
+  await box.press("Enter");
+  await expect(box).toHaveValue("/fake-status ");
+  await expect(menu).toBeHidden();
+  await box.press("Enter");
+  await expect(prompts(page)).toHaveText(["/fake-status"]);
+  await expect(page.getByText("fake status: all good")).toBeVisible();
+  await expect(status(page)).toHaveText("Idle");
+  // An app command, the same on every harness.
+  await box.fill("/rename Better title");
+  await box.press("Enter");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Better title");
+  // Esc closes the menu and keeps the text.
+  await box.fill("/re");
+  await expect(menu).toBeVisible();
+  await box.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(box).toHaveValue("/re");
+});
+
 const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 test("images can be pasted, dropped, or picked, then removed or sent with the prompt", async ({ page }) => {

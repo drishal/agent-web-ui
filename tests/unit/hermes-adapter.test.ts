@@ -128,6 +128,24 @@ describe("hermes adapter (scripted gateway)", () => {
     const assistant = chat.snapshot().items.find((i) => i.kind === "assistant");
     expect(assistant).toMatchObject({ error: "fake failure" });
   });
+
+  it("lists Hermes's commands and runs them the way its TUI does", async () => {
+    const { chat, live } = await openChat();
+    expect((await live.listCommands()).map((c) => [c.name, c.source])).toEqual([
+      ["status", "command"],
+      ["review", "skill"],
+    ]);
+    // A built-in answers with output and no model turn.
+    await chat.send("/status", "normal");
+    await until(() => chat.status === "idle");
+    const ran = chat.snapshot().items;
+    expect(ran.find((i) => i.kind === "user")).toMatchObject({ text: "/status" });
+    expect(ran.find((i) => i.kind === "assistant")).toMatchObject({ text: expect.stringContaining("hermes status: fine") });
+    // A skill goes on to command.dispatch, and its message runs as a normal turn.
+    await chat.send("/review the tests", "normal");
+    await until(() => chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.includes("Review: the tests")));
+    await until(() => chat.status === "idle");
+  });
 });
 
 describe("gateway runtime", () => {

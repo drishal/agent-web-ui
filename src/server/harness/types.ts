@@ -11,6 +11,7 @@ import type {
   InteractionRequest,
   ModelInfo,
   QueueState,
+  SlashCommand,
   TodoItem,
 } from "../../shared/protocol.js";
 
@@ -98,6 +99,8 @@ export interface LiveChat {
   getUsage(): Promise<HarnessUsage | null>;
   /** The harness's own todo list, if it keeps one. */
   getTodos(): Promise<TodoItem[]>;
+  /** The "/" commands this session understands; sending "/name args" as a prompt runs one. */
+  listCommands(): Promise<SlashCommand[]>;
   /** Resolves once the harness accepted the prompt; the run streams as events. */
   prompt(text: string, images?: ImageAttachment[]): Promise<void>;
   steer(text: string, images?: ImageAttachment[]): Promise<void>;

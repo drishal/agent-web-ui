@@ -182,6 +182,17 @@ export const interactionAnswerSchema = z.discriminatedUnion("kind", [
 ]);
 export type InteractionAnswer = z.infer<typeof interactionAnswerSchema>;
 
+/** A "/" command the open chat's harness offers (the composer's menu). */
+export interface SlashCommand {
+  /** Without the slash, e.g. "compact" or "skill:review". */
+  name: string;
+  description?: string;
+  /** What goes after the name, e.g. "[instructions]". */
+  hint?: string;
+  /** How the harness labels it: builtin, extension, skill, prompt, plugin, ... */
+  source: string;
+}
+
 /** One slice of the context window: omp's own `/context` figures, or this server's estimate for Pi. */
 export interface ContextCategory {
   id: string;

@@ -23,6 +23,7 @@ import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/Side
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore, IconSidebar } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
+import { appCommand } from "./commands.js";
 import { isBusy } from "./session-groups.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { ChatStream, type ConnectionState } from "./stream.js";
@@ -346,6 +347,8 @@ export function App() {
 
   const send = async (text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<boolean> => {
     if (!chat) return false;
+    const command = mode === "normal" && images.length === 0 ? appCommand(text) : null;
+    if (command) return runAppCommand(command.name, command.arg);
     try {
       await api(`/api/chats/${chat.chatId}/messages`, { body: { text, mode, ...(images.length > 0 ? { images } : {}) } });
       setBanner(null);
@@ -363,6 +366,23 @@ export function App() {
       await api(`/api/chats/${chat.chatId}/models/refresh`, { body: {} });
     } catch (e) {
       setBanner({ level: "error", text: errorText(e) });
+    }
+  };
+
+  /** /new, /compact [focus], /rename <title>: the app's own commands, for every harness. */
+  const runAppCommand = async (name: string, arg: string): Promise<boolean> => {
+    if (!chat) return false;
+    try {
+      if (name === "new") await newChat();
+      else if (name === "compact") await api(`/api/chats/${chat.chatId}/compact`, { body: arg ? { instructions: arg } : {} });
+      else if (name === "rename") {
+        if (arg) await api(`/api/chats/${chat.chatId}/rename`, { body: { name: arg } });
+        else setRenameOpen(true);
+      }
+      return true;
+    } catch (e) {
+      setBanner({ level: "error", text: errorText(e) });
+      return false;
     }
   };
 

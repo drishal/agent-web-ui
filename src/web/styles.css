@@ -1698,6 +1698,75 @@ body.is-resizing {
   opacity: 0.6;
 }
 
+/* "/" command menu (Hermes Desktop's): above the composer, the full description on hover. */
+.command-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: min(560px, 100%);
+  max-height: min(340px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+}
+
+.command-menu-head {
+  padding: 8px 8px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.command-item.is-active {
+  background: var(--hover);
+}
+
+.command-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.command-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-source {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 11px;
+}
+
+.command-empty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* Dropping files: the card outlines itself as the target. */
 .composer-card.is-dragging {
   box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);

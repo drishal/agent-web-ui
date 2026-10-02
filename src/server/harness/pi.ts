@@ -18,6 +18,7 @@ import {
   type ImageAttachment,
   type InteractionAnswer,
   type InteractionKind,
+  type SlashCommand,
   type ModelInfo,
   type TodoItem,
 } from "../../shared/protocol.js";
@@ -467,6 +468,27 @@ class PiLiveChat implements LiveChat {
       output: s.tokens.output,
       cost: s.cost > 0 ? s.cost : null,
     };
+  }
+
+  /** What Pi's own autocomplete offers: extension commands, prompt templates, skills (all run through prompt). */
+  async listCommands(): Promise<SlashCommand[]> {
+    const extensions = this.session.extensionRunner.getRegisteredCommands().map((c) => ({
+      name: c.invocationName,
+      ...(c.description ? { description: c.description } : {}),
+      source: "extension",
+    }));
+    const prompts = this.session.promptTemplates.map((t) => ({
+      name: t.name,
+      ...(t.description ? { description: t.description } : {}),
+      ...(t.argumentHint ? { hint: t.argumentHint } : {}),
+      source: "prompt",
+    }));
+    const skills = this.session.resourceLoader.getSkills().skills.map((s) => ({
+      name: `skill:${s.name}`,
+      ...(s.description ? { description: s.description } : {}),
+      source: "skill",
+    }));
+    return [...extensions, ...prompts, ...skills];
   }
 
   /** Pi has no built-in todo list. */

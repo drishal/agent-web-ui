@@ -14,6 +14,7 @@ import type {
   QueueState,
   SendMode,
   SessionUsage,
+  SlashCommand,
   TodoItem,
   ToolItem,
   WorkspaceInfo,
@@ -622,6 +623,12 @@ export class Chat {
     }
     this.config = await this.live.getConfig();
     this.emit({ type: "config", config: this.config });
+  }
+
+  /** The harness's "/" commands; an empty list when it cannot say (the menu then offers the app's own). */
+  async commands(): Promise<SlashCommand[]> {
+    this.assertOpen();
+    return this.live.listCommands().catch(() => []);
   }
 
   async refreshModels(): Promise<void> {

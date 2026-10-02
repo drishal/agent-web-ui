@@ -352,6 +352,10 @@ export function createApp(deps: AppDeps) {
     res.json(chat.snapshot().config);
   });
 
+  app.get("/api/chats/:id/commands", async (req, res) => {
+    res.json({ commands: await manager.get(req.params.id).commands() });
+  });
+
   app.post("/api/chats/:id/models/refresh", async (req, res) => {
     const chat = manager.get(req.params.id);
     await chat.refreshModels();

@@ -137,6 +137,20 @@ rl.on("line", (line) => {
     case "session.close":
       runtimeId = "";
       return ok(id, { closed: true });
+    // "/" commands as the gateway runs them: slash.exec answers built-ins, sends skills to command.dispatch.
+    case "complete.slash":
+      return ok(id, {
+        items: [
+          { text: "/status", display: "/status", meta: "Show session status", kind: "command" },
+          { text: "/review", display: "/review", meta: "Review the work so far", kind: "skill" },
+        ],
+      });
+    case "slash.exec":
+      if (String(params.command).startsWith("/status")) return ok(id, { output: "hermes status: fine" });
+      return fail(id, 4018, "skill command: use command.dispatch");
+    case "command.dispatch":
+      if (params.name === "review") return ok(id, { type: "skill", name: "review", message: `Review: ${params.arg || "everything"}` });
+      return fail(id, 4018, `not a quick/plugin/bundle/skill command: ${params.name}`);
     case "prompt.submit":
       ok(id, { status: "streaming" });
       void runPrompt(String(params.text ?? ""));

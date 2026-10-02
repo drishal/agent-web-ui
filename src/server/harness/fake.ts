@@ -13,9 +13,10 @@ import {
   type ImageAttachment,
   type InteractionAnswer,
   type ModelInfo,
+  type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { historyToItems } from "./agent-events.js";
+import { commandOutputEvents, historyToItems } from "./agent-events.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -208,6 +209,13 @@ class FakeLiveChat implements LiveChat {
     return { turns: role("user"), steps, input: steps * 1200, cachedInput: Math.max(0, steps - 1) * 900, cacheWrite: 0, output: steps * 40, cost: null };
   }
 
+  async listCommands(): Promise<SlashCommand[]> {
+    return [
+      { name: "fake-status", description: "Report the fake harness's status without a model call", source: "builtin" },
+      { name: "skill:review", description: "Review the work so far", hint: "[focus]", source: "skill" },
+    ];
+  }
+
   async getTodos(): Promise<TodoItem[]> {
     const wanted = this.session.messages.some((m) => {
       const msg = m as { role?: string; content?: unknown };
@@ -223,6 +231,13 @@ class FakeLiveChat implements LiveChat {
 
   async prompt(text: string, images: ImageAttachment[] = []): Promise<void> {
     if (this.disposed) throw new Error("Chat is closed");
+    // Like omp's builtins: runs locally, answers with output, no model turn.
+    if (text.trim() === "/fake-status") {
+      this.emit({ type: "user_message", text: "/fake-status" });
+      for (const event of commandOutputEvents("fake status: all good")) this.emit(event);
+      this.emit({ type: "settled" });
+      return;
+    }
     if (this.running) throw new Error("Agent is busy");
     this.abortController = new AbortController();
     const signal = this.abortController.signal;

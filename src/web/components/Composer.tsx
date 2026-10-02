@@ -1,9 +1,11 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode } from "../../shared/protocol.js";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { IMAGE_MIME_TYPES, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode, type SlashCommand } from "../../shared/protocol.js";
+import { api } from "../api.js";
 import type { ChatState } from "../chat-state.js";
-import { IconArrowUp, IconImage, IconStop, IconX, Spinner } from "../icons.js";
+import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
+import { IconArrowUp, IconImage, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
@@ -119,7 +121,67 @@ export function Composer({
 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
 
+  // The "/" menu (Hermes Desktop's): open while the first word is still being typed.
+  const [commands, setCommands] = useState<SlashCommand[] | null>(null);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  const menuId = useId();
+  const slashQuery = /^\/(\S*)$/.exec(text)?.[1];
+  const menuOpen = slashQuery !== undefined && !menuDismissed && !closed;
+  const menuItems = menuOpen ? matchCommands(commands ?? APP_COMMANDS, slashQuery) : [];
+  const activeCommand = menuItems[Math.min(menuIndex, menuItems.length - 1)];
+
+  useEffect(() => {
+    if (!menuOpen || commands !== null) return;
+    let cancelled = false;
+    api<{ commands: SlashCommand[] }>(`/api/chats/${chat.chatId}/commands`).then(
+      (r) => !cancelled && setCommands(mergeCommands(r.commands)),
+      () => !cancelled && setCommands(mergeCommands([])),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [menuOpen, commands, chat.chatId]);
+
+  useEffect(() => {
+    setMenuIndex(0);
+    if (slashQuery === undefined) setMenuDismissed(false);
+  }, [slashQuery]);
+
+  useEffect(() => {
+    if (menuOpen) document.getElementById(`${menuId}-${menuIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [menuOpen, menuIndex, menuId]);
+
+  const completeCommand = (c: SlashCommand) => {
+    setText(`/${c.name} `);
+    area.current?.focus();
+  };
+
+  /** Arrow keys move, Tab/Enter complete, Esc closes; true when the key was the menu's. */
+  const menuKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!menuOpen) return false;
+    if (e.key === "Escape") {
+      setMenuDismissed(true);
+      return true;
+    }
+    if (menuItems.length === 0) return false;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setMenuIndex((i) => (i + step + menuItems.length) % menuItems.length);
+      return true;
+    }
+    if (e.key !== "Tab" && (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing)) return false;
+    // A command typed in full that takes nothing more runs on Enter; otherwise the key completes it.
+    if (e.key === "Enter" && activeCommand?.name === slashQuery && !activeCommand.hint) return false;
+    if (activeCommand) completeCommand(activeCommand);
+    return true;
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuKey(e)) {
+      e.preventDefault();
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || coarsePointer()) return;
     e.preventDefault();
     if (!busy) void submit("normal");
@@ -189,6 +251,38 @@ export function Composer({
               {imageError ?? `${model?.name ?? "This model"} does not take image input; switch to a vision model before sending.`}
             </p>
           ) : null}
+          {menuOpen ? (
+            <div className="command-menu" id={menuId} role="listbox" aria-label="Commands">
+              <div className="command-menu-head" aria-hidden="true">
+                Commands
+              </div>
+              {menuItems.length === 0 ? (
+                <div className="command-empty">{commands === null ? "Loading commands…" : `No command matches /${slashQuery}`}</div>
+              ) : (
+                menuItems.map((c, i) => (
+                  <div
+                    key={`${c.source}:${c.name}`}
+                    id={`${menuId}-${i}`}
+                    role="option"
+                    aria-selected={i === menuIndex}
+                    className={`command-item${i === menuIndex ? " is-active" : ""}`}
+                    title={c.description ? `/${c.name}${c.hint ? ` ${c.hint}` : ""}: ${c.description}` : undefined}
+                    onPointerMove={() => setMenuIndex(i)}
+                    onMouseDown={(e) => {
+                      // Keep the caret in the composer.
+                      e.preventDefault();
+                      completeCommand(c);
+                    }}
+                  >
+                    <IconTerminal size={14} />
+                    <span className="command-name">/{c.name}</span>
+                    {c.description ? <span className="command-desc">{c.description}</span> : null}
+                    {c.source === "skill" || c.source === "prompt" || c.source === "app" ? <span className="command-source">{c.source}</span> : null}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
           <textarea
             ref={area}
             className="composer-input"
@@ -210,6 +304,9 @@ export function Composer({
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             aria-label="Message"
+            aria-autocomplete="list"
+            aria-controls={menuOpen ? menuId : undefined}
+            aria-activedescendant={menuOpen && menuItems.length > 0 ? `${menuId}-${menuIndex}` : undefined}
             enterKeyHint={coarsePointer() ? "enter" : "send"}
           />
           <div className="composer-bar">
