@@ -343,13 +343,15 @@ function toModelInfo(m: unknown): ModelInfo | null {
 
 /**
  * Categories from omp's own `/context` text (slash-commands/helpers/context-report.ts):
- * `  <label> [<bar>]  <n> tokens`. Free space and the auto-compact buffer are not usage.
+ * `  <label> [<bar>] <pct>%  <n> tokens`, the bar ANSI-coloured. Free space and the
+ * auto-compact buffer are not usage.
  */
 export function parseContextReport(text: string): ContextCategory[] | null {
-  if (!/^Context window: \d+ tokens/m.test(text)) return null;
+  const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+  if (!/^Context window: \d+ tokens/m.test(plain)) return null;
   const categories: ContextCategory[] = [];
-  for (const line of text.split("\n")) {
-    const m = /^ {2}(\S.*?)\s+\[[^\]]*\]\s+(\d+) tokens$/.exec(line);
+  for (const line of plain.split("\n")) {
+    const m = /^ {2}(\S[^[]*?)\s+\[.*?\].*?\s(\d+) tokens$/.exec(line);
     if (!m?.[1] || !m[2]) continue;
     const label = m[1].trim();
     if (label === "Free" || label.startsWith("Auto-compact")) continue;

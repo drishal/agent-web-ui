@@ -172,13 +172,15 @@ if (args[0] === "acp") {
         if (cmd.message === "/context" && (process.env.FAKE_OMP_CONTEXT ?? "builtin") === "builtin") {
           out({
             type: "command_output",
+            // Verbatim shape of omp 18.4.10's output, ANSI-coloured bars and all.
             text: [
               "Context window: 200000 tokens (1% used)",
-              "  System prompt    [█░░░░░░░░░░░░░░░░░░░░░░░]  1500 tokens",
-              "  System tools     [█░░░░░░░░░░░░░░░░░░░░░░░]  5200 tokens",
-              "  Skills           [░░░░░░░░░░░░░░░░░░░░░░░░]  300 tokens",
-              "  Messages         [░░░░░░░░░░░░░░░░░░░░░░░░]  527 tokens",
-              "  Free             [███████████████████████░]  192473 tokens",
+              "  System prompt    [\x1b[38;2;124;111;100m░░░░░░░░░░░░░░░░░░░░░░░░\x1b[39m] 0%  1500 tokens",
+              "  System tools     [\x1b[38;2;124;111;100m░░░░░░░░░░░░░░░░░░░░░░░░\x1b[39m] 2%  5200 tokens",
+              "  Skills           [\x1b[38;2;124;111;100m░░░░░░░░░░░░░░░░░░░░░░░░\x1b[39m] 0%  300 tokens",
+              "  Messages         [\x1b[38;2;124;111;100m░░░░░░░░░░░░░░░░░░░░░░░░\x1b[39m] 0%  527 tokens",
+              "  Auto-compact buf [\x1b[38;2;124;111;100m████░░░░░░░░░░░░░░░░░░░░\x1b[39m] 15%  30000 tokens",
+              "  Free             [\x1b[38;2;124;111;100m████████████████████░░░░\x1b[39m] 81%  162473 tokens",
             ].join("\n"),
           });
           return ok(cmd.id, "prompt", { agentInvoked: false });

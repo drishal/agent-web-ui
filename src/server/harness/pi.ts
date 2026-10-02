@@ -401,9 +401,11 @@ class PiLiveChat implements LiveChat {
     const usage = this.session.getContextUsage();
     if (!usage) return null;
     const categories = this.contextCategories();
-    // Pi knows the real total only after a response; until then the estimate stands in.
-    const tokens = usage.tokens ?? categories.reduce((sum, c) => sum + c.tokens, 0);
-    const percent = usage.percent ?? (usage.contextWindow > 0 ? (tokens / usage.contextWindow) * 100 : null);
+    // Pi knows the real total only after a response (before that it says 0 or null,
+    // though the prompt and tools are already there), so the estimate stands in.
+    const known = usage.tokens !== null && usage.tokens > 0;
+    const tokens = known ? (usage.tokens as number) : categories.reduce((sum, c) => sum + c.tokens, 0);
+    const percent = known ? usage.percent : usage.contextWindow > 0 ? (tokens / usage.contextWindow) * 100 : null;
     return { tokens, window: usage.contextWindow, percent, categories };
   }
 
