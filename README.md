@@ -6,7 +6,7 @@ The browser is only a control surface. Each harness remains the agent and the so
 
 ```
 browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAdapter
-                                                        ├─ Pi   (in-process SDK, @earendil-works/pi-coding-agent 0.87.1)
+                                                        ├─ Pi   (in-process SDK, @earendil-works/pi-coding-agent 1.0.0)
                                                         ├─ omp  (child process: `omp --mode rpc-ui`, one per live chat)
                                                         └─ fake (tests only)
 ```
