@@ -17,6 +17,8 @@ import { ThemeStore } from "./theme.js";
 import { Workspaces } from "./workspaces.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+/** Bad settings (EX_CONFIG): retrying cannot help, so supervisors should not restart on it. */
+const EXIT_CONFIG = 78;
 
 async function findRoot(): Promise<string> {
   let dir = here;
@@ -40,7 +42,7 @@ async function main(): Promise<void> {
     settings = envFile ? loadEnvFile(envFile) : null;
   } catch (error) {
     console.error(`agent-web-ui: cannot read ${envFile}: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    process.exit(EXIT_CONFIG);
   }
   let config;
   try {
@@ -48,7 +50,7 @@ async function main(): Promise<void> {
   } catch (error) {
     if (error instanceof ConfigError) {
       console.error(`agent-web-ui: ${error.message}`);
-      process.exit(1);
+      process.exit(EXIT_CONFIG);
     }
     throw error;
   }
@@ -76,7 +78,7 @@ async function main(): Promise<void> {
         console.error(
           "agent-web-ui: HOST=0.0.0.0 and ALLOWED_HOSTS need a login for other devices (AUTH_USERNAME and AUTH_PASSWORD in .env, or `npm run set-password`); refusing to start.",
         );
-        process.exit(1);
+        process.exit(EXIT_CONFIG);
       }
     }
   }
@@ -93,7 +95,7 @@ async function main(): Promise<void> {
   for (const w of warnings) console.error(`agent-web-ui: ${w}`);
   if (workspaces.rootList.length === 0) {
     console.error("agent-web-ui: no usable WORKSPACE_ROOTS");
-    process.exit(1);
+    process.exit(EXIT_CONFIG);
   }
   const registry = HarnessRegistry.fromConfig(config);
   for (const status of await registry.refreshStatus()) {

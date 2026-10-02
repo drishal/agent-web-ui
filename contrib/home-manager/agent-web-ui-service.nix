@@ -31,6 +31,8 @@ in
       # SIGTERM is a clean exit (0), so "on-failure" would leave it dead after a stray kill.
       Restart = "always";
       RestartSec = 5;
+      # 78 = bad settings (e.g. HOST=0.0.0.0 without a login): stop and say why in the journal.
+      RestartPreventExitStatus = 78;
     };
     Install.WantedBy = [ "default.target" ];
   };

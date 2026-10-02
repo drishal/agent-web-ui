@@ -243,7 +243,7 @@ Changing `stylix.base16Scheme` in `shared/stylix.nix` then re-themes the web UI.
 
 ## Optional autostart (home-manager)
 
-Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, no secrets, and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It sets no app settings, so `PORT`, `HOST` and the login come from the checkout's `.env`. It is skipped (not restart-looped) until `dist/` is built. Add it next to the theme module and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
+Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, no secrets, and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It sets no app settings, so `PORT`, `HOST` and the login come from the checkout's `.env`. It is skipped (not restart-looped) until `dist/` is built, and bad settings (such as `HOST=0.0.0.0` without a login) stop it with exit code 78 and the reason in the journal instead of restarting it every 5 seconds. Add it next to the theme module and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
 
 ```bash
 systemctl --user status agent-web-ui
