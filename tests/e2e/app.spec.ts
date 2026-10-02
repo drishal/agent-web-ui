@@ -354,29 +354,40 @@ test("several pending requests stack; answering the front one reveals the next",
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
 });
 
-test("the sidebar lists every project's sessions and opens them across projects", async ({ page }) => {
+test("the sidebar scopes sessions to the selected harness and opens them across projects", async ({ page }) => {
   await signInAndOpen(page, "beta");
   await newChat(page, "Fake B");
   await sendAndWait(page, "xproj one");
-  for (const text of ["xproj two", "xproj three", "xproj four", "xproj five"]) {
+  for (const text of ["xproj two", "xproj three", "xproj four", "xproj five", "xproj six"]) {
     await newChat(page, "Fake");
     await sendAndWait(page, text);
   }
-  // From another project, beta's sessions are still listed under their own folder.
+  // From another project, the selected harness's sessions are still listed under their own folder.
   await signInAndOpen(page, "alpha");
+  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake", exact: true }).click();
   const groups = page.getByTestId("project-group");
   await expect(groups.first().locator(".project-name")).toHaveText("alpha");
   const beta = groups.filter({ has: page.locator(".project-name", { hasText: /^beta$/ }) });
-  await expect(beta.locator(".session-title").first()).toHaveText("xproj five");
+  await expect(beta.locator(".session-title").first()).toHaveText("xproj six");
   await expect(beta.locator(".date-divider").first()).toHaveText("Today");
 
-  // Other projects show their newest few, then "Show N more".
+  // Only the Fake sessions: the Fake B one is another harness's, so it stays hidden.
   await expect(beta.locator(".session")).toHaveCount(4);
+  await expect(beta.locator(".session", { hasText: "xproj one" })).toHaveCount(0);
+  // Other projects show their newest few, then "Show N more".
   await beta.getByRole("button", { name: /^Show \d+ more in beta$/ }).click();
   await expect(beta.locator(".session")).toHaveCount(Number(await beta.locator(".group-count").innerText()));
-  await expect(beta.locator(".session", { hasText: "xproj one" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake B");
+  await expect(beta.locator(".session", { hasText: "xproj two" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake");
 
-  // Searching covers every project and every harness.
+  // Switching the harness swaps the list for that harness's own sessions.
+  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake B", exact: true }).click();
+  await expect(beta.locator(".session")).toHaveCount(1);
+  await expect(beta.locator(".session", { hasText: "xproj one" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake B");
+  await expect(beta.locator(".session", { hasText: "xproj six" })).toHaveCount(0);
+
+  // Search stays inside the selected harness.
+  await page.getByRole("searchbox", { name: "Search sessions" }).fill("xproj six");
+  await expect(page.getByText("No matching sessions")).toBeVisible();
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("xproj one");
   await expect(page.locator(".session")).toHaveCount(1);
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("no such session anywhere");
@@ -385,6 +396,7 @@ test("the sidebar lists every project's sessions and opens them across projects"
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("");
 
   // Opening a session from another project switches to that project.
+  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake", exact: true }).click();
   await beta.locator(".session", { hasText: "xproj four" }).click();
   await expect(prompts(page)).toHaveText(["xproj four"]);
   await expect(page.locator(".workspace-name")).toHaveText("beta");

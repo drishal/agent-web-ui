@@ -24,22 +24,35 @@ const overview: SessionsOverview = {
 
 describe("groupByProject", () => {
   it("puts the current project first, then projects by their newest session", () => {
-    const groups = groupByProject(overview, { currentId: "webui", query: "" });
+    const groups = groupByProject(overview, { currentId: "webui", query: "", harnessId: "pi" });
     expect(groups.map((g) => [g.workspace.name, g.current, g.sessions.map((x) => x.id)])).toEqual([
       ["webui", true, ["w1"]],
-      ["dotfiles", false, ["d1", "d2"]],
+      ["dotfiles", false, ["d2"]],
     ]);
   });
 
-  it("mixes harnesses, keeps the empty current project, and drops projects a search leaves empty", () => {
-    const all = groupByProject(overview, { currentId: "notes", query: "" });
+  it("scopes the list to the selected harness, and a search stays inside it", () => {
+    const omp = groupByProject(overview, { currentId: "notes", query: "", harnessId: "omp" });
+    expect(omp.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([
+      ["notes", []],
+      ["dotfiles", ["d1"]],
+    ]);
+    // A pi session does not show up while omp is selected, even by exact title.
+    const search = groupByProject(overview, { currentId: "notes", query: "  WAYBAR ", harnessId: "pi" });
+    expect(search.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([]);
+    const own = groupByProject(overview, { currentId: "notes", query: "stylix", harnessId: "pi" });
+    expect(own.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([["dotfiles", ["d2"]]]);
+  });
+
+  it("drops projects a search leaves empty, and keeps the empty current project otherwise", () => {
+    const all = groupByProject(overview, { currentId: "notes", query: "", harnessId: "pi" });
     expect(all.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([
       ["notes", []],
-      ["dotfiles", ["d1", "d2"]],
       ["webui", ["w1"]],
+      ["dotfiles", ["d2"]],
     ]);
-    const search = groupByProject(overview, { currentId: "notes", query: "  WAYBAR " });
-    expect(search.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([["dotfiles", ["d1"]]]);
+    const search = groupByProject(overview, { currentId: "notes", query: "model picker", harnessId: "pi" });
+    expect(search.map((g) => [g.workspace.name, g.sessions.map((x) => x.id)])).toEqual([["webui", ["w1"]]]);
   });
 });
 

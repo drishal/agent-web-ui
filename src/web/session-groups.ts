@@ -18,12 +18,14 @@ export interface ProjectGroup {
 
 export function groupByProject(
   overview: SessionsOverview,
-  opts: { currentId: string | null; query: string },
+  opts: { currentId: string | null; query: string; harnessId: string | null },
 ): ProjectGroup[] {
   const q = opts.query.trim().toLowerCase();
   const groups = new Map<string, ProjectGroup>();
   for (const ws of overview.workspaces) groups.set(ws.id, { workspace: ws, sessions: [], current: ws.id === opts.currentId });
   for (const s of overview.sessions) {
+    // The harness switch scopes the list: only sessions that actually ran in it.
+    if (s.harnessId !== opts.harnessId) continue;
     if (q && !s.title.toLowerCase().includes(q)) continue;
     groups.get(s.workspaceId)?.sessions.push(s);
   }

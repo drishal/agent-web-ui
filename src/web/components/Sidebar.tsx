@@ -203,8 +203,9 @@ export function Sidebar(props: {
       groupByProject(props.overview, {
         currentId: props.workspace?.id ?? null,
         query: props.query,
+        harnessId: props.harnessId,
       }),
-    [props.overview, props.workspace, props.query],
+    [props.overview, props.workspace, props.query, props.harnessId],
   );
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
