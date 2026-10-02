@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
+import { ChatManager } from "../../src/server/chats/manager.js";
 import { firstPrompt, liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
@@ -173,6 +174,22 @@ describe("omp adapter (scripted omp)", () => {
     const { chat } = await openChat(await bigSession());
     const long = chat.snapshot().items.find((i) => i.kind === "assistant" && i.text.length >= 3_000_000);
     expect(long).toBeDefined();
+  });
+
+  it("when a history cannot load, says why and leaves no omp process behind", async () => {
+    const nativeId = await bigSession();
+    await adapter.shutdown();
+    expect(liveOmpChildren()).toBe(0);
+    adapter = new OmpAdapter({ command: script, agentDir: null, sessionDir: null, home, env: { ...process.env, FAKE_OMP_STATE: state, FAKE_OMP_V1: "1" } });
+    const ws: WorkspaceInfo = { id: "w", path: project, name: "proj" };
+    // The session lister (omp acp) stays up by design; only the chat's own process must go.
+    await adapter.listSessions(project);
+    const lister = liveOmpChildren();
+    await expect(new ChatManager().resume(adapter, ws, nativeId)).rejects.toMatchObject({
+      code: "harness_load_failed",
+      message: expect.stringContaining("exceeded the transport limit"),
+    });
+    expect(liveOmpChildren()).toBe(lister);
   });
 
   it("changes model and thinking in place, without restarting omp", async () => {

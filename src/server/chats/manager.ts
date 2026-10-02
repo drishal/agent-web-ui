@@ -3,7 +3,7 @@
 // process running the same harness is NOT locked out (documented in README).
 import { randomUUID } from "node:crypto";
 import type { WorkspaceInfo } from "../../shared/protocol.js";
-import type { HarnessAdapter } from "../harness/types.js";
+import type { HarnessAdapter, LiveChat } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
 
 const IDLE_DISPOSE_MS = 30 * 60_000;
@@ -72,9 +72,23 @@ export class ChatManager {
     } catch (error) {
       throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to start: ${errorMessage(error)}`);
     }
-    const chat = await Chat.open(randomUUID(), adapter, workspace, live);
+    const chat = await this.load(adapter, workspace, live);
     this.register(chat);
     return chat;
+  }
+
+  /**
+   * Build the chat from a started harness session. If that fails (a history too
+   * big for the transport, say), the session is closed again rather than left
+   * running with nothing attached to it.
+   */
+  private async load(adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
+    try {
+      return await Chat.open(randomUUID(), adapter, workspace, live);
+    } catch (error) {
+      await live.dispose().catch(() => undefined);
+      throw new ChatError(502, "harness_load_failed", `${adapter.displayName} could not load this session: ${errorMessage(error)}`);
+    }
   }
 
   /** Attach to the live chat for this session if one exists; otherwise open it. */
@@ -97,7 +111,7 @@ export class ChatManager {
       } catch (error) {
         throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to resume: ${errorMessage(error)}`);
       }
-      const chat = await Chat.open(randomUUID(), adapter, workspace, live);
+      const chat = await this.load(adapter, workspace, live);
       this.register(chat);
       return chat;
     })();
