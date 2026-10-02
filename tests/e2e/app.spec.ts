@@ -374,6 +374,19 @@ test("the sidebar lists every project's sessions and opens them across projects"
   await expect(groups.first().locator(".project-name")).toHaveText("beta");
 });
 
+test("a working session spins in the sidebar, also while another chat is open", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "slow spinner run");
+  const row = page.locator(".session", { hasText: "slow spinner run" });
+  await expect(row.getByRole("img", { name: "Working" })).toBeVisible();
+  // Switch away: the run carries on in the background and spins until it settles.
+  await newChat(page);
+  await expect(row.getByRole("img", { name: "Working" })).toBeVisible();
+  await expect(row.getByRole("img", { name: "Working" })).toHaveCount(0, { timeout: 15_000 });
+  await expect(row.locator(".live-dot")).toBeVisible();
+});
+
 test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {
   await signInAndOpen(page);
   const btn = page.getByRole("button", { name: "Refresh sessions" });

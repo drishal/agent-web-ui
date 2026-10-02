@@ -1,8 +1,15 @@
 // Sidebar grouping (Hermes Desktop style): sessions by project, the current
 // project first, then projects by their newest session.
-import type { ProjectSession, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
+import type { ChatStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
 
 export type SessionScope = "harness" | "all";
+
+const BUSY: ReadonlySet<ChatStatus> = new Set(["starting", "running", "stopping", "compacting"]);
+
+/** A live chat that is doing something (the sidebar's working spinner). */
+export function isBusy(status: ChatStatus | null | undefined): boolean {
+  return status !== null && status !== undefined && BUSY.has(status);
+}
 
 export interface ProjectGroup {
   workspace: WorkspaceInfo;

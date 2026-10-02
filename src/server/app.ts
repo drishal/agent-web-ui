@@ -164,7 +164,7 @@ export function createApp(deps: AppDeps) {
         title: s.title,
         updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
         ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
-        ...(live ? { liveChatId: live.chatId } : {}),
+        ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
       };
     });
     // Live chats whose session the harness has not persisted yet.
@@ -177,6 +177,7 @@ export function createApp(deps: AppDeps) {
         title: chat.title || "New chat",
         updatedAt: new Date(chat.lastActivity).toISOString(),
         liveChatId: chat.chatId,
+        status: chat.status,
       });
     }
     res.json({ sessions });
@@ -209,7 +210,7 @@ export function createApp(deps: AppDeps) {
         title: s.title,
         updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
         ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
-        ...(live ? { liveChatId: live.chatId } : {}),
+        ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
         workspaceId: ws.id,
       });
     };
@@ -240,6 +241,7 @@ export function createApp(deps: AppDeps) {
         title: chat.title || "New chat",
         updatedAt: new Date(chat.lastActivity).toISOString(),
         liveChatId: chat.chatId,
+        status: chat.status,
         workspaceId: chat.workspace.id,
       });
     }

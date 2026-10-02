@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
+import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch } from "../icons.js";
-import { dateBucket, groupByProject, type ProjectGroup, type SessionScope } from "../session-groups.js";
+import { dateBucket, groupByProject, isBusy, type ProjectGroup, type SessionScope } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
 
 /** Sessions shown per project before "Show N more". */
@@ -28,26 +28,42 @@ function relativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** Hermes-style spinning ring for a session whose run is in progress; harness-coloured in the All view. */
+function WorkingRing({ harnessId, colored }: { harnessId?: string | undefined; colored: boolean }) {
+  return <span className="working-ring" data-harness={colored ? harnessId : undefined} role="img" aria-label="Working" title="Working" />;
+}
+
 function SessionRow({
   s,
   active,
+  working,
   harnessName,
   showBadge,
   onOpen,
 }: {
   s: ProjectSession;
   active: boolean;
+  working: boolean;
   harnessName: string;
   showBadge: boolean;
   onOpen: () => void;
 }) {
   return (
     <li>
-      <button type="button" className={`session${active ? " is-active" : ""}`} onClick={onOpen} aria-current={active ? "true" : undefined}>
-        {showBadge ? <span className={`harness-dot harness-${s.harnessId}`} role="img" aria-label={harnessName} title={harnessName} /> : null}
+      <button
+        type="button"
+        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}`}
+        onClick={onOpen}
+        aria-current={active ? "true" : undefined}
+      >
+        {working ? (
+          <WorkingRing harnessId={s.harnessId} colored={showBadge} />
+        ) : showBadge ? (
+          <span className={`harness-dot harness-${s.harnessId}`} role="img" aria-label={harnessName} title={harnessName} />
+        ) : null}
         <span className="session-title">{s.title}</span>
         <span className="session-meta">
-          {s.liveChatId ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
+          {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
           <span className="session-time">{relativeTime(s.updatedAt)}</span>
         </span>
       </button>
@@ -60,6 +76,7 @@ function ProjectGroupView({
   group,
   searching,
   isActive,
+  isWorking,
   harnessName,
   showBadges,
   canStartChat,
@@ -69,6 +86,7 @@ function ProjectGroupView({
   group: ProjectGroup;
   searching: boolean;
   isActive: (s: ProjectSession) => boolean;
+  isWorking: (s: ProjectSession) => boolean;
   harnessName: (id: string) => string;
   showBadges: boolean;
   canStartChat: boolean;
@@ -94,7 +112,17 @@ function ProjectGroupView({
         </li>,
       );
     }
-    rows.push(<SessionRow key={s.id} s={s} active={isActive(s)} harnessName={harnessName(s.harnessId)} showBadge={showBadges} onOpen={() => onOpen(s)} />);
+    rows.push(
+      <SessionRow
+        key={s.id}
+        s={s}
+        active={isActive(s)}
+        working={isWorking(s)}
+        harnessName={harnessName(s.harnessId)}
+        showBadge={showBadges}
+        onOpen={() => onOpen(s)}
+      />,
+    );
   }
 
   return (
@@ -104,6 +132,7 @@ function ProjectGroupView({
           <IconChevronDown size={12} className="group-chevron" />
           <IconFolder size={14} />
           <span className="project-name">{workspace.name}</span>
+          {!open && sessions.some(isWorking) ? <WorkingRing colored={false} /> : null}
           <span className="group-count">{sessions.length}</span>
         </button>
         <button
@@ -155,6 +184,8 @@ export function Sidebar(props: {
   onQuery: (q: string) => void;
   activeSessionId: string | null;
   activeChatId: string | null;
+  /** The open chat's status (live over SSE), which beats the listing's. */
+  activeStatus: ChatStatus | null;
   onOpenSession: (s: ProjectSession) => void;
   onRefresh: () => void;
   themeMode: ThemeMode;
@@ -200,6 +231,7 @@ export function Sidebar(props: {
 
   const isActive = (s: ProjectSession) =>
     (props.activeSessionId !== null && s.id === props.activeSessionId) || (s.liveChatId !== undefined && s.liveChatId === props.activeChatId);
+  const isWorking = (s: ProjectSession) => (isActive(s) ? isBusy(props.activeStatus) : isBusy(s.status));
   const searching = props.query.trim() !== "";
 
   return (
@@ -281,6 +313,7 @@ export function Sidebar(props: {
                 group={g}
                 searching={searching}
                 isActive={isActive}
+                isWorking={isWorking}
                 harnessName={(id) => names.get(id) ?? id}
                 showBadges={props.scope === "all"}
                 canStartChat={props.canStartChat}

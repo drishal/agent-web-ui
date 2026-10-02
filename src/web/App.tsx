@@ -22,12 +22,15 @@ import { clampSidebar, SIDEBAR_DEFAULT, SidebarResizer } from "./components/Side
 import { StatusBar } from "./components/StatusBar.js";
 import { IconMenu, IconMore } from "./icons.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
-import type { SessionScope } from "./session-groups.js";
+import { isBusy, type SessionScope } from "./session-groups.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { ChatStream, type ConnectionState } from "./stream.js";
 import { applyTheme, fetchTheme, storedThemeMode, storeThemeMode, type ThemeMode } from "./theme.js";
 
 type Banner = { level: "info" | "warning" | "error"; text: string } | null;
+
+/** How often the session list refreshes while a chat other than the open one is working. */
+const BACKGROUND_POLL_MS = 3000;
 
 const STATUS_LABEL: Record<string, string> = {
   starting: "Starting",
@@ -230,6 +233,14 @@ export function App() {
       if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
     };
   }, [settleKey, refreshSessions]);
+
+  // Runs in other chats have no stream here: poll while any is working so its spinner stops on time.
+  const backgroundBusy = overview.sessions.some((s) => isBusy(s.status) && s.liveChatId !== chatId);
+  useEffect(() => {
+    if (!backgroundBusy) return;
+    const timer = window.setInterval(() => void refreshSessions(), BACKGROUND_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [backgroundBusy, refreshSessions]);
 
   // ---- actions -------------------------------------------------------------------------
 
@@ -434,6 +445,7 @@ export function App() {
         onQuery={setQuery}
         activeSessionId={chat?.sessionId ?? null}
         activeChatId={chatId}
+        activeStatus={chat?.status ?? null}
         onOpenSession={(s) => void openSession(s)}
         onRefresh={() => void refreshSessions()}
         themeMode={themeMode}

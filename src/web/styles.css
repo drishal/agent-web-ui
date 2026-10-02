@@ -581,6 +581,38 @@ pre {
   vertical-align: 1px;
 }
 
+/* Same 10px slot as the working ring, so titles don't shift when a run starts. */
+.session .harness-dot {
+  margin: 0 2px;
+}
+
+/* A run in progress (Hermes Desktop's sidebar): a spinning ring, harness-coloured in the All
+   view. Reduced motion stops the spin and leaves the ring with its gap. */
+.working-ring {
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.working-ring[data-harness="pi"] {
+  color: var(--link);
+}
+
+.working-ring[data-harness="omp"] {
+  color: var(--thinking);
+}
+
+.project-toggle .working-ring {
+  margin-left: 2px;
+}
+
 .show-more {
   display: flex;
   align-items: center;

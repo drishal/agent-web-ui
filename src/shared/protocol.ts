@@ -57,6 +57,8 @@ export interface SessionSummary {
   messageCount?: number;
   /** Chat id when this session is already open in this process. */
   liveChatId?: string;
+  /** That live chat's status, so lists can show which sessions are working. */
+  status?: ChatStatus;
 }
 
 /** A session together with the project it belongs to. */
