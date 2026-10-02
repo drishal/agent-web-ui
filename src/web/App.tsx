@@ -3,6 +3,7 @@ import type {
   Bootstrap,
   ChatEvent,
   ChatSnapshot,
+  ImageAttachment,
   InteractionAnswer,
   ProjectSession,
   SendMode,
@@ -310,10 +311,10 @@ export function App() {
     }
   };
 
-  const send = async (text: string, mode: SendMode): Promise<boolean> => {
+  const send = async (text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<boolean> => {
     if (!chat) return false;
     try {
-      await api(`/api/chats/${chat.chatId}/messages`, { body: { text, mode } });
+      await api(`/api/chats/${chat.chatId}/messages`, { body: { text, mode, ...(images.length > 0 ? { images } : {}) } });
       setBanner(null);
       return true;
     } catch (e) {

@@ -1,9 +1,10 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { InteractionAnswer, SendMode } from "../../shared/protocol.js";
+import { IMAGE_MIME_TYPES, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode } from "../../shared/protocol.js";
 import type { ChatState } from "../chat-state.js";
-import { IconArrowUp, IconStop, Spinner } from "../icons.js";
+import { IconArrowUp, IconImage, IconStop, IconX, Spinner } from "../icons.js";
+import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
@@ -26,7 +27,7 @@ export function Composer({
   maxChars: number;
   hero?: boolean;
   placeholder?: string;
-  onSend: (text: string, mode: SendMode) => Promise<boolean>;
+  onSend: (text: string, mode: SendMode, images: ImageAttachment[]) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
@@ -35,7 +36,11 @@ export function Composer({
   const [text, setText] = useState(() => load<string>(draftKey, ""));
   const [sending, setSending] = useState(false);
   const [answering, setAnswering] = useState(false);
+  const [images, setImages] = useState<PendingImage[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
   const caps = chat.capabilities;
   const running = chat.status === "running";
   const stopping = chat.status === "stopping";
@@ -58,16 +63,57 @@ export function Composer({
       const value = text.trim();
       if (!value || sending) return;
       // Clear immediately so text typed while the request is in flight survives;
-      // restore only if the send failed and nothing new was typed.
+      // restore only if the send failed and nothing new was typed or attached.
+      const attached = images;
       setSending(true);
       setText("");
-      const ok = await onSend(value, mode);
+      setImages([]);
+      setImageError(null);
+      const ok = await onSend(
+        value,
+        mode,
+        attached.map(({ mimeType, data }) => ({ mimeType, data })),
+      );
       setSending(false);
-      if (!ok) setText((current) => current || value);
+      if (!ok) {
+        setText((current) => current || value);
+        setImages((current) => (current.length > 0 ? current : attached));
+      }
       area.current?.focus();
     },
-    [onSend, sending, text],
+    [onSend, sending, text, images],
   );
+
+  const addImages = async (files: File[]) => {
+    if (files.length === 0) return;
+    setImageError(null);
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
+      setImageError(`Up to ${MAX_IMAGES} images per message`);
+      return;
+    }
+    const added: PendingImage[] = [];
+    for (const file of files.slice(0, room)) {
+      try {
+        added.push(await prepareImage(file));
+      } catch (error) {
+        setImageError(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (files.length > room) setImageError(`Up to ${MAX_IMAGES} images per message`);
+    setImages((current) => [...current, ...added].slice(0, MAX_IMAGES));
+    area.current?.focus();
+  };
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = imageFiles(e.clipboardData.files);
+    // Spreadsheets and rich editors copy a rendering beside the text; paste the text then.
+    if (files.length === 0 || e.clipboardData.getData("text/plain")) return;
+    e.preventDefault();
+    void addImages(files);
+  };
+
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || coarsePointer()) return;
@@ -78,6 +124,8 @@ export function Composer({
 
   const tooLong = text.length > maxChars;
   const empty = !text.trim();
+  const model = chat.config.models.find((m) => m.key === chat.config.model);
+  const blind = images.length > 0 && model?.vision === false;
   const pending = closed ? [] : chat.pending;
 
   return (
@@ -96,7 +144,45 @@ export function Composer({
           }}
         />
       ) : (
-        <div className={`composer-card${closed ? " is-closed" : ""}`}>
+        <div
+          className={`composer-card${closed ? " is-closed" : ""}${dragging ? " is-dragging" : ""}`}
+          onDragOver={(e) => {
+            if (closed || !hasFiles(e)) return;
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(e) => {
+            if (closed || !hasFiles(e)) return;
+            e.preventDefault();
+            setDragging(false);
+            void addImages(imageFiles(e.dataTransfer.files));
+          }}
+        >
+          {images.length > 0 ? (
+            <ul className="composer-images" aria-label="Attached images">
+              {images.map((image, i) => (
+                <li key={image.id} className="composer-image">
+                  <img src={dataUrl(image)} alt={`Attached image ${i + 1}`} />
+                  <button
+                    type="button"
+                    className="composer-image-remove"
+                    aria-label={`Remove image ${i + 1}`}
+                    onClick={() => setImages((current) => current.filter((x) => x.id !== image.id))}
+                  >
+                    <IconX size={11} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {imageError || blind ? (
+            <p className="composer-note" role="status">
+              {imageError ?? `${model?.name ?? "This model"} does not take image input; switch to a vision model before sending.`}
+            </p>
+          ) : null}
           <textarea
             ref={area}
             className="composer-input"
@@ -110,14 +196,38 @@ export function Composer({
                   ? caps.supportsSteer
                     ? "Steer the agent, or queue a follow-up…"
                     : "The agent is working…"
-                  : (placeholder ?? "Message the agent…")
+                  : images.length > 0
+                    ? "Say what to do with the image…"
+                    : (placeholder ?? "Message the agent…")
             }
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             aria-label="Message"
             enterKeyHint={coarsePointer() ? "enter" : "send"}
           />
           <div className="composer-bar">
+            <button
+              type="button"
+              className="icon-btn composer-attach"
+              aria-label="Attach images"
+              title="Attach images (or paste / drop them)"
+              disabled={closed || images.length >= MAX_IMAGES}
+              onClick={() => filePicker.current?.click()}
+            >
+              <IconImage size={16} />
+            </button>
+            <input
+              ref={filePicker}
+              type="file"
+              accept={IMAGE_MIME_TYPES.join(",")}
+              multiple
+              hidden
+              onChange={(e) => {
+                void addImages(imageFiles(e.target.files));
+                e.target.value = "";
+              }}
+            />
             <ComposerControls chat={chat} onConfig={onConfig} />
             <div className="composer-actions">
               {tooLong ? (

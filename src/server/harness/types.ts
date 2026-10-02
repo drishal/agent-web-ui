@@ -6,6 +6,7 @@ import type {
   ContextUsage,
   HarnessCapabilities,
   HarnessId,
+  ImageAttachment,
   InteractionAnswer,
   InteractionRequest,
   ModelInfo,
@@ -77,9 +78,9 @@ export interface LiveChat {
   /** The harness's own todo list, if it keeps one. */
   getTodos(): Promise<TodoItem[]>;
   /** Resolves once the harness accepted the prompt; the run streams as events. */
-  prompt(text: string): Promise<void>;
-  steer(text: string): Promise<void>;
-  followUp(text: string): Promise<void>;
+  prompt(text: string, images?: ImageAttachment[]): Promise<void>;
+  steer(text: string, images?: ImageAttachment[]): Promise<void>;
+  followUp(text: string, images?: ImageAttachment[]): Promise<void>;
   /** Aborts the run, clears queues where supported, resolves when idle. */
   abort(): Promise<void>;
   setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void>;

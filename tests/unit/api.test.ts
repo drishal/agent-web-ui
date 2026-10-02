@@ -257,6 +257,27 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect((await agent.get("/api/chats/does-not-exist")).status).toBe(404);
   });
 
+  it("sends pasted images with the prompt, and refuses fakes, extras, and image-only messages", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const url = `/api/chats/${chat.chatId}/messages`;
+    // A ~1 MB PNG: well past the 455 kB limit every other body keeps.
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(1024 * 1024)]).toString("base64");
+    const image = { mimeType: "image/png", data: png };
+
+    expect((await agent.post(url).send({ text: "what is this?", images: [{ ...image, mimeType: "image/jpeg" }] })).body.code).toBe("bad_image");
+    expect((await agent.post(url).send({ text: "", images: [image] })).status).toBe(400);
+    expect((await agent.post(url).send({ text: "too many", images: Array(9).fill(image) })).status).toBe(400);
+    expect((await agent.post(url).send({ text: "svg", images: [{ mimeType: "image/svg+xml", data: png }] })).status).toBe(400);
+
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    expect((await agent.post(url).send({ text: "what is this?", images: [image, image] })).status).toBe(202);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    const user = (await agent.get(`/api/chats/${chat.chatId}`)).body.items.find((i: { kind: string }) => i.kind === "user");
+    expect(user).toMatchObject({ text: "what is this?", imageCount: 2 });
+    sse.close();
+  });
+
   it("never returns filesystem paths for sessions", async () => {
     const { agent, ws, t } = await setup();
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;

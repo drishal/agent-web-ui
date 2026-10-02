@@ -14,6 +14,7 @@ import {
   type ChatItem,
   type ContextUsage,
   type HarnessCapabilities,
+  type ImageAttachment,
   type InteractionAnswer,
   type InteractionKind,
   type ModelInfo,
@@ -37,7 +38,7 @@ const SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
 
 type AgentSession = pi.AgentSession;
 type Services = Awaited<ReturnType<typeof pi.createAgentSessionServices>>;
-type PiModel = { provider: string; id: string; name?: string; reasoning?: boolean };
+type PiModel = { provider: string; id: string; name?: string; reasoning?: boolean; input?: string[] };
 
 function expandTilde(p: string): string {
   return p === "~" || p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(1)) : p;
@@ -59,7 +60,12 @@ function toModelInfo(m: PiModel): ModelInfo {
     id: m.id,
     name: m.name ?? m.id,
     ...(m.reasoning !== undefined ? { reasoning: Boolean(m.reasoning) } : {}),
+    ...(Array.isArray(m.input) ? { vision: m.input.includes("image") } : {}),
   };
+}
+
+function toPiImages(images: ImageAttachment[] | undefined) {
+  return images?.length ? images.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })) : undefined;
 }
 
 /** Theme stand-in for extensions that style text: every styling call returns its text. */
@@ -398,12 +404,14 @@ class PiLiveChat implements LiveChat {
     return [];
   }
 
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
     if (!this.session.isIdle) throw new Error("Pi is busy");
+    const piImages = toPiImages(images);
     await new Promise<void>((resolve, reject) => {
       let decided = false;
       const runPromise = this.session.prompt(text, {
         source: "rpc",
+        ...(piImages ? { images: piImages } : {}),
         preflightResult: (ok) => {
           decided = true;
           if (ok) resolve();
@@ -425,12 +433,12 @@ class PiLiveChat implements LiveChat {
     });
   }
 
-  async steer(text: string): Promise<void> {
-    await this.session.steer(text, undefined, { source: "rpc" });
+  async steer(text: string, images?: ImageAttachment[]): Promise<void> {
+    await this.session.steer(text, toPiImages(images), { source: "rpc" });
   }
 
-  async followUp(text: string): Promise<void> {
-    await this.session.followUp(text, undefined, { source: "rpc" });
+  async followUp(text: string, images?: ImageAttachment[]): Promise<void> {
+    await this.session.followUp(text, toPiImages(images), { source: "rpc" });
   }
 
   async abort(): Promise<void> {

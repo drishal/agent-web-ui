@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { Markdown } from "./Markdown.js";
 import { TurnRail } from "./TurnRail.js";
@@ -190,7 +190,11 @@ function UserPrompt({ item }: { item: UserItem }) {
         <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
           {item.text}
         </div>
-        {item.imageCount ? <span className="bubble-meta">{item.imageCount} image(s)</span> : null}
+        {item.imageCount ? (
+          <span className="bubble-meta bubble-images">
+            <IconImage size={13} /> {item.imageCount} {item.imageCount === 1 ? "image" : "images"}
+          </span>
+        ) : null}
         {long ? (
           <button type="button" className="link-btn" onClick={() => setExpanded((v) => !v)}>
             {expanded ? "Show less" : "Show more"}

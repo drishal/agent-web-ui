@@ -16,6 +16,7 @@ import {
   type ChatItem,
   type ContextUsage,
   type HarnessCapabilities,
+  type ImageAttachment,
   type InteractionAnswer,
   type InteractionKind,
   type ModelInfo,
@@ -333,7 +334,13 @@ function toModelInfo(m: unknown): ModelInfo | null {
     id: m.id,
     name: typeof m.name === "string" ? m.name : m.id,
     ...(typeof m.reasoning === "boolean" ? { reasoning: m.reasoning } : {}),
+    ...(Array.isArray(m.input) ? { vision: m.input.includes("image") } : {}),
   };
+}
+
+/** omp's RPC takes pi-ai ImageContent on prompt, steer, and follow_up. */
+function withImages(message: string, images: ImageAttachment[] | undefined): Obj {
+  return images?.length ? { message, images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : { message };
 }
 
 export class OmpAdapter implements HarnessAdapter {
@@ -678,16 +685,16 @@ class OmpLiveChat implements LiveChat {
     return out.slice(0, 100);
   }
 
-  async prompt(text: string): Promise<void> {
-    await this.live.command("prompt", { message: text });
+  async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
+    await this.live.command("prompt", withImages(text, images));
   }
 
-  async steer(text: string): Promise<void> {
-    await this.live.command("steer", { message: text });
+  async steer(text: string, images?: ImageAttachment[]): Promise<void> {
+    await this.live.command("steer", withImages(text, images));
   }
 
-  async followUp(text: string): Promise<void> {
-    await this.live.command("follow_up", { message: text });
+  async followUp(text: string, images?: ImageAttachment[]): Promise<void> {
+    await this.live.command("follow_up", withImages(text, images));
   }
 
   async abort(): Promise<void> {

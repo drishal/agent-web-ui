@@ -85,6 +85,8 @@ export interface ModelInfo {
   id: string;
   name: string;
   reasoning?: boolean;
+  /** Accepts image input; absent when the harness does not say. */
+  vision?: boolean;
 }
 
 export interface ChatConfig {
@@ -267,8 +269,32 @@ export const resumeChatSchema = z.object({
   workspaceId: z.string().min(1).max(128),
   sessionId: z.string().min(1).max(512),
 });
+/** Image types both harnesses and the major providers accept. */
+export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
+export const MAX_IMAGES = 8;
+/** Per image, after the browser's downscaling; Anthropic's API refuses anything larger. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** A pasted, dropped, or picked image, base64-encoded. The harness resizes it further for the model. */
+export interface ImageAttachment {
+  mimeType: ImageMimeType;
+  data: string;
+}
+
+export const imageAttachmentSchema = z.object({
+  mimeType: z.enum(IMAGE_MIME_TYPES),
+  data: z
+    .string()
+    .min(8)
+    .max(Math.ceil(MAX_IMAGE_BYTES / 3) * 4)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, "not base64"),
+});
+
 export const sendMessageSchema = z.object({
+  // Text stays required with images: some providers reject an empty text block.
   text: z.string().min(1).max(MAX_MESSAGE_CHARS),
+  images: z.array(imageAttachmentSchema).max(MAX_IMAGES).default([]),
   mode: z.enum(["normal", "steer", "followUp", "stopAndSend"]).default("normal"),
 });
 export const patchConfigSchema = z

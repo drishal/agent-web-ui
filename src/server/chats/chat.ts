@@ -8,6 +8,7 @@ import type {
   ChatSnapshot,
   ChatStatus,
   ContextUsage,
+  ImageAttachment,
   InteractionAnswer,
   InteractionRequest,
   QueueState,
@@ -493,7 +494,7 @@ export class Chat {
 
   // ---- commands -------------------------------------------------------------
 
-  async send(text: string, mode: SendMode): Promise<void> {
+  async send(text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<void> {
     this.assertOpen();
     this.lastActivity = Date.now();
     const caps = this.adapter.capabilities;
@@ -502,12 +503,12 @@ export class Chat {
       case "steer":
         if (!caps.supportsSteer) throw new ChatError(400, "unsupported", "This harness cannot steer");
         if (this.status !== "running") throw new ChatError(409, "not_running", "Nothing is running to steer");
-        await this.live.steer(text);
+        await this.live.steer(text, images);
         return;
       case "followUp":
         if (!caps.supportsFollowUp) throw new ChatError(400, "unsupported", "This harness has no follow-up queue");
         if (this.status !== "running") throw new ChatError(409, "not_running", "Nothing is running to follow");
-        await this.live.followUp(text);
+        await this.live.followUp(text, images);
         return;
       case "stopAndSend":
         if (busy) await this.abort();
@@ -519,7 +520,7 @@ export class Chat {
     if (this.status === "error") this.status = "idle";
     this.setStatus("running");
     try {
-      await this.live.prompt(text);
+      await this.live.prompt(text, images);
     } catch (error) {
       this.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
       this.setStatus("idle");

@@ -9,6 +9,8 @@ import {
   type ChatEvent,
   compactSchema,
   createChatSchema,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGES,
   MAX_MESSAGE_CHARS,
   openWorkspaceSchema,
   patchConfigSchema,
@@ -24,6 +26,7 @@ import { ChatError, errorMessage } from "./chats/chat.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
+import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import type { Workspaces } from "./workspaces.js";
@@ -95,7 +98,12 @@ export function createApp(deps: AppDeps) {
   app.post("/api/logout", security.logout);
 
   app.use("/api", security.requireAuth);
-  app.use("/api", express.json({ limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4) / 1024) + 64}kb` }));
+  // Only sending a message may carry images; every other body stays small.
+  const textJson = express.json({ limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4) / 1024) + 64}kb` });
+  const messageJson = express.json({
+    limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4 + MAX_IMAGES * Math.ceil(MAX_IMAGE_BYTES / 3) * 4) / 1024) + 64}kb`,
+  });
+  app.use("/api", (req, res, next) => (req.method === "POST" && /^\/chats\/[^/]+\/messages$/.test(req.path) ? messageJson : textJson)(req, res, next));
 
   let statusAt = 0;
   app.get("/api/bootstrap", async (req, res) => {
@@ -311,8 +319,11 @@ export function createApp(deps: AppDeps) {
 
   app.post("/api/chats/:id/messages", async (req, res) => {
     const chat = manager.get(req.params.id);
-    const { text, mode } = body(sendMessageSchema, req);
-    await chat.send(text, mode);
+    const { text, images, mode } = body(sendMessageSchema, req);
+    for (const image of images) {
+      if (sniffImage(image.data) !== image.mimeType) throw new ChatError(400, "bad_image", "An attachment is not the image type it claims to be");
+    }
+    await chat.send(text, mode, images);
     res.status(202).json({ accepted: true, mode });
   });
 

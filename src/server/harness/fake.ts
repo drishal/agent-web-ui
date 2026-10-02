@@ -10,6 +10,7 @@ import {
   type ChatItem,
   type ContextUsage,
   type HarnessCapabilities,
+  type ImageAttachment,
   type InteractionAnswer,
   type ModelInfo,
   type TodoItem,
@@ -27,11 +28,11 @@ import type {
 } from "./types.js";
 
 const FAKE_MODELS: ModelInfo[] = [
-  { key: "fake/echo", provider: "fake", id: "echo", name: "Fake Echo", reasoning: true },
+  { key: "fake/echo", provider: "fake", id: "echo", name: "Fake Echo", reasoning: true, vision: true },
   { key: "fake/slow", provider: "fake", id: "slow", name: "Fake Slow", reasoning: false },
   { key: "acme/gpt-5.5", provider: "acme", id: "gpt-5.5", name: "GPT-5.5", reasoning: true },
   { key: "acme/gpt-5.5-mini", provider: "acme", id: "gpt-5.5-mini", name: "GPT-5.5 Mini" },
-  { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true },
+  { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true, vision: false },
 ];
 const FAKE_THINKING = ["off", "low", "high"];
 
@@ -201,13 +202,13 @@ class FakeLiveChat implements LiveChat {
     ];
   }
 
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, images: ImageAttachment[] = []): Promise<void> {
     if (this.disposed) throw new Error("Chat is closed");
     if (this.running) throw new Error("Agent is busy");
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
     this.emit({ type: "busy" });
-    this.running = this.run(text, signal).finally(() => {
+    this.running = this.run(text, signal, images.length).finally(() => {
       this.running = null;
       this.emit({ type: "settled" });
     });
@@ -291,18 +292,21 @@ class FakeLiveChat implements LiveChat {
     if (signal.aborted) throw new Aborted();
   }
 
-  private async run(firstText: string, signal: AbortSignal): Promise<void> {
+  private async run(firstText: string, signal: AbortSignal, firstImages: number): Promise<void> {
     let text: string | undefined = firstText;
+    let images = firstImages;
     while (text !== undefined) {
-      await this.turn(text, signal);
+      await this.turn(text, signal, images);
+      images = 0;
       text = this.followUps.shift();
       if (text !== undefined) this.emitQueue();
     }
   }
 
-  private async turn(text: string, signal: AbortSignal): Promise<void> {
-    this.record({ role: "user", content: text });
-    this.emit({ type: "user_message", text });
+  private async turn(text: string, signal: AbortSignal, imageCount = 0): Promise<void> {
+    const images = Array.from({ length: imageCount }, () => ({ type: "image", data: "", mimeType: "image/png" }));
+    this.record({ role: "user", content: imageCount ? [{ type: "text", text }, ...images] : text });
+    this.emit({ type: "user_message", text, ...(imageCount ? { imageCount } : {}) });
     if (!this.session.title) {
       this.session.title = text.slice(0, 60);
       this.emit({ type: "title", title: this.session.title });

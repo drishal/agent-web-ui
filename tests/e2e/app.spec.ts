@@ -385,6 +385,55 @@ test("a working session spins in the sidebar, also while another chat is open", 
   await expect(row.locator(".live-dot")).toBeVisible();
 });
 
+const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+test("images can be pasted, dropped, or picked, then removed or sent with the prompt", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const box = page.getByRole("textbox", { name: "Message" });
+  const strip = page.getByRole("list", { name: "Attached images" });
+  const fire = (type: "paste" | "drop", selector: string) =>
+    page.evaluate(
+      ({ type, selector, b64 }) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "shot.png", { type: "image/png" }));
+        const target = document.querySelector(selector) as HTMLElement;
+        if (type === "paste") target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+        else for (const t of ["dragover", "drop"]) target.dispatchEvent(new DragEvent(t, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      },
+      { type, selector, b64: PNG_1X1 },
+    );
+
+  // A screenshot on the clipboard, a dropped file, and one from the picker.
+  await fire("paste", ".composer-input");
+  await expect(strip.getByRole("img")).toHaveCount(1);
+  await fire("drop", ".composer-card");
+  await expect(strip.getByRole("img")).toHaveCount(2);
+  await page.locator('.composer input[type="file"]').setInputFiles({ name: "c.png", mimeType: "image/png", buffer: Buffer.from(PNG_1X1, "base64") });
+  await expect(strip.getByRole("img")).toHaveCount(3);
+  await page.getByRole("button", { name: "Remove image 3" }).click();
+  await page.getByRole("button", { name: "Remove image 2" }).click();
+  await expect(strip.getByRole("img")).toHaveCount(1);
+  await expect(box).toHaveAttribute("placeholder", "Say what to do with the image…");
+
+  // A text-only model is called out.
+  const pick = async (query: string) => {
+    await page.getByTestId("model-picker").click();
+    await page.getByRole("combobox", { name: "Search models" }).fill(query);
+    await page.keyboard.press("Enter");
+  };
+  await pick("glm");
+  await expect(page.getByText(/GLM-5\.3-Flash does not take image input/)).toBeVisible();
+  await pick("fake echo");
+  await expect(page.getByText(/does not take image input/)).toHaveCount(0);
+
+  // An image needs words to go with it; then both are sent.
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await sendAndWait(page, "what is in this screenshot?");
+  await expect(page.getByTestId("turn").last().locator(".bubble-images")).toHaveText("1 image");
+  await expect(strip).toHaveCount(0);
+});
+
 test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {
   await signInAndOpen(page);
   const btn = page.getByRole("button", { name: "Refresh sessions" });
