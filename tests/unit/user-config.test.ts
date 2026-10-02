@@ -29,7 +29,7 @@ auth:
   password: "correct horse"
 workspace_roots: [/home/x/code, /srv]
 allowed_hosts: [box.tail.ts.net]
-theme: custom
+theme: base16
 autocollapse_sidebar: false
 `);
     const read = readUserConfig(dir);
@@ -41,7 +41,9 @@ autocollapse_sidebar: false
       WORKSPACE_ROOTS: `/home/x/code${path.delimiter}/srv`,
       ALLOWED_HOSTS: "box.tail.ts.net",
     });
-    expect(uiSettings(read?.config)).toEqual({ theme: "custom", autocollapseSidebar: false });
+    expect(uiSettings(read?.config)).toEqual({ theme: "base16", autocollapseSidebar: false });
+    // The old name still works.
+    expect(uiSettings(readUserConfig(folder("theme: custom\n"))?.config).theme).toBe("base16");
   });
 
   it("defaults the browser settings, and an empty file is no settings", () => {

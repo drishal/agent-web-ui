@@ -490,7 +490,7 @@ export function App() {
         onOpenSession={(s) => void openSession(s)}
         onRefresh={() => void refreshSessions()}
         themeMode={themeMode}
-        schemeName={themeInfo?.source === "file" ? themeInfo.name : null}
+        scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}
         onThemeMode={(m) => {
           setThemeMode(m);
           storeThemeMode(m);

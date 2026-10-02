@@ -284,8 +284,8 @@ export interface Bootstrap {
   roots: string[];
   home: string;
   theme: { active: string; problem?: string };
-  /** From config.yml. theme: the default look (custom = theme.yml), null when unset. */
-  ui: { theme: "system" | "light" | "dark" | "custom" | null; autocollapseSidebar: boolean };
+  /** From config.yml. theme: the default look (base16 = theme.yml), null when unset. */
+  ui: { theme: "system" | "light" | "dark" | "base16" | null; autocollapseSidebar: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }

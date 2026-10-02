@@ -57,7 +57,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `workspace_roots` | home dir | Projects must be inside a root, checked by realpath, so symlink and `..` escapes are refused. |
 | `allowed_hosts` | — | Extra `Host` values (e.g. your `*.ts.net` Serve name). |
 | `allowed_tailscale_users` | — | Optional Tailscale logins; when set, Serve requests must also carry one of them. |
-| `theme` | — | Default look on every device: `system`, `light`, `dark`, or `custom` (`theme.yml`). Unset: `theme.yml` when there is one, else `system`. The theme menu changes it per device; a changed value here wins once on each device. |
+| `theme` | — | Default look on every device: `system`, `light`, `dark`, or `base16` (`theme.yml`; `custom` is accepted as the old name). Unset: `theme.yml` when there is one, else `system`. The theme menu changes it per device; a changed value here wins once on each device. |
 | `autocollapse_sidebar` | `true` | Fold the sidebar away below 1200 px wide (phones use the drawer anyway); a sidebar collapsed with its button stays collapsed at any width. |
 
 **`theme.yml`**: a base16/base24 scheme (see [Theme](#theme)); the dotfiles' stylix module writes it.
@@ -249,7 +249,7 @@ With `host: 0.0.0.0` in `config.yml`, startup prints `LAN: http://<ip>:4783/` fo
 
 ## Theme
 
-The built-in light and dark themes follow your system. A base16 or base24 scheme in `~/.config/agentwebui/theme.yml` is listed in the theme menu by its name; `theme: custom` in `config.yml` makes it the default everywhere.
+The built-in light and dark themes follow your system. A base16 or base24 scheme in `~/.config/agentwebui/theme.yml` is listed in the theme menu as **base16** (its own name shows on hover); `theme: base16` in `config.yml` makes it the default everywhere.
 
 - **Accepted formats:** tinted-theming (`system`, `name`, `variant`, nested `palette:`), the stylix-generated shape (`name` + `palette:`, hex without `#`), and legacy flat base16 (`scheme:` + top-level `base00`…).
 - **Validation:** only exact 6-digit hex is accepted, because colors become CSS custom properties applied through the CSSOM.

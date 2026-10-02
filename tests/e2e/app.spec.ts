@@ -331,6 +331,8 @@ test("the stylix theme file drives colors and passes contrast", async ({ page })
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1d2021");
+  // A theme.yml is listed as "base16", whatever its scheme is called.
+  await expect(page.getByRole("combobox", { name: "Theme" }).locator('option[value="scheme"]')).toHaveText("base16");
   await page.getByRole("combobox", { name: "Theme" }).selectOption("light");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 255, 255)");
 });

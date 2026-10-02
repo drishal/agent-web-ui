@@ -45,9 +45,9 @@ export function applyTheme(mode: ThemeMode, info: ThemeInfo | null): void {
 
 type ThemeChoice = Bootstrap["ui"]["theme"];
 
-/** config.yml's theme as a mode; "custom" needs a theme.yml to show. */
+/** config.yml's theme as a mode; "base16" needs a theme.yml to show. */
 function configMode(choice: ThemeChoice, info: ThemeInfo | null): ThemeMode | null {
-  if (choice === "custom") return info?.source === "file" ? "scheme" : "system";
+  if (choice === "base16") return info?.source === "file" ? "scheme" : "system";
   return choice;
 }
 

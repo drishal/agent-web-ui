@@ -182,7 +182,8 @@ export function Sidebar(props: {
   onOpenSession: (s: ProjectSession) => void;
   onRefresh: () => void;
   themeMode: ThemeMode;
-  schemeName: string | null;
+  /** The theme.yml scheme, when one is loaded; listed as "base16" with its own name on hover. */
+  scheme: { name: string | null } | null;
   onThemeMode: (mode: ThemeMode) => void;
   textScale: number;
   onTextScale: (scale: number) => void;
@@ -328,7 +329,11 @@ export function Sidebar(props: {
               <option value="system">System</option>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
-              {props.schemeName ? <option value="scheme">{props.schemeName}</option> : null}
+              {props.scheme ? (
+                <option value="scheme" title={props.scheme.name ?? undefined}>
+                  base16
+                </option>
+              ) : null}
             </select>
           </label>
           <label className="foot-control">

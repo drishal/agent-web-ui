@@ -11,7 +11,7 @@ import { z } from "zod";
 export const CONFIG_FILE = "config.yml";
 export const THEME_FILE = "theme.yml";
 
-export type ThemeChoice = "system" | "light" | "dark" | "custom";
+export type ThemeChoice = "system" | "light" | "dark" | "base16";
 
 /** What the browser needs from config.yml; re-read on every page load. */
 export interface UiSettings {
@@ -30,7 +30,8 @@ const schema = z
     workspace_roots: z.array(z.string()).optional(),
     allowed_hosts: z.array(z.string()).optional(),
     allowed_tailscale_users: z.array(z.string()).optional(),
-    theme: z.enum(["system", "light", "dark", "custom"]).optional(),
+    // "custom" is the old name for base16.
+    theme: z.enum(["system", "light", "dark", "base16", "custom"]).optional(),
     autocollapse_sidebar: z.boolean().optional(),
   })
   .strict();
@@ -88,5 +89,6 @@ export function configEnv(c: UserConfig): Record<string, string> {
 }
 
 export function uiSettings(c: UserConfig | undefined): UiSettings {
-  return { theme: c?.theme ?? null, autocollapseSidebar: c?.autocollapse_sidebar ?? true };
+  const theme = c?.theme === "custom" ? "base16" : (c?.theme ?? null);
+  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true };
 }

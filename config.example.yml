@@ -29,7 +29,7 @@ auth:
 # allowed_tailscale_users: [you@example.com]
 
 # The default look on every device: system (follow light/dark), light, dark,
-# or custom (theme.yml in this folder: a base16/base24 scheme). The theme menu
+# or base16 (theme.yml in this folder: a base16/base24 scheme). The theme menu
 # can still change it per device until this value changes.
 theme: system
 
