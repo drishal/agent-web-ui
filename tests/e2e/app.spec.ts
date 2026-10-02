@@ -424,6 +424,11 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   // A screenshot on the clipboard, a dropped file, and one from the picker.
   await fire("paste", ".composer-input");
   await expect(strip.getByRole("img")).toHaveCount(1);
+  await page.getByRole("button", { name: "View image 1" }).click();
+  const viewer = page.getByRole("dialog", { name: "Image 1" });
+  await expect(viewer.getByRole("img", { name: "Attached image 1, full size" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
   await fire("drop", ".composer-card");
   await expect(strip.getByRole("img")).toHaveCount(2);
   await page.locator('.composer input[type="file"]').setInputFiles({ name: "c.png", mimeType: "image/png", buffer: Buffer.from(PNG_1X1, "base64") });

@@ -7,6 +7,7 @@ import { IconArrowUp, IconImage, IconStop, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
+import { Dialog } from "./Dialog.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
@@ -41,6 +42,7 @@ export function Composer({
   const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [viewing, setViewing] = useState<{ image: PendingImage; index: number } | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const caps = chat.capabilities;
@@ -167,7 +169,9 @@ export function Composer({
             <ul className="composer-images" aria-label="Attached images">
               {images.map((image, i) => (
                 <li key={image.id} className="composer-image">
-                  <img src={dataUrl(image)} alt={`Attached image ${i + 1}`} />
+                  <button type="button" className="composer-image-open" aria-label={`View image ${i + 1}`} onClick={() => setViewing({ image, index: i })}>
+                    <img src={dataUrl(image)} alt={`Attached image ${i + 1}`} />
+                  </button>
                   <button
                     type="button"
                     className="composer-image-remove"
@@ -268,6 +272,11 @@ export function Composer({
           </div>
         </div>
       )}
+      {viewing ? (
+        <Dialog title={`Image ${viewing.index + 1}`} className="image-dialog" onClose={() => setViewing(null)}>
+          <img className="image-viewer" src={dataUrl(viewing.image)} alt={`Attached image ${viewing.index + 1}, full size`} />
+        </Dialog>
+      ) : null}
     </div>
   );
 }

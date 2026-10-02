@@ -1715,8 +1715,23 @@ body.is-resizing {
   object-fit: cover;
 }
 
+.composer-image-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.composer-image-open:hover img {
+  filter: brightness(0.92);
+}
+
 .composer-image-remove {
   position: absolute;
+  z-index: 1;
   top: 3px;
   right: 3px;
   display: inline-flex;
@@ -2375,6 +2390,20 @@ body.is-resizing {
 
 .dialog code {
   overflow-wrap: anywhere;
+}
+
+.image-dialog {
+  width: fit-content;
+  max-width: calc(100vw - 32px);
+}
+
+.image-viewer {
+  display: block;
+  max-width: calc(100vw - 68px);
+  max-height: calc(100dvh - 120px);
+  object-fit: contain;
+  border-radius: var(--r-sm);
+  background: var(--bg);
 }
 
 .picker-section {
