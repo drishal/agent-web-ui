@@ -40,8 +40,9 @@ if (args[0] === "acp") {
     else if (msg.method === "session/list") {
       const state = load();
       const sessions = Object.entries(state.sessions)
-        .filter(([, s]) => s.cwd === msg.params.cwd && s.messages.length > 0)
-        .map(([id, s]) => ({ sessionId: id, cwd: s.cwd, title: s.title || "Untitled", updatedAt: new Date().toISOString(), _meta: { messageCount: s.messages.length } }));
+        .filter(([, s]) => (!msg.params.cwd || s.cwd === msg.params.cwd) && s.messages.length > 0)
+        // Like omp: no title field at all when the session never got one.
+        .map(([id, s]) => ({ sessionId: id, cwd: s.cwd, ...(s.title ? { title: s.title } : {}), updatedAt: new Date().toISOString(), _meta: { messageCount: s.messages.length } }));
       out({ jsonrpc: "2.0", id: msg.id, result: { sessions } });
     } else out({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "nope" } });
   });

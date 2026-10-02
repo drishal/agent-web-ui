@@ -7,6 +7,7 @@
 // src/modes/rpc/rpc-types.ts and kept deliberately loose; 18.4.10 only adds
 // commands and an opt-in `ask` dialog, so nothing used here changed.
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { promisify } from "node:util";
@@ -44,6 +45,7 @@ const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
 const CONTEXT_REPORT_TIMEOUT_MS = 5_000;
+const FIRST_PROMPT_BYTES = 64 * 1024;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
 
@@ -305,7 +307,7 @@ class AcpLister {
           out.push({
             nativeId: s.sessionId,
             cwd: sessionCwd,
-            title: typeof s.title === "string" && s.title ? s.title : "Untitled",
+            title: typeof s.title === "string" ? s.title.trim() : "",
             updatedAt: typeof s.updatedAt === "string" ? new Date(s.updatedAt) : null,
             ...(typeof meta.messageCount === "number" ? { messageCount: meta.messageCount } : {}),
           });
@@ -365,6 +367,90 @@ function withImages(message: string, images: ImageAttachment[] | undefined): Obj
   return images?.length ? { message, images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : { message };
 }
 
+/** The first user prompt in an omp session file (JSONL), on one line, or null. */
+export function firstPrompt(jsonl: string): string | null {
+  for (const line of jsonl.split("\n")) {
+    if (!line.includes('"user"')) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // the read window can cut the last line short
+    }
+    if (!isObj(entry) || entry.type !== "message" || !isObj(entry.message) || entry.message.role !== "user") continue;
+    const content = entry.message.content;
+    const text =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.map((b) => (isObj(b) && b.type === "text" && typeof b.text === "string" ? b.text : "")).join(" ")
+          : "";
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (clean) return clean.length > 80 ? `${clean.slice(0, 79)}…` : clean;
+  }
+  return null;
+}
+
+/**
+ * ACP `session/list` gives only omp's stored title, which stays empty when its
+ * title generation never ran (a run that ended on tool calls, say). omp's own
+ * picker then shows the first prompt; this does the same. Read-only: the first
+ * 64 kB of `<sessionDir>/<cwd>/<time>_<id>.jsonl`, cached by file size.
+ */
+class FirstPrompts {
+  private cache = new Map<string, { size: number; title: string | null }>();
+
+  constructor(private readonly root: () => Promise<string>) {}
+
+  async fill<T extends NativeSessionSummary>(sessions: T[]): Promise<T[]> {
+    const untitled = sessions.filter((s) => !s.title);
+    if (untitled.length > 0) {
+      const files = await this.locate(new Set(untitled.map((s) => s.nativeId)));
+      await Promise.all(
+        untitled.map(async (s) => {
+          const file = files.get(s.nativeId);
+          s.title = (file ? await this.read(s.nativeId, file) : null) ?? "Untitled";
+        }),
+      );
+    }
+    return sessions;
+  }
+
+  private async locate(ids: Set<string>): Promise<Map<string, string>> {
+    const root = await this.root();
+    const found = new Map<string, string>();
+    const dirs = await fs.readdir(root).catch(() => [] as string[]);
+    await Promise.all(
+      dirs.map(async (dir) => {
+        for (const name of await fs.readdir(path.join(root, dir)).catch(() => [] as string[])) {
+          const id = name.endsWith(".jsonl") ? name.slice(name.lastIndexOf("_") + 1, -".jsonl".length) : "";
+          if (ids.has(id)) found.set(id, path.join(root, dir, name));
+        }
+      }),
+    );
+    return found;
+  }
+
+  private async read(id: string, file: string): Promise<string | null> {
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(file, "r");
+      const { size } = await handle.stat();
+      const cached = this.cache.get(id);
+      if (cached && cached.size === size) return cached.title;
+      const buf = Buffer.alloc(Math.min(size, FIRST_PROMPT_BYTES));
+      await handle.read(buf, 0, buf.length, 0);
+      const title = firstPrompt(buf.toString("utf8"));
+      this.cache.set(id, { size, title });
+      return title;
+    } catch {
+      return null;
+    } finally {
+      await handle?.close();
+    }
+  }
+}
+
 export class OmpAdapter implements HarnessAdapter {
   readonly id = asHarnessId("omp");
   readonly displayName = "omp";
@@ -380,6 +466,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsModelSelection: true,
   };
   private lister: AcpLister;
+  private firstPrompts = new FirstPrompts(() => this.resolveSessionDir());
   private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[] }>();
 
   constructor(private readonly options: OmpOptions) {
@@ -430,12 +517,12 @@ export class OmpAdapter implements HarnessAdapter {
   }
 
   async listSessions(cwd: string): Promise<NativeSessionSummary[]> {
-    return this.lister.list(cwd);
+    return this.firstPrompts.fill(await this.lister.list(cwd));
   }
 
   async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
     const pages = Math.max(1, Math.ceil(limit / ACP_SESSION_PAGE));
-    return (await this.lister.list(undefined, pages)).filter((s) => s.cwd).slice(0, limit);
+    return this.firstPrompts.fill((await this.lister.list(undefined, pages)).filter((s) => s.cwd).slice(0, limit));
   }
 
   /** One throwaway `--no-session` child per workspace (cached) for models and thinking levels. */

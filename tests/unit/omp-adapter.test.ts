@@ -1,8 +1,8 @@
-import { chmodSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
-import { liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
+import { firstPrompt, liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -122,6 +122,32 @@ describe("omp adapter (scripted omp)", () => {
     expect(resumed.snapshot().items.filter((i) => i.kind === "user").map((i) => (i as { text: string }).text)).toEqual(["remember this"]);
   });
 
+  it("names untitled sessions by their first prompt, as omp's own picker does", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("check why the dock does not show up", "normal");
+    await until(() => chat.status === "idle");
+    const nativeId = live.nativeId as string;
+    await live.dispose();
+    // omp never generated a title for these (the fixture now omits it, like omp does).
+    const saved = JSON.parse(readFileSync(state, "utf8"));
+    saved.sessions[nativeId].title = "";
+    saved.sessions["01a0aaaa-0000-7000-8000-000000000000"] = { cwd: project, title: "", messages: [{ role: "user", content: "x" }] };
+    writeFileSync(state, JSON.stringify(saved));
+    // Only the first session has a file: <sessionDir>/<cwd dir>/<time>_<id>.jsonl.
+    const dir = path.join(home, ".omp", "agent", "sessions", "-proj");
+    mkdirSync(dir, { recursive: true });
+    const lines = [
+      { type: "title", v: 1, title: "" },
+      { type: "session", version: 3, cwd: project },
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "check why the dock\n  does not show up" }] } },
+      { type: "message", message: { role: "assistant", content: [] } },
+    ];
+    writeFileSync(path.join(dir, `2026-10-01T19-34-02-238Z_${nativeId}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n"));
+    const titles = Object.fromEntries((await adapter.listSessions(project)).map((s) => [s.nativeId, s.title]));
+    expect(titles[nativeId]).toBe("check why the dock does not show up");
+    expect(titles["01a0aaaa-0000-7000-8000-000000000000"]).toBe("Untitled");
+  });
+
   it("changes model and thinking in place, without restarting omp", async () => {
     const { chat } = await openChat();
     await chat.setConfig({ thinkingLevel: "high" });
@@ -197,5 +223,19 @@ describe("omp adapter (scripted omp)", () => {
     child.kill("SIGKILL");
     await until(() => chat.status === "error");
     expect(chat.snapshot().items.some((i) => i.kind === "notice" && i.level === "error" && /stopped unexpectedly/.test(i.text))).toBe(true);
+  });
+});
+
+describe("firstPrompt", () => {
+  it("takes the first user message's text, on one line, and survives a cut-off read", () => {
+    const jsonl = [
+      JSON.stringify({ type: "title", title: "" }),
+      JSON.stringify({ type: "message", message: { role: "system", content: "You are omp" } }),
+      JSON.stringify({ type: "message", message: { role: "user", content: "  list the\nlast 5 commits " } }),
+      '{"type":"message","message":{"role":"user","content":"cut of',
+    ].join("\n");
+    expect(firstPrompt(jsonl)).toBe("list the last 5 commits");
+    expect(firstPrompt(JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "image" }] } }))).toBeNull();
+    expect(firstPrompt(JSON.stringify({ type: "message", message: { role: "user", content: "y".repeat(200) } }))).toHaveLength(80);
   });
 });
