@@ -517,6 +517,31 @@ test("the sidebar collapses and expands from its header, and stays that way", as
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeHidden();
 });
 
+test("narrow windows fold the sidebar away, and a sidebar collapsed by hand stays collapsed", async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 860 });
+  await signInAndOpen(page);
+  const sidebar = page.locator(".sidebar");
+  const expand = page.getByRole("button", { name: "Expand sidebar" });
+  await expect(sidebar).toBeVisible();
+  // A vertical monitor or a tiled half screen.
+  await page.setViewportSize({ width: 1080, height: 1800 });
+  await expect(sidebar).toBeHidden();
+  // Reopened by hand, it stays open in the narrow window, until the width crosses back and forth.
+  await expand.click();
+  await expect(sidebar).toBeVisible();
+  await page.setViewportSize({ width: 1360, height: 860 });
+  await expect(sidebar).toBeVisible();
+  await page.setViewportSize({ width: 980, height: 1060 });
+  await expect(sidebar).toBeHidden();
+  // Collapsed with the button: resizing does nothing.
+  await expand.click();
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.setViewportSize({ width: 1360, height: 860 });
+  await expect(sidebar).toBeHidden();
+  await page.setViewportSize({ width: 1080, height: 1800 });
+  await expect(sidebar).toBeHidden();
+});
+
 test("the sidebar is resizable by drag and keyboard, and remembers its width", async ({ page }) => {
   await page.goto("/");
   const sidebar = page.locator(".sidebar");

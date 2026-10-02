@@ -30,6 +30,10 @@ import { applyTheme, fetchTheme, storedThemeMode, storeThemeMode, type ThemeMode
 
 type Banner = { level: "info" | "warning" | "error"; text: string } | null;
 
+/** Below this width (and above the phone drawer's 820 px) the sidebar folds away by itself. */
+const AUTO_COLLAPSE_BELOW = 1200;
+const NARROW_QUERY = `(min-width: 820px) and (max-width: ${AUTO_COLLAPSE_BELOW - 1}px)`;
+
 /** How often the session list refreshes while a chat other than the open one is working. */
 const BACKGROUND_POLL_MS = 3000;
 
@@ -89,6 +93,19 @@ export function App() {
   // Animate only the toggle; resizing by drag must follow the pointer exactly.
   const [sidebarToggling, setSidebarToggling] = useState(false);
   const toggleTimer = useRef<number | null>(null);
+  // Narrow windows (a vertical monitor, a tiled half screen) fold the sidebar away by
+  // themselves, unless the user reopens it; crossing the threshold again resets that.
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+  const [openedWhileNarrow, setOpenedWhileNarrow] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(NARROW_QUERY);
+    const onChange = () => {
+      setNarrow(query.matches);
+      setOpenedWhileNarrow(false);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
   const chatId = chat?.chatId ?? null;
 
   // ---- bootstrap -----------------------------------------------------------
@@ -253,8 +270,10 @@ export function App() {
     setSidebarToggling(true);
     if (toggleTimer.current !== null) window.clearTimeout(toggleTimer.current);
     toggleTimer.current = window.setTimeout(() => setSidebarToggling(false), 250);
+    // A collapse by hand sticks at every width; reopening in a narrow window lasts until it widens.
     setSidebarCollapsed(collapsed);
     save("sidebarCollapsed", collapsed || null);
+    if (!collapsed && narrow) setOpenedWhileNarrow(true);
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(collapsed ? ".sidebar-expand" : ".sidebar-collapse")?.focus());
   };
 
@@ -397,6 +416,8 @@ export function App() {
 
   // ---- render ---------------------------------------------------------------------------
 
+  const collapsed = sidebarCollapsed || (narrow && !openedWhileNarrow && (boot?.ui.autocollapseSidebar ?? true));
+
   if (signedOut) {
     return <LoginForm />;
   }
@@ -434,7 +455,7 @@ export function App() {
 
   return (
     <div
-      className={`app${sidebarCollapsed ? " is-collapsed" : ""}${sidebarToggling ? " is-toggling" : ""}`}
+      className={`app${collapsed ? " is-collapsed" : ""}${sidebarToggling ? " is-toggling" : ""}`}
       style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}
     >
       <Sidebar
@@ -494,7 +515,7 @@ export function App() {
           <button type="button" className="icon-btn drawer-open" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
             <IconMenu size={18} />
           </button>
-          {sidebarCollapsed ? (
+          {collapsed ? (
             <button type="button" className="icon-btn sidebar-expand" aria-label="Expand sidebar" title="Expand sidebar" onClick={() => collapseSidebar(false)}>
               <IconSidebar size={16} />
             </button>
