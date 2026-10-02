@@ -45,6 +45,8 @@ const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
 const CONTEXT_REPORT_TIMEOUT_MS = 5_000;
+/** omp's protocol v2 ceiling for one reassembled frame. */
+const MAX_REASSEMBLED_BYTES = 64 * 1024 * 1024;
 const FIRST_PROMPT_BYTES = 64 * 1024;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
@@ -153,6 +155,51 @@ class LineProcess {
   }
 }
 
+/**
+ * omp's protocol v1 caps every stdout frame at 1 MiB: a bigger response fails
+ * ("RPC response exceeded the transport limit"), so a long session's history
+ * would not load, and a bigger event is trimmed. Protocol v2 sends such frames
+ * as ordered `rpc_chunk` slices (base64, up to 64 MiB in all); this joins them.
+ */
+class ChunkJoiner {
+  private pending: { id: string; count: number; byteLength: number; next: number; parts: Buffer[]; size: number } | null = null;
+
+  /** The frame to handle, or null while a chunked one is incomplete (or turned out malformed). */
+  push(frame: Obj): Obj | null {
+    if (frame.type !== "rpc_chunk") {
+      this.pending = null; // omp never interleaves; a broken sequence is dropped
+      return frame;
+    }
+    const { chunkId, index, count, byteLength, data } = frame;
+    const valid =
+      typeof chunkId === "string" &&
+      typeof data === "string" &&
+      Number.isSafeInteger(index) &&
+      Number.isSafeInteger(count) &&
+      Number.isSafeInteger(byteLength) &&
+      (byteLength as number) <= MAX_REASSEMBLED_BYTES;
+    if (valid && index === 0) this.pending = { id: chunkId, count: count as number, byteLength: byteLength as number, next: 0, parts: [], size: 0 };
+    const p = this.pending;
+    if (!valid || !p || p.id !== chunkId || p.next !== index) {
+      this.pending = null;
+      return null;
+    }
+    const bytes = Buffer.from(data as string, "base64");
+    p.parts.push(bytes);
+    p.size += bytes.length;
+    p.next += 1;
+    if (p.next < p.count && p.size <= p.byteLength) return null;
+    this.pending = null;
+    if (p.next < p.count || p.size !== p.byteLength) return null;
+    try {
+      const whole: unknown = JSON.parse(Buffer.concat(p.parts).toString("utf8"));
+      return isObj(whole) ? whole : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** One omp `--mode rpc-ui` process bound to one session. */
 class OmpRpc {
   private proc: LineProcess;
@@ -161,14 +208,26 @@ class OmpRpc {
   private readyResolve!: () => void;
   private readyReject!: (e: Error) => void;
   readonly ready: Promise<void>;
+  private chunks = new ChunkJoiner();
 
   constructor(command: string, args: string[], env: NodeJS.ProcessEnv, cwd: string, onEvent: (frame: Obj) => void, onExit: (m: string) => void) {
     this.ready = new Promise((resolve, reject) => {
       this.readyResolve = resolve;
       this.readyReject = reject;
     });
-    this.proc = new LineProcess(command, args, env, cwd, (frame) => {
-      if (frame.type === "ready") return this.readyResolve();
+    this.proc = new LineProcess(command, args, env, cwd, (line) => {
+      const frame = this.chunks.push(line);
+      if (!frame) return;
+      if (frame.type === "ready") {
+        const v2 = Array.isArray(frame.supportedProtocolVersions) && frame.supportedProtocolVersions.includes(2);
+        if (!v2) return this.readyResolve();
+        // Before anything else, so big responses and events arrive whole.
+        void this.command("negotiate_protocol", { protocolVersion: 2 }, READY_TIMEOUT_MS).then(
+          () => this.readyResolve(),
+          () => this.readyResolve(),
+        );
+        return;
+      }
       if (frame.type === "response" && typeof frame.id === "string" && this.pending.has(frame.id)) {
         const entry = this.pending.get(frame.id);
         this.pending.delete(frame.id);

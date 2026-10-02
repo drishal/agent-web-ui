@@ -156,6 +156,25 @@ describe("omp adapter (scripted omp)", () => {
     expect(titles["01a0aaaa-0000-7000-8000-000000000000"]).toBe("Untitled");
   });
 
+  /** A saved session whose history no longer fits omp's 1 MiB v1 frame. */
+  async function bigSession(): Promise<string> {
+    const { chat, live } = await openChat();
+    await chat.send("remember this", "normal");
+    await until(() => chat.status === "idle");
+    const nativeId = live.nativeId as string;
+    await live.dispose();
+    const saved = JSON.parse(readFileSync(state, "utf8"));
+    saved.sessions[nativeId].messages.push({ role: "assistant", content: [{ type: "text", text: "x".repeat(3_000_000) }], stopReason: "stop", model: "m1" });
+    writeFileSync(state, JSON.stringify(saved));
+    return nativeId;
+  }
+
+  it("loads a history bigger than omp's 1 MiB frame, through protocol v2 chunks", async () => {
+    const { chat } = await openChat(await bigSession());
+    const long = chat.snapshot().items.find((i) => i.kind === "assistant" && i.text.length >= 3_000_000);
+    expect(long).toBeDefined();
+  });
+
   it("changes model and thinking in place, without restarting omp", async () => {
     const { chat } = await openChat();
     await chat.setConfig({ thinkingLevel: "high" });

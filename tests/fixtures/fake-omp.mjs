@@ -19,7 +19,28 @@ function load() {
 function save(state) {
   writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
-const out = (frame) => process.stdout.write(`${JSON.stringify(frame)}\n`);
+// Like omp: protocol v1 caps a frame at 1 MiB (an oversized response fails);
+// after negotiate_protocol 2, an oversized frame goes out as rpc_chunk slices.
+let protocol = 1;
+const MAX_FRAME_BYTES = 1024 * 1024;
+const CHUNK_BYTES = 256 * 1024;
+const out = (frame) => {
+  const json = JSON.stringify(frame);
+  const bytes = Buffer.from(json, "utf8");
+  if (bytes.length + 1 <= MAX_FRAME_BYTES) return process.stdout.write(`${json}\n`);
+  if (protocol === 2) {
+    const chunkId = randomUUID();
+    const count = Math.ceil(bytes.length / CHUNK_BYTES);
+    for (let index = 0; index < count; index++) {
+      const data = bytes.subarray(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES).toString("base64");
+      process.stdout.write(`${JSON.stringify({ type: "rpc_chunk", chunkId, index, count, byteLength: bytes.length, data })}\n`);
+    }
+    return;
+  }
+  if (frame.type === "response") {
+    process.stdout.write(`${JSON.stringify({ id: frame.id, type: "response", command: frame.command, success: false, error: "RPC response exceeded the transport limit" })}\n`);
+  }
+};
 const flag = (name) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
@@ -123,6 +144,10 @@ if (args[0] === "acp") {
   rl.on("line", (line) => {
     const cmd = JSON.parse(line);
     switch (cmd.type) {
+      case "negotiate_protocol":
+        ok(cmd.id, cmd.type, { protocolVersion: 2 });
+        protocol = 2;
+        return;
       case "get_state": {
         const s = session();
         return ok(cmd.id, "get_state", {
@@ -228,5 +253,5 @@ if (args[0] === "acp") {
     }
   });
   out({ type: "extension_ui_request", id: randomUUID(), method: "setStatus", statusKey: "plan", statusText: "ready" });
-  out({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
+  out({ type: "ready", protocolVersion: 1, supportedProtocolVersions: process.env.FAKE_OMP_V1 ? [1] : [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 }
