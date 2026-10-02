@@ -238,7 +238,7 @@ Changing `stylix.base16Scheme` in `shared/stylix.nix` then re-themes the web UI.
 
 ## Optional autostart (home-manager)
 
-Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, `127.0.0.1` by default, no secrets (the login hash stays in `~/.local/state`), and a `PATH` that finds `pi` and `omp`. Add it next to the theme module, uncomment `HOST=0.0.0.0` / `ALLOWED_HOSTS` for other devices (after `npm run set-password`), and rebuild.
+Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, `127.0.0.1` by default, no secrets (the login hash stays in `~/.local/state`), and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It is skipped (not restart-looped) until `dist/` is built. Add it next to the theme module, uncomment `HOST=0.0.0.0` / `ALLOWED_HOSTS` for other devices (after `npm run set-password`), and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
 
 ```bash
 systemctl --user status agent-web-ui
