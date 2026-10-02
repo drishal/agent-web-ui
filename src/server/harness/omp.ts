@@ -14,6 +14,7 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextCategory,
   type ContextUsage,
   type HarnessCapabilities,
   type ImageAttachment,
@@ -30,6 +31,7 @@ import type {
   HarnessDiscovery,
   HarnessEvent,
   HarnessEventListener,
+  HarnessUsage,
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
@@ -41,6 +43,7 @@ export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
+const CONTEXT_REPORT_TIMEOUT_MS = 5_000;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
 
@@ -338,6 +341,23 @@ function toModelInfo(m: unknown): ModelInfo | null {
   };
 }
 
+/**
+ * Categories from omp's own `/context` text (slash-commands/helpers/context-report.ts):
+ * `  <label> [<bar>]  <n> tokens`. Free space and the auto-compact buffer are not usage.
+ */
+export function parseContextReport(text: string): ContextCategory[] | null {
+  if (!/^Context window: \d+ tokens/m.test(text)) return null;
+  const categories: ContextCategory[] = [];
+  for (const line of text.split("\n")) {
+    const m = /^ {2}(\S.*?)\s+\[[^\]]*\]\s+(\d+) tokens$/.exec(line);
+    if (!m?.[1] || !m[2]) continue;
+    const label = m[1].trim();
+    if (label === "Free" || label.startsWith("Auto-compact")) continue;
+    categories.push({ id: label.toLowerCase().replace(/[^a-z]+/g, "-"), label, tokens: Number(m[2]) });
+  }
+  return categories.length > 0 ? categories : null;
+}
+
 /** omp's RPC takes pi-ai ImageContent on prompt, steer, and follow_up. */
 function withImages(message: string, images: ImageAttachment[] | undefined): Obj {
   return images?.length ? { message, images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : { message };
@@ -468,6 +488,10 @@ class OmpLiveChat implements LiveChat {
   private generation = 0;
   private dialogs = new Map<string, OpenDialog>();
   private queue: QueueState = { steering: [], followUp: [] };
+  /** Whether /context is an omp builtin (checked once), the pending probe, and their queue. */
+  private contextBuiltin: Promise<boolean> | null = null;
+  private contextProbe: ((text: string) => void) | null = null;
+  private contextChain: Promise<unknown> = Promise.resolve();
   private models: ModelInfo[] | null = null;
   private sessionId: string | null = null;
   private sessionName: string | null = null;
@@ -540,6 +564,11 @@ class OmpLiveChat implements LiveChat {
       }
       case "extension_error":
         this.hub.emit({ type: "notice", level: "error", text: `Extension error: ${String(frame.error ?? "unknown")}` });
+        return;
+      case "command_output":
+        // Output of a builtin slash command: the context probe's, or one the user typed.
+        if (this.contextProbe) this.contextProbe(String(frame.text ?? ""));
+        else if (typeof frame.text === "string" && frame.text.trim()) this.hub.emit({ type: "notice", level: "info", text: frame.text });
         return;
       case "queue_update":
         this.queue = {
@@ -662,10 +691,59 @@ class OmpLiveChat implements LiveChat {
     const state = await this.live.command<Obj>("get_state");
     const usage = state?.contextUsage;
     if (!isObj(usage) || typeof usage.contextWindow !== "number") return null;
+    // Only while settled, so the probe can never land inside a run.
+    const categories = state?.isSettled === true ? await this.contextReport() : null;
     return {
       tokens: typeof usage.tokens === "number" ? usage.tokens : null,
       window: usage.contextWindow,
       percent: typeof usage.percent === "number" ? usage.percent : null,
+      ...(categories ? { categories } : {}),
+    };
+  }
+
+  /**
+   * omp's `/context` breakdown. RPC runs that builtin locally and answers with
+   * `command_output` (agentInvoked: false), so no model is called; it is only
+   * sent once get_available_commands confirms /context is a builtin.
+   */
+  private contextReport(): Promise<ContextCategory[] | null> {
+    const job = this.contextChain.then(async () => {
+      this.contextBuiltin ??= this.live.command<Obj>("get_available_commands").then(
+        (data) => Array.isArray(data?.commands) && data.commands.some((c) => isObj(c) && c.name === "context" && c.source === "builtin"),
+        () => false,
+      );
+      if (!(await this.contextBuiltin)) return null;
+      const output = new Promise<string | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), CONTEXT_REPORT_TIMEOUT_MS);
+        this.contextProbe = (text) => {
+          clearTimeout(timer);
+          resolve(text);
+        };
+      });
+      try {
+        await this.live.command("prompt", { message: "/context" });
+        return parseContextReport((await output) ?? "");
+      } finally {
+        this.contextProbe = null;
+      }
+    });
+    this.contextChain = job.catch(() => undefined);
+    return job.catch(() => null);
+  }
+
+  async getUsage(): Promise<HarnessUsage | null> {
+    const stats = await this.live.command<Obj>("get_session_stats");
+    const tokens = isObj(stats?.tokens) ? stats.tokens : null;
+    if (!stats || !tokens) return null;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+    return {
+      turns: n(stats.userMessages),
+      steps: n(stats.assistantMessages),
+      input: n(tokens.input),
+      cachedInput: n(tokens.cacheRead),
+      cacheWrite: n(tokens.cacheWrite),
+      output: n(tokens.output),
+      cost: n(stats.cost) > 0 ? n(stats.cost) : null,
     };
   }
 
@@ -686,7 +764,9 @@ class OmpLiveChat implements LiveChat {
   }
 
   async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
-    await this.live.command("prompt", withImages(text, images));
+    const result = await this.live.command<Obj>("prompt", withImages(text, images));
+    // A builtin slash command (/context, /usage…) runs locally: no run, so no prompt_result to settle on.
+    if (isObj(result) && result.agentInvoked === false) this.hub.emit({ type: "settled" });
   }
 
   async steer(text: string, images?: ImageAttachment[]): Promise<void> {

@@ -105,7 +105,13 @@ if (args[0] === "acp") {
       text += chunk;
       out({ type: "message_update", messageId: "a", message: {}, assistantMessageEvent: { type: "text_delta", delta: chunk } });
     }
-    const final = { role: "assistant", content: [{ type: "text", text }], stopReason: aborted ? "aborted" : "stop", model: "m1" };
+    const final = {
+      role: "assistant",
+      content: [{ type: "text", text }],
+      stopReason: aborted ? "aborted" : "stop",
+      model: "m1",
+      usage: { input: 900, output: 12, cacheRead: 300, cacheWrite: 0 },
+    };
     persist(final);
     out({ type: "message_end", messageId: "a", message: final });
     out({ type: "prompt_result", id, agentInvoked: true, status: aborted ? "aborted" : "completed", sessionSettled: true });
@@ -142,7 +148,41 @@ if (args[0] === "acp") {
         return ok(cmd.id, "get_available_thinking_levels", { levels: ["off", "low", "high", "max"] });
       case "get_messages":
         return ok(cmd.id, "get_messages", { messages: session().messages });
+      case "get_available_commands":
+        // FAKE_OMP_CONTEXT=extension makes /context look like an extension command (not run locally).
+        return ok(cmd.id, cmd.type, {
+          commands: [
+            { name: "context", description: "Show estimated context usage breakdown", source: process.env.FAKE_OMP_CONTEXT ?? "builtin" },
+            { name: "usage", source: "builtin" },
+          ],
+        });
+      case "get_session_stats": {
+        const m = session().messages;
+        const count = (role) => m.filter((x) => x.role === role).length;
+        const steps = count("assistant");
+        return ok(cmd.id, cmd.type, {
+          sessionId,
+          userMessages: count("user"),
+          assistantMessages: steps,
+          tokens: { input: steps * 900, output: steps * 12, reasoning: 0, cacheRead: steps * 300, cacheWrite: 0, total: steps * 1212 },
+          cost: 0.0042 * steps,
+        });
+      }
       case "prompt":
+        if (cmd.message === "/context" && (process.env.FAKE_OMP_CONTEXT ?? "builtin") === "builtin") {
+          out({
+            type: "command_output",
+            text: [
+              "Context window: 200000 tokens (1% used)",
+              "  System prompt    [█░░░░░░░░░░░░░░░░░░░░░░░]  1500 tokens",
+              "  System tools     [█░░░░░░░░░░░░░░░░░░░░░░░]  5200 tokens",
+              "  Skills           [░░░░░░░░░░░░░░░░░░░░░░░░]  300 tokens",
+              "  Messages         [░░░░░░░░░░░░░░░░░░░░░░░░]  527 tokens",
+              "  Free             [███████████████████████░]  192473 tokens",
+            ].join("\n"),
+          });
+          return ok(cmd.id, "prompt", { agentInvoked: false });
+        }
         if (running) return out({ id: cmd.id, type: "response", command: "prompt", success: false, error: "busy" });
         ok(cmd.id, "prompt", { agentInvoked: true });
         void runPrompt(cmd.id, cmd.message);

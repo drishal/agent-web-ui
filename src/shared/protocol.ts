@@ -180,10 +180,37 @@ export const interactionAnswerSchema = z.discriminatedUnion("kind", [
 ]);
 export type InteractionAnswer = z.infer<typeof interactionAnswerSchema>;
 
+/** One slice of the context window: omp's own `/context` figures, or this server's estimate for Pi. */
+export interface ContextCategory {
+  id: string;
+  label: string;
+  tokens: number;
+}
+
 export interface ContextUsage {
   tokens: number | null;
   window: number;
   percent: number | null;
+  /** What fills the window; estimates. */
+  categories?: ContextCategory[];
+}
+
+/** Session-wide tokens and model timing (the composer's stats line). */
+export interface SessionUsage {
+  /** Prompts and model calls across the whole session, from the harness. */
+  turns: number;
+  steps: number;
+  /** Token totals: input sent fresh, input read from the provider's cache, cache writes, output. */
+  input: number;
+  cachedInput: number;
+  cacheWrite: number;
+  output: number;
+  /** USD, when the harness prices the model. */
+  cost: number | null;
+  /** Measured by this server over the runs it watched; null until one has finished. */
+  llmMs: number | null;
+  ttftMs: number | null;
+  tokensPerSecond: number | null;
 }
 
 export interface TodoItem {
@@ -213,6 +240,7 @@ export interface ChatSnapshot {
   capabilities: HarnessCapabilities;
   extensionStatus: Record<string, string>;
   context: ContextUsage | null;
+  usage: SessionUsage | null;
   todos: TodoItem[];
   generation: number;
   lastEventId: number;
@@ -230,6 +258,7 @@ export type ChatEvent =
   | { type: "request_resolved"; requestId: string; outcome: string }
   | { type: "extension_status"; key: string; text: string | null }
   | { type: "context"; context: ContextUsage | null }
+  | { type: "usage"; usage: SessionUsage | null }
   | { type: "todos"; todos: TodoItem[] }
   | { type: "disposed"; reason: string };
 

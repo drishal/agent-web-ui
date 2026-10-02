@@ -1904,18 +1904,92 @@ body.is-resizing {
   color: var(--danger);
 }
 
-.context-pop {
+/* Context and usage panel (DeepSeek Harness's three popovers, as sections of one). */
+.usage-pop {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   z-index: 30;
-  padding: 7px 10px;
-  border-radius: var(--r-sm);
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
   background: var(--card);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
   color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-section {
+  padding: 10px 0;
+}
+
+.usage-section + .usage-section {
+  border-top: 1px solid var(--hairline);
+}
+
+.usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.usage-head strong {
+  font-weight: 600;
+}
+
+.usage-bar {
+  display: flex;
+  gap: 1px;
+  height: 5px;
+  margin: 2px 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.usage-bar span {
+  flex: none;
+  min-width: 2px;
+  height: 100%;
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.usage-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.usage-swatch {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.usage-value {
+  flex: none;
+  color: var(--text);
+}
+
+.usage-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 /* ---- status stack (Hermes Desktop) ---------------------------------------------- */

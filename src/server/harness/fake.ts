@@ -21,6 +21,7 @@ import type {
   HarnessDiscovery,
   HarnessEvent,
   HarnessEventListener,
+  HarnessUsage,
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
@@ -185,8 +186,19 @@ class FakeLiveChat implements LiveChat {
   }
 
   async getContextUsage(): Promise<ContextUsage | null> {
-    const tokens = this.session.messages.length * 850;
-    return { tokens, window: 100_000, percent: Math.min(100, (tokens / 100_000) * 100) };
+    const categories = [
+      { id: "system", label: "System prompt", tokens: 1500 },
+      { id: "tools", label: "Tool definitions", tokens: 5200 },
+      { id: "messages", label: "Messages", tokens: this.session.messages.length * 850 },
+    ];
+    const tokens = categories.reduce((sum, c) => sum + c.tokens, 0);
+    return { tokens, window: 100_000, percent: Math.min(100, (tokens / 100_000) * 100), categories };
+  }
+
+  async getUsage(): Promise<HarnessUsage | null> {
+    const role = (r: string) => this.session.messages.filter((m) => (m as { role?: string }).role === r).length;
+    const steps = role("assistant");
+    return { turns: role("user"), steps, input: steps * 1200, cachedInput: Math.max(0, steps - 1) * 900, cacheWrite: 0, output: steps * 40, cost: null };
   }
 
   async getTodos(): Promise<TodoItem[]> {
@@ -373,7 +385,7 @@ class FakeLiveChat implements LiveChat {
       stopReason: "stop",
       model: this.model,
     });
-    this.emit({ type: "assistant_end", text: body, thinking });
+    this.emit({ type: "assistant_end", text: body, thinking, usage: { input: 1200, output: Math.ceil(body.length / 4), cacheRead: 0, cacheWrite: 0 } });
   }
 
   private async tool(kind: "read" | "big" | "edit", signal: AbortSignal): Promise<void> {

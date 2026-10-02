@@ -249,6 +249,16 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await expect(page.getByTestId("process-toggle").last()).toHaveText(/1 edit/);
   await expect(page.getByTestId("context-ring")).toBeVisible();
   await expect(page.getByTestId("context-ring")).toHaveAccessibleName(/% of context used · .* tokens/);
+  // One panel: what fills the window, the session's tokens, and model timing.
+  await page.getByTestId("context-ring").click();
+  const panel = page.getByRole("dialog", { name: "Context and usage" });
+  await expect(panel.getByRole("region", { name: "Context" })).toContainText(/of context used/);
+  await expect(panel.locator(".usage-label")).toContainText(["System prompt", "Tool definitions", "Messages", "Cache hit"]);
+  await expect(panel.getByRole("region", { name: "Tokens" })).toContainText("Tokens this session");
+  await expect(panel.getByRole("region", { name: "Session" })).toContainText(/1 turn · \d+ steps?/);
+  await expect(panel.getByRole("region", { name: "Session" })).toContainText(/Tokens per second\s*\d+ tok\/s/);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
   await sendAndWait(page, "second turn");
   await sendAndWait(page, "third turn");
   const rail = page.getByRole("navigation", { name: "Jump to turn" });

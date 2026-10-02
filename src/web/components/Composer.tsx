@@ -235,7 +235,7 @@ export function Composer({
                   {text.length.toLocaleString()} / {maxChars.toLocaleString()}
                 </span>
               ) : null}
-              <ContextRing context={chat.context} />
+              <ContextRing context={chat.context} usage={chat.usage} />
               {busy ? (
                 <>
                   {caps.supportsSteer ? (

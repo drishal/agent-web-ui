@@ -13,12 +13,13 @@ import type {
   InteractionRequest,
   QueueState,
   SendMode,
+  SessionUsage,
   TodoItem,
   ToolItem,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
 import { boundText, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
-import type { HarnessAdapter, HarnessEvent, LiveChat } from "../harness/types.js";
+import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 
 export class ChatError extends Error {
   constructor(
@@ -72,7 +73,14 @@ export class Chat {
   private pending = new Map<string, InteractionRequest>();
   private extensionStatus: Record<string, string> = {};
   private context: ContextUsage | null = null;
+  private usage: SessionUsage | null = null;
   private todos: TodoItem[] = [];
+  /**
+   * Model timing, measured from the stream because no harness reports it: a
+   * call's request starts at the prompt or the last tool result (the hand-off),
+   * its first token is its first delta, and it ends at assistant_end.
+   */
+  private timing = { handoffAt: 0, requestAt: 0, firstTokenAt: 0, llmMs: 0, ttftMs: 0, ttftCount: 0, genMs: 0, genTokens: 0 };
   private config: ChatConfig;
   private log: Array<{ id: number; event: ChatEvent }> = [];
   private nextEventId = 1;
@@ -100,14 +108,16 @@ export class Chat {
   }
 
   static async open(chatId: string, adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
-    const [items, config, context, todos] = await Promise.all([
+    const [items, config, context, usage, todos] = await Promise.all([
       live.history(),
       live.getConfig(),
       live.getContextUsage().catch(() => null),
+      live.getUsage().catch(() => null),
       live.getTodos().catch(() => []),
     ]);
     const chat = new Chat(chatId, adapter, workspace, live, config);
     chat.context = context;
+    chat.usage = chat.composeUsage(usage);
     chat.todos = todos;
     for (const item of items) chat.upsert(item);
     chat.title = live.title ?? chat.firstUserText() ?? "";
@@ -158,6 +168,7 @@ export class Chat {
       capabilities: this.adapter.capabilities,
       extensionStatus: { ...this.extensionStatus },
       context: this.context,
+      usage: this.usage,
       todos: [...this.todos],
       generation: this.generation,
       lastEventId: this.nextEventId - 1,
@@ -296,8 +307,15 @@ export class Chat {
       case "assistant_start":
         this.finishStreaming();
         this.currentModel = event.model;
+        this.timing.requestAt = this.timing.handoffAt || Date.now();
+        this.timing.firstTokenAt = 0;
         break;
       case "assistant_delta": {
+        if (this.timing.requestAt && !this.timing.firstTokenAt) {
+          this.timing.firstTokenAt = Date.now();
+          this.timing.ttftMs += this.timing.firstTokenAt - this.timing.requestAt;
+          this.timing.ttftCount += 1;
+        }
         const item = this.ensureAssistant();
         item[event.field] += event.delta;
         this.pendingDeltas.push({ itemId: item.id, field: event.field, append: event.delta });
@@ -305,6 +323,7 @@ export class Chat {
         break;
       }
       case "assistant_end": {
+        this.endStep(event.usage?.output ?? 0);
         const existing = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
         if (!existing && !event.text && !event.thinking && !event.error) {
           this.currentAssistant = null;
@@ -350,6 +369,7 @@ export class Chat {
         break;
       }
       case "tool_end": {
+        this.timing.handoffAt = Date.now();
         const id = `t:${event.toolCallId}`;
         this.dirtyTools.delete(id);
         const item = this.get(id);
@@ -386,6 +406,7 @@ export class Chat {
         this.finishStreaming();
         if (this.status !== "error") this.setStatus("idle");
         void this.refreshContext();
+        void this.refreshUsage();
         void this.refreshTodos();
         break;
       case "compacting":
@@ -446,6 +467,45 @@ export class Chat {
       if (JSON.stringify(context) === JSON.stringify(this.context)) return;
       this.context = context;
       this.emit({ type: "context", context });
+    } catch {
+      // usage is best-effort
+    }
+  }
+
+  /** Close the current model call's timing; `outputTokens` feeds tokens per second. */
+  private endStep(outputTokens: number): void {
+    const t = this.timing;
+    if (!t.requestAt) return;
+    const now = Date.now();
+    t.llmMs += now - t.requestAt;
+    if (t.firstTokenAt && outputTokens > 0 && now > t.firstTokenAt) {
+      t.genMs += now - t.firstTokenAt;
+      t.genTokens += outputTokens;
+    }
+    t.requestAt = 0;
+    t.firstTokenAt = 0;
+    t.handoffAt = now;
+  }
+
+  private composeUsage(harness: HarnessUsage | null): SessionUsage | null {
+    if (!harness) return null;
+    const t = this.timing;
+    return {
+      ...harness,
+      llmMs: t.llmMs > 0 ? t.llmMs : null,
+      ttftMs: t.ttftCount > 0 ? Math.round(t.ttftMs / t.ttftCount) : null,
+      tokensPerSecond: t.genMs > 0 ? Math.round((t.genTokens / t.genMs) * 1000) : null,
+    };
+  }
+
+  private async refreshUsage(): Promise<void> {
+    const generation = this.generation;
+    try {
+      const usage = this.composeUsage(await this.live.getUsage());
+      if (generation !== this.generation || this.status === "disposed") return;
+      if (JSON.stringify(usage) === JSON.stringify(this.usage)) return;
+      this.usage = usage;
+      this.emit({ type: "usage", usage });
     } catch {
       // usage is best-effort
     }
@@ -519,6 +579,7 @@ export class Chat {
     }
     if (this.status === "error") this.status = "idle";
     this.setStatus("running");
+    this.timing.handoffAt = Date.now();
     try {
       await this.live.prompt(text, images);
     } catch (error) {

@@ -12,6 +12,7 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextCategory,
   type ContextUsage,
   type HarnessCapabilities,
   type ImageAttachment,
@@ -27,6 +28,7 @@ import type {
   HarnessDiscovery,
   HarnessEvent,
   HarnessEventListener,
+  HarnessUsage,
   LiveChat,
   NativeSessionSummary,
   OpenChatRequest,
@@ -43,6 +45,8 @@ type PiModel = { provider: string; id: string; name?: string; reasoning?: boolea
 function expandTilde(p: string): string {
   return p === "~" || p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(1)) : p;
 }
+
+const estimateText = (text: string) => Math.ceil(text.length / 4);
 
 function summarize(info: pi.SessionInfo): NativeSessionSummary {
   return {
@@ -396,7 +400,44 @@ class PiLiveChat implements LiveChat {
   async getContextUsage(): Promise<ContextUsage | null> {
     const usage = this.session.getContextUsage();
     if (!usage) return null;
-    return { tokens: usage.tokens, window: usage.contextWindow, percent: usage.percent };
+    const categories = this.contextCategories();
+    // Pi knows the real total only after a response; until then the estimate stands in.
+    const tokens = usage.tokens ?? categories.reduce((sum, c) => sum + c.tokens, 0);
+    const percent = usage.percent ?? (usage.contextWindow > 0 ? (tokens / usage.contextWindow) * 100 : null);
+    return { tokens, window: usage.contextWindow, percent, categories };
+  }
+
+  /**
+   * What fills the window, estimated: Pi has no breakdown of its own (`/context`
+   * comes from an extension that draws in the terminal). The prompt and the
+   * declared tools at ~4 chars a token; messages by Pi's own estimateTokens,
+   * skipping the system messages that carry the prompt and tool declarations.
+   */
+  private contextCategories(): ContextCategory[] {
+    const active = new Set(this.session.getActiveToolNames());
+    const tools = this.session.agent.state.tools
+      .filter((t) => active.has(t.name))
+      .map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+    let messages = 0;
+    for (const m of this.session.messages) if ((m as { role?: string }).role !== "system") messages += pi.estimateTokens(m);
+    return [
+      { id: "system", label: "System prompt", tokens: estimateText(this.session.systemPrompt) },
+      { id: "tools", label: "Tool definitions", tokens: estimateText(JSON.stringify(tools)) },
+      { id: "messages", label: "Messages", tokens: messages },
+    ];
+  }
+
+  async getUsage(): Promise<HarnessUsage | null> {
+    const s = this.session.getSessionStats();
+    return {
+      turns: s.userMessages,
+      steps: s.assistantMessages,
+      input: s.tokens.input,
+      cachedInput: s.tokens.cacheRead,
+      cacheWrite: s.tokens.cacheWrite,
+      output: s.tokens.output,
+      cost: s.cost > 0 ? s.cost : null,
+    };
   }
 
   /** Pi has no built-in todo list. */

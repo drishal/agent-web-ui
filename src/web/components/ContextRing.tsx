@@ -1,16 +1,70 @@
-// Context occupancy ring (DeepSeek Harness / OpenCode). Hidden until the
-// harness reports a percentage.
-import { useState } from "react";
-import type { ContextUsage } from "../../shared/protocol.js";
+// Context occupancy ring (DeepSeek Harness / OpenCode). Its popover holds the
+// whole picture, in DeepSeek Harness's sections: what fills the context
+// window, the session's tokens, and model timing. Hidden until the harness
+// reports a percentage.
+import { useEffect, useRef, useState } from "react";
+import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 
 function compact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (n >= 1000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, "")}K`;
   return String(n);
 }
 
-export function ContextRing({ context }: { context: ContextUsage | null }) {
+const full = (n: number) => n.toLocaleString("en-US");
+
+function duration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+}
+
+/** Category colours: the system prompt grey, tools purple, messages blue (DeepSeek Harness), the rest after. */
+const SWATCH: Record<string, string> = {
+  system: "var(--muted)",
+  "system-prompt": "var(--muted)",
+  tools: "var(--thinking)",
+  "system-tools": "var(--thinking)",
+  messages: "var(--link)",
+  skills: "var(--ok)",
+  "system-context": "var(--warn)",
+};
+const FALLBACK = ["var(--accent)", "var(--danger)", "var(--text-2)"];
+const swatch = (c: ContextCategory, i: number) => SWATCH[c.id] ?? FALLBACK[i % FALLBACK.length];
+
+function Row({ label, value, color }: { label: string; value: string; color?: string | undefined }) {
+  return (
+    <div className="usage-row">
+      <span className="usage-label">
+        {color ? <span className="usage-swatch" style={{ background: color }} aria-hidden="true" /> : null}
+        {label}
+      </span>
+      <span className="usage-value">{value}</span>
+    </div>
+  );
+}
+
+export function ContextRing({ context, usage }: { context: ContextUsage | null; usage: SessionUsage | null }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   // Hidden until there is real usage: an empty ring reads like a spinner.
   if (!context || context.percent === null || context.percent < 0.5) return null;
   const pct = Math.max(0, Math.min(100, context.percent));
@@ -18,13 +72,21 @@ export function ContextRing({ context }: { context: ContextUsage | null }) {
   const c = 2 * Math.PI * r;
   const tone = pct >= 90 ? "danger" : pct >= 70 ? "warn" : "ok";
   const detail = `${Math.round(pct)}% of context used${context.tokens !== null ? ` · ${compact(context.tokens)} / ${compact(context.window)} tokens` : ""}`;
+  const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
+
+  const uncached = usage ? usage.input + usage.cacheWrite : 0;
+  const inputTotal = usage ? uncached + usage.cachedInput : 0;
+  const cacheHit = inputTotal > 0 && usage ? `${Math.round((usage.cachedInput / inputTotal) * 100)}%` : "—";
+  const timed = usage !== null && (usage.llmMs !== null || usage.tokensPerSecond !== null);
+
   return (
-    <div className="context-ring-wrap">
+    <div className="context-ring-wrap" ref={wrap}>
       <button
         type="button"
         className={`context-ring tone-${tone}`}
         aria-label={detail}
         aria-expanded={open}
+        aria-haspopup="dialog"
         data-testid="context-ring"
         onClick={() => setOpen((v) => !v)}
       >
@@ -45,8 +107,58 @@ export function ContextRing({ context }: { context: ContextUsage | null }) {
         <span className="context-pct">{Math.round(pct)}%</span>
       </button>
       {open ? (
-        <div className="context-pop" role="status">
-          {detail}
+        <div className="usage-pop" role="dialog" aria-label="Context and usage" data-testid="usage-panel">
+          <section className="usage-section" aria-label="Context">
+            <div className="usage-head">
+              <span>
+                <strong>{pct < 1 ? "<1" : Math.round(pct)}%</strong> of context used
+              </span>
+              <span className="usage-value">
+                {context.tokens !== null ? `~${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}
+              </span>
+            </div>
+            <div className="usage-bar" aria-hidden="true">
+              {categories.length > 0 ? (
+                categories.map((x, i) => (
+                  <span key={x.id} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />
+                ))
+              ) : (
+                <span style={{ width: `${pct}%`, background: "currentColor" }} />
+              )}
+            </div>
+            {categories.map((x, i) => (
+              <Row key={x.id} label={x.label} value={`~${compact(x.tokens)}`} color={swatch(x, i)} />
+            ))}
+          </section>
+
+          {usage ? (
+            <section className="usage-section" aria-label="Tokens">
+              <div className="usage-head">
+                <span>Tokens this session</span>
+                <span className="usage-value">{full(inputTotal + usage.output)}</span>
+              </div>
+              <Row label="Cache hit" value={cacheHit} />
+              <Row label="Uncached input" value={full(uncached)} />
+              <Row label="Cached input" value={full(usage.cachedInput)} />
+              <Row label="Output" value={full(usage.output)} />
+              {usage.cost !== null ? <Row label="Cost" value={`$${usage.cost.toFixed(usage.cost < 1 ? 4 : 2)}`} /> : null}
+            </section>
+          ) : null}
+
+          {usage ? (
+            <section className="usage-section" aria-label="Session">
+              <div className="usage-head">
+                <span>Session</span>
+                <span className="usage-value">
+                  {usage.turns} {usage.turns === 1 ? "turn" : "turns"} · {usage.steps} {usage.steps === 1 ? "step" : "steps"}
+                </span>
+              </div>
+              <Row label="LLM time" value={usage.llmMs !== null ? duration(usage.llmMs) : "—"} />
+              <Row label="Avg time to first token" value={usage.ttftMs !== null ? duration(usage.ttftMs) : "—"} />
+              <Row label="Tokens per second" value={usage.tokensPerSecond !== null ? `${usage.tokensPerSecond} tok/s` : "—"} />
+              {!timed ? <p className="usage-note">Timing is measured from runs this server watches.</p> : null}
+            </section>
+          ) : null}
         </div>
       ) : null}
     </div>

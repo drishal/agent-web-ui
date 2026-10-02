@@ -59,6 +59,8 @@ function apply(state: ChatState | null, event: ChatEvent): ChatState | null {
     }
     case "context":
       return { ...state, context: event.context };
+    case "usage":
+      return { ...state, usage: event.usage };
     case "todos":
       return { ...state, todos: event.todos };
     case "disposed":

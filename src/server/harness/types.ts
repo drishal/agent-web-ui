@@ -30,6 +30,25 @@ export interface NativeSessionSummary {
   messageCount?: number;
 }
 
+/** One model call's tokens, as the provider reported them. */
+export interface StepUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/** Session totals the harness keeps (Pi getSessionStats, omp get_session_stats). */
+export interface HarnessUsage {
+  turns: number;
+  steps: number;
+  input: number;
+  cachedInput: number;
+  cacheWrite: number;
+  output: number;
+  cost: number | null;
+}
+
 export interface RecentNativeSession extends NativeSessionSummary {
   /** The project the session belongs to. */
   cwd: string;
@@ -46,7 +65,7 @@ export type HarnessEvent =
   | { type: "user_message"; text: string; imageCount?: number }
   | { type: "assistant_start"; model?: string }
   | { type: "assistant_delta"; field: "text" | "thinking"; delta: string }
-  | { type: "assistant_end"; text: string; thinking: string; error?: string }
+  | { type: "assistant_end"; text: string; thinking: string; error?: string; usage?: StepUsage }
   | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
   | { type: "tool_update"; toolCallId: string; output: string }
   | { type: "tool_end"; toolCallId: string; output: string; isError: boolean }
@@ -75,6 +94,8 @@ export interface LiveChat {
   getConfig(): Promise<ChatConfig>;
   /** Context window occupancy, or null when the harness cannot tell. */
   getContextUsage(): Promise<ContextUsage | null>;
+  /** Session token totals, or null when the harness cannot tell. */
+  getUsage(): Promise<HarnessUsage | null>;
   /** The harness's own todo list, if it keeps one. */
   getTodos(): Promise<TodoItem[]>;
   /** Resolves once the harness accepted the prompt; the run streams as events. */

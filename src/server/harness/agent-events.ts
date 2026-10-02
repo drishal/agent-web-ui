@@ -2,7 +2,7 @@
 // Pi fork and emits the same shapes over RPC, so both adapters share this.
 // Inputs are untyped on purpose: SDK and wire types never leave the adapters.
 import type { ChatItem, ToolCategory, ToolItem } from "../../shared/protocol.js";
-import type { HarnessEvent } from "./types.js";
+import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
 export const MAX_TOOL_ARGS_CHARS = 4_000;
@@ -26,6 +26,14 @@ export function textOf(content: unknown): string {
     if (isObj(block) && block.type === "text" && typeof block.text === "string") parts.push(block.text);
   }
   return parts.join("\n");
+}
+
+/** pi-ai's per-message `usage` (Pi and omp share it). */
+function stepUsage(raw: unknown): StepUsage | null {
+  if (!isObj(raw)) return null;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const usage = { input: n(raw.input), output: n(raw.output), cacheRead: n(raw.cacheRead), cacheWrite: n(raw.cacheWrite) };
+  return usage.input + usage.output + usage.cacheRead + usage.cacheWrite > 0 ? usage : null;
 }
 
 function imageCount(content: unknown): number {
@@ -174,7 +182,8 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
       if (!isObj(message) || message.role !== "assistant") return [];
       const { text, thinking } = assistantParts(message);
       const error = assistantError(message);
-      return [{ type: "assistant_end", text, thinking, ...(error ? { error } : {}) }];
+      const usage = stepUsage(message.usage);
+      return [{ type: "assistant_end", text, thinking, ...(error ? { error } : {}), ...(usage ? { usage } : {}) }];
     }
     case "tool_execution_start":
       return [

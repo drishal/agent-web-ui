@@ -79,6 +79,14 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect(user?.at).toBeGreaterThan(0);
     await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "context"));
     expect(t.manager.get(chat.chatId).snapshot().context?.tokens).toBeGreaterThan(0);
+    expect(t.manager.get(chat.chatId).snapshot().context?.categories?.map((c) => c.label)).toEqual(["System prompt", "Tool definitions", "Messages"]);
+    // Session tokens come from the harness; timing is measured from the stream.
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "usage"));
+    const usage = t.manager.get(chat.chatId).snapshot().usage;
+    expect(usage).toMatchObject({ turns: 1, steps: 2 });
+    expect(usage?.llmMs).toBeGreaterThan(0);
+    expect(usage?.ttftMs).not.toBeNull();
+    expect(usage?.tokensPerSecond).toBeGreaterThan(0);
     // Monotonic event ids.
     const ids = sse.messages.filter((m) => m.id !== undefined).map((m) => m.id as number);
     expect([...ids].sort((a, b) => a - b)).toEqual(ids);

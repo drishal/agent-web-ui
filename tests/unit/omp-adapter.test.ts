@@ -133,11 +133,56 @@ describe("omp adapter (scripted omp)", () => {
   it("reports omp context usage and flattens todo phases", async () => {
     const { chat } = await openChat();
     const snap = chat.snapshot();
-    expect(snap.context).toEqual({ tokens: 1200, window: 200000, percent: 0.6 });
+    expect(snap.context).toEqual({
+      tokens: 1200,
+      window: 200000,
+      percent: 0.6,
+      // omp's own /context categories; free space is not usage.
+      categories: [
+        { id: "system-prompt", label: "System prompt", tokens: 1500 },
+        { id: "system-tools", label: "System tools", tokens: 5200 },
+        { id: "skills", label: "Skills", tokens: 300 },
+        { id: "messages", label: "Messages", tokens: 527 },
+      ],
+    });
+    // The probe ran locally: nothing reached the model or the session.
+    expect(Object.values(readState().sessions).flatMap((s) => s.messages)).toEqual([]);
     expect(snap.todos).toEqual([
       { phase: "Plan", text: "Inspect", status: "completed" },
       { phase: "Plan", text: "Fix", status: "in_progress" },
     ]);
+  });
+
+  it("never sends /context unless omp lists it as a builtin", async () => {
+    adapter = new OmpAdapter({
+      command: script,
+      agentDir: null,
+      sessionDir: null,
+      home,
+      env: { ...process.env, FAKE_OMP_STATE: state, FAKE_OMP_CONTEXT: "extension" },
+    });
+    const { chat } = await openChat();
+    expect(chat.snapshot().context).toEqual({ tokens: 1200, window: 200000, percent: 0.6 });
+    expect(Object.values(readState().sessions).flatMap((s) => s.messages)).toEqual([]);
+  });
+
+  it("reports session tokens from omp and measures model timing from the stream", async () => {
+    const { chat } = await openChat();
+    await chat.send("hello", "normal");
+    await until(() => chat.status === "idle" && (chat.snapshot().usage?.steps ?? 0) > 0);
+    const usage = chat.snapshot().usage;
+    expect(usage).toMatchObject({ turns: 1, steps: 1, input: 900, cachedInput: 300, cacheWrite: 0, output: 12, cost: 0.0042 });
+    expect(usage?.llmMs).toBeGreaterThan(0);
+    expect(usage?.ttftMs).not.toBeNull();
+    expect(usage?.tokensPerSecond).toBeGreaterThan(0);
+  });
+
+  it("settles a typed builtin command and shows its output", async () => {
+    const { chat } = await openChat();
+    await chat.send("/context", "normal");
+    await until(() => chat.status === "idle");
+    const notice = chat.snapshot().items.find((i) => i.kind === "notice");
+    expect(notice).toMatchObject({ text: expect.stringContaining("Context window: 200000 tokens") });
   });
 
   it("splits provider/model keys at the first slash only", async () => {
