@@ -60,7 +60,7 @@ async function until(predicate: () => boolean, ms = 8000) {
 describe("omp adapter (scripted omp)", () => {
   it("discovers the version and refuses the home directory", async () => {
     const d = await adapter.discover();
-    expect(d).toMatchObject({ available: true, version: "18.4.5", warnings: [] });
+    expect(d).toMatchObject({ available: true, version: "18.4.10", warnings: [] });
     expect(adapter.workspaceProblem(home)).toMatch(/home directory/);
     expect(adapter.workspaceProblem(project)).toBeNull();
   });

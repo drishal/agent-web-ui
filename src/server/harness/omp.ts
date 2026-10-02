@@ -4,7 +4,8 @@
 // extension UI over the protocol) as one child process. omp's RPC mode has no
 // session listing, so listing uses a short-lived `omp acp` process and ACP's
 // `session/list`. Protocol types below are hand-written from omp 18.4.5's
-// src/modes/rpc/rpc-types.ts and kept deliberately loose.
+// src/modes/rpc/rpc-types.ts and kept deliberately loose; 18.4.10 only adds
+// commands and an opt-in `ask` dialog, so nothing used here changed.
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import path from "node:path";
 import readline from "node:readline";
@@ -34,7 +35,7 @@ import type {
 } from "./types.js";
 
 const run = promisify(execFile);
-export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.5";
+export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;

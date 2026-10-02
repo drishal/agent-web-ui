@@ -162,7 +162,7 @@ omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported int
 - **Resume:** `--resume <id>` with `--cwd`. The adapter checks that omp opened exactly that session.
 - **Tools:** omp starts with its normal tool set. The app never passes `--tools`.
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
-- **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp **18.4.5**; other versions show a warning.
+- **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp 18.4.5 and checked against **18.4.10** (which only adds commands); other versions show a warning.
 
 ### Approvals and extension dialogs
 

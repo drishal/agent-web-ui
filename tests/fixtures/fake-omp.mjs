@@ -26,7 +26,7 @@ const flag = (name) => {
 };
 
 if (args[0] === "--version") {
-  console.log("omp/18.4.5");
+  console.log("omp/18.4.10");
   process.exit(0);
 }
 
