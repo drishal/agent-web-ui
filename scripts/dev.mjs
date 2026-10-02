@@ -2,8 +2,13 @@
 // Development: backend under `tsx watch` plus Vite (which proxies /api to the
 // backend). Local use needs no sign-in.
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 
-const port = process.env.PORT ?? "4783";
+// The backend reads .env itself; Vite needs its PORT to proxy to it.
+const envFile = process.env.AWUI_ENV_FILE ?? ".env";
+const fileEnv = envFile && existsSync(envFile) ? parseEnv(readFileSync(envFile, "utf8")) : {};
+const port = process.env.PORT ?? fileEnv.PORT ?? "4783";
 const children = [];
 
 function run(name, command, args, onLine) {

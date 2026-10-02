@@ -14,24 +14,19 @@ in
 {
   systemd.user.services.agent-web-ui = {
     Unit = {
-      Description = "Agent Web UI for Pi and omp (127.0.0.1:4783)";
+      Description = "Agent Web UI for Pi and omp";
       # No build yet (or no checkout on this machine): skip instead of restart-looping.
       ConditionPathExists = "${appDir}/dist/server/server/index.js";
     };
     Service = {
       ExecStart = "${lib.getExe pkgs.nodejs} ${appDir}/dist/server/server/index.js";
       WorkingDirectory = appDir;
+      # PORT, HOST and the login come from ${appDir}/.env; anything set here
+      # would override that file.
       Environment = [
-        "PORT=4783"
-        "WORKSPACE_ROOTS=%h"
         # The shell's toolset: pi and omp live outside the Nix profile, and the
         # agents' own tools (git, rg, sudo, cargo, ...) need the rest.
         "PATH=%h/.local/bin:%h/.node_modules/bin:%h/.cargo/bin:%h/.bun/bin:/run/wrappers/bin:${config.home.profileDirectory}/bin:/etc/profiles/per-user/${config.home.username}/bin:/run/current-system/sw/bin"
-        # Other devices sign in with the login from `npm run set-password`
-        # (the server refuses to start without one when either is set):
-        # "HOST=0.0.0.0"                              # LAN; open the port in the firewall too
-        # "ALLOWED_HOSTS=<machine>.<tailnet>.ts.net"  # Tailscale Serve
-        # "ALLOWED_TAILSCALE_USERS=<your-tailscale-login>"  # optional extra check for Serve
       ];
       # SIGTERM is a clean exit (0), so "on-failure" would leave it dead after a stray kill.
       Restart = "always";

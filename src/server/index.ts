@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import http from "node:http";
 import type { Socket } from "node:net";
@@ -6,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { ChatManager } from "./chats/manager.js";
 import { ConfigError, loadConfig } from "./config.js";
+import { type LoadedEnvFile, loadEnvFile } from "./env-file.js";
 import { liveOmpChildren } from "./harness/omp.js";
 import { HarnessRegistry } from "./harness/registry.js";
-import { loadCredentials, PasswordAuth } from "./auth.js";
+import { hashPassword, loadCredentials, PasswordAuth } from "./auth.js";
 import { cachedLanHosts, sampleLanHosts } from "./network.js";
 import { loadOrCreateSecret, Security } from "./security.js";
 import { ThemeStore } from "./theme.js";
@@ -31,6 +33,15 @@ async function findRoot(): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  const root = await findRoot();
+  const envFile = process.env.AWUI_ENV_FILE ?? path.join(root, ".env");
+  let settings: LoadedEnvFile | null = null;
+  try {
+    settings = envFile ? loadEnvFile(envFile) : null;
+  } catch (error) {
+    console.error(`agent-web-ui: cannot read ${envFile}: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
   let config;
   try {
     config = loadConfig();
@@ -41,20 +52,32 @@ async function main(): Promise<void> {
     }
     throw error;
   }
-  const root = await findRoot();
+  // The agents' shells inherit process.env; the password must not reach them.
+  delete process.env.AUTH_PASSWORD;
+  if (settings) console.log(`  settings: ${settings.file} (${settings.applied.join(", ") || "nothing new"})`);
+  if (settings?.tightened) console.log(`  ${settings.file} holds a password; its mode is now 0600`);
   const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")) as { version: string };
   const secret = await loadOrCreateSecret(config.stateDir);
   // Other devices (LAN via HOST=0.0.0.0, or Tailscale Serve) sign in with a
   // password; this machine never needs to.
   const remote = config.host === "0.0.0.0" || config.allowedHosts.length > 0;
   let password: PasswordAuth | undefined;
-  try {
-    password = new PasswordAuth(await loadCredentials(config.credentialsFile));
-  } catch (error) {
-    if (remote) {
-      console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
-      console.error("agent-web-ui: HOST=0.0.0.0 and ALLOWED_HOSTS need a login for other devices; refusing to start.");
-      process.exit(1);
+  if (config.login) {
+    // Salt from the install secret: the same password keeps the same cookie
+    // fingerprint, so a restart does not sign devices out; a new one does.
+    const salt = createHmac("sha256", secret).update(`login-salt\0${config.login.username}`).digest().subarray(0, 16);
+    password = new PasswordAuth(await hashPassword(config.login.username, config.login.password, salt));
+  } else {
+    try {
+      password = new PasswordAuth(await loadCredentials(config.credentialsFile));
+    } catch (error) {
+      if (remote) {
+        console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(
+          "agent-web-ui: HOST=0.0.0.0 and ALLOWED_HOSTS need a login for other devices (AUTH_USERNAME and AUTH_PASSWORD in .env, or `npm run set-password`); refusing to start.",
+        );
+        process.exit(1);
+      }
     }
   }
   const security = new Security({
@@ -118,7 +141,9 @@ async function main(): Promise<void> {
     console.log(`Local: http://127.0.0.1:${config.port}/ (no sign-in on this machine)`);
     for (const url of lanUrls) console.log(`LAN:   ${url}`);
     for (const h of config.allowedHosts) console.log(`Serve: https://${h}/`);
-    if (password && remote) console.log(`  other devices sign in as "${password.username}"`);
+    if (password && remote) {
+      console.log(`  other devices sign in as "${password.username}" (${config.login ? "AUTH_PASSWORD" : "npm run set-password"})`);
+    }
     if (lanUrls.length > 0) {
       console.log("  warning: LAN access is plain HTTP; the password and chats are not encrypted on the network. Prefer Tailscale.");
     }

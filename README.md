@@ -23,32 +23,37 @@ npm start            # serves UI + API on http://127.0.0.1:4783
 
 Open http://127.0.0.1:4783/ on this machine. No token and no sign-in: local use is open.
 
-To use it from other devices, set a login once and restart with `HOST=0.0.0.0` (LAN) and/or Tailscale Serve:
+Settings live in `.env` at the repo root (`cp .env.example .env`; it is gitignored): `PORT`, `HOST`, and the login for other devices. To use it from other devices (LAN and/or Tailscale Serve), set:
 
 ```bash
-npm run set-password            # prompts for username and password (min 8 chars)
-HOST=0.0.0.0 npm start          # prints LAN: http://<ip>:4783/ for each address
+HOST=0.0.0.0                    # prints LAN: http://<ip>:4783/ for each address
+AUTH_USERNAME=you
+AUTH_PASSWORD=at-least-8-chars
 ```
 
-Other devices get a sign-in form; this machine still opens directly.
+then restart. Other devices get a sign-in form; this machine still opens directly. If you would rather not keep the password in a file, leave `AUTH_PASSWORD` empty and run `npm run set-password` instead (it stores only a scrypt hash).
 
 | Script | What it does |
 |---|---|
 | `npm run dev` | Backend under `tsx watch` plus Vite on :5173, proxying `/api`. Prints a `Dev UI: http://127.0.0.1:5173/` link. |
-| `npm run set-password` | Sets the username and password for other devices (stores a salted scrypt hash only). Changing it signs every device out. |
+| `npm run set-password` | Alternative to `AUTH_PASSWORD`: sets the login for other devices, storing a salted scrypt hash only. Changing it signs every device out. |
 | `npm run typecheck` | Strict TypeScript for server, web, and tests |
 | `npm test` | Vitest unit and integration tests. Uses only fake and scripted harnesses, so no model tokens are spent. |
 | `npm run test:e2e` | Builds, then runs Playwright (Chromium) against the fake harnesses |
 | `npm run smoke` | Opt-in checks against the real installed Pi and omp (see [Testing](#testing)) |
 | `npm run build` / `npm start` | Production build, then a single process serving UI and API |
 
-### Configuration (environment)
+### Configuration (`.env` or environment)
+
+Any of these can go in `.env`; a variable already set in the environment wins over the file.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `4783` | Validated, 1024–65535. |
-| `HOST` | `127.0.0.1` | `127.0.0.1` (this machine only) or `0.0.0.0` (LAN; other devices sign in). Nothing else is accepted. |
-| `AUTH_CREDENTIALS_FILE` | `$XDG_STATE_HOME/agent-web-ui/credentials.json` | Login written by `npm run set-password`. Required for `HOST=0.0.0.0` or `ALLOWED_HOSTS`, otherwise the server refuses to start. |
+| `HOST` | `127.0.0.1` | `127.0.0.1` (this machine only, no sign-in) or `0.0.0.0` (LAN; other devices sign in). Nothing else is accepted. |
+| `AUTH_USERNAME`, `AUTH_PASSWORD` | — | Login for other devices (password ≥ 8 chars). `HOST=0.0.0.0` and `ALLOWED_HOSTS` need a login (this or `set-password`), otherwise the server refuses to start. The server makes a `.env` holding a password mode 0600 and removes `AUTH_PASSWORD` from its own environment, so the agents' shells never see it. |
+| `AUTH_CREDENTIALS_FILE` | `$XDG_STATE_HOME/agent-web-ui/credentials.json` | Login written by `npm run set-password`; used when `AUTH_PASSWORD` is unset. |
+| `AWUI_ENV_FILE` | `<repo>/.env` | Settings file to read; empty disables it (the tests do this). |
 | `WORKSPACE_ROOTS` | home dir | `:`-separated. Projects must be inside a root, checked by realpath, so symlink and `..` escapes are refused. |
 | `ALLOWED_HOSTS` | — | Comma-separated extra `Host` values (e.g. your `*.ts.net` Serve name). |
 | `ALLOWED_TAILSCALE_USERS` | — | Optional comma-separated Tailscale logins; when set, Serve requests must also carry one of them. |
@@ -180,8 +185,8 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 
 - Binds `127.0.0.1` by default, or `0.0.0.0` with `HOST=0.0.0.0`. No CORS. `Host` must be loopback, in `ALLOWED_HOSTS`, or (with `HOST=0.0.0.0`) one of this machine's own LAN addresses or hostname. `Origin` must match `Host`, and `Sec-Fetch-Site: cross-site` is refused. These failures return `403`, which also blocks DNS rebinding and cross-site requests against the open local mode.
 - **This machine needs no sign-in.** A request counts as local only when the TCP peer is loopback, the Host is loopback, and no proxy headers (`X-Forwarded-*`, `Forwarded`, `Tailscale-User-*`) are present. So a LAN client faking `Host: 127.0.0.1`, or Tailscale Serve proxying over loopback, is never local. The trade-off: any process or user on this machine can drive the agent through the UI. That is the same reach they already have by running `pi`/`omp` as you.
-- **Other devices sign in** with the username and password from `npm run set-password`:
-  - Only a salted scrypt hash is stored, mode 0600.
+- **Other devices sign in** with `AUTH_USERNAME`/`AUTH_PASSWORD` from `.env`, or the login from `npm run set-password`:
+  - `set-password` stores only a salted scrypt hash, mode 0600. `AUTH_PASSWORD` is plaintext in `.env` (forced to mode 0600) and is hashed in memory with a salt derived from the cookie secret, so restarts keep devices signed in.
   - Sign-in issues an HMAC-signed cookie bound to that `host:port` and to the credential fingerprint: `HttpOnly`, `SameSite=Strict`, ~30 days, and `Secure` on Serve hosts. Changing the password signs every device out.
   - Five wrong tries lock that address for 15 minutes, and every failure costs 400 ms.
   - Without a configured login, every non-local request is refused, and `HOST=0.0.0.0` or `ALLOWED_HOSTS` will not start.
@@ -197,8 +202,8 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 Do this after localhost works:
 
 ```bash
-npm run set-password   # once
-ALLOWED_HOSTS=<machine>.<tailnet>.ts.net npm start
+# in .env: AUTH_USERNAME, AUTH_PASSWORD, and ALLOWED_HOSTS=<machine>.<tailnet>.ts.net
+npm start
 tailscale serve --bg http://127.0.0.1:4783
 tailscale serve status
 ```
@@ -207,7 +212,7 @@ tailscale serve status
 
 ### LAN (`HOST=0.0.0.0`)
 
-`HOST=0.0.0.0 npm start` prints `LAN: http://<ip>:4783/` for each address. NixOS blocks inbound ports by default, so open it on your LAN interface in the dotfiles, e.g. `networking.firewall.interfaces."enp14s0".allowedTCPPorts = [ 4783 ];` in `hosts/common/firewall.nix`. Prefer Tailscale over exposing it on Wi-Fi you do not control.
+With `HOST=0.0.0.0` in `.env`, startup prints `LAN: http://<ip>:4783/` for each address. NixOS blocks inbound ports by default, so open it on your LAN interface in the dotfiles, e.g. `networking.firewall.interfaces."enp14s0".allowedTCPPorts = [ 4783 ];` in `hosts/common/firewall.nix`. Prefer Tailscale over exposing it on Wi-Fi you do not control.
 
 ## Theme
 
@@ -238,7 +243,7 @@ Changing `stylix.base16Scheme` in `shared/stylix.nix` then re-themes the web UI.
 
 ## Optional autostart (home-manager)
 
-Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, `127.0.0.1` by default, no secrets (the login hash stays in `~/.local/state`), and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It is skipped (not restart-looped) until `dist/` is built. Add it next to the theme module, uncomment `HOST=0.0.0.0` / `ALLOWED_HOSTS` for other devices (after `npm run set-password`), and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
+Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, no secrets, and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It sets no app settings, so `PORT`, `HOST` and the login come from the checkout's `.env`. It is skipped (not restart-looped) until `dist/` is built. Add it next to the theme module and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
 
 ```bash
 systemctl --user status agent-web-ui
@@ -252,7 +257,7 @@ systemctl --user stop agent-web-ui
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, and the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `.env` (kept across restarts, revoked by a new password), streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, harness-grouped sessions, chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi and omp: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:

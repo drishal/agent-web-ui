@@ -19,6 +19,18 @@ describe("loadConfig", () => {
     expect(loadConfig({ AUTH_CREDENTIALS_FILE: "/run/secrets/awui" }).credentialsFile).toBe("/run/secrets/awui");
   });
 
+  it("takes a login from AUTH_USERNAME/AUTH_PASSWORD, with set-password's rules", () => {
+    expect(loadConfig({}).login).toBeNull();
+    expect(loadConfig({ AUTH_USERNAME: "drishal", AUTH_PASSWORD: "" }).login).toBeNull();
+    expect(loadConfig({ AUTH_USERNAME: " drishal ", AUTH_PASSWORD: "long enough" }).login).toEqual({
+      username: "drishal",
+      password: "long enough",
+    });
+    expect(() => loadConfig({ AUTH_PASSWORD: "long enough" })).toThrow(/AUTH_USERNAME/);
+    expect(() => loadConfig({ AUTH_USERNAME: "two words", AUTH_PASSWORD: "long enough" })).toThrow(ConfigError);
+    expect(() => loadConfig({ AUTH_USERNAME: "drishal", AUTH_PASSWORD: "short" })).toThrow(/at least 8/);
+  });
+
   it("validates PORT", () => {
     expect(loadConfig({ PORT: "5000" }).port).toBe(5000);
     for (const bad of ["80", "70000", "abc", "4783.5"]) expect(() => loadConfig({ PORT: bad })).toThrow(ConfigError);

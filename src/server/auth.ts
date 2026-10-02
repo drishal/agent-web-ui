@@ -26,8 +26,7 @@ export interface StoredCredentials {
 const DEFAULTS = { N: 1 << 15, r: 8, p: 1, keylen: 64 };
 const maxmem = (N: number, r: number) => 128 * N * r * 2;
 
-export async function hashPassword(username: string, password: string): Promise<StoredCredentials> {
-  const salt = randomBytes(16);
+export async function hashPassword(username: string, password: string, salt: Buffer = randomBytes(16)): Promise<StoredCredentials> {
   const key = await scrypt(password, salt, DEFAULTS.keylen, { N: DEFAULTS.N, r: DEFAULTS.r, p: DEFAULTS.p, maxmem: maxmem(DEFAULTS.N, DEFAULTS.r) });
   return { v: 1, username, salt: salt.toString("base64"), hash: key.toString("base64"), ...DEFAULTS };
 }
