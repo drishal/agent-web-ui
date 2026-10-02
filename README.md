@@ -163,7 +163,7 @@ Tools are Pi's normal active set (your `defaultTools` plus extension tools); thi
 
 omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported into this Node server. Each live chat therefore runs the **installed** `omp` in `--mode rpc-ui`, one child process per chat. `rpc-ui` is the mode with tool-approval and extension-UI requests over the protocol; plain `rpc` has no UI, so approvals would fail closed.
 
-- **Listing:** omp's RPC has no session listing, so a short-lived `omp acp` process answers `session/list` (with a `cwd` for one project, without one for the sidebar's newest sessions across projects) and exits after 60 s idle.
+- **Listing:** omp's RPC has no session listing, so a short-lived `omp acp` process answers `session/list` (with a `cwd` for one project, without one for the sidebar's newest sessions across projects) and exits after 60 s idle. `session/list` carries only omp's stored title, which stays empty when omp never generated one; like omp's own picker, the adapter then shows the first prompt, read from the first 64 kB of that session's file (read-only, cached by size).
 - **Resume:** `--resume <id>` with `--cwd`. The adapter checks that omp opened exactly that session.
 - **Tools:** omp starts with its normal tool set. The app never passes `--tools`.
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
