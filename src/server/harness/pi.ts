@@ -44,7 +44,7 @@ const MODEL_REFRESH_MS = 15_000;
 
 type AgentSession = pi.AgentSession;
 type Services = Awaited<ReturnType<typeof pi.createAgentSessionServices>>;
-type PiModel = { provider: string; id: string; name?: string; reasoning?: boolean; input?: string[] };
+type PiModel = { provider: string; id: string; name?: string; reasoning?: boolean; input?: string[]; thinkingLevelMap?: Record<string, string | null> };
 
 function expandTilde(p: string): string {
   return p === "~" || p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(1)) : p;
@@ -62,7 +62,21 @@ function summarize(info: pi.SessionInfo): NativeSessionSummary {
   };
 }
 
+/** Pi's thinking ladder, weakest first; "off" is not a level the picker shows. */
+const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+/** Mirrors pi-ai's getSupportedThinkingLevels (that module is not re-exported here). */
+function supportedLevels(m: PiModel): string[] {
+  if (!m.reasoning) return [];
+  return THINKING_LEVELS.filter((level) => {
+    const mapped = m.thinkingLevelMap?.[level];
+    if (mapped === null) return false;
+    return level === "xhigh" || level === "max" ? mapped !== undefined : true;
+  });
+}
+
 function toModelInfo(m: PiModel): ModelInfo {
+  const levels = supportedLevels(m);
   return {
     key: `${m.provider}/${m.id}`,
     provider: m.provider,
@@ -70,6 +84,7 @@ function toModelInfo(m: PiModel): ModelInfo {
     name: m.name ?? m.id,
     ...(m.reasoning !== undefined ? { reasoning: Boolean(m.reasoning) } : {}),
     ...(Array.isArray(m.input) ? { vision: m.input.includes("image") } : {}),
+    ...(levels.length > 0 ? { levels } : {}),
   };
 }
 

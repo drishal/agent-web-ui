@@ -80,6 +80,14 @@ describe("omp adapter (scripted omp)", () => {
     await until(() => chat.snapshot().extensionStatus.plan === "ready");
   });
 
+  it("carries omp's per-model thinking efforts into the model list", async () => {
+    const models = await adapter.listModels(project);
+    expect(models.find((m) => m.key === "fakeomp/m1")?.levels).toEqual(["low", "high", "max"]);
+    const m2 = models.find((m) => m.key === "fakeomp/org/m2");
+    expect(m2).toBeDefined();
+    expect(m2?.levels).toBeUndefined();
+  });
+
   it("streams a prompt with a tool call and settles via session_settled", async () => {
     const { chat } = await openChat();
     await chat.send("run tool please", "normal");

@@ -262,7 +262,12 @@ export function ModelPicker({
                       >
                         <span className="model-name">{model.name}</span>
                         {model.name !== model.id ? <span className="model-id">{section.recent ? model.key : model.id}</span> : null}
-                        {model.reasoning ? <span className="model-tag">thinking</span> : null}
+                        {model.levels?.length ? (
+                          // The strongest level; the harness lists them weakest first.
+                          <span className="model-tag" title={`Reasoning: ${model.levels.join(", ")}`}>
+                            {model.levels[model.levels.length - 1]}
+                          </span>
+                        ) : null}
                         {model.key === current ? <IconCheck size={13} className="model-check" /> : null}
                       </div>
                     );

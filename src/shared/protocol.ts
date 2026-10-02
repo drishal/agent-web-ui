@@ -87,6 +87,8 @@ export interface ModelInfo {
   reasoning?: boolean;
   /** Accepts image input; absent when the harness does not say. */
   vision?: boolean;
+  /** Reasoning levels the harness offers for this model, weakest first; "off" is not a level. */
+  levels?: string[];
 }
 
 export interface ChatConfig {

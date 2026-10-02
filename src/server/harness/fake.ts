@@ -29,11 +29,11 @@ import type {
 } from "./types.js";
 
 const FAKE_MODELS: ModelInfo[] = [
-  { key: "fake/echo", provider: "fake", id: "echo", name: "Fake Echo", reasoning: true, vision: true },
+  { key: "fake/echo", provider: "fake", id: "echo", name: "Fake Echo", reasoning: true, vision: true, levels: ["low", "high"] },
   { key: "fake/slow", provider: "fake", id: "slow", name: "Fake Slow", reasoning: false },
-  { key: "acme/gpt-5.5", provider: "acme", id: "gpt-5.5", name: "GPT-5.5", reasoning: true },
+  { key: "acme/gpt-5.5", provider: "acme", id: "gpt-5.5", name: "GPT-5.5", reasoning: true, levels: ["minimal", "low", "medium", "high", "xhigh"] },
   { key: "acme/gpt-5.5-mini", provider: "acme", id: "gpt-5.5-mini", name: "GPT-5.5 Mini" },
-  { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true, vision: false },
+  { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true, vision: false, levels: ["low", "high", "max"] },
 ];
 const FAKE_THINKING = ["off", "low", "high"];
 

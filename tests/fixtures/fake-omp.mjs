@@ -141,7 +141,7 @@ if (args[0] === "acp") {
       case "get_available_models":
         return ok(cmd.id, "get_available_models", {
           models: [
-            { provider: "fakeomp", id: "m1", name: "M1", reasoning: true, baseUrl: "http://secret" },
+            { provider: "fakeomp", id: "m1", name: "M1", reasoning: true, baseUrl: "http://secret", thinking: { mode: "effort", efforts: ["low", "high", "max"] } },
             { provider: "fakeomp", id: "org/m2", name: "M2" },
           ],
         });

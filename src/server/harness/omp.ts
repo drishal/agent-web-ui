@@ -333,6 +333,7 @@ class AcpLister {
 
 function toModelInfo(m: unknown): ModelInfo | null {
   if (!isObj(m) || typeof m.provider !== "string" || typeof m.id !== "string") return null;
+  const efforts = isObj(m.thinking) && Array.isArray(m.thinking.efforts) ? m.thinking.efforts.filter((l): l is string => typeof l === "string") : [];
   return {
     key: `${m.provider}/${m.id}`,
     provider: m.provider,
@@ -340,6 +341,7 @@ function toModelInfo(m: unknown): ModelInfo | null {
     name: typeof m.name === "string" ? m.name : m.id,
     ...(typeof m.reasoning === "boolean" ? { reasoning: m.reasoning } : {}),
     ...(Array.isArray(m.input) ? { vision: m.input.includes("image") } : {}),
+    ...(efforts.length > 0 ? { levels: efforts } : {}),
   };
 }
 
