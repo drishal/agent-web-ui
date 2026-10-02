@@ -123,6 +123,29 @@ test("reconnects after going offline without duplicating messages", async ({ pag
   expect(text.match(/Echo: slow stream/g)).toHaveLength(1);
 });
 
+test("a run keeps going after the browser closes, and another device can watch it finish", async ({ browser }) => {
+  const laptop = await browser.newContext();
+  const page = await laptop.newPage();
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "slow background run");
+  await expect(status(page)).toHaveText("Working");
+  // The browser goes away mid-run.
+  await laptop.close();
+
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const mobile = await phone.newPage();
+  await signInAndOpen(mobile);
+  await showSidebar(mobile);
+  await mobile.locator(".session", { hasText: "slow background run" }).first().click();
+  await expect(prompts(mobile)).toHaveText(["slow background run"]);
+  // It ran to the end on its own: the whole answer, not a "Stopped" one.
+  await expect(answers(mobile).last()).toContainText("line 60", { timeout: 20_000 });
+  await expect(status(mobile)).toHaveText("Idle", { timeout: 20_000 });
+  await expect(mobile.getByText("Stopped")).toHaveCount(0);
+  await phone.close();
+});
+
 test("reload re-attaches, and the session list resumes the same live chat", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
