@@ -186,7 +186,7 @@ omp's npm package requires Bun and ships raw `.ts`, so it cannot be imported int
 - **Transport:** omp's protocol v1 caps every frame at 1 MiB, so a long session's `get_messages` fails ("RPC response exceeded the transport limit") and big events are trimmed. When omp's ready frame offers protocol v2, the adapter negotiates it and joins the `rpc_chunk` slices (up to 64 MiB a frame). If a history still cannot load, the chat fails with omp's reason and its omp process is closed again.
 - **Tools:** omp starts with its normal tool set. The app never passes `--tools`.
 - **Home directory:** omp refuses to work in your home directory itself (it would switch to a temp dir), so the UI disables omp for a workspace that is exactly `~`. It never passes `--allow-home`.
-- **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp 18.4.5 and checked against **18.4.10** (which only adds commands); other versions show a warning.
+- **Lifecycle:** children are killed on dispose and on `SIGINT`/`SIGTERM`. A crash surfaces as a chat error. Protocol types are hand-written from omp 18.4.5 and checked against **18.4.10**: newer minors are assumed additive and stay quiet, while an older build or a different major line shows a warning.
 
 ### Hermes
 

@@ -5,7 +5,9 @@
 // session listing, so listing uses a short-lived `omp acp` process and ACP's
 // `session/list`. Protocol types below are hand-written from omp 18.4.5's
 // src/modes/rpc/rpc-types.ts and kept deliberately loose; 18.4.10 only adds
-// commands and an opt-in `ask` dialog, so nothing used here changed.
+// commands and an opt-in `ask` dialog, so nothing used here changed. Newer
+// minors are assumed additive and stay quiet; an older build or a new major
+// line is reported by ompVersionWarning().
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -43,6 +45,27 @@ import type {
 
 const run = promisify(execFile);
 export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
+
+/**
+ * What to warn about for a detected omp CLI, or null when its signature is
+ * known to fit: equal to, or newer than, the checked version on the same major
+ * line — omp adds, it has not changed what this adapter calls. An older build,
+ * a different major line, or an unreadable version carries a warning.
+ */
+export function ompVersionWarning(version: string, writtenFor = OMP_PROTOCOL_VERSION_WRITTEN_FOR): string | null {
+  const seen = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
+  const known = /^(\d+)\.(\d+)\.(\d+)/.exec(writtenFor);
+  if (!seen || !known) return `omp ${version} is installed; this adapter's protocol types were written for ${writtenFor}`;
+  const major = Number(seen[1]);
+  const minor = Number(seen[2]);
+  const patch = Number(seen[3]);
+  const knownMajor = Number(known[1]);
+  const knownMinor = Number(known[2]);
+  const knownPatch = Number(known[3]);
+  if (major !== knownMajor) return `omp ${version} is installed; this adapter's protocol types were written for ${writtenFor}, on a different major line`;
+  if (minor < knownMinor || (minor === knownMinor && patch < knownPatch)) return `omp ${version} is older than ${writtenFor}, the version this adapter's protocol types were written for`;
+  return null;
+}
 const READY_TIMEOUT_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
@@ -551,9 +574,8 @@ export class OmpAdapter implements HarnessAdapter {
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000, env: this.env() });
       const version = stdout.trim().replace(/^omp\//, "").replace(/^v/, "");
-      if (version !== OMP_PROTOCOL_VERSION_WRITTEN_FOR) {
-        warnings.push(`omp ${version} is installed; this adapter's protocol types were written for ${OMP_PROTOCOL_VERSION_WRITTEN_FOR}`);
-      }
+      const warning = ompVersionWarning(version);
+      if (warning) warnings.push(warning);
       return { available: true, version, warnings, overrides };
     } catch {
       return {

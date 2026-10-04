@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
 import { ChatManager } from "../../src/server/chats/manager.js";
-import { firstPrompt, liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
+import { firstPrompt, liveOmpChildren, OmpAdapter, ompVersionWarning } from "../../src/server/harness/omp.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -64,6 +64,18 @@ describe("omp adapter (scripted omp)", () => {
     expect(d).toMatchObject({ available: true, version: "18.4.10", warnings: [] });
     expect(adapter.workspaceProblem(home)).toMatch(/home directory/);
     expect(adapter.workspaceProblem(project)).toBeNull();
+  });
+
+  it("softens the version warning to older builds and new major lines", () => {
+    expect(ompVersionWarning("18.4.10")).toBeNull();
+    expect(ompVersionWarning("18.4.11")).toBeNull();
+    expect(ompVersionWarning("18.6.1")).toBeNull();
+    expect(ompVersionWarning("18.12.0")).toBeNull();
+    expect(ompVersionWarning("18.4.9")).toMatch(/older than/);
+    expect(ompVersionWarning("18.3.0")).toMatch(/older than/);
+    expect(ompVersionWarning("17.9.9")).toMatch(/different major/);
+    expect(ompVersionWarning("19.0.0")).toMatch(/different major/);
+    expect(ompVersionWarning("nightly")).toMatch(/written for/);
   });
 
   it("spawns one rpc-ui child with omp's normal tools and without Pi's PI_* overrides", async () => {
