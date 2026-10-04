@@ -30,7 +30,7 @@ Settings live in `~/.config/agentwebui/`: `config.yml` (start from [`config.exam
 host: 0.0.0.0          # prints LAN: http://<ip>:4783/ for each address
 auth:
   username: you
-  password: at-least-8-chars
+  password: your-password
 ```
 
 then restart. Other devices get a sign-in form; this machine still opens directly. If you would rather not keep the password in a file, leave it out and run `npm run set-password` instead (it stores only a scrypt hash).
