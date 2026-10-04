@@ -1,0 +1,111 @@
+// Pi-family session files (Pi and omp): JSONL with an optional title slot, a
+// session header, then entries that form a tree through parentId. Forking a
+// chat keeps the active branch's ancestor chain through the Nth user turn; a
+// plain line prefix would drag along abandoned branches.
+import { randomBytes } from "node:crypto";
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Time-ordered session id, the shape both harnesses mint for new sessions. */
+export function uuidv7(now = Date.now()): string {
+  const bytes = randomBytes(16);
+  for (let i = 0; i < 6; i += 1) bytes[i] = Number((BigInt(now) >> BigInt(8 * (5 - i))) & 0xffn);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x70;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** File name prefix omp/Pi use for a session started now: ISO with : and . as -. */
+export function sessionFileTimestamp(date: Date): string {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+/** The file's active branch, root first. Session files are append-only, so the last entry is the leaf. */
+function activeBranch(entries: Obj[]): Obj[] {
+  const byId = new Map<string, Obj>();
+  for (const entry of entries) if (typeof entry.id === "string") byId.set(entry.id, entry);
+  const chain: Obj[] = [];
+  const seen = new Set<string>();
+  let current: Obj | undefined = entries[entries.length - 1];
+  while (current && typeof current.id === "string" && !seen.has(current.id)) {
+    seen.add(current.id);
+    chain.push(current);
+    current = typeof current.parentId === "string" ? byId.get(current.parentId) : undefined;
+  }
+  return chain.reverse();
+}
+
+export interface ForkOptions {
+  /** Keep everything up to and including turn N (1-based). */
+  throughTurns: number;
+  /** Id for the copy; also used by the caller for the file name. */
+  id: string;
+  now: Date;
+  cwd: string;
+  /** The source session's id, recorded so the copy knows where it came from. */
+  parentSession: string;
+}
+
+/**
+ * The body of a forked session file: the title slot and header rewritten for the
+ * copy, then the kept entries unchanged. Entries whose referenced entry was cut
+ * with the rest of the branch (a compaction's firstKeptEntryId, say) are dropped.
+ */
+export function forkSessionText(text: string, options: ForkOptions): string {
+  let slot: string | null = null;
+  let header: Obj | null = null;
+  const entries: Obj[] = [];
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // A half-written trailing line: the source was being appended to.
+    }
+    if (!isObj(parsed)) continue;
+    if (header === null && parsed.type === "title" && slot === null) {
+      slot = line;
+      continue;
+    }
+    if (header === null && parsed.type === "session") {
+      header = parsed;
+      continue;
+    }
+    entries.push(parsed);
+  }
+  const branch = activeBranch(entries);
+  let cut = branch.length;
+  let turn = 0;
+  for (let i = 0; i < branch.length; i += 1) {
+    const entry = branch[i];
+    if (!entry || entry.type !== "message") continue;
+    const message = entry.message;
+    if (!isObj(message) || message.role !== "user") continue;
+    turn += 1;
+    if (turn > options.throughTurns) {
+      cut = i;
+      break;
+    }
+  }
+  const keptIds = new Set(branch.slice(0, cut).map((entry) => String(entry.id ?? "")));
+  const kept = branch.slice(0, cut).filter((entry) => {
+    const refs = [entry.firstKeptEntryId, entry.fromId, entry.targetId, entry.parentId];
+    return refs.every((ref) => typeof ref !== "string" || keptIds.has(ref));
+  });
+  const out = {
+    type: "session",
+    version: typeof header?.version === "number" ? header.version : 3,
+    id: options.id,
+    timestamp: options.now.toISOString(),
+    cwd: options.cwd,
+    ...(typeof header?.title === "string" ? { title: header.title, titleSource: header.titleSource ?? "auto" } : {}),
+    parentSession: options.parentSession,
+    // Prompt-cache affinity survives only because a fork keeps model, system prompt, and tools.
+    ...(typeof header?.providerPromptCacheKey === "string" ? { providerPromptCacheKey: header.providerPromptCacheKey } : {}),
+  };
+  const lines = [slot, JSON.stringify(out), ...kept.map((entry) => JSON.stringify(entry))];
+  return `${lines.filter((line): line is string => typeof line === "string").join("\n")}\n`;
+}

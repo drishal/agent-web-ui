@@ -470,6 +470,19 @@ test("/ opens the command menu: it filters, completes, runs, and closes", async 
   await expect(box).toHaveValue("/re");
 });
 
+test("a finished turn forks into a new chat holding just that turn", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first question");
+  await sendAndWait(page, "second question");
+  await expect(prompts(page)).toHaveText(["first question", "second question"]);
+  // The fork button lives on a finished answer; the copy opens in its place.
+  await page.getByTestId("answer").first().getByRole("button", { name: "Fork from here" }).click();
+  await expect(prompts(page)).toHaveText(["first question"]);
+  await expect(status(page)).toHaveText("Idle");
+  await expect(page.getByTestId("turn")).toHaveCount(1);
+});
+
 const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 test("images can be pasted, dropped, or picked, then removed or sent with the prompt", async ({ page }) => {

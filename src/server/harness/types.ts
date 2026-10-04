@@ -133,6 +133,13 @@ export interface HarnessAdapter {
   listSessions(cwd: string): Promise<NativeSessionSummary[]>;
   /** The newest sessions across every project, newest first. */
   listRecentSessions(limit: number): Promise<RecentNativeSession[]>;
+  /**
+   * Copy the session's conversation through its Nth user turn (1-based) into a
+   * new session of the harness's own store, and return the new native id. The
+   * copy is listed and resumable like any other session. Callers gate on
+   * capabilities.supportsFork.
+   */
+  forkSession(req: { cwd: string; nativeId: string; throughTurns: number }): Promise<{ nativeId: string }>;
   openChat(req: OpenChatRequest): Promise<LiveChat>;
   /** Kill helper processes; called on server shutdown. */
   shutdown(): Promise<void>;

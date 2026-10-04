@@ -9,6 +9,7 @@ import {
   type ChatEvent,
   compactSchema,
   createChatSchema,
+  forkChatSchema,
   MAX_IMAGE_BYTES,
   MAX_IMAGES,
   MAX_MESSAGE_CHARS,
@@ -374,6 +375,15 @@ export function createApp(deps: AppDeps) {
     if (chat.status !== "idle") throw new ChatError(409, "busy", "Compact only while idle");
     chat.compact(instructions).catch((error: unknown) => log(`compact failed: ${errorMessage(error)}`));
     res.status(202).json({ accepted: true });
+  });
+
+  app.post("/api/chats/:id/fork", async (req, res) => {
+    const { through } = body(forkChatSchema, req);
+    const chat = manager.get(req.params.id);
+    if (!chat.adapter.capabilities.supportsFork) throw new ChatError(400, "unsupported", `${chat.adapter.displayName} sessions cannot be forked`);
+    if (!chat.nativeId) throw new ChatError(409, "not_started", "This chat has no session to fork yet");
+    const forked = await chat.adapter.forkSession({ cwd: chat.workspace.path, nativeId: chat.nativeId, throughTurns: through });
+    res.status(201).json((await manager.resume(chat.adapter, chat.workspace, forked.nativeId)).snapshot());
   });
 
   app.post("/api/chats/:id/requests/:requestId", (req, res) => {

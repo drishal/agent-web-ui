@@ -392,6 +392,16 @@ export function App() {
     api(`/api/chats/${chat.chatId}/abort`, { body: {} }).catch((e: unknown) => setBanner({ level: "error", text: errorText(e) }));
   };
 
+  /** Branch the chat after its Nth turn into a new session, and open the copy. */
+  const forkChat = async (through: number): Promise<void> => {
+    if (!chat) return;
+    try {
+      showChat(await api<ChatSnapshot>(`/api/chats/${chat.chatId}/fork`, { body: { through } }));
+    } catch (e) {
+      setBanner({ level: "error", text: errorText(e) });
+    }
+  };
+
   const answer = async (requestId: string, a: InteractionAnswer) => {
     if (!chat) return;
     try {
@@ -650,7 +660,7 @@ export function App() {
           </div>
         ) : chat ? (
           <>
-            <Conversation items={chat.items} status={chat.status} workspace={chat.workspace.path} />
+            <Conversation items={chat.items} status={chat.status} workspace={chat.workspace.path} canFork={chat.capabilities.supportsFork} onFork={forkChat} />
             {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
             <Composer
               key={chat.chatId}

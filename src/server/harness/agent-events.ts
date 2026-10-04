@@ -29,6 +29,23 @@ export function textOf(content: unknown): string {
 }
 
 /**
+ * Where to cut a Pi-family transcript to fork after its Nth user turn: the index
+ * of the message that starts turn N+1, or the end when there is no such message.
+ * Steering messages count as user turns, matching how the UI groups turns.
+ */
+export function forkCutIndex(messages: unknown[], throughTurns: number): number {
+  let turn = 0;
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (isObj(message) && message.role === "user") {
+      turn += 1;
+      if (turn > throughTurns) return i;
+    }
+  }
+  return messages.length;
+}
+
+/**
  * Output of a "/" command that ran without a model turn, as that turn's answer.
  * Fenced, because it is terminal text (padded columns, bars) that markdown would reflow.
  */

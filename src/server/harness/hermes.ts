@@ -835,11 +835,17 @@ export class HermesAdapter implements HarnessAdapter {
     supportsInteractiveRequests: true,
     supportsRename: true,
     supportsModelSelection: true,
+    supportsFork: false,
   };
   private probes = new Map<string, { at: number; models: ModelInfo[] }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;
 
   constructor(private readonly options: { command?: string; args?: string[] } = {}) {}
+
+  /** Hermes has no session-fork API; the capability is false and the UI hides it. */
+  async forkSession(): Promise<{ nativeId: string }> {
+    throw new Error("Hermes sessions cannot be forked");
+  }
 
   /** The interpreter, argv, and environment that run the gateway (tests point this at a script). */
   async spawnSpec(): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv }> {

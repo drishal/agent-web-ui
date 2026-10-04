@@ -16,7 +16,7 @@ import {
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, historyToItems } from "./agent-events.js";
+import { commandOutputEvents, forkCutIndex, historyToItems } from "./agent-events.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -77,6 +77,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsInteractiveRequests: true,
       supportsRename: true,
       supportsModelSelection: true,
+      supportsFork: true,
       ...options.capabilities,
     };
   }
@@ -123,6 +124,21 @@ export class FakeAdapter implements HarnessAdapter {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, limit)
       .map((s) => ({ nativeId: s.nativeId, cwd: s.cwd, title: s.title, updatedAt: s.updatedAt, messageCount: s.messages.length }));
+  }
+
+  /** Copy the messages of the first `throughTurns` user turns into a new in-memory session. */
+  async forkSession(req: { cwd: string; nativeId: string; throughTurns: number }): Promise<{ nativeId: string }> {
+    const source = this.sessions.get(req.nativeId);
+    if (!source || source.cwd !== req.cwd) throw new Error("Unknown session");
+    const nativeId = randomUUID();
+    this.sessions.set(nativeId, {
+      nativeId,
+      cwd: source.cwd,
+      title: source.title,
+      messages: source.messages.slice(0, forkCutIndex(source.messages, req.throughTurns)),
+      updatedAt: new Date(),
+    });
+    return { nativeId };
   }
 
   async openChat(req: OpenChatRequest): Promise<LiveChat> {

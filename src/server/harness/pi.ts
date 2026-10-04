@@ -114,6 +114,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsInteractiveRequests: true,
     supportsRename: true,
     supportsModelSelection: true,
+    supportsFork: true,
   };
   private modelCache = new Map<string, { at: number; models: ModelInfo[] }>();
 
@@ -211,6 +212,35 @@ export class PiAdapter implements HarnessAdapter {
       .sort((a, b) => b.modified.getTime() - a.modified.getTime())
       .slice(0, limit)
       .map((info) => ({ ...summarize(info), cwd: info.cwd }));
+  }
+
+  /**
+   * Pi's own branch primitive (`SessionManager.createBranchedSession`) writes the
+   * ancestor chain through the cut entry into a new file, remapping labels and
+   * compaction references. The cut is the entry just before turn N+1's prompt, so
+   * the fork ends with turn N's answer.
+   */
+  async forkSession(req: { cwd: string; nativeId: string; throughTurns: number }): Promise<{ nativeId: string }> {
+    const agentDir = pi.getAgentDir();
+    const sessionDir = this.sessionDirFor(req.cwd, agentDir, this.trust(req.cwd, agentDir).trusted);
+    const info = (await pi.SessionManager.list(req.cwd, sessionDir)).find((s) => s.id === req.nativeId);
+    if (!info) throw new Error("Session not found in Pi's session list");
+    const manager = pi.SessionManager.open(info.path, sessionDir);
+    const branch = manager.getBranch() as Array<{ type?: string; id?: string; message?: { role?: string } }>;
+    let target: string | undefined = branch[branch.length - 1]?.id;
+    let turn = 0;
+    for (let i = 0; i < branch.length; i += 1) {
+      const entry = branch[i];
+      if (!entry || entry.type !== "message" || entry.message?.role !== "user") continue;
+      turn += 1;
+      if (turn > req.throughTurns) {
+        target = i > 0 ? branch[i - 1]?.id : undefined;
+        break;
+      }
+    }
+    if (!target) throw new Error("There is nothing before that turn to fork");
+    if (!manager.createBranchedSession(target)) throw new Error("Pi could not write the forked session");
+    return { nativeId: manager.getSessionId() };
   }
 
   private async services(cwd: string): Promise<{ services: Services; notices: HarnessEvent[]; trusted: boolean }> {

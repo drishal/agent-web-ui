@@ -105,6 +105,14 @@ export const IconCopy = (p: IconProps) => (
     <path d="M10.75 5.25V3.75a1.5 1.5 0 00-1.5-1.5h-5a1.5 1.5 0 00-1.5 1.5v5a1.5 1.5 0 001.5 1.5h1.5" />
   </Svg>
 );
+export const IconFork = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.25 4.5v7" />
+    <circle cx="4.25" cy="12.5" r="1.75" />
+    <circle cx="11.75" cy="4.5" r="1.75" />
+    <path d="M11.75 6.25a6.25 6.25 0 0 1-6.25 6.25" />
+  </Svg>
+);
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />

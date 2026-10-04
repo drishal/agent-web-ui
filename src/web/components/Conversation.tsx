@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { Markdown } from "./Markdown.js";
 import { TurnRail } from "./TurnRail.js";
@@ -205,7 +205,7 @@ function UserPrompt({ item }: { item: UserItem }) {
   );
 }
 
-function Answer({ item }: { item: AssistantItem }) {
+function Answer({ item, through, canFork, onFork }: { item: AssistantItem; through: number; canFork: boolean; onFork: (through: number) => void }) {
   const [copied, setCopied] = useState(false);
   const stopped = item.error === "Stopped";
   return (
@@ -229,6 +229,17 @@ function Answer({ item }: { item: AssistantItem }) {
           >
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
           </button>
+          {canFork ? (
+            <button
+              type="button"
+              className="ghost-icon"
+              aria-label="Fork from here"
+              title="Fork from here"
+              onClick={() => onFork(through)}
+            >
+              <IconFork size={14} />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -291,11 +302,15 @@ const TurnView = memo(function TurnView({
   open,
   onToggle,
   workspace,
+  canFork,
+  onFork,
 }: {
   turn: Turn;
   open: boolean;
   onToggle: (id: string) => void;
   workspace: string;
+  canFork: boolean;
+  onFork: (through: number) => void;
 }) {
   if (!turn.prompt) {
     // Startup notices before any prompt: plain rows, no fold.
@@ -312,7 +327,7 @@ const TurnView = memo(function TurnView({
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} />
       {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={() => onToggle(turn.id)} workspace={workspace} /> : null}
-      {turn.answer ? <Answer item={turn.answer} /> : null}
+      {turn.answer ? <Answer item={turn.answer} through={turn.index + 1} canFork={canFork} onFork={onFork} /> : null}
       {!hasProcess && !turn.answer && turn.live ? (
         <div className="process is-live">
           <span className="process-head is-static">
@@ -336,7 +351,19 @@ const TurnView = memo(function TurnView({
   );
 });
 
-export function Conversation({ items, status, workspace }: { items: ChatItem[]; status: ChatStatus; workspace: string }) {
+export function Conversation({
+  items,
+  status,
+  workspace,
+  canFork,
+  onFork,
+}: {
+  items: ChatItem[];
+  status: ChatStatus;
+  workspace: string;
+  canFork: boolean;
+  onFork: (through: number) => void;
+}) {
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -396,7 +423,7 @@ export function Conversation({ items, status, workspace }: { items: ChatItem[]; 
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <div className="thread">
           {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} />
+            <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={onFork} />
           ))}
         </div>
       </div>

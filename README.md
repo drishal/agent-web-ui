@@ -84,6 +84,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
   - your prompt as a bubble that stays pinned while you scroll through a long turn;
   - one **"Worked for 12s · 3 reads, 1 edit"** line folding the agent's thinking, intermediate notes, tool calls, and approvals (open while running, collapsed after);
   - the answer as plain text with a Copy button;
+  - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi branches with its own primitive (`createBranchedSession`); omp gets a new session file cut to the same branch. Not offered for Hermes, which has no fork.
   - a **Changed N files** list for edits and writes.
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Composer card.**

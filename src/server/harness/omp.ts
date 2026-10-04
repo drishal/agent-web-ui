@@ -27,6 +27,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, normalizeAgentEvent } from "./agent-events.js";
+import { forkSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -526,6 +527,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsInteractiveRequests: true,
     supportsRename: true,
     supportsModelSelection: true,
+    supportsFork: true,
   };
   private lister: AcpLister;
   private firstPrompts = new FirstPrompts(() => this.resolveSessionDir());
@@ -585,6 +587,36 @@ export class OmpAdapter implements HarnessAdapter {
   async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
     const pages = Math.max(1, Math.ceil(limit / ACP_SESSION_PAGE));
     return this.firstPrompts.fill((await this.lister.list(undefined, pages)).filter((s) => s.cwd).slice(0, limit));
+  }
+
+  /** The .jsonl of a session, across the store's per-project buckets. */
+  private async sessionFile(nativeId: string): Promise<string | null> {
+    const root = await this.resolveSessionDir();
+    for (const dir of await fs.readdir(root).catch(() => [] as string[])) {
+      for (const name of await fs.readdir(path.join(root, dir)).catch(() => [] as string[])) {
+        if (name.endsWith(".jsonl") && name.slice(name.lastIndexOf("_") + 1, -".jsonl".length) === nativeId) return path.join(root, dir, name);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * omp has no entry-indexed fork (its CLI only copies whole sessions and its RPC
+   * branch moves the leaf in place), so the copy is written here: same branch,
+   * cut after the Nth user turn, fresh id in the header and file name.
+   */
+  async forkSession(req: { cwd: string; nativeId: string; throughTurns: number }): Promise<{ nativeId: string }> {
+    const file = await this.sessionFile(req.nativeId);
+    if (!file) throw new Error(`omp session ${req.nativeId} is not on disk`);
+    const source = await fs.readFile(file, "utf8");
+    const id = uuidv7();
+    const now = new Date();
+    const body = forkSessionText(source, { throughTurns: req.throughTurns, id, now, cwd: req.cwd, parentSession: req.nativeId });
+    const target = path.join(path.dirname(file), `${sessionFileTimestamp(now)}_${id}.jsonl`);
+    const tmp = `${target}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, body, { mode: 0o600 });
+    await fs.rename(tmp, target);
+    return { nativeId: id };
   }
 
   /** One throwaway `--no-session` child per workspace (cached) for models and thinking levels. */

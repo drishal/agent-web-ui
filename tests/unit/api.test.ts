@@ -93,6 +93,30 @@ describe("chat lifecycle over HTTP + SSE", () => {
     sse.close();
   });
 
+  it("forks a chat through a turn into a new session", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "snapshot"));
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "first question" });
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "status" && e.status === "idle"));
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "second question" });
+    await sse.waitFor(() => sse.chatEvents().filter((e) => e.type === "status" && e.status === "idle").length >= 2);
+
+    const forked = await agent.post(`/api/chats/${chat.chatId}/fork`).send({ through: 1 });
+    expect(forked.status).toBe(201);
+    const copy = forked.body as ChatSnapshot;
+    expect(copy.chatId).not.toBe(chat.chatId);
+    expect(copy.sessionId).not.toBe(chat.sessionId);
+    expect(copy.items.filter((i) => i.kind === "user").map((i) => (i.kind === "user" ? i.text : ""))).toEqual(["first question"]);
+    // The source keeps both turns; the copy is its own session.
+    const source = (await agent.get(`/api/chats/${chat.chatId}`)).body as ChatSnapshot;
+    expect(source.items.filter((i) => i.kind === "user")).toHaveLength(2);
+    // A fork needs a live session to copy.
+    expect((await agent.post("/api/chats/resume-nonexistent/fork").send({ through: 1 })).status).toBe(404);
+    sse.close();
+  });
+
   it("returns 409 for a normal send while busy, and steers / queues follow-ups", async () => {
     const { agent, ws, t } = await setup({ chunkDelayMs: 15 });
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
