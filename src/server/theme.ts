@@ -5,6 +5,7 @@
 import { promises as fs } from "node:fs";
 import { parse } from "yaml";
 import type { ThemeInfo } from "../shared/protocol.js";
+import { isObj } from "./harness/agent-events.js";
 
 const HEX = /^#?([0-9a-fA-F]{6})$/;
 const FONT = /^[A-Za-z0-9 -]{1,64}$/;
@@ -20,9 +21,6 @@ export interface Scheme {
   palette: Record<string, string>;
   fonts: { sans?: string; mono?: string };
 }
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
 export function parseScheme(text: string): Scheme {
   let doc: unknown;

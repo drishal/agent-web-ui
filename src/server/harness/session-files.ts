@@ -3,9 +3,7 @@
 // chat keeps the active branch's ancestor chain through the Nth user turn; a
 // plain line prefix would drag along abandoned branches.
 import { randomBytes } from "node:crypto";
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+import { isObj, type Obj } from "./agent-events.js";
 
 /** Time-ordered session id, the shape both harnesses mint for new sessions. */
 export function uuidv7(now = Date.now()): string {

@@ -64,10 +64,12 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
   }, [text]);
 
+  const tooLong = text.length > maxChars;
+
   const submit = useCallback(
     async (mode: SendMode) => {
       const value = text.trim();
-      if (!value || sending) return;
+      if (!value || sending || tooLong) return;
       // Clear immediately so text typed while the request is in flight survives;
       // restore only if the send failed and nothing new was typed or attached.
       const attached = images;
@@ -188,7 +190,6 @@ export function Composer({
     else if (caps.supportsSteer && running) void submit("steer");
   };
 
-  const tooLong = text.length > maxChars;
   const empty = !text.trim();
   const model = chat.config.models.find((m) => m.key === chat.config.model);
   const blind = images.length > 0 && model?.vision === false;

@@ -4,25 +4,16 @@
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, ToolItem, UserItem } from "../../shared/protocol.js";
+import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
+import { useNow } from "../hooks.js";
 import { Markdown } from "./Markdown.js";
 import { TurnRail } from "./TurnRail.js";
 
 const PIN_DISTANCE_PX = 96;
 const LONG_PROMPT_CHARS = 600;
 const LONG_PROMPT_LINES = 8;
-
-function useNow(enabled: boolean, intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!enabled) return;
-    const t = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(t);
-  }, [enabled, intervalMs]);
-  return now;
-}
 
 /** One quiet line that expands: icon (chevron on hover), title · summary. */
 function DisclosureRow({
@@ -207,6 +198,7 @@ function UserPrompt({ item }: { item: UserItem }) {
 
 function Answer({ item, through, canFork, onFork }: { item: AssistantItem; through: number; canFork: boolean; onFork: (through: number) => void }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const stopped = item.error === "Stopped";
   return (
     <div className="answer" data-testid="answer">
@@ -219,12 +211,20 @@ function Answer({ item, through, canFork, onFork }: { item: AssistantItem; throu
           <button
             type="button"
             className="ghost-icon"
-            aria-label={copied ? "Copied" : "Copy reply"}
+            aria-label={copied ? "Copied" : copyFailed ? "Copy failed" : "Copy reply"}
             onClick={() => {
-              void navigator.clipboard?.writeText(item.text).then(() => {
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1500);
-              });
+              void navigator.clipboard
+                ?.writeText(item.text)
+                .then(() => {
+                  setCopyFailed(false);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                })
+                .catch(() => {
+                  setCopied(false);
+                  setCopyFailed(true);
+                  window.setTimeout(() => setCopyFailed(false), 1500);
+                });
             }}
           >
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
@@ -267,7 +267,7 @@ function ChangedFiles({ files, workspace }: { files: string[]; workspace: string
   );
 }
 
-function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: boolean; onToggle: () => void; workspace: string }) {
+function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: boolean; onToggle: (id: string) => void; workspace: string }) {
   const now = useNow(turn.live);
   const counts = countSummary(turn.counts);
   const duration =
@@ -276,7 +276,7 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
   const answerThinking = turn.answer?.thinking ? turn.answer : null;
   return (
     <div className={`process${open ? " is-open" : ""}${turn.live ? " is-live" : ""}`}>
-      <button type="button" className="process-head" aria-expanded={open} onClick={onToggle} data-testid="process-toggle">
+      <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(turn.id)} data-testid="process-toggle">
         {turn.live ? <Spinner size={13} /> : null}
         <span className="process-label">
           {label}
@@ -294,6 +294,31 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
         </div>
       ) : null}
     </div>
+  );
+}
+
+function sameArray<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
+/** Structural equality, so a streamed rebuild reuses the previous Turn object when nothing it renders changed. */
+function turnUnchanged(a: Turn, b: Turn): boolean {
+  const countKeys = Object.keys(a.counts) as ToolCategory[];
+  return (
+    a.id === b.id &&
+    a.index === b.index &&
+    a.through === b.through &&
+    a.live === b.live &&
+    a.startedAt === b.startedAt &&
+    a.endedAt === b.endedAt &&
+    a.prompt === b.prompt &&
+    a.answer === b.answer &&
+    sameArray(a.process, b.process) &&
+    sameArray(a.errors, b.errors) &&
+    sameArray(a.after, b.after) &&
+    sameArray(a.changedFiles, b.changedFiles) &&
+    countKeys.length === Object.keys(b.counts).length &&
+    countKeys.every((key) => a.counts[key] === b.counts[key])
   );
 }
 
@@ -326,8 +351,8 @@ const TurnView = memo(function TurnView({
   return (
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} />
-      {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={() => onToggle(turn.id)} workspace={workspace} /> : null}
-      {turn.answer ? <Answer item={turn.answer} through={turn.index + 1} canFork={canFork} onFork={onFork} /> : null}
+      {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
+      {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={canFork} onFork={onFork} /> : null}
       {!hasProcess && !turn.answer && turn.live ? (
         <div className="process is-live">
           <span className="process-head is-static">
@@ -368,18 +393,35 @@ export function Conversation({
   const pinned = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  const turns = useMemo(() => buildTurns(items, status), [items, status]);
+  const cache = useRef(new Map<string, Turn>());
+  const turns = useMemo(() => {
+    const fresh = buildTurns(items, status);
+    const previous = cache.current;
+    const next = new Map<string, Turn>();
+    const stable = fresh.map((turn) => {
+      const kept = previous.get(turn.id);
+      const result = kept !== undefined && turnUnchanged(kept, turn) ? kept : turn;
+      next.set(turn.id, result);
+      return result;
+    });
+    cache.current = next;
+    return stable;
+  }, [items, status]);
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
 
-  const onToggle = useCallback(
-    (id: string) => {
-      setOverrides((prev) => {
-        const turn = turns.find((t) => t.id === id);
-        const current = prev[id] ?? Boolean(turn?.live);
-        return { ...prev, [id]: !current };
-      });
-    },
-    [turns],
-  );
+  const onToggle = useCallback((id: string) => {
+    setOverrides((prev) => {
+      const turn = turnsRef.current.find((t) => t.id === id);
+      const current = prev[id] ?? Boolean(turn?.live);
+      return { ...prev, [id]: !current };
+    });
+  }, []);
+
+  // App re-creates forkChat per render; keep a stable identity for memoized TurnViews.
+  const onForkRef = useRef(onFork);
+  onForkRef.current = onFork;
+  const fork = useCallback((through: number) => onForkRef.current(through), []);
 
   const onScroll = useCallback(() => {
     const el = scroller.current;
@@ -423,7 +465,7 @@ export function Conversation({
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <div className="thread">
           {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={onFork} />
+            <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
           ))}
         </div>
       </div>

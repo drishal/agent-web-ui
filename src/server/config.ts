@@ -23,7 +23,7 @@ export interface ServerConfig {
   stateDir: string;
   ompAgentDir: string | null;
   ompSessionDir: string | null;
-  /** Comma list selecting adapters; tests use `fake`. Default: pi,omp. */
+  /** Comma list selecting adapters; tests use `fake`. Default: pi,omp,hermes. */
   harnesses: string[];
   home: string;
 }
@@ -51,17 +51,31 @@ const list = (value: string | undefined, sep: string | RegExp = ","): string[] =
     .map((s) => s.trim())
     .filter(Boolean);
 
+export interface Authority {
+  hostname: string;
+  port: string;
+  authority: string;
+}
+
+/** The one host/authority parser: trim, reject anything but `host[:port]` (no `\
+ * whitespace, `/`, `@`, `?`, `#`, or `\`), and lowercase. Used for both Host
+ * headers and ALLOWED_HOSTS, so neither can accept what the other refuses. */
+export function parseAuthority(value: string | undefined): Authority | null {
+  const trimmed = value?.trim();
+  if (!trimmed || /[\s/@?#\\]/.test(trimmed)) return null;
+  try {
+    const url = new URL(`http://${trimmed.toLowerCase()}`);
+    return { hostname: url.hostname, port: url.port, authority: url.port ? `${url.hostname}:${url.port}` : url.hostname };
+  } catch {
+    return null;
+  }
+}
+
 /** Normalize an ALLOWED_HOSTS entry to a lowercase `host` or `host:port` authority. */
 export function normalizeAuthority(entry: string): string {
-  const trimmed = entry.trim().toLowerCase();
-  if (!trimmed || /[\s/@?#]/.test(trimmed)) throw new ConfigError(`Invalid ALLOWED_HOSTS entry: ${entry}`);
-  let url: URL;
-  try {
-    url = new URL(`http://${trimmed}`);
-  } catch {
-    throw new ConfigError(`Invalid ALLOWED_HOSTS entry: ${entry}`);
-  }
-  return url.port ? `${url.hostname}:${url.port}` : url.hostname;
+  const auth = parseAuthority(entry);
+  if (!auth) throw new ConfigError(`Invalid ALLOWED_HOSTS entry: ${entry}`);
+  return auth.authority;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {

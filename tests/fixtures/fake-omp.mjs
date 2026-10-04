@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 // Scripted stand-in for the `omp` binary: speaks the rpc-ui JSON-lines
 // protocol and ACP session/list closely enough to exercise the omp adapter.
+// Prompt text selects behaviour — the same scenario set as the pi fake
+// (src/server/harness/fake.ts):
+//   "tool"  run a fake tool          "ask"   raise an approval request first
+//   "ask twice"  two approval requests at once (stacked approvals)
+//   "fail"  end the turn with an error "slow"  stream many chunks
+//   "big"   oversized tool output         "edit"  edit a file (src/app.ts)
 // State lives in $FAKE_OMP_STATE (JSON) so separate processes share sessions.
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -110,30 +116,42 @@ if (args[0] === "acp") {
     persist({ role: "user", content: message });
     out({ type: "message_start", messageId: "u", message: { role: "user", content: message } });
     if (/\bask\b/.test(message)) {
-      const uiId = randomUUID();
-      out({ type: "extension_ui_request", id: uiId, method: "select", title: "Allow tool: bash", options: ["Approve", "Deny"] });
-      const answer = await new Promise((r) => pendingUi.set(uiId, r));
-      if (answer.value !== "Approve") out({ type: "extension_ui_request", id: randomUUID(), method: "notify", message: "denied", notifyType: "warning" });
+      // "ask twice" raises both requests before awaiting (stacked approvals).
+      const count = /\btwice\b/.test(message) ? 2 : 1;
+      const answers = await Promise.all(
+        Array.from({ length: count }, (_, i) => {
+          const uiId = randomUUID();
+          const { promise, resolve } = Promise.withResolvers();
+          pendingUi.set(uiId, resolve);
+          out({ type: "extension_ui_request", id: uiId, method: "select", title: i === 0 ? "Allow tool: bash" : "Allow tool: read", options: ["Approve", "Deny"] });
+          return promise;
+        }),
+      );
+      if (answers.some((a) => a.value !== "Approve")) out({ type: "extension_ui_request", id: randomUUID(), method: "notify", message: "denied", notifyType: "warning" });
     }
-    if (/\btool\b/.test(message)) {
-      out({ type: "tool_execution_start", toolCallId: "tc1", toolName: "bash", args: { command: "ls" } });
-      out({ type: "tool_execution_end", toolCallId: "tc1", toolName: "bash", result: { content: [{ type: "text", text: "file.txt" }] }, isError: false });
+    if (/\btool\b|\bbig\b/.test(message)) {
+      const big = /\bbig\b/.test(message);
+      out({ type: "tool_execution_start", toolCallId: "tc1", toolName: big ? "read" : "bash", args: big ? { path: "README.md" } : { command: "ls" } });
+      out({ type: "tool_execution_end", toolCallId: "tc1", toolName: big ? "read" : "bash", result: { content: [{ type: "text", text: big ? "x".repeat(200_000) : "file.txt" }] }, isError: false });
+    }
+    if (/\bedit\b/.test(message)) {
+      out({ type: "tool_execution_start", toolCallId: "tc2", toolName: "edit", args: { path: `${cwd ?? process.cwd()}/src/app.ts`, oldText: "a", newText: "b" } });
+      out({ type: "tool_execution_end", toolCallId: "tc2", toolName: "edit", result: { content: [{ type: "text", text: "Edited src/app.ts (+1 -1)" }] }, isError: false });
     }
     out({ type: "message_start", messageId: "a", message: { role: "assistant", content: [], model: "m1" } });
+    // "fail" ends the turn with an error instead of an answer.
+    const failed = /\bfail\b/.test(message);
     let text = "";
-    for (const chunk of ["omp ", "says ", message]) {
+    for (const chunk of failed ? [] : ["omp ", "says ", message]) {
       if (aborted) break;
       await delay(/\bslow\b/.test(message) ? 80 : 5);
       text += chunk;
       out({ type: "message_update", messageId: "a", message: {}, assistantMessageEvent: { type: "text_delta", delta: chunk } });
     }
-    const final = {
-      role: "assistant",
-      content: [{ type: "text", text }],
-      stopReason: aborted ? "aborted" : "stop",
-      model: "m1",
-      usage: { input: 900, output: 12, cacheRead: 300, cacheWrite: 0 },
-    };
+    const usage = { input: 900, output: 12, cacheRead: 300, cacheWrite: 0 };
+    const final = failed
+      ? { role: "assistant", content: [], stopReason: "error", errorMessage: "Fake failure", model: "m1", usage }
+      : { role: "assistant", content: [{ type: "text", text }], stopReason: aborted ? "aborted" : "stop", model: "m1", usage };
     persist(final);
     out({ type: "message_end", messageId: "a", message: final });
     out({ type: "prompt_result", id, agentInvoked: true, status: aborted ? "aborted" : "completed", sessionSettled: true });

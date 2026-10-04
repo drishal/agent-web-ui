@@ -289,6 +289,11 @@ export interface ThemeInfo {
   problem?: string;
 }
 
+/** config.yml's `theme`: the default look on every device. `custom` is the legacy name for `base16`. */
+export const themeChoiceSchema = z.enum(["system", "light", "dark", "base16", "custom"]);
+/** A device's theme mode; the file's legacy `custom` maps to `base16`. */
+export type ThemeChoice = Exclude<z.infer<typeof themeChoiceSchema>, "custom">;
+
 export interface Bootstrap {
   version: string;
   /** "local": this machine, no sign-in. "password": signed in from another device. */
@@ -298,7 +303,7 @@ export interface Bootstrap {
   home: string;
   theme: { active: string; problem?: string };
   /** From config.yml. theme: the default look (base16 = theme.yml), null when unset. */
-  ui: { theme: "system" | "light" | "dark" | "base16" | null; autocollapseSidebar: boolean };
+  ui: { theme: ThemeChoice | null; autocollapseSidebar: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -360,8 +365,3 @@ export const compactSchema = z.object({ instructions: z.string().max(10_000).opt
 export const answerSchema = z.object({ answer: interactionAnswerSchema });
 
 export type SendMode = z.infer<typeof sendMessageSchema>["mode"];
-
-export interface ApiError {
-  error: string;
-  code: string;
-}

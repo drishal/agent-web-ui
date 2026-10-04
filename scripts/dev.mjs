@@ -2,20 +2,37 @@
 // Development: backend under `tsx watch` plus Vite (which proxies /api to the
 // backend). Local use needs no sign-in.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
-import { parse } from "yaml";
+import { fileURLToPath } from "node:url";
+import { tsImport } from "tsx/esm/api";
 
-// The backend reads config.yml itself; Vite needs its port to proxy to it.
-const dir = process.env.AWUI_CONFIG_DIR ?? path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"), "agentwebui");
-const file = dir ? path.join(dir, "config.yml") : "";
-const fromFile = file && existsSync(file) ? parse(readFileSync(file, "utf8"))?.port : undefined;
-const port = process.env.PORT ?? (fromFile !== undefined ? String(fromFile) : "4783");
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const bin = (name) => path.join(root, "node_modules", ".bin", process.platform === "win32" ? `${name}.cmd` : name);
+
+// Config folder and port come from the server's own loader, so Vite proxies to
+// exactly the backend that `tsx watch` will start.
+const { loadConfig } = await tsImport("../src/server/config.ts", import.meta.url);
+const { configDir, configEnv, readUserConfig } = await tsImport("../src/server/user-config.ts", import.meta.url);
+
+let config;
+try {
+  const settings = readUserConfig(configDir());
+  config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });
+} catch (error) {
+  // Same message and exit code the server gives a bad config.yml.
+  console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(78);
+}
+const port = String(config.port);
+
 const children = [];
 
 function run(name, command, args, onLine) {
-  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PORT: port } });
+  const child = spawn(command, args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, PORT: port },
+    shell: process.platform === "win32",
+  });
   children.push(child);
   for (const stream of [child.stdout, child.stderr]) {
     let buffer = "";
@@ -47,7 +64,7 @@ function shutdown(code) {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-run("server", "npx", ["tsx", "watch", "--clear-screen=false", "src/server/index.ts"], (line) => {
+run("server", bin("tsx"), ["watch", "--clear-screen=false", "src/server/index.ts"], (line) => {
   if (/Local: http:\/\/127\.0\.0\.1:\d+\//.test(line)) process.stdout.write("\n  Dev UI: http://127.0.0.1:5173/\n\n");
 });
-run("vite", "npx", ["vite"]);
+run("vite", bin("vite"), []);

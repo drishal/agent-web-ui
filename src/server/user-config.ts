@@ -7,11 +7,10 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
+import { themeChoiceSchema, type ThemeChoice } from "../shared/protocol.js";
 
 export const CONFIG_FILE = "config.yml";
 export const THEME_FILE = "theme.yml";
-
-export type ThemeChoice = "system" | "light" | "dark" | "base16";
 
 /** What the browser needs from config.yml; re-read on every page load. */
 export interface UiSettings {
@@ -30,8 +29,7 @@ const schema = z
     workspace_roots: z.array(z.string()).optional(),
     allowed_hosts: z.array(z.string()).optional(),
     allowed_tailscale_users: z.array(z.string()).optional(),
-    // "custom" is the old name for base16.
-    theme: z.enum(["system", "light", "dark", "base16", "custom"]).optional(),
+    theme: themeChoiceSchema.optional(),
     autocollapse_sidebar: z.boolean().optional(),
   })
   .strict();

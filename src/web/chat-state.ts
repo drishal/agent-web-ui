@@ -4,29 +4,45 @@ import type { ChatEvent, ChatItem, ChatSnapshot } from "../shared/protocol.js";
 export type ChatState = ChatSnapshot & { gone?: string };
 
 export function applyEvents(state: ChatState | null, events: ChatEvent[]): ChatState | null {
+  const index = new Map<string, number>();
+  if (state) indexItems(index, state.items);
   let next = state;
-  for (const event of events) next = apply(next, event);
+  for (const event of events) next = apply(next, event, index);
   return next;
 }
 
-function replaceItem(items: ChatItem[], item: ChatItem): ChatItem[] {
-  const index = items.findIndex((i) => i.id === item.id);
-  if (index === -1) return [...items, item];
+/** id → position, first occurrence wins (the old `findIndex` semantics). */
+function indexItems(index: Map<string, number>, items: ChatItem[]): void {
+  index.clear();
+  items.forEach((item, i) => {
+    if (!index.has(item.id)) index.set(item.id, i);
+  });
+}
+
+function replaceItem(items: ChatItem[], item: ChatItem, index: Map<string, number>): ChatItem[] {
+  const at = index.get(item.id);
+  if (at === undefined) {
+    index.set(item.id, items.length);
+    return [...items, item];
+  }
   const copy = items.slice();
-  copy[index] = item;
+  copy[at] = item;
   return copy;
 }
 
-function apply(state: ChatState | null, event: ChatEvent): ChatState | null {
-  if (event.type === "snapshot") return { ...event.snapshot };
+function apply(state: ChatState | null, event: ChatEvent, index: Map<string, number>): ChatState | null {
+  if (event.type === "snapshot") {
+    indexItems(index, event.snapshot.items);
+    return { ...event.snapshot };
+  }
   if (!state) return state;
   switch (event.type) {
     case "item":
-      return { ...state, items: replaceItem(state.items, event.item) };
+      return { ...state, items: replaceItem(state.items, event.item, index) };
     case "delta": {
-      const index = state.items.findIndex((i) => i.id === event.itemId);
-      if (index === -1) return state;
-      const item = state.items[index] as ChatItem;
+      const at = index.get(event.itemId);
+      if (at === undefined) return state;
+      const item = state.items[at] as ChatItem;
       let updated: ChatItem = item;
       if (item.kind === "assistant" && (event.field === "text" || event.field === "thinking")) {
         updated = { ...item, [event.field]: item[event.field] + event.append };
@@ -34,7 +50,7 @@ function apply(state: ChatState | null, event: ChatEvent): ChatState | null {
         updated = { ...item, output: item.output + event.append };
       }
       const items = state.items.slice();
-      items[index] = updated;
+      items[at] = updated;
       return { ...state, items };
     }
     case "status":

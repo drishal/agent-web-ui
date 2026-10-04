@@ -9,7 +9,6 @@ const MAX_SIDE = 2048;
 export interface PendingImage extends ImageAttachment {
   /** Local key; crypto.randomUUID is missing on plain-HTTP LAN pages. */
   id: number;
-  bytes: number;
 }
 
 let nextId = 1;
@@ -62,5 +61,5 @@ export async function prepareImage(file: File): Promise<PendingImage> {
   const blob = accepted(file.type) && file.size <= MAX_IMAGE_BYTES ? file : await redraw(file);
   const mimeType = blob.type;
   if (!accepted(mimeType)) throw new Error("That image type is not supported");
-  return { id: nextId++, mimeType, data: await toBase64(blob), bytes: blob.size };
+  return { id: nextId++, mimeType, data: await toBase64(blob) };
 }

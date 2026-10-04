@@ -7,8 +7,8 @@ import type { HarnessEvent, StepUsage } from "./types.js";
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
 export const MAX_TOOL_ARGS_CHARS = 4_000;
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+export type Obj = Record<string, unknown>;
+export const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Keep the head and tail of oversized output; payloads stay bounded on the wire. */
 export function boundText(text: string, max = MAX_TOOL_OUTPUT_CHARS): { text: string; truncated: boolean } {

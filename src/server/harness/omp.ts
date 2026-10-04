@@ -28,13 +28,13 @@ import {
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, historyToItems, normalizeAgentEvent } from "./agent-events.js";
+import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
+import { PendingRequests, terminateChild } from "./child-process.js";
 import { forkSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
-  HarnessEvent,
   HarnessEventListener,
   HarnessUsage,
   LiveChat,
@@ -44,7 +44,6 @@ import type {
 } from "./types.js";
 
 const run = promisify(execFile);
-export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
 
 /**
  * What to warn about for a detected omp CLI, or null when its signature is
@@ -52,7 +51,7 @@ export const OMP_PROTOCOL_VERSION_WRITTEN_FOR = "18.4.10";
  * line — omp adds, it has not changed what this adapter calls. An older build,
  * a different major line, or an unreadable version carries a warning.
  */
-export function ompVersionWarning(version: string, writtenFor = OMP_PROTOCOL_VERSION_WRITTEN_FOR): string | null {
+export function ompVersionWarning(version: string, writtenFor = "18.4.10"): string | null {
   const seen = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
   const known = /^(\d+)\.(\d+)\.(\d+)/.exec(writtenFor);
   if (!seen || !known) return `omp ${version} is installed; this adapter's protocol types were written for ${writtenFor}`;
@@ -67,7 +66,6 @@ export function ompVersionWarning(version: string, writtenFor = OMP_PROTOCOL_VER
   return null;
 }
 const READY_TIMEOUT_MS = 30_000;
-const COMMAND_TIMEOUT_MS = 60_000;
 const LISTER_IDLE_MS = 60_000;
 const CONTEXT_REPORT_TIMEOUT_MS = 5_000;
 /** omp's protocol v2 ceiling for one reassembled frame. */
@@ -75,9 +73,6 @@ const MAX_REASSEMBLED_BYTES = 64 * 1024 * 1024;
 const FIRST_PROMPT_BYTES = 64 * 1024;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
 export interface OmpOptions {
   command?: string;
@@ -119,16 +114,6 @@ function track(child: ChildProcessWithoutNullStreams): void {
 
 export function liveOmpChildren(): number {
   return children.size;
-}
-
-async function terminate(child: ChildProcessWithoutNullStreams): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-  child.stdin.end();
-  child.kill("SIGTERM");
-  const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
-  await exited;
-  clearTimeout(timer);
 }
 
 /** JSON-lines RPC over a child's stdio, used for both rpc-ui and acp. */
@@ -176,7 +161,7 @@ class LineProcess {
   }
 
   kill(): Promise<void> {
-    return terminate(this.child);
+    return terminateChild(this.child);
   }
 }
 
@@ -228,8 +213,18 @@ class ChunkJoiner {
 /** One omp `--mode rpc-ui` process bound to one session. */
 class OmpRpc {
   private proc: LineProcess;
-  private nextId = 1;
-  private pending = new Map<string, { resolve: (data: unknown) => void; reject: (e: Error) => void; timer?: NodeJS.Timeout }>();
+  private readonly calls = new PendingRequests<string>(
+    {
+      formatId: (n) => String(n),
+      encode: (id, payload) => ({ id, ...payload }),
+      answeredId: (frame) => (frame.type === "response" && typeof frame.id === "string" ? frame.id : null),
+      outcome: (frame) =>
+        frame.success === true
+          ? { value: frame.data }
+          : { error: new Error(typeof frame.error === "string" ? frame.error : "omp command failed") },
+    },
+    (frame) => this.proc.write(frame),
+  );
   private readyResolve!: () => void;
   private readyReject!: (e: Error) => void;
   readonly ready: Promise<void>;
@@ -253,25 +248,14 @@ class OmpRpc {
         );
         return;
       }
-      if (frame.type === "response" && typeof frame.id === "string" && this.pending.has(frame.id)) {
-        const entry = this.pending.get(frame.id);
-        this.pending.delete(frame.id);
-        if (entry?.timer) clearTimeout(entry.timer);
-        if (frame.success === true) entry?.resolve(frame.data);
-        else entry?.reject(new Error(typeof frame.error === "string" ? frame.error : "omp command failed"));
-        return;
-      }
+      if (this.calls.accept(frame)) return;
       onEvent(frame);
     });
     const timer = setTimeout(() => this.readyReject(new Error("omp did not become ready")), READY_TIMEOUT_MS);
     void this.ready.then(() => clearTimeout(timer), () => clearTimeout(timer));
     this.proc.onExit((message) => {
       this.readyReject(new Error(message));
-      for (const entry of this.pending.values()) {
-        if (entry.timer) clearTimeout(entry.timer);
-        entry.reject(new Error(message));
-      }
-      this.pending.clear();
+      this.calls.failAll(message);
       onExit(message);
     });
   }
@@ -280,28 +264,8 @@ class OmpRpc {
     return this.proc.exited;
   }
 
-  command<T = unknown>(type: string, fields: Obj = {}, timeoutMs: number | null = COMMAND_TIMEOUT_MS): Promise<T> {
-    const id = String(this.nextId++);
-    return new Promise<T>((resolve, reject) => {
-      const entry: { resolve: (d: unknown) => void; reject: (e: Error) => void; timer?: NodeJS.Timeout } = {
-        resolve: resolve as (d: unknown) => void,
-        reject,
-      };
-      if (timeoutMs) {
-        entry.timer = setTimeout(() => {
-          this.pending.delete(id);
-          reject(new Error(`omp did not answer ${type}`));
-        }, timeoutMs);
-      }
-      this.pending.set(id, entry);
-      try {
-        this.proc.write({ id, type, ...fields });
-      } catch (error) {
-        this.pending.delete(id);
-        if (entry.timer) clearTimeout(entry.timer);
-        reject(error as Error);
-      }
-    });
+  command<T = unknown>(type: string, fields: Obj = {}, timeoutMs?: number | null): Promise<T> {
+    return this.calls.send<T>({ type, ...fields }, `omp did not answer ${type}`, timeoutMs);
   }
 
   send(frame: Obj): void {
@@ -317,49 +281,33 @@ class OmpRpc {
 class AcpLister {
   private proc: LineProcess | null = null;
   private initialized: Promise<void> | null = null;
-  private nextId = 1;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private readonly calls = new PendingRequests<number>(
+    {
+      formatId: (n) => n,
+      encode: (id, payload) => ({ jsonrpc: "2.0", id, ...payload }),
+      answeredId: (frame) => (typeof frame.id === "number" ? frame.id : null),
+      outcome: (frame) =>
+        isObj(frame.error) ? { error: new Error(String(frame.error.message ?? "ACP error")) } : { value: frame.result },
+    },
+    (frame) => this.proc?.write(frame),
+  );
   private idleTimer: NodeJS.Timeout | null = null;
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly command: string, private readonly env: () => NodeJS.ProcessEnv, private readonly cwd: string) {}
 
   private call(method: string, params: Obj): Promise<unknown> {
-    const proc = this.proc;
-    if (!proc) return Promise.reject(new Error("omp acp is not running"));
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`omp acp did not answer ${method}`));
-      }, COMMAND_TIMEOUT_MS);
-      this.pending.set(id, {
-        resolve: (v) => {
-          clearTimeout(timer);
-          resolve(v);
-        },
-        reject: (e) => {
-          clearTimeout(timer);
-          reject(e);
-        },
-      });
-      proc.write({ jsonrpc: "2.0", id, method, params });
-    });
+    if (!this.proc) return Promise.reject(new Error("omp acp is not running"));
+    return this.calls.send({ method, params }, `omp acp did not answer ${method}`);
   }
 
   private start(): Promise<void> {
     if (this.proc && !this.proc.exited && this.initialized) return this.initialized;
     this.proc = new LineProcess(this.command, ["acp"], this.env(), this.cwd, (frame) => {
-      if (typeof frame.id !== "number") return;
-      const entry = this.pending.get(frame.id);
-      if (!entry) return;
-      this.pending.delete(frame.id);
-      if (isObj(frame.error)) entry.reject(new Error(String(frame.error.message ?? "ACP error")));
-      else entry.resolve(frame.result);
+      this.calls.accept(frame);
     });
     this.proc.onExit((message) => {
-      for (const entry of this.pending.values()) entry.reject(new Error(message));
-      this.pending.clear();
+      this.calls.failAll(message);
       this.proc = null;
       this.initialized = null;
     });
@@ -1077,5 +1025,3 @@ class OmpLiveChat implements LiveChat {
     await rpc?.kill();
   }
 }
-
-export type { HarnessEvent };

@@ -74,13 +74,14 @@ export class ChatStream {
     es.addEventListener("chat", (message) => {
       const msg = message as MessageEvent<string>;
       this.lastAlive = Date.now();
-      if (msg.lastEventId) this.lastId = Number(msg.lastEventId);
       let event: ChatEvent;
       try {
         event = JSON.parse(msg.data) as ChatEvent;
       } catch {
+        // Leave lastId untouched so a reconnect replays this frame.
         return;
       }
+      if (msg.lastEventId) this.lastId = Number(msg.lastEventId);
       this.handlers.onEvent(event);
       if (event.type === "disposed") this.stop();
     });

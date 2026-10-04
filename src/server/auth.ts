@@ -23,7 +23,8 @@ export interface StoredCredentials {
   keylen: number;
 }
 
-const DEFAULTS = { N: 1 << 15, r: 8, p: 1, keylen: 64 };
+/** Scrypt cost parameters; scripts/set-password.mjs writes them too (tests/unit/credential-parity.test.ts). */
+export const DEFAULTS = { N: 1 << 15, r: 8, p: 1, keylen: 64 };
 const maxmem = (N: number, r: number) => 128 * N * r * 2;
 
 export async function hashPassword(username: string, password: string, salt: Buffer = randomBytes(16)): Promise<StoredCredentials> {

@@ -70,9 +70,10 @@ export class DialogTracker {
   }
 
   cancelAll(): void {
-    for (const [id, dialog] of [...this.pending]) {
-      this.pending.delete(id);
-      this.hub.emit({ type: "request_cancelled", requestId: id, outcome: "cancelled" });
+    // No pre-delete: `finish` (via dialog.resolve) owns the deletion, so every
+    // pending promise settles instead of early-returning on a missing entry.
+    for (const dialog of [...this.pending.values()]) {
+      this.hub.emit({ type: "request_cancelled", requestId: dialog.request.id, outcome: "cancelled" });
       dialog.resolve(null);
     }
   }

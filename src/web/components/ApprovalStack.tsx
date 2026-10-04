@@ -3,14 +3,11 @@
 // Hermes Desktop's stacked silhouettes when more requests are queued.
 import { useEffect, useState } from "react";
 import type { InteractionAnswer, InteractionRequest } from "../../shared/protocol.js";
+import { useNow } from "../hooks.js";
 import { IconStop } from "../icons.js";
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
+  const now = useNow(true);
   return <span className="approval-countdown">{Math.max(0, Math.round((expiresAt - now) / 1000))}s</span>;
 }
 

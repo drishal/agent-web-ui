@@ -4,6 +4,7 @@
 // a bottom sheet.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ModelInfo } from "../../shared/protocol.js";
+import { useDismiss } from "../hooks.js";
 import { IconCheck, IconChevronDown, IconRefresh, IconSearch, Spinner } from "../icons.js";
 import { groupModels, type ModelGroup } from "../model-search.js";
 import { load, save } from "../storage.js";
@@ -105,14 +106,9 @@ export function ModelPicker({
     document.getElementById(`${listId}-opt-${active}`)?.scrollIntoView({ block: "nearest" });
   }, [open, active, listId]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) close(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [open]);
+  // Escape closes from anywhere; the input's own Escape case runs first and
+  // refocuses the trigger, then this idempotent close is a no-op.
+  useDismiss(wrap, open, () => close(false), { escape: true });
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     switch (e.key) {

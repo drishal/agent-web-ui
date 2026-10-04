@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Scripted `tui_gateway.entry` for adapter tests: newline-delimited JSON-RPC on
-// stdio, the shapes the real gateway speaks. Prompt text selects behaviour:
+// stdio, the shapes the real gateway speaks. Prompt text selects behaviour —
+// the same scenario set as the pi fake (src/server/harness/fake.ts):
 //   "tool"  run a fake tool            "ask"    raise an approval request first
+//   "ask twice"  two approval requests at once (stacked approvals)
 //   "fail"  end the turn with an error "slow"   stream many chunks
+//   "big"   oversized tool output          "edit"  edit a file (src/app.ts)
 // Session rows for projects.tree/list come from FAKE_HERMES_STATE (JSON file).
 import { readFileSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
@@ -51,23 +54,33 @@ async function runPrompt(text) {
   event("session.info", { model, provider: "fake", reasoning_effort: effort, running: true, title, stored_session_id: storedId });
   event("message.start", undefined, sessionId);
   if (/\bask\b/.test(text)) {
-    const requestId = `req-${approvals.length + 1}`;
-    approvals.push(requestId);
-    out({
-      jsonrpc: "2.0",
-      id: `srq-${requestId}`,
-      method: "approval",
-      params: { session_id: sessionId, request_id: requestId, command: "rm -rf /tmp/x", description: "Delete a scratch tree", choices: ["once", "session", "always", "deny"], tool_name: "terminal" },
+    // "ask twice" raises both requests before awaiting (stacked approvals).
+    const count = /\btwice\b/.test(text) ? 2 : 1;
+    const answers = Array.from({ length: count }, (_, i) => {
+      const requestId = `req-${approvals.length + 1}`;
+      approvals.push(requestId);
+      const { promise, resolve } = Promise.withResolvers();
+      pendingApprovals.set(`srq-${requestId}`, resolve);
+      out({
+        jsonrpc: "2.0",
+        id: `srq-${requestId}`,
+        method: "approval",
+        params: { session_id: sessionId, request_id: requestId, command: i === 0 ? "rm -rf /tmp/x" : "cat /etc/secrets", description: i === 0 ? "Delete a scratch tree" : "Read a secret file", choices: ["once", "session", "always", "deny"], tool_name: "terminal" },
+      });
+      return promise;
     });
-    await new Promise((resolve) => {
-      pendingApproval = resolve;
-    });
+    await Promise.all(answers);
     event("tool.start", { tool_id: "t-approval", name: "terminal", args: { command: "rm -rf /tmp/x" } });
     event("tool.complete", { tool_id: "t-approval", name: "terminal", result: "removed", summary: "rm -rf /tmp/x" });
   }
-  if (/\btool\b/.test(text)) {
+  if (/\btool\b|\bbig\b/.test(text)) {
+    const big = /\bbig\b/.test(text);
     event("tool.start", { tool_id: "t1", name: "read", args: { path: "README.md" } });
-    event("tool.complete", { tool_id: "t1", name: "read", result: { content: [{ type: "text", text: "file.txt" }] } });
+    event("tool.complete", { tool_id: "t1", name: "read", result: { content: [{ type: "text", text: big ? "x".repeat(200_000) : "file.txt" }] } });
+  }
+  if (/\bedit\b/.test(text)) {
+    event("tool.start", { tool_id: "t2", name: "edit", args: { path: `${process.cwd()}/src/app.ts`, oldText: "a", newText: "b" } });
+    event("tool.complete", { tool_id: "t2", name: "edit", result: { content: [{ type: "text", text: "Edited src/app.ts (+1 -1)" }] } });
   }
   let body = "";
   const chunks = /\bslow\b/.test(text) ? ["a", "b", "c", "d", "e"] : [`hermes says ${text}`];
@@ -85,7 +98,7 @@ async function runPrompt(text) {
   messages.push({ role: "user", text, timestamp: Date.now() / 1000 }, { role: "assistant", text: body, reasoning: "hmm", timestamp: Date.now() / 1000 });
 }
 
-let pendingApproval = null;
+const pendingApprovals = new Map();
 const rl = readline.createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   let frame;
@@ -95,10 +108,18 @@ rl.on("line", (line) => {
     return;
   }
   // A response to one of our server→client requests (approval).
-  if (frame.method === undefined && frame.id !== undefined && pendingApproval) {
-    approvals.push(`answered:${frame.result?.choice ?? "?"}`);
-    pendingApproval();
-    pendingApproval = null;
+  if (frame.method === undefined && frame.id !== undefined && pendingApprovals.size > 0) {
+    const resolve = pendingApprovals.get(String(frame.id)) ?? pendingApprovals.values().next().value;
+    if (resolve) {
+      for (const [key, done] of pendingApprovals) {
+        if (done === resolve) {
+          pendingApprovals.delete(key);
+          break;
+        }
+      }
+      approvals.push(`answered:${frame.result?.choice ?? "?"}`);
+      resolve();
+    }
     return;
   }
   const { id, method, params = {} } = frame;
@@ -127,10 +148,8 @@ rl.on("line", (line) => {
       return ok(id, { title });
     case "session.interrupt":
       aborted = true;
-      if (pendingApproval) {
-        pendingApproval();
-        pendingApproval = null;
-      }
+      for (const resolve of pendingApprovals.values()) resolve();
+      pendingApprovals.clear();
       return ok(id, { status: "interrupted", interrupted: true });
     case "session.compress":
       return ok(id, { status: "compressed", removed: 2, before_messages: 10, after_messages: 8 });

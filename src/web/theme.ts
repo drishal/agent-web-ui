@@ -1,6 +1,7 @@
 // Theme application through the CSSOM (style.setProperty), never injected
 // <style> text, so the CSP needs no 'unsafe-inline'.
-import type { Bootstrap, ThemeInfo } from "../shared/protocol.js";
+import { useEffect, useState } from "react";
+import type { ThemeChoice, ThemeInfo } from "../shared/protocol.js";
 import { api } from "./api.js";
 import { load, save } from "./storage.js";
 
@@ -43,10 +44,8 @@ export function applyTheme(mode: ThemeMode, info: ThemeInfo | null): void {
   setMetaThemeColor(useScheme ? info?.themeColor ?? null : null);
 }
 
-type ThemeChoice = Bootstrap["ui"]["theme"];
-
 /** config.yml's theme as a mode; "base16" needs a theme.yml to show. */
-function configMode(choice: ThemeChoice, info: ThemeInfo | null): ThemeMode | null {
+function configMode(choice: ThemeChoice | null, info: ThemeInfo | null): ThemeMode | null {
   if (choice === "base16") return info?.source === "file" ? "scheme" : "system";
   return choice;
 }
@@ -56,8 +55,8 @@ function configMode(choice: ThemeChoice, info: ThemeInfo | null): ThemeMode | nu
  * else theme.yml when there is one. A changed config.yml theme wins once, so
  * editing the file is never shadowed by an old pick.
  */
-export function storedThemeMode(info: ThemeInfo | null, choice: ThemeChoice = null): ThemeMode {
-  if (choice !== null && choice !== load<ThemeChoice>("themeConfig", null)) {
+export function storedThemeMode(info: ThemeInfo | null, choice: ThemeChoice | null = null): ThemeMode {
+  if (choice !== null && choice !== load<ThemeChoice | null>("themeConfig", null)) {
     save("themeConfig", choice);
     save("theme", null);
   }
@@ -77,4 +76,41 @@ export async function fetchTheme(): Promise<ThemeInfo | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The device's theme: its mode, the theme.yml info behind "scheme", applying
+ * both to the document, and a refetch when the tab comes back to the fore.
+ */
+export function useTheme() {
+  const [themeInfo, setThemeInfo] = useState<ThemeInfo | null>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+
+  /** Take the theme delivered with the bootstrap payload. */
+  const initTheme = (info: ThemeInfo, choice: ThemeChoice | null): void => {
+    setThemeInfo(info);
+    setThemeMode(storedThemeMode(info, choice));
+  };
+
+  /** Pick a mode from the menu and remember it on this device. */
+  const applyMode = (mode: ThemeMode): void => {
+    setThemeMode(mode);
+    storeThemeMode(mode);
+  };
+
+  useEffect(() => {
+    applyTheme(themeMode, themeInfo);
+  }, [themeMode, themeInfo]);
+
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      const t = await fetchTheme();
+      if (t) setThemeInfo((prev) => (JSON.stringify(prev) === JSON.stringify(t) ? prev : t));
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  return { themeMode, themeInfo, initTheme, applyMode };
 }

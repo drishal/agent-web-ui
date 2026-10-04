@@ -23,7 +23,7 @@ import {
   type SessionSummary,
   type WorkspaceInfo,
 } from "../shared/protocol.js";
-import { ChatError, errorMessage } from "./chats/chat.js";
+import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
@@ -60,6 +60,30 @@ function parseLastEventId(value: unknown): number | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (typeof raw !== "string" || !/^\d{1,15}$/.test(raw)) return undefined;
   return Number(raw);
+}
+
+/**
+ * One native session as a sidebar row: ids, ISO timestamps, and the live chat
+ * when one is open. Pass `ws` to attach the owning project — the all-projects
+ * list carries `workspaceId`; the per-harness list intentionally does not.
+ */
+function toSession(adapter: HarnessAdapter, s: NativeSessionSummary, ws: WorkspaceInfo, live?: Chat | null): ProjectSession;
+function toSession(adapter: HarnessAdapter, s: NativeSessionSummary, ws: null, live?: Chat | null): SessionSummary;
+function toSession(
+  adapter: HarnessAdapter,
+  s: NativeSessionSummary,
+  ws: WorkspaceInfo | null,
+  live?: Chat | null,
+): SessionSummary | ProjectSession {
+  const summary: SessionSummary = {
+    id: `${adapter.id}:${s.nativeId}`,
+    harnessId: adapter.id,
+    title: s.title,
+    updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
+    ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
+    ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
+  };
+  return ws ? { ...summary, workspaceId: ws.id } : summary;
 }
 
 export function createApp(deps: AppDeps) {
@@ -101,7 +125,11 @@ export function createApp(deps: AppDeps) {
   app.post("/api/login", express.json({ limit: "8kb" }), security.login);
   app.post("/api/logout", security.logout);
 
-  app.use("/api", security.requireAuth);
+  app.use("/api", security.requireAuth, (_req, res, next) => {
+    // Session-bearing JSON must never be cached by a browser or proxy.
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   // Only sending a message may carry images; every other body stays small.
   const textJson = express.json({ limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4) / 1024) + 64}kb` });
   const messageJson = express.json({
@@ -140,12 +168,10 @@ export function createApp(deps: AppDeps) {
       pairing: { urls: deps.pairingUrls },
       limits: { maxMessageChars: MAX_MESSAGE_CHARS },
     };
-    res.setHeader("Cache-Control", "no-store");
     res.json(payload);
   });
 
   app.get("/api/theme", async (_req, res) => {
-    res.setHeader("Cache-Control", "no-store");
     res.json(await theme.get());
   });
 
@@ -179,15 +205,8 @@ export function createApp(deps: AppDeps) {
     const seen = new Set<string>();
     const sessions: SessionSummary[] = native.map((s) => {
       seen.add(s.nativeId);
-      const live = manager.liveChatFor(adapter.id, s.nativeId);
-      return {
-        id: `${adapter.id}:${s.nativeId}`,
-        harnessId: adapter.id,
-        title: s.title,
-        updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
-        ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
-        ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
-      };
+      // No workspaceId: this route is already project-scoped.
+      return toSession(adapter, s, null, manager.liveChatFor(adapter.id, s.nativeId));
     });
     // Live chats whose session the harness has not persisted yet.
     for (const chat of manager.list()) {
@@ -224,17 +243,8 @@ export function createApp(deps: AppDeps) {
     const add = (adapter: HarnessAdapter, s: NativeSessionSummary, ws: WorkspaceInfo) => {
       const id = `${adapter.id}:${s.nativeId}`;
       if (sessions.has(id)) return;
-      const live = manager.liveChatFor(adapter.id, s.nativeId);
       projects.set(ws.id, ws);
-      sessions.set(id, {
-        id,
-        harnessId: adapter.id,
-        title: s.title,
-        updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
-        ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
-        ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
-        workspaceId: ws.id,
-      });
+      sessions.set(id, toSession(adapter, s, ws, manager.liveChatFor(adapter.id, s.nativeId)));
     };
     const errors: string[] = [];
     const adapters = registry.list().filter((a) => registry.isAvailable(a.id));

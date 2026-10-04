@@ -26,7 +26,9 @@ import {
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { boundText, commandOutputEvents, stringifyArgs, toolCategory, toolPaths, toolSummary } from "./agent-events.js";
+import { commandOutputEvents, historyToItems, isObj, type Obj } from "./agent-events.js";
+import { PendingRequests, terminateChild } from "./child-process.js";
+import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -42,13 +44,10 @@ import type {
 
 const run = promisify(execFile);
 const READY_TIMEOUT_MS = 30_000;
-const COMMAND_TIMEOUT_MS = 60_000;
 const PROBE_TTL_MS = 60_000;
 /** Hermes's effort ladder (agent/reasoning_effort.py); the route clamps to what it accepts. */
 const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -125,14 +124,15 @@ export function liveHermesChildren(): number {
   return liveChildren.size;
 }
 
-interface Frame {
+/** One gateway frame; a type alias so it also satisfies `Record<string, unknown>`. */
+type Frame = {
   jsonrpc?: string;
   id?: string | number;
   method?: string;
   params?: Obj;
   result?: unknown;
   error?: { code?: number; message?: string };
-}
+};
 
 /** A gateway error with its JSON-RPC code (4018: "run this through command.dispatch"). */
 class HermesRpcError extends Error {
@@ -147,8 +147,20 @@ class HermesRpcError extends Error {
 /** JSON-RPC over one child's stdio: requests we send, events and server requests we receive. */
 class HermesRpc {
   readonly child: ChildProcessWithoutNullStreams;
-  private nextId = 1;
-  private pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly calls = new PendingRequests<string>(
+    {
+      formatId: (n) => String(n),
+      encode: (id, payload) => ({ jsonrpc: "2.0", id, ...payload }),
+      answeredId: (frame) => (frame.id === undefined ? null : String(frame.id)),
+      outcome: (frame) => {
+        const error = frame.error as Frame["error"];
+        return error
+          ? { error: new HermesRpcError(error.message ?? `hermes error ${error.code ?? ""}`.trim(), error.code) }
+          : { value: frame.result };
+      },
+    },
+    (frame) => this.child.stdin.write(`${JSON.stringify(frame)}\n`),
+  );
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
   readonly ready: Promise<void>;
@@ -188,16 +200,7 @@ class HermesRpc {
         if (isObj(frame.params)) this.onEvent(frame.params);
         return;
       }
-      if (frame.id !== undefined && this.pending.has(String(frame.id))) {
-        const entry = this.pending.get(String(frame.id));
-        this.pending.delete(String(frame.id));
-        if (entry) {
-          clearTimeout(entry.timer);
-          if (frame.error) entry.reject(new HermesRpcError(frame.error.message ?? `hermes error ${frame.error.code ?? ""}`.trim(), frame.error.code));
-          else entry.resolve(frame.result);
-        }
-        return;
-      }
+      if (this.calls.accept(frame)) return;
       // No pending request matches: a server→client request (approval, clarify, …).
       if (frame.method && frame.id !== undefined) this.onRequest(frame);
     });
@@ -207,11 +210,7 @@ class HermesRpc {
       if (this.exited) return;
       this.exited = true;
       this.readyReject(new Error(detail));
-      for (const entry of this.pending.values()) {
-        clearTimeout(entry.timer);
-        entry.reject(new Error(detail));
-      }
-      this.pending.clear();
+      this.calls.failAll(detail);
       for (const listener of this.exitListeners) listener(detail);
     };
     this.child.once("error", (error) => failed(`could not start hermes (${error.message})`));
@@ -224,15 +223,7 @@ class HermesRpc {
 
   request<T = unknown>(method: string, params: Obj = {}): Promise<T> {
     if (this.exited) return Promise.reject(new Error("hermes is not running"));
-    const id = String(this.nextId++);
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`hermes did not answer ${method}`));
-      }, COMMAND_TIMEOUT_MS);
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
-      this.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
-    });
+    return this.calls.send<T>({ method, params }, `hermes did not answer ${method}`);
   }
 
   /** Answer a server→client request (its id is the `srq-…` frame id). */
@@ -243,12 +234,7 @@ class HermesRpc {
 
   async kill(): Promise<void> {
     if (this.exited) return;
-    const exited = new Promise<void>((resolve) => this.child.once("exit", () => resolve()));
-    this.child.stdin.end();
-    this.child.kill("SIGTERM");
-    const timer = setTimeout(() => this.child.kill("SIGKILL"), 3_000);
-    await exited;
-    clearTimeout(timer);
+    await terminateChild(this.child);
   }
 }
 
@@ -281,60 +267,58 @@ function usageOf(raw: unknown): StepUsage | null {
 }
 
 /** Tool output as hermes stores it: a string, a `{content: […]}` block list, or JSON. */
-function toolOutput(result: unknown): { text: string; truncated: boolean } {
-  let text = "";
-  if (typeof result === "string") text = result;
-  else if (Array.isArray(result)) text = result.map((part) => (isObj(part) ? str(part.text) : String(part))).join("\n");
-  else if (isObj(result)) {
+function toolOutput(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (Array.isArray(result)) return result.map((part) => (isObj(part) ? str(part.text) : String(part))).join("\n");
+  if (isObj(result)) {
     const content = result.content;
-    if (Array.isArray(content)) text = content.map((part) => (isObj(part) ? str(part.text) : String(part))).join("\n");
-    else if (typeof content === "string") text = content;
-    else text = JSON.stringify(result, null, 2);
-  } else if (result !== undefined && result !== null) text = String(result);
-  return boundText(text);
+    if (Array.isArray(content)) return content.map((part) => (isObj(part) ? str(part.text) : String(part))).join("\n");
+    if (typeof content === "string") return content;
+    return JSON.stringify(result, null, 2);
+  }
+  if (result !== undefined && result !== null) return String(result);
+  return "";
+}
+
+/**
+ * One stored row as the shared transcript reconstruction (`historyToItems`)
+ * expects: user/assistant rows become messages, a tool row becomes a tool call
+ * plus its result. Hermes's other roles are not displayable and stay dropped.
+ */
+function rowToMessages(row: Obj): unknown[] {
+  const at = atMs(row.timestamp);
+  const stamp = at === undefined ? {} : { timestamp: at };
+  switch (str(row.role)) {
+    case "user": {
+      const text = str(row.text);
+      return text ? [{ role: "user", content: text, ...stamp }] : [];
+    }
+    case "assistant": {
+      const text = str(row.text);
+      const thinking = str(row.reasoning);
+      if (!text && !thinking) return [];
+      const content: unknown[] = [];
+      if (thinking) content.push({ type: "thinking", thinking });
+      if (text) content.push({ type: "text", text });
+      return [{ role: "assistant", content, ...stamp }];
+    }
+    case "tool": {
+      const id = str(row.tool_call_id) || randomUUID();
+      return [
+        { role: "assistant", content: [{ type: "toolCall", id, name: str(row.name) || "tool", arguments: row.args }], ...stamp },
+        { role: "toolResult", toolCallId: id, result: toolOutput(row.content ?? row.result), isError: false, ...stamp },
+      ];
+    }
+    default:
+      return [];
+  }
 }
 
 /** Stored transcript rows (role/text/reasoning/tool) as display items. */
 function transcriptItems(messages: unknown[]): ChatItem[] {
-  const items: ChatItem[] = [];
-  for (const raw of messages) {
-    if (!isObj(raw)) continue;
-    const at = atMs(raw.timestamp);
-    switch (str(raw.role)) {
-      case "user": {
-        const text = str(raw.text);
-        if (text) items.push({ kind: "user", id: randomUUID(), text, ...(at ? { at } : {}) });
-        break;
-      }
-      case "assistant": {
-        const text = str(raw.text);
-        const thinking = str(raw.reasoning);
-        if (text || thinking) items.push({ kind: "assistant", id: randomUUID(), text, thinking, streaming: false, ...(at ? { at, endedAt: at } : {}) });
-        break;
-      }
-      case "tool": {
-        const name = str(raw.name) || "tool";
-        const { text, truncated } = toolOutput(raw.content ?? raw.result);
-        items.push({
-          kind: "tool",
-          id: str(raw.tool_call_id) || randomUUID(),
-          name,
-          args: stringifyArgs(raw.args),
-          status: "done",
-          output: text,
-          truncated,
-          category: toolCategory(name),
-          summary: toolSummary(raw.args) || str(raw.context) || "",
-          paths: toolPaths(raw.args),
-          ...(at ? { at, endedAt: at } : {}),
-        });
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  return items;
+  const rows: unknown[] = [];
+  for (const raw of messages) if (isObj(raw)) rows.push(...rowToMessages(raw));
+  return historyToItems(rows);
 }
 
 /** A dangerous-command approval the gateway is waiting on. */
@@ -353,7 +337,8 @@ interface PendingClarify {
 type PendingRequest = PendingApproval | PendingClarify;
 
 class HermesLiveChat implements LiveChat {
-  private listeners = new Set<HarnessEventListener>();
+  /** Buffered until the first subscriber, so events raised while starting survive. */
+  private hub = new EventHub();
   private rpc: HermesRpc | null = null;
   private runtimeId: string | null = null;
   private storedId: string | null = null;
@@ -381,13 +366,12 @@ class HermesLiveChat implements LiveChat {
   }
 
   subscribe(listener: HarnessEventListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.hub.subscribe(listener);
   }
 
   private emit(event: HarnessEvent): void {
     if (this.disposed) return;
-    for (const listener of this.listeners) listener(event);
+    this.hub.emit(event);
   }
 
   private get live(): HermesRpc {
@@ -490,11 +474,10 @@ class HermesLiveChat implements LiveChat {
         break;
       }
       case "tool.complete": {
-        const output = toolOutput(p.result_text ?? p.result ?? p.summary);
         this.emit({
           type: "tool_end",
           toolCallId: str(p.tool_id) || randomUUID(),
-          output: output.text,
+          output: toolOutput(p.result_text ?? p.result ?? p.summary),
           isError: p.is_error === true || (isObj(p.result) && p.result.is_error === true),
         });
         break;
@@ -782,6 +765,7 @@ class HermesLiveChat implements LiveChat {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.hub.clear();
     const rpc = this.rpc;
     this.rpc = null;
     if (!rpc) return;

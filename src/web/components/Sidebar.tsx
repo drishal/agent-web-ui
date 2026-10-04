@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
+import { useDismiss } from "../hooks.js";
 import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSidebar } from "../icons.js";
 import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
@@ -210,18 +211,13 @@ export function Sidebar(props: {
   );
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
-  const onCloseRef = useRef(props.onClose);
-  onCloseRef.current = props.onClose;
 
-  // Drawer mode: Escape closes from anywhere; focus moves in once on open.
+  // Drawer mode: Escape closes from anywhere; the backdrop owns outside clicks.
+  useDismiss(asideRef, open, props.onClose, { escape: true, outside: false });
+  // Focus moves in once on open.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    document.addEventListener("keydown", onKey);
     asideRef.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
-    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   const isActive = (s: ProjectSession) =>

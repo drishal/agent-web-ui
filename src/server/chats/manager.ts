@@ -52,7 +52,7 @@ export class ChatManager {
     const owner = this.bySession.get(k);
     if (owner && owner !== chat.chatId) {
       // Two live instances must never write one session file; close the newcomer.
-      void chat.dispose("Session already open in another chat");
+      void chat.dispose("Session already open in another chat").catch(() => undefined);
       return;
     }
     this.bySession.set(k, chat.chatId);

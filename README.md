@@ -69,6 +69,9 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `PORT`, `HOST`, `AUTH_USERNAME`, `AUTH_PASSWORD` | As the keys above. |
 | `WORKSPACE_ROOTS`, `ALLOWED_HOSTS`, `ALLOWED_TAILSCALE_USERS` | As the lists above (`:`-separated roots, comma-separated hosts and users). |
 | `AWUI_CONFIG_DIR` | Another settings folder; empty ignores `config.yml` (the tests do this). |
+| `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes` (the tests use `fake`). |
+| `AWUI_WEB_DIR` | Serve the built UI from here instead of `dist/web`. |
+| `AWUI_HEARTBEAT_MS` | Keep-alive interval for open event streams; default `20000`. |
 | `THEME_FILE` | Another theme file. |
 | `AUTH_CREDENTIALS_FILE` | Login written by `npm run set-password` (default `$XDG_STATE_HOME/agent-web-ui/credentials.json`); used when no password is configured. |
 | `OMP_AGENT_DIR`, `OMP_SESSION_DIR` | Overrides for omp only (see [Config dirs](#config-dirs)). |

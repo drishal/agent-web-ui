@@ -1,11 +1,13 @@
 // Groups the flat item list into turns: the user's prompt, the work the agent
 // did (folded into one "Worked for …" line), and the final answer. Pattern
 // from DeepSeek Harness (process fold) with OpenCode-style tool counts.
-import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, ToolCategory, ToolItem, UserItem } from "../shared/protocol.js";
+import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, ToolCategory, UserItem } from "../shared/protocol.js";
 
 export interface Turn {
   id: string;
   index: number;
+  /** 1-based ordinal of USER-prompted groups (what the server's fork `through` counts); 0 for a preamble. */
+  through: number;
   prompt: UserItem | null;
   /** Everything before the answer: thinking, intermediate text, tools, notices, requests. */
   process: ChatItem[];
@@ -34,8 +36,10 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
   if (current.length > 0) groups.push(current);
 
   const busy = status === "running" || status === "stopping" || status === "compacting";
+  let userTurns = 0;
   return groups.map((group, index) => {
     const prompt = group[0]?.kind === "user" ? group[0] : null;
+    const through = prompt ? ++userTurns : 0;
     const rest = prompt ? group.slice(1) : group;
     const live = busy && index === groups.length - 1;
 
@@ -81,6 +85,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     return {
       id: prompt?.id ?? `pre-${group[0]?.id ?? index}`,
       index,
+      through,
       prompt,
       process,
       answer,
@@ -130,6 +135,3 @@ export function relativePath(path: string, workspace: string): string {
   return path.startsWith(base) ? path.slice(base.length) : path;
 }
 
-export function isToolItem(item: ChatItem): item is ToolItem {
-  return item.kind === "tool";
-}

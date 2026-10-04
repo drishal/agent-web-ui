@@ -1,5 +1,7 @@
 // One live chat: owns the adapter's LiveChat, folds normalized harness events
-// into display state, and fans out a replayable, monotonic event stream.
+// into display state, and fans out a replayable, monotonic event stream. The
+// fold (EventReducer), the stream (EventLog), and model-call timing (Timing)
+// are collaborators; Chat itself keeps the LiveChat binding and the commands.
 import type {
   AssistantItem,
   ChatConfig,
@@ -58,241 +60,172 @@ function describeAnswer(request: InteractionRequest, answer: InteractionAnswer):
   }
 }
 
-export class Chat {
-  readonly createdAt = Date.now();
-  nativeId: string | null;
-  status: ChatStatus = "idle";
-  title = "";
-  generation = 0;
-  lastActivity = Date.now();
-  onSession?: (chat: Chat) => void;
-  onDisposed?: (chat: Chat) => void;
+/**
+ * Model timing, measured from the stream because no harness reports it: a
+ * call's request starts at the prompt or the last tool result (the hand-off),
+ * its first token is its first delta, and it ends at assistant_end.
+ */
+class Timing {
+  private handoffAt = 0;
+  private requestAt = 0;
+  private firstTokenAt = 0;
+  private llmMs = 0;
+  private ttftMs = 0;
+  private ttftCount = 0;
+  private genMs = 0;
+  private genTokens = 0;
 
-  private items: ChatItem[] = [];
-  private index = new Map<string, number>();
-  private queue: QueueState = { steering: [], followUp: [] };
-  private pending = new Map<string, InteractionRequest>();
-  private extensionStatus: Record<string, string> = {};
-  private context: ContextUsage | null = null;
-  private usage: SessionUsage | null = null;
-  private todos: TodoItem[] = [];
-  /**
-   * Model timing, measured from the stream because no harness reports it: a
-   * call's request starts at the prompt or the last tool result (the hand-off),
-   * its first token is its first delta, and it ends at assistant_end.
-   */
-  private timing = { handoffAt: 0, requestAt: 0, firstTokenAt: 0, llmMs: 0, ttftMs: 0, ttftCount: 0, genMs: 0, genTokens: 0 };
-  private config: ChatConfig;
-  private log: Array<{ id: number; event: ChatEvent }> = [];
+  /** Close the previous hand-off: the next call's request starts here. */
+  markHandoff(at = Date.now()): void {
+    this.handoffAt = at;
+  }
+
+  /** A model call begins; time-to-first-token is measured once per call. */
+  startRequest(at = Date.now()): void {
+    this.requestAt = this.handoffAt || at;
+    this.firstTokenAt = 0;
+  }
+
+  firstToken(at = Date.now()): void {
+    if (!this.requestAt || this.firstTokenAt) return;
+    this.firstTokenAt = at;
+    this.ttftMs += at - this.requestAt;
+    this.ttftCount += 1;
+  }
+
+  /** Close the current model call; `outputTokens` feeds tokens per second. */
+  endStep(outputTokens: number, at = Date.now()): void {
+    if (!this.requestAt) return;
+    this.llmMs += at - this.requestAt;
+    if (this.firstTokenAt && outputTokens > 0 && at > this.firstTokenAt) {
+      this.genMs += at - this.firstTokenAt;
+      this.genTokens += outputTokens;
+    }
+    this.requestAt = 0;
+    this.firstTokenAt = 0;
+    this.handoffAt = at;
+  }
+
+  /** The harness's usage plus the timing it never reports. */
+  compose(harness: HarnessUsage | null): SessionUsage | null {
+    if (!harness) return null;
+    return {
+      ...harness,
+      llmMs: this.llmMs > 0 ? this.llmMs : null,
+      ttftMs: this.ttftCount > 0 ? Math.round(this.ttftMs / this.ttftCount) : null,
+      tokensPerSecond: this.genMs > 0 ? Math.round((this.genTokens / this.genMs) * 1000) : null,
+    };
+  }
+}
+
+/**
+ * The replayable, monotonic ChatEvent stream: event ids, fan-out to
+ * subscribers, and the replay window that lets a reconnecting stream catch up.
+ */
+class EventLog {
+  private entries: Array<{ id: number; event: ChatEvent }> = [];
   private nextEventId = 1;
   private subscribers = new Set<ChatSubscriber>();
-  private counter = 0;
-  private currentAssistant: string | null = null;
-  private currentModel: string | undefined;
-  private pendingDeltas: Array<{ itemId: string; field: "text" | "thinking" | "output"; append: string }> = [];
-  private dirtyTools = new Set<string>();
-  private flushTimer: NodeJS.Timeout | null = null;
-  private settleWaiters: Array<() => void> = [];
-  private unsubscribe: (() => void) | null = null;
-  private live: LiveChat;
 
-  private constructor(
-    readonly chatId: string,
-    readonly adapter: HarnessAdapter,
-    readonly workspace: WorkspaceInfo,
-    live: LiveChat,
-    config: ChatConfig,
-  ) {
-    this.live = live;
-    this.nativeId = live.nativeId;
-    this.config = config;
-  }
-
-  static async open(chatId: string, adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
-    const [items, config, context, usage, todos] = await Promise.all([
-      live.history(),
-      live.getConfig(),
-      live.getContextUsage().catch(() => null),
-      live.getUsage().catch(() => null),
-      live.getTodos().catch(() => []),
-    ]);
-    const chat = new Chat(chatId, adapter, workspace, live, config);
-    chat.context = context;
-    chat.usage = chat.composeUsage(usage);
-    chat.todos = todos;
-    for (const item of items) chat.upsert(item);
-    chat.title = live.title ?? chat.firstUserText() ?? "";
-    chat.attach();
-    return chat;
-  }
-
-  get harnessId() {
-    return this.adapter.id;
-  }
-
-  get sessionId(): string | null {
-    return namespacedSessionId(this.adapter.id, this.nativeId);
+  get lastEventId(): number {
+    return this.nextEventId - 1;
   }
 
   get subscriberCount(): number {
     return this.subscribers.size;
   }
 
-  private firstUserText(): string | null {
-    const first = this.items.find((i) => i.kind === "user");
-    return first && first.kind === "user" ? first.text.slice(0, 80) : null;
-  }
-
-  /** Bind to the LiveChat; events from a previous binding are dropped. */
-  private attach(): void {
-    this.unsubscribe?.();
-    const generation = ++this.generation;
-    this.unsubscribe = this.live.subscribe((event) => {
-      if (generation !== this.generation) return;
-      this.apply(event);
-    });
-  }
-
-  snapshot(): ChatSnapshot {
-    this.flushNow();
-    return {
-      chatId: this.chatId,
-      harnessId: this.adapter.id,
-      sessionId: this.sessionId,
-      workspace: this.workspace,
-      title: this.title,
-      status: this.status,
-      items: this.items.map((i) => ({ ...i })),
-      queue: { steering: [...this.queue.steering], followUp: [...this.queue.followUp] },
-      pending: [...this.pending.values()],
-      config: this.config,
-      capabilities: this.adapter.capabilities,
-      extensionStatus: { ...this.extensionStatus },
-      context: this.context,
-      usage: this.usage,
-      todos: [...this.todos],
-      generation: this.generation,
-      lastEventId: this.nextEventId - 1,
-    };
+  record(event: ChatEvent): void {
+    const id = this.nextEventId++;
+    this.entries.push({ id, event });
+    if (this.entries.length > MAX_LOG_EVENTS) this.entries.splice(0, this.entries.length - MAX_LOG_EVENTS);
+    for (const s of this.subscribers) s.send(id, event);
   }
 
   /**
    * Subscribe a stream. With a lastEventId still inside the replay window the
    * missed events are replayed; otherwise the subscriber gets a fresh snapshot.
    */
-  subscribe(subscriber: ChatSubscriber, lastEventId?: number): () => void {
-    this.flushNow();
-    const oldest = this.log[0]?.id ?? this.nextEventId;
-    const canReplay =
-      lastEventId !== undefined && lastEventId >= oldest - 1 && lastEventId <= this.nextEventId - 1;
+  subscribe(subscriber: ChatSubscriber, lastEventId: number | undefined, snapshot: () => ChatSnapshot): () => void {
+    const oldest = this.entries[0]?.id ?? this.nextEventId;
+    const canReplay = lastEventId !== undefined && lastEventId >= oldest - 1 && lastEventId <= this.nextEventId - 1;
     if (canReplay) {
-      for (const entry of this.log) if (entry.id > lastEventId) subscriber.send(entry.id, entry.event);
+      for (const entry of this.entries) if (entry.id > lastEventId) subscriber.send(entry.id, entry.event);
     } else {
-      subscriber.send(this.nextEventId - 1, { type: "snapshot", snapshot: this.snapshot() });
+      subscriber.send(this.nextEventId - 1, { type: "snapshot", snapshot: snapshot() });
     }
     this.subscribers.add(subscriber);
     return () => this.subscribers.delete(subscriber);
   }
 
-  private emit(event: ChatEvent): void {
-    if (event.type !== "delta") this.flushNow();
-    this.record(event);
+  /** Close every subscriber; the chat is going away. */
+  closeAll(): void {
+    for (const s of this.subscribers) s.close();
+    this.subscribers.clear();
+  }
+}
+
+/** What the event fold asks of the Chat around it: its side effects. */
+interface ReducerEffects {
+  /** The chat's current status (guards status transitions and notice ambience). */
+  status(): ChatStatus;
+  /** Move to a new status; the Chat emits the event and wakes settle waiters. */
+  setStatus(status: ChatStatus): void;
+  /** Re-read a derived view from the harness (best-effort). */
+  refreshContext(): void;
+  refreshUsage(): void;
+  refreshTodos(): void;
+  /** A session id arrived from the harness: tell the manager. */
+  sessionAssigned(): void;
+}
+
+/**
+ * The event fold: normalized harness events into display state (items, queue,
+ * pending requests, config, title, …) and the outbound ChatEvent stream, with
+ * deltas coalesced per item/field and tool updates throttled to the next
+ * flush. Side effects — status changes, refreshes, the manager hook — go
+ * through `fx`; everything else lives and dies here.
+ */
+class EventReducer {
+  items: ChatItem[] = [];
+  queue: QueueState = { steering: [], followUp: [] };
+  extensionStatus: Record<string, string> = {};
+  title = "";
+  nativeId: string | null;
+  config: ChatConfig;
+
+  private index = new Map<string, number>();
+  private pending = new Map<string, InteractionRequest>();
+  private counter = 0;
+  private currentAssistant: string | null = null;
+  private currentModel: string | undefined;
+  private pendingDeltas: Array<{ itemId: string; field: "text" | "thinking" | "output"; append: string }> = [];
+  private dirtyTools = new Set<string>();
+  private flushTimer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private readonly log: EventLog,
+    private readonly timing: Timing,
+    private readonly harnessId: HarnessAdapter["id"],
+    config: ChatConfig,
+    nativeId: string | null,
+    private readonly fx: ReducerEffects,
+  ) {
+    this.config = config;
+    this.nativeId = nativeId;
   }
 
-  private record(event: ChatEvent): void {
-    const id = this.nextEventId++;
-    this.log.push({ id, event });
-    if (this.log.length > MAX_LOG_EVENTS) this.log.splice(0, this.log.length - MAX_LOG_EVENTS);
-    for (const s of this.subscribers) s.send(id, event);
+  get sessionId(): string | null {
+    return namespacedSessionId(this.harnessId, this.nativeId);
   }
 
-  private scheduleFlush(): void {
-    if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flushNow(), DELTA_FLUSH_MS);
-  }
-
-  /** Coalesce deltas per item/field and throttled tool updates into few events. */
-  private flushNow(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    const deltas = this.pendingDeltas;
-    this.pendingDeltas = [];
-    for (const d of deltas) this.record({ type: "delta", ...d });
-    const tools = [...this.dirtyTools];
-    this.dirtyTools.clear();
-    for (const id of tools) {
-      const item = this.get(id);
-      if (item) this.record({ type: "item", item: { ...item } });
-    }
-  }
-
-  private get(id: string): ChatItem | undefined {
-    const i = this.index.get(id);
-    return i === undefined ? undefined : this.items[i];
-  }
-
-  private upsert(item: ChatItem): void {
-    const i = this.index.get(item.id);
-    if (i === undefined) {
-      this.index.set(item.id, this.items.length);
-      this.items.push(item);
-    } else {
-      this.items[i] = item;
-    }
-  }
-
-  private put(item: ChatItem): void {
-    this.upsert(item);
-    this.emit({ type: "item", item: { ...item } });
-  }
-
-  private nextId(prefix: string): string {
-    return `${prefix}${++this.counter}`;
-  }
-
-  private setStatus(status: ChatStatus): void {
-    if (this.status === status || this.status === "disposed") return;
-    this.status = status;
-    this.emit({ type: "status", status });
-    if (status === "idle" || status === "error") {
-      const waiters = this.settleWaiters;
-      this.settleWaiters = [];
-      for (const w of waiters) w();
-    }
-  }
-
-  private ensureAssistant(): AssistantItem {
-    const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
-    if (current && current.kind === "assistant") return current;
-    const item: AssistantItem = {
-      kind: "assistant",
-      id: this.nextId("a"),
-      text: "",
-      thinking: "",
-      streaming: true,
-      at: Date.now(),
-      ...(this.currentModel ? { model: this.currentModel } : {}),
-    };
-    this.currentAssistant = item.id;
-    this.put(item);
-    return item;
-  }
-
-  private finishStreaming(): void {
-    const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
-    if (current && current.kind === "assistant" && current.streaming) this.put({ ...current, streaming: false, endedAt: Date.now() });
-    this.currentAssistant = null;
-  }
-
-  private notice(level: "info" | "warning" | "error", text: string, ambient?: boolean): void {
-    const busy = this.status === "running" || this.status === "stopping" || this.status === "compacting";
-    const between = ambient ?? !busy;
-    this.put({ kind: "notice", id: this.nextId("n"), level, text, at: Date.now(), ...(between ? { ambient: true } : {}) });
+  /** Seed from the harness's stored history: its items and the title it knows. */
+  load(items: ChatItem[], title: string | null): void {
+    for (const item of items) this.upsert(item);
+    this.title = title ?? this.firstUserText() ?? "";
   }
 
   apply(event: HarnessEvent): void {
-    this.lastActivity = Date.now();
     switch (event.type) {
       case "user_message":
         this.finishStreaming();
@@ -308,15 +241,10 @@ export class Chat {
       case "assistant_start":
         this.finishStreaming();
         this.currentModel = event.model;
-        this.timing.requestAt = this.timing.handoffAt || Date.now();
-        this.timing.firstTokenAt = 0;
+        this.timing.startRequest();
         break;
       case "assistant_delta": {
-        if (this.timing.requestAt && !this.timing.firstTokenAt) {
-          this.timing.firstTokenAt = Date.now();
-          this.timing.ttftMs += this.timing.firstTokenAt - this.timing.requestAt;
-          this.timing.ttftCount += 1;
-        }
+        this.timing.firstToken();
         const item = this.ensureAssistant();
         item[event.field] += event.delta;
         this.pendingDeltas.push({ itemId: item.id, field: event.field, append: event.delta });
@@ -324,7 +252,7 @@ export class Chat {
         break;
       }
       case "assistant_end": {
-        this.endStep(event.usage?.output ?? 0);
+        this.timing.endStep(event.usage?.output ?? 0);
         const existing = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
         if (!existing && !event.text && !event.thinking && !event.error) {
           this.currentAssistant = null;
@@ -370,7 +298,7 @@ export class Chat {
         break;
       }
       case "tool_end": {
-        this.timing.handoffAt = Date.now();
+        this.timing.markHandoff();
         const id = `t:${event.toolCallId}`;
         this.dirtyTools.delete(id);
         const item = this.get(id);
@@ -397,24 +325,24 @@ export class Chat {
           status: event.isError ? "error" : "done",
           endedAt: Date.now(),
         });
-        if (base.name.toLowerCase().includes("todo")) void this.refreshTodos();
+        if (base.name.toLowerCase().includes("todo")) this.fx.refreshTodos();
         break;
       }
       case "busy":
-        if (this.status !== "stopping") this.setStatus("running");
+        if (this.fx.status() !== "stopping") this.fx.setStatus("running");
         break;
       case "settled":
         this.finishStreaming();
-        if (this.status !== "error") this.setStatus("idle");
-        void this.refreshContext();
-        void this.refreshUsage();
-        void this.refreshTodos();
+        if (this.fx.status() !== "error") this.fx.setStatus("idle");
+        this.fx.refreshContext();
+        this.fx.refreshUsage();
+        this.fx.refreshTodos();
         break;
       case "compacting":
-        if (event.active) this.setStatus("compacting");
+        if (event.active) this.fx.setStatus("compacting");
         else {
-          if (this.status === "compacting") this.setStatus("idle");
-          void this.refreshContext();
+          if (this.fx.status() === "compacting") this.fx.setStatus("idle");
+          this.fx.refreshContext();
         }
         break;
       case "queue":
@@ -434,7 +362,7 @@ export class Chat {
       case "session":
         if (this.nativeId !== event.nativeId) {
           this.nativeId = event.nativeId;
-          this.onSession?.(this);
+          this.fx.sessionAssigned();
           this.emit({ type: "title", title: this.title, sessionId: this.sessionId });
         }
         break;
@@ -455,8 +383,255 @@ export class Chat {
         this.finishStreaming();
         for (const id of [...this.pending.keys()]) this.resolveRequest(id, "Cancelled");
         this.notice("error", event.message);
-        this.setStatus("error");
+        this.fx.setStatus("error");
         break;
+    }
+  }
+
+  /** Coalesce deltas per item/field and throttled tool updates into few events. */
+  flushNow(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    const deltas = this.pendingDeltas;
+    this.pendingDeltas = [];
+    for (const d of deltas) this.log.record({ type: "delta", ...d });
+    const tools = [...this.dirtyTools];
+    this.dirtyTools.clear();
+    for (const id of tools) {
+      const item = this.get(id);
+      if (item) this.log.record({ type: "item", item: { ...item } });
+    }
+  }
+
+  emit(event: ChatEvent): void {
+    if (event.type !== "delta") this.flushNow();
+    this.log.record(event);
+  }
+
+  notice(level: "info" | "warning" | "error", text: string, ambient?: boolean): void {
+    const status = this.fx.status();
+    const busy = status === "running" || status === "stopping" || status === "compacting";
+    const between = ambient ?? !busy;
+    this.put({ kind: "notice", id: this.nextId("n"), level, text, at: Date.now(), ...(between ? { ambient: true } : {}) });
+  }
+
+  setTitle(title: string): void {
+    this.title = title;
+    this.emit({ type: "title", title, sessionId: this.sessionId });
+  }
+
+  replaceConfig(config: ChatConfig): void {
+    this.config = config;
+    this.emit({ type: "config", config });
+  }
+
+  pendingIds(): string[] {
+    return [...this.pending.keys()];
+  }
+
+  pendingRequest(requestId: string): InteractionRequest | undefined {
+    return this.pending.get(requestId);
+  }
+
+  pendingRequests(): InteractionRequest[] {
+    return [...this.pending.values()];
+  }
+
+  resolveRequest(requestId: string, outcome: string): void {
+    const request = this.pending.get(requestId);
+    if (!request) return;
+    this.pending.delete(requestId);
+    this.put({ kind: "request", id: `r:${requestId}`, request, outcome });
+    this.emit({ type: "request_resolved", requestId, outcome });
+  }
+
+  private firstUserText(): string | null {
+    const first = this.items.find((i) => i.kind === "user");
+    return first && first.kind === "user" ? first.text.slice(0, 80) : null;
+  }
+
+  private scheduleFlush(): void {
+    if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flushNow(), DELTA_FLUSH_MS);
+  }
+
+  private get(id: string): ChatItem | undefined {
+    const i = this.index.get(id);
+    return i === undefined ? undefined : this.items[i];
+  }
+
+  private upsert(item: ChatItem): void {
+    const i = this.index.get(item.id);
+    if (i === undefined) {
+      this.index.set(item.id, this.items.length);
+      this.items.push(item);
+    } else {
+      this.items[i] = item;
+    }
+  }
+
+  private put(item: ChatItem): void {
+    this.upsert(item);
+    this.emit({ type: "item", item: { ...item } });
+  }
+
+  private nextId(prefix: string): string {
+    return `${prefix}${++this.counter}`;
+  }
+
+  private ensureAssistant(): AssistantItem {
+    const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
+    if (current && current.kind === "assistant") return current;
+    const item: AssistantItem = {
+      kind: "assistant",
+      id: this.nextId("a"),
+      text: "",
+      thinking: "",
+      streaming: true,
+      at: Date.now(),
+      ...(this.currentModel ? { model: this.currentModel } : {}),
+    };
+    this.currentAssistant = item.id;
+    this.put(item);
+    return item;
+  }
+
+  private finishStreaming(): void {
+    const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
+    if (current && current.kind === "assistant" && current.streaming) this.put({ ...current, streaming: false, endedAt: Date.now() });
+    this.currentAssistant = null;
+  }
+}
+
+export class Chat {
+  readonly createdAt = Date.now();
+  status: ChatStatus = "idle";
+  generation = 0;
+  lastActivity = Date.now();
+  onSession?: (chat: Chat) => void;
+  onDisposed?: (chat: Chat) => void;
+
+  private readonly log = new EventLog();
+  private readonly timing = new Timing();
+  private readonly reducer: EventReducer;
+  private context: ContextUsage | null = null;
+  private usage: SessionUsage | null = null;
+  private todos: TodoItem[] = [];
+  private settleWaiters: Array<() => void> = [];
+  private unsubscribe: (() => void) | null = null;
+  private readonly live: LiveChat;
+
+  private constructor(
+    readonly chatId: string,
+    readonly adapter: HarnessAdapter,
+    readonly workspace: WorkspaceInfo,
+    live: LiveChat,
+    config: ChatConfig,
+  ) {
+    this.live = live;
+    this.reducer = new EventReducer(this.log, this.timing, adapter.id, config, live.nativeId, {
+      status: () => this.status,
+      setStatus: (status) => this.setStatus(status),
+      refreshContext: () => void this.refreshContext(),
+      refreshUsage: () => void this.refreshUsage(),
+      refreshTodos: () => void this.refreshTodos(),
+      sessionAssigned: () => this.onSession?.(this),
+    });
+  }
+
+  static async open(chatId: string, adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
+    const [items, config, context, usage, todos] = await Promise.all([
+      live.history(),
+      live.getConfig(),
+      live.getContextUsage().catch(() => null),
+      live.getUsage().catch(() => null),
+      live.getTodos().catch(() => []),
+    ]);
+    const chat = new Chat(chatId, adapter, workspace, live, config);
+    chat.context = context;
+    chat.usage = chat.timing.compose(usage);
+    chat.todos = todos;
+    chat.reducer.load(items, live.title);
+    chat.attach();
+    return chat;
+  }
+
+  get harnessId() {
+    return this.adapter.id;
+  }
+
+  get sessionId(): string | null {
+    return this.reducer.sessionId;
+  }
+
+  get nativeId(): string | null {
+    return this.reducer.nativeId;
+  }
+
+  get title(): string {
+    return this.reducer.title;
+  }
+
+  get subscriberCount(): number {
+    return this.log.subscriberCount;
+  }
+
+  /** Bind to the LiveChat; events from a previous binding are dropped. */
+  private attach(): void {
+    this.unsubscribe?.();
+    const generation = ++this.generation;
+    this.unsubscribe = this.live.subscribe((event) => {
+      if (generation !== this.generation) return;
+      this.apply(event);
+    });
+  }
+
+  snapshot(): ChatSnapshot {
+    this.reducer.flushNow();
+    return {
+      chatId: this.chatId,
+      harnessId: this.adapter.id,
+      sessionId: this.sessionId,
+      workspace: this.workspace,
+      title: this.title,
+      status: this.status,
+      items: this.reducer.items.map((i) => ({ ...i })),
+      queue: { steering: [...this.reducer.queue.steering], followUp: [...this.reducer.queue.followUp] },
+      pending: this.reducer.pendingRequests(),
+      config: this.reducer.config,
+      capabilities: this.adapter.capabilities,
+      extensionStatus: { ...this.reducer.extensionStatus },
+      context: this.context,
+      usage: this.usage,
+      todos: [...this.todos],
+      generation: this.generation,
+      lastEventId: this.log.lastEventId,
+    };
+  }
+
+  /**
+   * Subscribe a stream. With a lastEventId still inside the replay window the
+   * missed events are replayed; otherwise the subscriber gets a fresh snapshot.
+   */
+  subscribe(subscriber: ChatSubscriber, lastEventId?: number): () => void {
+    this.reducer.flushNow();
+    return this.log.subscribe(subscriber, lastEventId, () => this.snapshot());
+  }
+
+  apply(event: HarnessEvent): void {
+    this.lastActivity = Date.now();
+    this.reducer.apply(event);
+  }
+
+  private setStatus(status: ChatStatus): void {
+    if (this.status === status || this.status === "disposed") return;
+    this.status = status;
+    this.reducer.emit({ type: "status", status });
+    if (status === "idle" || status === "error") {
+      const waiters = this.settleWaiters;
+      this.settleWaiters = [];
+      for (const w of waiters) w();
     }
   }
 
@@ -467,46 +642,20 @@ export class Chat {
       if (generation !== this.generation || this.status === "disposed") return;
       if (JSON.stringify(context) === JSON.stringify(this.context)) return;
       this.context = context;
-      this.emit({ type: "context", context });
+      this.reducer.emit({ type: "context", context });
     } catch {
       // usage is best-effort
     }
   }
 
-  /** Close the current model call's timing; `outputTokens` feeds tokens per second. */
-  private endStep(outputTokens: number): void {
-    const t = this.timing;
-    if (!t.requestAt) return;
-    const now = Date.now();
-    t.llmMs += now - t.requestAt;
-    if (t.firstTokenAt && outputTokens > 0 && now > t.firstTokenAt) {
-      t.genMs += now - t.firstTokenAt;
-      t.genTokens += outputTokens;
-    }
-    t.requestAt = 0;
-    t.firstTokenAt = 0;
-    t.handoffAt = now;
-  }
-
-  private composeUsage(harness: HarnessUsage | null): SessionUsage | null {
-    if (!harness) return null;
-    const t = this.timing;
-    return {
-      ...harness,
-      llmMs: t.llmMs > 0 ? t.llmMs : null,
-      ttftMs: t.ttftCount > 0 ? Math.round(t.ttftMs / t.ttftCount) : null,
-      tokensPerSecond: t.genMs > 0 ? Math.round((t.genTokens / t.genMs) * 1000) : null,
-    };
-  }
-
   private async refreshUsage(): Promise<void> {
     const generation = this.generation;
     try {
-      const usage = this.composeUsage(await this.live.getUsage());
+      const usage = this.timing.compose(await this.live.getUsage());
       if (generation !== this.generation || this.status === "disposed") return;
       if (JSON.stringify(usage) === JSON.stringify(this.usage)) return;
       this.usage = usage;
-      this.emit({ type: "usage", usage });
+      this.reducer.emit({ type: "usage", usage });
     } catch {
       // usage is best-effort
     }
@@ -519,34 +668,21 @@ export class Chat {
       if (generation !== this.generation || this.status === "disposed") return;
       if (JSON.stringify(todos) === JSON.stringify(this.todos)) return;
       this.todos = todos;
-      this.emit({ type: "todos", todos });
+      this.reducer.emit({ type: "todos", todos });
     } catch {
       // todos are best-effort
     }
   }
 
-  private setTitle(title: string): void {
-    this.title = title;
-    this.emit({ type: "title", title, sessionId: this.sessionId });
-  }
-
-  private resolveRequest(requestId: string, outcome: string): void {
-    const request = this.pending.get(requestId);
-    if (!request) return;
-    this.pending.delete(requestId);
-    this.put({ kind: "request", id: `r:${requestId}`, request, outcome });
-    this.emit({ type: "request_resolved", requestId, outcome });
-  }
-
   private waitForSettle(): Promise<void> {
     if (this.status === "idle" || this.status === "error" || this.status === "disposed") return Promise.resolve();
-    return new Promise((resolve) => {
-      const timer = setTimeout(resolve, SETTLE_TIMEOUT_MS);
-      this.settleWaiters.push(() => {
-        clearTimeout(timer);
-        resolve();
-      });
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const timer = setTimeout(resolve, SETTLE_TIMEOUT_MS);
+    this.settleWaiters.push(() => {
+      clearTimeout(timer);
+      resolve();
     });
+    return promise;
   }
 
   private assertOpen(): void {
@@ -580,11 +716,11 @@ export class Chat {
     }
     if (this.status === "error") this.status = "idle";
     this.setStatus("running");
-    this.timing.handoffAt = Date.now();
+    this.timing.markHandoff();
     try {
       await this.live.prompt(text, images);
     } catch (error) {
-      this.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
+      this.reducer.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
       this.setStatus("idle");
       throw new ChatError(422, "prompt_rejected", errorMessage(error));
     }
@@ -594,11 +730,11 @@ export class Chat {
     this.assertOpen();
     if (this.status !== "running" && this.status !== "compacting" && this.status !== "stopping") return;
     this.setStatus("stopping");
-    for (const id of [...this.pending.keys()]) this.resolveRequest(id, "Cancelled");
+    for (const id of this.reducer.pendingIds()) this.reducer.resolveRequest(id, "Cancelled");
     try {
       await this.live.abort();
     } catch (error) {
-      this.notice("error", `Stop failed: ${errorMessage(error)}`);
+      this.reducer.notice("error", `Stop failed: ${errorMessage(error)}`);
     }
     await this.waitForSettle();
     if (this.status === "stopping") this.setStatus("idle");
@@ -621,8 +757,7 @@ export class Chat {
     } catch (error) {
       throw new ChatError(422, "config_rejected", errorMessage(error));
     }
-    this.config = await this.live.getConfig();
-    this.emit({ type: "config", config: this.config });
+    this.reducer.replaceConfig(await this.live.getConfig());
   }
 
   /** The harness's "/" commands; an empty list when it cannot say (the menu then offers the app's own). */
@@ -634,15 +769,14 @@ export class Chat {
   async refreshModels(): Promise<void> {
     this.assertOpen();
     await this.live.refreshModels();
-    this.config = await this.live.getConfig();
-    this.emit({ type: "config", config: this.config });
+    this.reducer.replaceConfig(await this.live.getConfig());
   }
 
   async rename(name: string): Promise<void> {
     this.assertOpen();
     if (!this.adapter.capabilities.supportsRename) throw new ChatError(400, "unsupported", "Rename is not supported");
     await this.live.rename(name);
-    this.setTitle(name);
+    this.reducer.setTitle(name);
   }
 
   async compact(instructions?: string): Promise<void> {
@@ -653,7 +787,7 @@ export class Chat {
     try {
       await this.live.compact(instructions);
     } catch (error) {
-      this.notice("error", `Compaction failed: ${errorMessage(error)}`);
+      this.reducer.notice("error", `Compaction failed: ${errorMessage(error)}`);
     } finally {
       // Re-read: events during the await may have moved the status on.
       if ((this.status as ChatStatus) === "compacting") this.setStatus("idle");
@@ -662,39 +796,32 @@ export class Chat {
 
   answer(requestId: string, answer: InteractionAnswer): string {
     this.assertOpen();
-    const request = this.pending.get(requestId);
+    const request = this.reducer.pendingRequest(requestId);
     if (!request) throw new ChatError(409, "request_resolved", "This request was already answered or cancelled");
     const outcome = describeAnswer(request, answer);
     // Synchronous check-deliver-resolve: the first answer wins, later ones see 409.
     const delivered = this.live.answer(requestId, answer);
     if (!delivered) {
-      this.resolveRequest(requestId, "Cancelled");
+      this.reducer.resolveRequest(requestId, "Cancelled");
       throw new ChatError(409, "request_resolved", "The harness no longer waits for this request");
     }
-    this.resolveRequest(requestId, outcome);
+    this.reducer.resolveRequest(requestId, outcome);
     return outcome;
-  }
-
-  /** Swap the LiveChat (e.g. an omp respawn); stale events are dropped by generation. */
-  rebind(live: LiveChat): void {
-    this.live = live;
-    this.attach();
   }
 
   async dispose(reason: string): Promise<void> {
     if (this.status === "disposed") return;
-    for (const id of [...this.pending.keys()]) this.resolveRequest(id, "Cancelled");
-    this.flushNow();
+    for (const id of this.reducer.pendingIds()) this.reducer.resolveRequest(id, "Cancelled");
+    this.reducer.flushNow();
     this.status = "disposed";
-    this.record({ type: "status", status: "disposed" });
-    this.record({ type: "disposed", reason });
+    this.log.record({ type: "status", status: "disposed" });
+    this.log.record({ type: "disposed", reason });
     this.unsubscribe?.();
     this.unsubscribe = null;
     const waiters = this.settleWaiters;
     this.settleWaiters = [];
     for (const w of waiters) w();
-    for (const s of this.subscribers) s.close();
-    this.subscribers.clear();
+    this.log.closeAll();
     try {
       await this.live.dispose();
     } finally {

@@ -49,17 +49,25 @@ function release(ink: HTMLSpanElement): void {
 }
 
 export function installRipple(root: Document = document): () => void {
-  let held: HTMLSpanElement | null = null;
+  const held = new Map<number, HTMLSpanElement>();
 
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0 || reducedMotion()) return;
     const host = hostFor(e.target);
     if (!host) return;
-    held = spawn(host, e.clientX, e.clientY);
+    const prior = held.get(e.pointerId);
+    if (prior) release(prior);
+    held.set(e.pointerId, spawn(host, e.clientX, e.clientY));
   };
-  const onUp = () => {
-    if (held) release(held);
-    held = null;
+  const onUp = (e: PointerEvent) => {
+    const ink = held.get(e.pointerId);
+    if (ink) release(ink);
+    held.delete(e.pointerId);
+  };
+  // Drag events carry no pointerId: release every held ink.
+  const onDragStart = () => {
+    for (const ink of held.values()) release(ink);
+    held.clear();
   };
   const onKey = (e: KeyboardEvent) => {
     if ((e.key !== "Enter" && e.key !== " ") || e.repeat || reducedMotion()) return;
@@ -72,13 +80,13 @@ export function installRipple(root: Document = document): () => void {
   root.addEventListener("pointerdown", onDown, { passive: true });
   root.addEventListener("pointerup", onUp, { passive: true });
   root.addEventListener("pointercancel", onUp, { passive: true });
-  root.addEventListener("dragstart", onUp, { passive: true });
+  root.addEventListener("dragstart", onDragStart, { passive: true });
   root.addEventListener("keydown", onKey);
   return () => {
     root.removeEventListener("pointerdown", onDown);
     root.removeEventListener("pointerup", onUp);
     root.removeEventListener("pointercancel", onUp);
-    root.removeEventListener("dragstart", onUp);
+    root.removeEventListener("dragstart", onDragStart);
     root.removeEventListener("keydown", onKey);
   };
 }

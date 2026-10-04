@@ -2,8 +2,9 @@
 // whole picture, in DeepSeek Harness's sections: what fills the context
 // window, the session's tokens, and model timing. Hidden until the harness
 // reports a percentage.
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
+import { useDismiss } from "../hooks.js";
 
 function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
@@ -49,21 +50,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismiss(wrap, open, () => setOpen(false), { escape: true });
 
   // Hidden until there is real usage: an empty ring reads like a spinner.
   if (!context || context.percent === null || context.percent < 0.5) return null;

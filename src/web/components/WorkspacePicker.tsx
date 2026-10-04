@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowseResult } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
@@ -19,12 +19,17 @@ export function WorkspacePicker({
   const [showHidden, setShowHidden] = useState(false);
   const [typed, setTyped] = useState("");
 
+  // Only the latest browse wins: rapid requests may resolve out of order.
+  const seq = useRef(0);
   const browse = useCallback(async (path?: string) => {
+    const mine = ++seq.current;
     setBrowseError(null);
     try {
-      setListing(await api<BrowseResult>(`/api/workspaces/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`));
+      const result = await api<BrowseResult>(`/api/workspaces/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`);
+      if (mine !== seq.current) return;
+      setListing(result);
     } catch (e) {
-      setBrowseError(errorText(e));
+      if (mine === seq.current) setBrowseError(errorText(e));
     }
   }, []);
 

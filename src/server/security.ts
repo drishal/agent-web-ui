@@ -18,6 +18,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
 import { LoginLimiter, type PasswordAuth } from "./auth.js";
+import { parseAuthority } from "./config.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "x-forwarded-host", "x-real-ip", "forwarded"];
@@ -34,22 +35,6 @@ export interface SecurityOptions {
   /** HOST=0.0.0.0: hostnames of this machine reachable on the LAN. */
   lanHosts?: () => Set<string>;
   log?: (message: string) => void;
-}
-
-interface Authority {
-  hostname: string;
-  port: string;
-  authority: string;
-}
-
-export function parseAuthority(value: string | undefined): Authority | null {
-  if (!value || /[\s/@?#\\]/.test(value)) return null;
-  try {
-    const url = new URL(`http://${value.toLowerCase()}`);
-    return { hostname: url.hostname, port: url.port, authority: url.port ? `${url.hostname}:${url.port}` : url.hostname };
-  } catch {
-    return null;
-  }
 }
 
 export function isLoopbackAddress(address: string | undefined): boolean {
@@ -180,8 +165,7 @@ export class Security {
     const auth = this.options.password;
     if (!auth) return send(res, 404, "not_found", "Password sign-in is not configured");
     const address = req.socket.remoteAddress ?? "unknown";
-    const key = `${address}|${String(req.headers["tailscale-user-login"] ?? "")}`;
-    const wait = this.limiter.retryAfter(key);
+    const wait = this.limiter.retryAfter(address);
     if (wait > 0) {
       res.setHeader("Retry-After", String(wait));
       return send(res, 429, "locked", `Too many failed sign-ins. Try again in ${Math.ceil(wait / 60)} min.`, { retryAfter: wait });
@@ -191,12 +175,12 @@ export class Security {
     const password = typeof body.password === "string" ? body.password.slice(0, 1024) : "";
     const ok = await auth.verify(username, password);
     if (!ok) {
-      this.limiter.fail(key);
+      this.limiter.fail(address);
       this.options.log?.(`sign-in failed from ${address}`);
       await new Promise((r) => setTimeout(r, FAIL_DELAY_MS));
       return send(res, 401, "bad_credentials", "Wrong username or password");
     }
-    this.limiter.succeed(key);
+    this.limiter.succeed(address);
     res.setHeader("Set-Cookie", this.issueCookie(res.locals.authority as string, res.locals.hostKind === "remote"));
     res.json({ ok: true, username: auth.username });
   };

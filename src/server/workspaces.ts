@@ -9,6 +9,9 @@ import { ChatError } from "./chats/chat.js";
 import { expandHome } from "./config.js";
 
 const MAX_ENTRIES = 2000;
+/** Opened workspaces remembered by id. The listing routes re-touch theirs on
+ *  every refresh, so the cap only ever drops projects nobody is looking at. */
+const MAX_OPENED = 512;
 
 export function isWithin(root: string, target: string): boolean {
   const rel = path.relative(root, target);
@@ -65,8 +68,17 @@ export class Workspaces {
   async open(input: string): Promise<WorkspaceInfo> {
     const real = await this.resolve(input);
     const id = createHash("sha256").update(real).digest("base64url").slice(0, 22);
-    const info: WorkspaceInfo = { id, path: real, name: path.basename(real) || real };
-    this.byId.set(id, info);
+    return this.remember({ id, path: real, name: path.basename(real) || real });
+  }
+
+  /** Insert or refresh a workspace as most-recently-used, evicting past the cap. */
+  private remember(info: WorkspaceInfo): WorkspaceInfo {
+    this.byId.delete(info.id);
+    this.byId.set(info.id, info);
+    if (this.byId.size > MAX_OPENED) {
+      const oldest = this.byId.keys().next().value;
+      if (oldest !== undefined) this.byId.delete(oldest);
+    }
     return info;
   }
 
@@ -80,7 +92,7 @@ export class Workspaces {
     } catch {
       throw new ChatError(404, "missing_project", "The project folder no longer exists");
     }
-    return info;
+    return this.remember(info);
   }
 
   async browse(input?: string): Promise<BrowseResult> {
