@@ -328,3 +328,7 @@ The interface borrows patterns, not code, from three MIT-licensed projects:
 ## Not included (by design)
 
 Profiles, voice, side agents, browser editing of auth, settings, trust, or theme files, a remote file editor, direct provider APIs, a second database, a full session-tree UI (only the active branch is shown), a generic ACP adapter (designed for, not built), public deploy or Funnel, telemetry, and share links.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
