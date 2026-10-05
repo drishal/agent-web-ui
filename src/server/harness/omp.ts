@@ -32,7 +32,7 @@ import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type O
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { forkSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
-import type { HandoffSeed } from "./handoff.js";
+import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -600,20 +600,16 @@ export class OmpAdapter implements HarnessAdapter {
     const lines: string[] = [
       JSON.stringify({ type: "session", version: 3, id, timestamp: now.toISOString(), cwd: path.resolve(req.cwd), ...(req.seed.title ? { title: req.seed.title, titleSource: "handoff" } : {}) }),
     ];
-    if (req.seed.summary) lines.push(entry({ role: "assistant", content: [{ type: "text", text: req.seed.summary }] }));
-    for (const turn of req.seed.turns) {
-      lines.push(entry({ role: "user", content: turn.prompt.text }));
-      for (const tool of turn.tools) {
-        lines.push(entry({ role: "assistant", content: [{ type: "text", text: `[Handed off from another harness] ${tool.summary}\n${tool.output}` }] }));
-      }
-      if (turn.answer) {
+    for (const seedEntry of seedTranscript(req.seed)) {
+      if (seedEntry.role === "user") lines.push(entry({ role: "user", content: seedEntry.text }));
+      else if (seedEntry.role === "tool") lines.push(entry({ role: "assistant", content: [{ type: "text", text: toolRecordText(seedEntry) }] }));
+      else {
         const content: Obj[] = [];
-        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
-        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        if (seedEntry.thinking) content.push({ type: "thinking", thinking: seedEntry.thinking });
+        if (seedEntry.text) content.push({ type: "text", text: seedEntry.text });
         lines.push(entry({ role: "assistant", content }));
       }
     }
-    if (req.seed.prompt) lines.push(entry({ role: "user", content: req.seed.prompt }));
     // Same bucket layout the lister scans: per-project dirs under the store root.
     const bucket = path.resolve(req.cwd).replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
     await fs.mkdir(path.join(root, bucket), { recursive: true });

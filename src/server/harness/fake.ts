@@ -17,7 +17,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, forkCutIndex, historyToItems } from "./agent-events.js";
-import type { HandoffSeed } from "./handoff.js";
+import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -150,24 +150,19 @@ export class FakeAdapter implements HarnessAdapter {
     const push = (message: Record<string, unknown>) => {
       session.messages.push({ timestamp: Date.now(), ...message });
     };
-    if (req.seed.summary) {
-      push({ role: "assistant", content: [{ type: "text", text: req.seed.summary }], stopReason: "stop" });
-    }
-    for (const turn of req.seed.turns) {
-      push({ role: "user", content: turn.prompt.text });
-      for (const tool of turn.tools) {
-        const id = randomUUID();
-        push({ role: "assistant", content: [{ type: "toolCall", id, name: tool.name, arguments: {} }], stopReason: "toolUse" });
-        push({ role: "toolResult", toolCallId: id, toolName: tool.name, content: [{ type: "text", text: `[handed off] ${tool.summary}\n${tool.output}` }], isError: false });
-      }
-      if (turn.answer) {
+    for (const entry of seedTranscript(req.seed)) {
+      if (entry.role === "user") push({ role: "user", content: entry.text });
+      else if (entry.role === "assistant") {
         const content: unknown[] = [];
-        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
-        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        if (entry.thinking) content.push({ type: "thinking", thinking: entry.thinking });
+        if (entry.text) content.push({ type: "text", text: entry.text });
         push({ role: "assistant", content, stopReason: "stop" });
+      } else {
+        const id = randomUUID();
+        push({ role: "assistant", content: [{ type: "toolCall", id, name: entry.name, arguments: {} }], stopReason: "toolUse" });
+        push({ role: "toolResult", toolCallId: id, toolName: entry.name, content: [{ type: "text", text: toolRecordText(entry) }], isError: false });
       }
     }
-    if (req.seed.prompt) push({ role: "user", content: req.seed.prompt });
     return new FakeLiveChat(session, this.chunkDelayMs);
   }
 

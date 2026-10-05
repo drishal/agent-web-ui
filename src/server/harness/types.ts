@@ -143,7 +143,7 @@ export interface HarnessAdapter {
   /**
    * Start a fresh session seeded with a portable transcript (cross-harness
    * handoff). Tool records arrive as plain transcript text, never live tool
-   * state; `prompt` becomes the first turn after the seed. Returns the live
+   * state; the caller sends any draft as a normal turn afterwards. Returns the live
    * chat directly (unlike forkSession, the session is already open). Callers
    * gate on capabilities.supportsHandoff.
    */

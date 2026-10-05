@@ -409,15 +409,20 @@ export function createApp(deps: AppDeps) {
     // in aborted state so nothing is lost if seeding fails.
     if (chat.status === "running" || chat.status === "compacting" || chat.status === "stopping") await chat.abort();
     const snap = chat.snapshot();
-    const seed = toSeed(snap.items, { title: snap.title, todos: snap.todos, throughTurns: through, prompt });
-    if (isEmptySeed(seed)) throw new ChatError(400, "empty_handoff", "There is nothing to hand off yet");
+    const seed = toSeed(snap.items, { title: snap.title, todos: snap.todos, throughTurns: through });
+    const draft = prompt?.trim() ? prompt : null;
+    if (isEmptySeed(seed) && !draft) throw new ChatError(400, "empty_handoff", "There is nothing to hand off yet");
     let live;
     try {
       live = await target.seedChat({ cwd: chat.workspace.path, seed });
     } catch (error) {
       throw new ChatError(502, "handoff_failed", `${target.displayName} could not take this session: ${errorMessage(error)}`);
     }
-    res.status(201).json((await manager.seedOpen(target, chat.workspace, live)).snapshot());
+    const moved = await manager.seedOpen(target, chat.workspace, live);
+    // The draft is the target's first real turn: sent, not just recorded.
+    // A rejected send leaves its notice in the new chat, which still opens.
+    if (draft) await moved.send(draft, "normal").catch(() => undefined);
+    res.status(201).json(moved.snapshot());
   });
 
   app.post("/api/chats/:id/requests/:requestId", async (req, res) => {

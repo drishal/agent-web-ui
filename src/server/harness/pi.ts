@@ -24,7 +24,7 @@ import {
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import type { HandoffSeed } from "./handoff.js";
+import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -473,20 +473,16 @@ export class PiAdapter implements HarnessAdapter {
       parent = entryId;
     };
     if (req.seed.title) lines.push(JSON.stringify({ type: "session_info", id: randomUUID(), parentId: parent, name: req.seed.title, timestamp: Date.now() }));
-    if (req.seed.summary) append({ role: "assistant", content: [{ type: "text", text: req.seed.summary }], stopReason: "stop" });
-    for (const turn of req.seed.turns) {
-      append({ role: "user", content: turn.prompt.text });
-      for (const tool of turn.tools) {
-        append({ role: "assistant", content: [{ type: "text", text: `[Handed off from another harness] ${tool.summary}\n${tool.output}` }], stopReason: "stop" });
-      }
-      if (turn.answer) {
+    for (const entry of seedTranscript(req.seed)) {
+      if (entry.role === "user") append({ role: "user", content: entry.text });
+      else if (entry.role === "tool") append({ role: "assistant", content: [{ type: "text", text: toolRecordText(entry) }], stopReason: "stop" });
+      else {
         const content: Obj[] = [];
-        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
-        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        if (entry.thinking) content.push({ type: "thinking", thinking: entry.thinking });
+        if (entry.text) content.push({ type: "text", text: entry.text });
         append({ role: "assistant", content, stopReason: "stop" });
       }
     }
-    if (req.seed.prompt) append({ role: "user", content: req.seed.prompt });
     const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
     const targetPath = path.join(dir, `${stamp}_${id}.jsonl`);
     const tmp = `${targetPath}.${process.pid}.tmp`;

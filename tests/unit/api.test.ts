@@ -129,8 +129,10 @@ describe("chat lifecycle over HTTP + SSE", () => {
     const copy = moved.body as ChatSnapshot;
     expect(copy.chatId).not.toBe(chat.chatId);
     expect(copy.harnessId).toBe("fake-b");
-    expect(copy.items.map((i) => i.kind)).toEqual(["user", "tool", "assistant", "user"]);
-    expect(copy.items[copy.items.length - 1]).toMatchObject({ kind: "user", text: "continue there" });
+    // The transcript is recorded; the draft then runs as the target's first real turn.
+    const target = (t as TestApp).manager.get(copy.chatId);
+    await sse.waitFor(() => target.status === "idle" && target.snapshot().items.some((i) => i.kind === "assistant" && i.text.startsWith("Echo: continue there")));
+    expect(target.snapshot().items.map((i) => i.kind)).toEqual(["user", "tool", "assistant", "user", "assistant"]);
     // Same-harness and unknown-harness handoffs are rejected; a fresh chat has
     // a native id already (in-memory), so emptiness — not missing session — rejects it.
     expect((await agent.post(`/api/chats/${chat.chatId}/handoff`).send({ harness: "fake" })).status).toBe(400);
