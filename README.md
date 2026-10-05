@@ -1,6 +1,6 @@
 # agent-web-ui
 
-A local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), and **Hermes** (hermes-agent) coding-agent harnesses. Use it from your desktop browser or, through Tailscale Serve, from your phone.
+A local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), **Hermes** (hermes-agent), and **Claude Code** coding-agent harnesses. Use it from your desktop browser or, through Tailscale Serve, from your phone.
 
 The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits an existing session file and keeps no second transcript database; forks and handoffs only add new sessions in the harness's own store.
 
@@ -9,12 +9,13 @@ browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAd
                                                         ├─ Pi     (child process: `pi --mode rpc`, one per live chat)
                                                         ├─ omp    (child process: `omp --mode rpc-ui`, one per live chat)
                                                         ├─ Hermes (child process: `python -m tui_gateway.entry`, one per live chat)
+                                                        ├─ Claude Code (child process: `claude -p` in stream-json mode, one per live chat)
                                                         └─ fake   (tests only)
 ```
 
 ## Install and run
 
-Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, and/or `hermes` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
+Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, and/or `claude` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
 
 ```bash
 npm ci
@@ -42,7 +43,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `npm run typecheck` | Strict TypeScript for server, web, and tests |
 | `npm test` | Vitest unit and integration tests. Uses only fake and scripted harnesses, so no model tokens are spent. |
 | `npm run test:e2e` | Builds, then runs Playwright (Chromium) against the fake harnesses |
-| `npm run smoke` | Opt-in checks against the real installed Pi, omp, and Hermes (see [Testing](#testing)) |
+| `npm run smoke` | Opt-in checks against the real installed Pi, omp, Hermes, and Claude Code (see [Testing](#testing)) |
 | `npm run build` / `npm start` | Production build, then a single process serving UI and API |
 
 ### Configuration (`~/.config/agentwebui`)
@@ -69,7 +70,8 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `PORT`, `HOST`, `AUTH_USERNAME`, `AUTH_PASSWORD` | As the keys above. |
 | `WORKSPACE_ROOTS`, `ALLOWED_HOSTS`, `ALLOWED_TAILSCALE_USERS` | As the lists above (`:`-separated roots, comma-separated hosts and users). |
 | `AWUI_CONFIG_DIR` | Another settings folder; empty ignores `config.yml` (the tests do this). |
-| `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes` (the tests use `fake`). |
+| `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes,claude` (the tests use `fake`). |
+| `CLAUDE_BIN` | The Claude Code executable; default `claude` on `PATH`. |
 | `AWUI_WEB_DIR` | Serve the built UI from here instead of `dist/web`. |
 | `AWUI_HEARTBEAT_MS` | Keep-alive interval for open event streams; default `20000`. |
 | `THEME_FILE` | Another theme file. |
@@ -80,15 +82,15 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 ## Using it
 
 - **Sidebar.** New chat, the harness switcher, and the project come first. Below them sit session search and the sessions of **every project**, grouped by folder like Hermes Desktop: the current project first, then the rest by their newest session, each with Today / Yesterday / Earlier this week / month headings and *Show N more in …*. Search covers all projects and the selected harness's sessions; a dot on each row marks its harness (the Pi/omp/Hermes switch, which scopes the list and picks the harness for new chats, is the legend), and a spinning ring marks a session that is working. Clicking a session in another project switches to that project, and a project row's **+** starts a new chat there. Only folders inside `WORKSPACE_ROOTS` that the harness can open are listed. A green dot means the session is already open in this server; clicking it attaches to that chat rather than opening a second writer. The footer holds the theme, the chat **text size** (scales the conversation and composer only, per device), and *Pair phone*. Drag the sidebar's right edge to resize it (200–560 px, remembered per device). The panel button at its top right folds it away, and the chat header gets one to bring it back. Narrower than 1200 px (a vertical monitor, a tiled half screen) it folds away by itself and returns when the window widens (`autocollapse_sidebar`); reopened by hand it stays open until the width crosses back, and one you collapsed yourself stays collapsed at any width. The handle also takes arrow keys (Shift for bigger steps) and Home/End, and double-clicking resets it.
-- **Harness switcher.** Pi, omp, or Hermes. Switching scopes the sidebar to that harness's own sessions and picks the harness for new and resumed chats; open chats stay on the harness that created them.
+- **Harness switcher.** Pi, omp, Hermes, or Claude Code. Switching scopes the sidebar to that harness's own sessions and picks the harness for new and resumed chats; open chats stay on the harness that created them.
 - **Project.** Recent folders, a folder browser that walks `WORKSPACE_ROOTS` one level at a time, or a typed path.
 - **New chat.** Opens as a centred composer.
 - **Each turn** shows:
   - your prompt as a bubble that stays pinned while you scroll through a long turn;
   - one **"Worked for 12s · 3 reads, 1 edit"** line folding the agent's thinking, intermediate notes, tool calls, and approvals (open while running, collapsed after);
   - the answer as plain text with a Copy button;
-  - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi and omp both get a new session file cut to the same branch. Not offered for Hermes, which has no fork, or for a command the harness answered itself (it stores no turn).
-  - **Handoff** from the harness chip in the composer: the chat continues in another harness as a new session holding the transcript — the first prompt and the last 10 turns verbatim, a one-line-per-turn summary of the middle, tool calls as plain records (never replayed), images noted but not carried — and a draft in the composer runs there as the first new turn. A busy chat is stopped first; the source is left as it was. Pi and omp take handoffs; Hermes can hand its chats off but not receive them, since its gateway can only record a turn by running it.
+  - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi, omp, and Claude Code each get a new session file cut to the same branch. Not offered for Hermes, which has no fork, or for a command the harness answered itself (it stores no turn).
+  - **Handoff** from the harness chip in the composer: the chat continues in another harness as a new session holding the transcript — the first prompt and the last 10 turns verbatim, a one-line-per-turn summary of the middle, tool calls as plain records (never replayed), images noted but not carried — and a draft in the composer runs there as the first new turn. A busy chat is stopped first; the source is left as it was. Pi and omp take handoffs; Hermes and Claude Code can hand their chats off but not receive them (Hermes's gateway can only record a turn by running it, and Claude Code's session files are not written by hand here).
   - a **Changed N files** list for edits and writes.
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Composer card.**
@@ -101,7 +103,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
     - **Tokens this session:** cache hit, uncached input, cached input, output, and cost when the harness prices the model (Pi `getSessionStats`, omp `get_session_stats`).
     - **Session:** turns and model calls (steps), LLM time, average time to first token, and tokens per second. No harness reports timing, so the server measures it from the stream: a call starts at the prompt or the last tool result, its first token is its first delta, and its output tokens come from the provider's usage.
   - Builtin omp commands typed into a chat (`/context`, `/usage`, …) run in omp itself: no model call, the output is the answer.
-  - **"/" commands:** typing `/` opens a menu (Hermes Desktop's) of what the chat's harness offers: Pi's extension commands, prompt templates, and `skill:` commands; omp's `get_available_commands` (only what runs over RPC); Hermes's `complete.slash`. The app adds `/new`, `/compact [focus]`, and `/rename <title>` for every harness. Typing filters (name, then description), ↑/↓ move, Tab or Enter completes, Enter on a complete command that takes nothing runs it, Esc closes. Pi and omp run a command sent as the prompt; Hermes runs it the way its TUI does (`slash.exec`, then `command.dispatch` for skills and plugins). A command that runs without a model turn shows as the prompt, with its output as the answer (preformatted, since it is terminal text).
+  - **"/" commands:** typing `/` opens a menu (Hermes Desktop's) of what the chat's harness offers: Pi's extension commands, prompt templates, and `skill:` commands; omp's `get_available_commands` (only what runs over RPC); Hermes's `complete.slash`; Claude Code's from its `initialize` handshake (commands and skills, run as the prompt). The app adds `/new`, `/compact [focus]`, and `/rename <title>` for every harness. Typing filters (name, then description), ↑/↓ move, Tab or Enter completes, Enter on a complete command that takes nothing runs it, Esc closes. Pi and omp run a command sent as the prompt; Hermes runs it the way its TUI does (`slash.exec`, then `command.dispatch` for skills and plugins). A command that runs without a model turn shows as the prompt, with its output as the answer (preformatted, since it is terminal text).
   - **Images:** paste a screenshot, drop image files on the card, or use the image button (handy on phones). Up to 8 per message; they show as thumbnails you can remove, and go with the prompt, a steer, or a follow-up. PNG, JPEG, GIF and WebP under 5 MB go as-is (the harness resizes them for the model); anything bigger or of another type is redrawn at most 2048 px on its long side. An image needs some text with it, since some providers reject an empty text block. A model that does not take image input gets a warning. Pasting from a spreadsheet or rich editor, which copies a rendering beside the text, pastes the text.
   - While a run is active you get **Steer**, **Follow-up**, and **Stop**. A harness without steer offers only **Stop and send**, labelled exactly that.
   - Enter sends; on touch devices Enter adds a newline and you tap Send.
@@ -125,6 +127,8 @@ src/server/
   harness/pi.ts             Pi adapter (`pi --mode rpc` child process)
   harness/omp.ts            omp adapter (rpc-ui child process, ACP lister)
   harness/hermes.ts         Hermes adapter (tui_gateway JSON-RPC child process)
+  harness/claude.ts         Claude Code adapter (`claude -p` stream-json child process)
+  harness/claude-sessions.ts  Claude Code session files: listing, transcript, usage, fork
   harness/fake.ts           deterministic adapter for tests
   chats/chat.ts             one live chat: state fold, event log, SSE fan-out, commands
   chats/manager.ts          chat registry, one live writer per native session
@@ -205,6 +209,16 @@ Each live chat runs Hermes's own gateway, `python -m tui_gateway.entry`, as a ch
 - **Decisions:** `approval` and `clarify` server requests become approval and dialog cards. Prompts this UI cannot serve (sudo, secrets, vault, previews) are declined with a notice.
 - **Config:** model and reasoning via `config.set` on Hermes's effort ladder (`none` … `max`); rename, compact (`session.compress`), todos, usage, and context come from the gateway. Hermes publishes no per-model effort levels, so its models carry no level chip.
 
+### Claude Code
+
+Each live chat runs the **installed** `claude` as `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --replay-user-messages --permission-prompt-tool stdio`, one child per chat: the stdio protocol Anthropic's Agent SDK drives, without the SDK's pinned copy of the CLI. Your login, settings, hooks, MCP servers, skills, memory files, and permission rules apply as in the terminal.
+
+- **Sessions:** a new chat gets its id up front (`--session-id`); resume is `--resume <id>`. Listing, history, and fork read `~/.claude/projects/<cwd with every symbol as ->/<id>.jsonl` (`CLAUDE_CONFIG_DIR` moves it): the active branch by `parentUuid`, cut at the last compaction, titled by your rename, then Claude's own title, then the first prompt. Messages sent mid-turn (stored as `queued_command` attachments) count as prompts, as they do on screen. A fork writes a new file cut after the chosen prompt.
+- **Runs:** each model call streams as partial messages; tool calls show after the call that made them, and subagent (`Task`) internals stay inside their tool. **Steer** sends with `priority: "next"`, landing right after the running tool call; **follow-up** waits in the CLI's queue for the next turn. The echoed (replayed) message marks when either starts. **Stop** cancels anything still queued (`cancel_async_message`) and interrupts.
+- **Decisions:** `can_use_tool` requests become approval cards: *Allow once*, *Allow for this session* (the CLI's suggested rules, scoped to the session, never written to your settings files), or *Deny*. `AskUserQuestion` becomes one card per question. Other host callbacks (hooks, MCP, elicitation) are declined.
+- **Config:** the handshake's models with their effort levels; model via `set_model`, effort via `apply_flag_settings` (this session only), thinking shown as summaries. Context comes from `get_context_usage` (Claude Code's own categories, minus deferred tools and free space); usage is summed per turn, and a resumed session starts from its file's per-message usage and the CLI's last cost snapshot. Rename is `rename_session`; compact sends `/compact`; todos come from `TodoWrite`.
+- **Trust:** print mode skips Claude Code's workspace-trust dialog, so only folders under `WORKSPACE_ROOTS` are offered. The handshake's account details (email, plan) stay on the server.
+
 ### Approvals and extension dialogs
 
 Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `yolo`, as configured; this app never changes it or passes `--auto-approve`). Dialogs come from Pi or omp extensions (`select`, `confirm`, `input`, `editor`). Both become one `interaction_request`:
@@ -215,12 +229,12 @@ Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `y
 
 ### Config dirs
 
-| | Pi | omp | Hermes |
-|---|---|---|---|
-| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` |
-| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) |
+| | Pi | omp | Hermes | Claude Code |
+|---|---|---|---|---|
+| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` | `CLAUDE_CONFIG_DIR` or `~/.claude` |
+| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) | `<config>/projects/<cwd as dashes>/` |
 
-omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app writes inside `~/.pi` or `~/.omp` only to add a new session file for a fork or handoff, never inside `~/.hermes`, and the browser never sees agent dirs or session file paths.
+omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app writes inside `~/.pi` or `~/.omp` only to add a new session file for a fork or handoff, inside `~/.claude` only for a fork's new file, never inside `~/.hermes`, and the browser never sees agent dirs or session file paths.
 
 ## Security
 
@@ -298,9 +312,9 @@ systemctl --user stop agent-web-ui
 
 ## Testing
 
-- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), and the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing).
+- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing), and the **Claude Code adapter against a scripted `claude`** (`tests/fixtures/fake-claude.mjs`, frames as recorded from Claude Code 2.1.289: streaming, tools, approvals, AskUserQuestion, steer and follow-up, stop, todos, model and effort, context, rename, resume from the file, fork, compaction).
 - `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `config.yml` (kept across restarts, revoked by a new password), a run that carries on after the browser closes and finishes in front of a second (phone-sized) browser, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), images (paste, drop, picker, remove, vision warning, send), the working spinner, and 390×844 and 320 px layouts.
-- `npm run smoke` runs the real Pi, omp, and Hermes: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
+- `npm run smoke` runs the real Pi, omp, Hermes, and Claude Code: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Claude Code takes `SMOKE_CLAUDE_MODEL` instead (e.g. `haiku`). Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
 
