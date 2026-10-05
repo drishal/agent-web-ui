@@ -24,11 +24,20 @@ export class ChatStream {
   private watchdog: number | null = null;
   private lastAlive = Date.now();
   private stopped = false;
+  private opened = false;
 
+  /**
+   * `from` is the lastEventId of a snapshot the caller already holds: the
+   * server then replays only what came after it, instead of sending that
+   * whole snapshot again (1.7 MB for a long session).
+   */
   constructor(
     private readonly chatId: string,
     private readonly handlers: StreamHandlers,
-  ) {}
+    from: number | null = null,
+  ) {
+    this.lastId = from;
+  }
 
   start(): void {
     window.addEventListener("online", this.onOnline);
@@ -61,12 +70,13 @@ export class ChatStream {
       this.setState("disconnected");
       return;
     }
-    this.setState(this.attempt === 0 && this.lastId === null ? "connecting" : "reconnecting");
+    this.setState(this.attempt === 0 && !this.opened ? "connecting" : "reconnecting");
     const query = this.lastId !== null ? `?lastEventId=${this.lastId}` : "";
     const es = new EventSource(`/api/chats/${encodeURIComponent(this.chatId)}/events${query}`);
     this.es = es;
     this.lastAlive = Date.now();
     es.addEventListener("open", () => {
+      this.opened = true;
       this.attempt = 0;
       this.lastAlive = Date.now();
       this.setState("connected");

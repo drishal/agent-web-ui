@@ -44,6 +44,9 @@ export function useChatStream({ onSignedOut }: { onSignedOut: () => void }) {
   const signedOutRef = useRef(onSignedOut);
   signedOutRef.current = onSignedOut;
   const chatId = chat?.chatId ?? null;
+  // The snapshot in hand when the stream starts; the stream resumes after it.
+  const fromRef = useRef<number | null>(null);
+  fromRef.current = chat?.lastEventId ?? null;
 
   useEffect(() => {
     if (!chatId) {
@@ -59,19 +62,20 @@ export function useChatStream({ onSignedOut }: { onSignedOut: () => void }) {
       queue = [];
       setChat((prev) => (prev && prev.chatId === chatId ? applyEvents(prev, events) : prev));
     };
-    const stream = new ChatStream(chatId, {
-      onEvent: (event) => {
+    const handlers = {
+      onEvent: (event: ChatEvent) => {
         queue.push(event);
         if (frame === null) frame = window.requestAnimationFrame(flush);
       },
       onState: setConn,
-      onGone: (status) => {
+      onGone: (status: number) => {
         if (status === 401) signedOutRef.current();
         else {
           setChat((prev) => (prev && prev.chatId === chatId ? { ...prev, status: "disposed", gone: "This chat was closed" } : prev));
         }
       },
-    });
+    };
+    const stream = new ChatStream(chatId, handlers, fromRef.current);
     stream.start();
     return () => {
       stream.stop();
