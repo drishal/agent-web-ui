@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
@@ -137,6 +137,12 @@ describe("hermes adapter (scripted gateway)", () => {
     await until(() => chat.status === "idle");
     const assistant = chat.snapshot().items.find((i) => i.kind === "assistant");
     expect(assistant).toMatchObject({ error: "fake failure" });
+  });
+
+  it("refuses handoffs, since recording a turn would run it", async () => {
+    expect(adapter.capabilities.supportsHandoff).toBe(false);
+    await expect(adapter.seedChat()).rejects.toThrow(/cannot take a handoff/);
+    expect(JSON.parse(readFileSync(state, "utf8")).spawns).toEqual([]);
   });
 
   it("lists Hermes's commands and runs them the way its TUI does", async () => {

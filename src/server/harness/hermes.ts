@@ -28,7 +28,6 @@ import {
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import type { HandoffSeed } from "./handoff.js";
 import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -783,13 +782,6 @@ class HermesLiveChat implements LiveChat {
     if (!this.runtimeId) throw new Error("This chat has no hermes session yet");
     return this.runtimeId;
   }
-
-  /** Record one seed line as a user turn without model inference or slash handling. */
-  async submitSeed(text: string): Promise<void> {
-    const id = this.requireSession();
-    await this.live.request("prompt.submit", { session_id: id, text });
-    this.emit({ type: "user_message", text });
-  }
 }
 
 function approvalChoice(answer: InteractionAnswer, choices: string[]): string {
@@ -833,7 +825,7 @@ export class HermesAdapter implements HarnessAdapter {
     supportsRename: true,
     supportsModelSelection: true,
     supportsFork: false,
-    supportsHandoff: true,
+    supportsHandoff: false,
   };
   private probes = new Map<string, { at: number; models: ModelInfo[] }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;
@@ -846,31 +838,14 @@ export class HermesAdapter implements HarnessAdapter {
   }
 
   /**
-   * Fresh gateway session with the seed's transcript submitted as turns
-   * (`prompt.submit` per user message; tool records as plain transcript text,
-   * never live tool state). Turn-taking per submit keeps each prompt aligned
-   * with its answer, like the transcript reads.
+   * The gateway has no way to record turns without running them: every
+   * `prompt.submit` is a live agent turn with tools, so replaying a transcript
+   * would re-run it. Its importer reads Claude Code and Codex stores only.
    */
-  async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
-    const chat = new HermesLiveChat(this, req.cwd);
-    try {
-      await chat.start(null);
-      if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
-      if (req.seed.summary) await chat.submitSeed(req.seed.summary);
-      for (const turn of req.seed.turns) {
-        await chat.submitSeed(turn.prompt.text);
-        for (const tool of turn.tools) {
-          await chat.submitSeed(`[Handed off from another harness] ${tool.summary}\n${tool.output}`);
-        }
-        if (turn.answer?.text) await chat.submitSeed(turn.answer.text);
-      }
-      if (req.seed.prompt) await chat.submitSeed(req.seed.prompt);
-    } catch (error) {
-      await chat.dispose().catch(() => undefined);
-      throw error;
-    }
-    return chat;
+  async seedChat(): Promise<LiveChat> {
+    throw new Error("Hermes cannot take a handoff: it can only record turns by running them");
   }
+
   async spawnSpec(): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv }> {
     if (this.options.command) return { command: this.options.command, args: this.options.args ?? [], env: { ...process.env } };
     const runtime = await gatewayRuntime(this.cliCommand);
