@@ -13,6 +13,7 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ContextCategory,
   type ContextUsage,
   type HarnessCapabilities,
   type ImageAttachment,
@@ -195,6 +196,60 @@ function toModelInfo(m: unknown): ModelInfo | null {
     ...(Array.isArray(m.input) ? { vision: (m.input as unknown[]).includes("image") } : {}),
     ...(levels.length > 0 ? { levels } : {}),
   };
+}
+
+/** pi-ai's estimate: 4 characters a token, an image as 4800 characters. */
+const CHARS_PER_TOKEN = 4;
+const IMAGE_CHARS = 4800;
+
+function contentChars(content: unknown): number {
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return 0;
+  let chars = 0;
+  for (const block of content) {
+    if (!isObj(block)) continue;
+    if (block.type === "text") chars += String(block.text ?? "").length;
+    else if (block.type === "thinking") chars += String(block.thinking ?? "").length;
+    else if (block.type === "toolCall") chars += String(block.name ?? "").length + JSON.stringify(block.arguments ?? {}).length;
+    else if (block.type === "image") chars += IMAGE_CHARS;
+  }
+  return chars;
+}
+
+/**
+ * What fills the window, estimated the way pi-ai's estimateMessageTokens does
+ * (pi has no breakdown of its own). System messages are replayed in order:
+ * each patches prompt sections by name (null removes one) and adds or removes
+ * tool declarations, which together are the current prompt and tool set.
+ */
+function contextCategories(messages: unknown[]): ContextCategory[] {
+  const sections = new Map<string, string>();
+  const tools = new Map<string, unknown>();
+  let base = "";
+  let messageChars = 0;
+  for (const m of messages) {
+    if (!isObj(m)) continue;
+    if (m.role === "system") {
+      if (typeof m.content === "string" && m.content) base = m.content;
+      if (isObj(m.sections)) {
+        for (const [name, text] of Object.entries(m.sections)) {
+          if (text === null) sections.delete(name);
+          else sections.set(name, String(text));
+        }
+      }
+      for (const t of Array.isArray(m.toolsAdded) ? m.toolsAdded : []) if (isObj(t) && typeof t.name === "string") tools.set(t.name, t);
+      for (const t of Array.isArray(m.toolsRemoved) ? m.toolsRemoved : []) if (isObj(t) && typeof t.name === "string") tools.delete(t.name);
+      continue;
+    }
+    messageChars += typeof m.summary === "string" ? m.summary.length : contentChars(m.content);
+  }
+  const promptChars = base.length + [...sections.values()].reduce((sum, text) => sum + text.length, 0);
+  const toolChars = tools.size > 0 ? JSON.stringify([...tools.values()]).length : 0;
+  return [
+    { id: "system", label: "System prompt", tokens: Math.ceil(promptChars / CHARS_PER_TOKEN) },
+    { id: "tools", label: "Tool definitions", tokens: Math.ceil(toolChars / CHARS_PER_TOKEN) },
+    { id: "messages", label: "Messages", tokens: Math.ceil(messageChars / CHARS_PER_TOKEN) },
+  ];
 }
 
 /** One `pi --mode rpc` child: JSON-lines commands on stdin, responses + session events on stdout. */
@@ -697,14 +752,20 @@ class PiLiveChat implements LiveChat {
   }
 
   async getContextUsage(): Promise<ContextUsage | null> {
-    const stats = await this.live.command<Obj>("get_session_stats").catch(() => null);
-    const tokens = stats && isObj(stats.tokens) ? stats.tokens : null;
-    if (!tokens) return null;
-    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-    const used = n(tokens.input) + n(tokens.output) + n(tokens.cacheRead);
-    const window = typeof tokens.contextWindow === "number" ? tokens.contextWindow : 0;
-    if (!window) return { tokens: used || null, window: 0, percent: null };
-    return { tokens: used || null, window, percent: (used / window) * 100 };
+    const [stats, data] = await Promise.all([
+      this.live.command<Obj>("get_session_stats").catch(() => null),
+      this.live.command<Obj>("get_messages").catch(() => null),
+    ]);
+    // contextUsage is absent while no model is selected; tokens are null right after compaction.
+    const usage = stats && isObj(stats.contextUsage) ? stats.contextUsage : null;
+    if (!usage) return null;
+    const window = typeof usage.contextWindow === "number" ? usage.contextWindow : 0;
+    const categories = contextCategories(data && Array.isArray(data.messages) ? data.messages : []);
+    // Pi knows the real total only after a response; until then the estimate stands in.
+    const known = typeof usage.tokens === "number" && usage.tokens > 0;
+    const tokens = known ? (usage.tokens as number) : categories.reduce((sum, c) => sum + c.tokens, 0);
+    const percent = known && typeof usage.percent === "number" ? usage.percent : window > 0 ? (tokens / window) * 100 : null;
+    return { tokens: tokens || null, window, percent, categories };
   }
 
   async getUsage(): Promise<HarnessUsage | null> {
