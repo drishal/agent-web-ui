@@ -553,6 +553,14 @@ export class Chat {
     chat.usage = chat.timing.compose(usage);
     chat.todos = todos;
     chat.reducer.load(items, live.title);
+    // A resumed old chat keeps its stored recency until someone talks in it;
+    // only a brand-new (empty) history starts at now.
+    let latest: number | null = null;
+    for (const i of items) {
+      const at = i.at ?? (i.kind === "assistant" || i.kind === "tool" ? i.endedAt : undefined) ?? null;
+      if (at !== null && (latest === null || at > latest)) latest = at;
+    }
+    chat.lastActivity = latest ?? Date.now();
     chat.attach();
     return chat;
   }
@@ -620,7 +628,10 @@ export class Chat {
   }
 
   apply(event: HarnessEvent): void {
-    this.lastActivity = Date.now();
+    // Viewing must not promote the chat: only real conversation (a prompt sent
+    // or a turn finished) counts as activity for sidebar ordering. Replay on
+    // open, status flaps, config/title/usage refreshes all stay quiet.
+    if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = Date.now();
     this.reducer.apply(event);
   }
 
