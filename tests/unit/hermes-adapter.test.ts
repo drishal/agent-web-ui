@@ -147,6 +147,20 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(assistant).toMatchObject({ error: "fake failure" });
   });
 
+  it("keeps the status line out of thinking: spinner frames dropped, waits as a chip until the turn ends", async () => {
+    const { chat } = await openChat();
+    await chat.send("wait for it", "normal");
+    await until(() => chat.snapshot().extensionStatus["hermes:status"] !== undefined);
+    expect(chat.snapshot().extensionStatus["hermes:status"]).toBe("Waiting for the provider (5s)...");
+    // Mid-turn, while it streams, the thinking holds no status-line text.
+    const streaming = chat.snapshot().items.filter((i) => i.kind === "assistant");
+    expect(streaming.map((i) => (i.kind === "assistant" ? i.thinking : "")).join("")).not.toMatch(/musing|Waiting/);
+    await until(() => chat.status === "idle");
+    expect(chat.snapshot().extensionStatus["hermes:status"]).toBeUndefined();
+    const assistant = chat.snapshot().items.find((i) => i.kind === "assistant");
+    expect(assistant && assistant.kind === "assistant" && assistant.thinking).toBe("hmm ");
+  });
+
   it("settles a turn and follows the model from session.info alone", async () => {
     const { chat } = await openChat();
     await chat.send("vanish now", "normal");

@@ -7,6 +7,8 @@
 //   "fail"  end the turn with an error "slow"   stream many chunks
 //   "big"   oversized tool output          "edit"  edit a file (src/app.ts)
 //   "vanish"  the turn stops on a fallback model with no message.complete
+//   "wait"  a provider-wait line on the status line (thinking.delta)
+// Every turn starts with the gateway's spinner frame on the status line, as the real one does.
 // Session rows for projects.tree/list come from FAKE_HERMES_STATE (JSON file).
 import { readFileSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
@@ -54,6 +56,11 @@ async function runPrompt(text) {
   const sessionId = runtimeId;
   event("session.info", { model, provider: "fake", reasoning_effort: effort, running: true, title, stored_session_id: storedId });
   event("message.start", undefined, sessionId);
+  event("thinking.delta", { text: "(´･_･`) musing..." }, sessionId);
+  if (/\bwait\b/.test(text)) {
+    event("thinking.delta", { text: "Waiting for the provider (5s)..." }, sessionId);
+    await new Promise((r) => setTimeout(r, 150));
+  }
   if (/\bask\b/.test(text)) {
     // "ask twice" raises both requests before awaiting (stacked approvals).
     const count = /\btwice\b/.test(text) ? 2 : 1;

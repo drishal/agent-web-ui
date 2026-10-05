@@ -435,7 +435,28 @@ class HermesLiveChat implements LiveChat {
     this.running = info.running === true;
     if (this.running && !wasRunning) this.emit({ type: "busy" });
     // A turn that ends without `message.complete` (reclaimed session, crash) still settles the UI.
-    if (!this.running && wasRunning) this.emit({ type: "settled" });
+    if (!this.running && wasRunning) {
+      this.statusLine("");
+      this.emit({ type: "settled" });
+    }
+  }
+
+  private statusText: string | null = null;
+
+  /**
+   * Hermes's live status line: each `thinking.delta` replaces it and "" clears
+   * it. Its spinner frames ("(´･_･`) musing...": a face and one verb) say only
+   * that the model is thinking, which the turn's own spinner already shows, so
+   * they are dropped, as Pi and omp show nothing of the kind; anything else (a
+   * provider wait, a retry) is a status chip until the turn ends.
+   */
+  private statusLine(text: string): void {
+    const line = text.trim();
+    const spinner = /^[^A-Za-z]+?\s+\p{L}+(?:\.\.\.|…)$/u.test(line);
+    const next = line && !spinner ? line : null;
+    if (next === this.statusText) return;
+    this.statusText = next;
+    this.emit({ type: "extension_status", key: "hermes:status", text: next });
   }
 
   /**
@@ -471,12 +492,15 @@ class HermesLiveChat implements LiveChat {
         if (text) this.emit({ type: "assistant_delta", field: "text", delta: text });
         break;
       }
-      case "reasoning.delta":
-      case "thinking.delta": {
+      case "reasoning.delta": {
         const text = str(p.text);
         if (text) this.emit({ type: "assistant_delta", field: "thinking", delta: text });
         break;
       }
+      case "thinking.delta":
+        // Not reasoning: the gateway's live status line (spinner, wait notices).
+        this.statusLine(str(p.text));
+        break;
       case "message.interim": {
         const text = str(p.text);
         if (text && p.already_streamed !== true) this.emit({ type: "assistant_delta", field: "text", delta: text });
@@ -495,6 +519,7 @@ class HermesLiveChat implements LiveChat {
           ...(error ? { error } : {}),
           ...(step ? { usage: step } : {}),
         });
+        this.statusLine("");
         this.emit({ type: "settled" });
         break;
       }
