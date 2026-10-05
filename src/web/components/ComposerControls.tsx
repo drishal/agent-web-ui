@@ -17,7 +17,7 @@ export function ComposerControls({
   harnesses: HarnessStatus[];
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
   onRefreshModels: () => Promise<void>;
-  onHandoff: (harnessId: string) => void;
+  onHandoff: (harnessId: string) => Promise<void>;
 }) {
   const caps = chat.capabilities;
   const idle = chat.status === "idle" || chat.status === "error";

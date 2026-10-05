@@ -451,7 +451,7 @@ export function App() {
                 onStop={stop}
                 onAnswer={answer}
                 onConfig={configure}
-                onHandoff={(id, draft) => void handoffChat(id, draft)}
+                onHandoff={(id, draft) => handoffChat(id, draft)}
               />
             </div>
           </div>
@@ -469,7 +469,7 @@ export function App() {
               onStop={stop}
               onAnswer={answer}
               onConfig={configure}
-              onHandoff={(id, draft) => void handoffChat(id, draft)}
+              onHandoff={(id, draft) => handoffChat(id, draft)}
             />
           </>
         ) : (

@@ -39,7 +39,7 @@ export function Composer({
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
   onRefreshModels: () => Promise<void>;
-  onHandoff: (harnessId: string, draft: string) => void;
+  onHandoff: (harnessId: string, draft: string) => Promise<void>;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));

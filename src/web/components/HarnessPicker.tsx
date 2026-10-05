@@ -15,13 +15,15 @@ export function HarnessPicker({
   harnesses: HarnessStatus[];
   currentId: string;
   disabled: boolean;
-  onHandoff: (harnessId: string) => void;
+  onHandoff: (harnessId: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   useDismiss(wrap, open, () => setOpen(false), { escape: true });
   const current = harnesses.find((h) => h.id === currentId);
   const others = harnesses.filter((h) => h.id !== currentId && h.available && h.capabilities.supportsHandoff);
+  const busy = disabled || pending;
 
   return (
     <div className="harness-picker" ref={wrap}>
@@ -31,11 +33,11 @@ export function HarnessPicker({
         data-harness={currentId}
         aria-label="Harness"
         title={others.length > 0 ? "Hand off to another harness" : "No other harness available"}
-        disabled={disabled || others.length === 0}
+        disabled={busy || others.length === 0}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {current?.displayName ?? currentId}
+        {pending ? "Handing off…" : (current?.displayName ?? currentId)}
         <IconChevronDown size={12} />
       </button>
       {open ? (
@@ -44,9 +46,13 @@ export function HarnessPicker({
             <div key={h.id} role="option" aria-selected="false">
               <button
                 type="button"
+                disabled={pending}
                 onClick={() => {
                   setOpen(false);
-                  onHandoff(h.id);
+                  setPending(true);
+                  // Success navigates to the new chat (remount); failure
+                  // re-enables via finally. Either way no second POST fires.
+                  void onHandoff(h.id).finally(() => setPending(false));
                 }}
               >
                 <span className="command-name">Handoff to {h.displayName}</span>
