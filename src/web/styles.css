@@ -3153,6 +3153,21 @@ button.harness-chip {
   cursor: pointer;
 }
 
+button.harness-chip[data-harness="pi"] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--link);
+}
+
+button.harness-chip[data-harness="omp"] {
+  background: color-mix(in srgb, var(--thinking) 18%, transparent);
+  color: var(--thinking);
+}
+
+button.harness-chip[data-harness="hermes"] {
+  background: color-mix(in srgb, var(--orange) 16%, transparent);
+  color: var(--orange);
+}
+
 button.harness-chip:hover:not(:disabled) {
   background: var(--hover-strong, var(--hover));
 }

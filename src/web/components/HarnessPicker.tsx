@@ -28,13 +28,14 @@ export function HarnessPicker({
       <button
         type="button"
         className="pill-select harness-chip"
+        data-harness={currentId}
         aria-label="Harness"
         title={others.length > 0 ? "Hand off to another harness" : "No other harness available"}
         disabled={disabled || others.length === 0}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={`badge badge-${currentId}`}>{current?.displayName ?? currentId}</span>
+        {current?.displayName ?? currentId}
         <IconChevronDown size={12} />
       </button>
       {open ? (
