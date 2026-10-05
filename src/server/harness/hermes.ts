@@ -306,7 +306,7 @@ function rowToMessages(row: Obj): unknown[] {
       const id = str(row.tool_call_id) || randomUUID();
       return [
         { role: "assistant", content: [{ type: "toolCall", id, name: str(row.name) || "tool", arguments: row.args }], ...stamp },
-        { role: "toolResult", toolCallId: id, result: toolOutput(row.content ?? row.result), isError: false, ...stamp },
+        { role: "toolResult", toolCallId: id, content: [{ type: "text", text: toolOutput(row.content ?? row.result) }], isError: false, ...stamp },
       ];
     }
     default:
@@ -317,8 +317,18 @@ function rowToMessages(row: Obj): unknown[] {
 /** Stored transcript rows (role/text/reasoning/tool) as display items. */
 function transcriptItems(messages: unknown[]): ChatItem[] {
   const rows: unknown[] = [];
-  for (const raw of messages) if (isObj(raw)) rows.push(...rowToMessages(raw));
-  return historyToItems(rows);
+  // A tool row's `context` names what it touched when its args say nothing.
+  const contexts = new Map<string, string>();
+  for (const raw of messages) {
+    if (!isObj(raw)) continue;
+    const converted = rowToMessages(raw);
+    rows.push(...converted);
+    const call = converted[1];
+    if (str(raw.role) === "tool" && isObj(call) && str(raw.context)) contexts.set(`t:${str(call.toolCallId)}`, str(raw.context));
+  }
+  return historyToItems(rows).map((item) =>
+    item.kind === "tool" && !item.summary && contexts.has(item.id) ? { ...item, summary: contexts.get(item.id) as string } : item,
+  );
 }
 
 /** A dangerous-command approval the gateway is waiting on. */

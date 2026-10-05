@@ -87,6 +87,14 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(tool && tool.kind === "tool" && tool.output).toContain("file.txt");
   });
 
+  it("reads stored tool rows back as tool output, not the row's JSON", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("run tool please", "normal");
+    await until(() => chat.status === "idle");
+    const stored = (await live.history()).find((i) => i.kind === "tool");
+    expect(stored).toMatchObject({ name: "read", output: "file.txt", summary: "README.md", status: "done" });
+  });
+
   it("raises approvals from server requests and answers them", async () => {
     const { chat } = await openChat();
     await chat.send("ask to delete", "normal");

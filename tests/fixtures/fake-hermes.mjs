@@ -101,7 +101,11 @@ async function runPrompt(text) {
   const failed = /\bfail\b/.test(text);
   event("message.complete", { text: body, status: aborted ? "interrupted" : failed ? "error" : "complete", ...(failed ? { error: "fake failure" } : {}), reasoning: "hmm ", usage: emitUsage() }, sessionId);
   event("session.info", { model, provider: "fake", reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
-  messages.push({ role: "user", text, timestamp: Date.now() / 1000 }, { role: "assistant", text: body, reasoning: "hmm", timestamp: Date.now() / 1000 });
+  const now = Date.now() / 1000;
+  messages.push({ role: "user", text, timestamp: now });
+  // Stored tool rows: the shape session.history returns (no args here, so `context` names the target).
+  if (/\btool\b/.test(text)) messages.push({ role: "tool", name: "read", tool_call_id: "t1", content: "file.txt", context: "README.md", timestamp: now });
+  messages.push({ role: "assistant", text: body, reasoning: "hmm", timestamp: now });
 }
 
 const pendingApprovals = new Map();
