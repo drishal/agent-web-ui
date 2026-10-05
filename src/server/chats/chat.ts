@@ -508,7 +508,10 @@ export class Chat {
   readonly createdAt = Date.now();
   status: ChatStatus = "idle";
   generation = 0;
+  /** Last real conversation (a prompt sent, a turn finished): sidebar order. */
   lastActivity = Date.now();
+  /** Last sign of use of any kind (events, sends, a viewer leaving): what the reaper's idle clock reads. */
+  lastSeen = Date.now();
   onSession?: (chat: Chat) => void;
   onDisposed?: (chat: Chat) => void;
 
@@ -624,7 +627,13 @@ export class Chat {
    */
   subscribe(subscriber: ChatSubscriber, lastEventId?: number): () => void {
     this.reducer.flushNow();
-    return this.log.subscribe(subscriber, lastEventId, () => this.snapshot());
+    this.lastSeen = Date.now();
+    const unsubscribe = this.log.subscribe(subscriber, lastEventId, () => this.snapshot());
+    return () => {
+      // The idle clock starts when the last viewer leaves, not at the last message.
+      this.lastSeen = Date.now();
+      unsubscribe();
+    };
   }
 
   apply(event: HarnessEvent): void {
@@ -632,6 +641,7 @@ export class Chat {
     // or a turn finished) counts as activity for sidebar ordering. Replay on
     // open, status flaps, config/title/usage refreshes all stay quiet.
     if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = Date.now();
+    this.lastSeen = Date.now();
     this.reducer.apply(event);
   }
 
@@ -708,6 +718,7 @@ export class Chat {
   async send(text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<void> {
     this.assertOpen();
     this.lastActivity = Date.now();
+    this.lastSeen = this.lastActivity;
     const caps = this.adapter.capabilities;
     const busy = this.status === "running" || this.status === "stopping" || this.status === "compacting";
     switch (mode) {
