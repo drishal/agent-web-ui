@@ -107,6 +107,8 @@ export function toolPaths(args: unknown): string[] {
   const out: string[] = [];
   for (const key of PATH_KEYS) {
     const v = args[key];
+    // `target` is a path for some tools and a mode for others (Hermes search_files: content | files).
+    if (key === "target" && typeof v === "string" && !/[/.]/.test(v)) continue;
     if (typeof v === "string" && v && v.length < 1024) out.push(v);
   }
   for (const key of ["paths", "files", "edits"]) {
@@ -123,16 +125,28 @@ export function toolPaths(args: unknown): string[] {
   return [...new Set(out)];
 }
 
-/** One-line description of a call: its path, command, or query. */
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 160);
+
+/**
+ * One-line description of a call: its command, else what a search looks for
+ * (and where, unless that is just the working directory), else its path, else
+ * its query. Every harness's tools go through this, so a grep reads the same
+ * in Pi, omp, Hermes, and Claude Code.
+ */
 export function toolSummary(args: unknown): string {
-  if (typeof args === "string") return args.replace(/\s+/g, " ").slice(0, 160);
+  if (typeof args === "string") return oneLine(args);
   if (!isObj(args)) return "";
   const paths = toolPaths(args);
   for (const key of ["command", "cmd", "script", "code"]) {
-    if (typeof args[key] === "string") return (args[key] as string).replace(/\s+/g, " ").trim().slice(0, 160);
+    if (typeof args[key] === "string") return oneLine(args[key] as string);
+  }
+  for (const key of ["pattern", "query", "glob", "regex", "q"]) {
+    if (typeof args[key] !== "string" || !(args[key] as string).trim()) continue;
+    const where = paths.find((p) => p !== "." && p !== "./");
+    return oneLine(where ? `${args[key] as string} in ${where}` : (args[key] as string));
   }
   if (paths.length > 0) return paths.length > 1 ? `${paths[0]} +${paths.length - 1}` : (paths[0] as string);
-  for (const key of ["pattern", "query", "url", "glob", "regex", "q", "prompt", "description"]) {
+  for (const key of ["url", "prompt", "description"]) {
     if (typeof args[key] === "string") return (args[key] as string).replace(/\s+/g, " ").trim().slice(0, 160);
   }
   try {

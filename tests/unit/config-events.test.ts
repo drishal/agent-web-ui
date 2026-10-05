@@ -107,6 +107,11 @@ describe("agent event normalization", () => {
     expect(toolSummary({ path: "src/a.ts" })).toBe("src/a.ts");
     expect(toolSummary({ paths: ["a", "b", "c"] })).toBe("a +2");
     expect(toolSummary({ pattern: "TODO" })).toBe("TODO");
+    // Searches say what they look for, and where unless it is the working directory.
+    expect(toolSummary({ pattern: "*.gguf", target: "files", path: "." })).toBe("*.gguf");
+    expect(toolSummary({ pattern: "TODO", path: "src" })).toBe("TODO in src");
+    expect(toolPaths({ pattern: "x", target: "content", path: "." })).toEqual(["."]);
+    expect(toolPaths({ target: "docs/README.md" })).toEqual(["docs/README.md"]);
     expect(toolPaths({ file_path: "/x/y.ts", edits: [{ path: "z.ts" }, "w.ts"] })).toEqual(["/x/y.ts", "z.ts", "w.ts"]);
     expect(toolPaths("nope")).toEqual([]);
   });
