@@ -68,6 +68,16 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(chat.snapshot().config).toMatchObject({ model: "fake/fake-model", thinkingLevel: "medium" });
   });
 
+  it("sums per-turn usage into lifetime totals across turns", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("first", "normal");
+    await until(() => chat.status === "idle");
+    await chat.send("second", "normal");
+    await until(() => chat.status === "idle" && chat.snapshot().items.filter((i) => i.kind === "user").length === 2);
+    // Two turns at input 900 / cache_read 300 each: lifetime totals, not last snapshot.
+    expect(await live.getUsage()).toMatchObject({ turns: 2, input: 1800, output: 24, cachedInput: 600 });
+  });
+
   it("streams tool rows from tool.start and tool.complete", async () => {
     const { chat } = await openChat();
     await chat.send("run tool please", "normal");

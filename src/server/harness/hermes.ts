@@ -411,22 +411,24 @@ class HermesLiveChat implements LiveChat {
       this.emit({ type: "title", title });
     }
     if (isObj(info.usage)) this.usage = info.usage;
-    const model = str(info.model);
-    const provider = str(info.provider);
-    if (model || provider) {
-      this.emit({
-        type: "config",
-        config: {
-          ...(model ? { model: provider ? `${provider}/${model}` : model } : {}),
-          ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort) } : {}),
-        },
-      });
-    }
-    const wasRunning = this.running;
-    this.running = info.running === true;
-    if (this.running && !wasRunning) this.emit({ type: "busy" });
-    // A turn that ends without `message.complete` (reclaimed session, crash) still settles the UI.
-    if (!this.running && wasRunning) this.emit({ type: "settled" });
+  }
+
+  /**
+   * Lifetime metered totals from per-turn message.complete usage. Snapshots
+   * repeat the just-finished turn (or omit cache_read on some proxies), so
+   * they cannot reconstruct lifetime counters; summing the per-turn deltas —
+   * the same shape state.db accumulates — can. getUsage prefers these once
+   * any turn has landed.
+   */
+  private metered: StepUsage | null = null;
+
+  private accumulateUsage(step: StepUsage): void {
+    const m = this.metered ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    m.input += step.input;
+    m.output += step.output;
+    m.cacheRead += step.cacheRead;
+    m.cacheWrite += step.cacheWrite;
+    this.metered = m;
   }
 
   // ---- gateway events ---------------------------------------------------------
@@ -459,12 +461,14 @@ class HermesLiveChat implements LiveChat {
         this.turns += 1;
         const status = str(p.status);
         const error = status === "error" ? str(p.error) || str(p.failure_reason) || "The run failed" : undefined;
+        const step = usageOf(p.usage);
+        if (step) this.accumulateUsage(step);
         this.emit({
           type: "assistant_end",
           text: str(p.text),
           thinking: str(p.reasoning),
           ...(error ? { error } : {}),
-          ...(usageOf(p.usage) ? { usage: usageOf(p.usage) as StepUsage } : {}),
+          ...(step ? { usage: step } : {}),
         });
         this.emit({ type: "settled" });
         break;
@@ -650,14 +654,15 @@ class HermesLiveChat implements LiveChat {
 
   async getUsage(): Promise<HarnessUsage | null> {
     const calls = num(this.usage.calls);
-    if (calls === null && num(this.usage.input) === null) return null;
+    if (calls === null && num(this.usage.input) === null && !this.metered) return null;
+    const m = this.metered;
     return {
       turns: this.turns,
       steps: calls ?? 0,
-      input: num(this.usage.input) ?? 0,
-      cachedInput: num(this.usage.cache_read) ?? 0,
-      cacheWrite: num(this.usage.cache_write) ?? 0,
-      output: num(this.usage.output) ?? 0,
+      input: m ? m.input : (num(this.usage.input) ?? 0),
+      cachedInput: m ? m.cacheRead : (num(this.usage.cache_read) ?? 0),
+      cacheWrite: m ? m.cacheWrite : (num(this.usage.cache_write) ?? 0),
+      output: m ? m.output : (num(this.usage.output) ?? 0),
       cost: null,
     };
   }
