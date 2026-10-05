@@ -38,7 +38,7 @@ export function HarnessPicker({
         <IconChevronDown size={12} />
       </button>
       {open ? (
-        <div className="command-menu harness-menu" role="listbox" aria-label="Hand off to">
+        <div className="harness-menu" role="listbox" aria-label="Hand off to">
           {others.map((h) => (
             <div key={h.id} role="option" aria-selected="false">
               <button

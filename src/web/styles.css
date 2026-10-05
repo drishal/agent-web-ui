@@ -3162,6 +3162,23 @@ button.harness-chip:disabled {
   cursor: default;
 }
 
+.harness-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(340px, 80vw);
+  max-height: min(340px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+}
+
 .harness-menu [role="option"] button {
   display: flex;
   flex-direction: column;
