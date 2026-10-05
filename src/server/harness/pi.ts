@@ -240,7 +240,8 @@ class PiRpc {
         return;
       }
       if (!isObj(frame)) return;
-      // rpc mode emits no ready frame; the first response or session event proves the child is up.
+      // rpc mode emits no ready frame, and without extensions it prints nothing
+      // until asked: the probe below (or any earlier frame) proves the child is up.
       if (!up) {
         up = true;
         this.readyResolve();
@@ -266,6 +267,8 @@ class PiRpc {
     const timer = setTimeout(() => {
       if (!up) onExit("pi did not become ready");
     }, READY_TIMEOUT_MS);
+    // Its answer is a frame like any other; a dead child rejects it via failAll.
+    this.command("get_state", {}, READY_TIMEOUT_MS).catch(() => undefined);
     void this.ready.then(
       () => clearTimeout(timer),
       () => clearTimeout(timer),
