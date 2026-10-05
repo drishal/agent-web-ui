@@ -4,6 +4,7 @@
 // plain line prefix would drag along abandoned branches.
 import { randomBytes } from "node:crypto";
 import { isObj, type Obj } from "./agent-events.js";
+import { toolRecordText, type SeedEntry } from "./handoff.js";
 
 /** Time-ordered session id, the shape both harnesses mint for new sessions. */
 export function uuidv7(now = Date.now()): string {
@@ -106,4 +107,46 @@ export function forkSessionText(text: string, options: ForkOptions): string {
   };
   const lines = [slot, JSON.stringify(out), ...kept.map((entry) => JSON.stringify(entry))];
   return `${lines.filter((line): line is string => typeof line === "string").join("\n")}\n`;
+}
+
+/** Usage of a message no model produced: zero, in the shape session totals add up. */
+const NO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+/**
+ * A new session file holding a handoff transcript: a v3 header, then one
+ * message entry per line chained through parentId (both harnesses rebuild
+ * context by walking from the leaf). Assistant entries carry zero usage and a
+ * "handoff" model so session totals and provider replay treat them as foreign.
+ * Tool records become assistant text; a foreign tool call cannot be replayed.
+ */
+export function seedSessionText(options: { id: string; cwd: string; now: Date; entries: SeedEntry[] }): string {
+  const lines = [JSON.stringify({ type: "session", version: 3, id: options.id, timestamp: options.now.toISOString(), cwd: options.cwd })];
+  let parentId: string | null = null;
+  let at = options.now.getTime();
+  for (const entry of options.entries) {
+    let message: Obj;
+    if (entry.role === "user") {
+      message = { role: "user", content: [{ type: "text", text: entry.text }] };
+    } else {
+      const content: Obj[] = [];
+      if (entry.role === "tool") content.push({ type: "text", text: toolRecordText(entry) });
+      else {
+        if (entry.thinking) content.push({ type: "thinking", thinking: entry.thinking });
+        if (entry.text) content.push({ type: "text", text: entry.text });
+      }
+      message = { role: "assistant", content, api: "handoff", provider: "handoff", model: "handoff", usage: NO_USAGE, stopReason: "stop" };
+    }
+    const id = randomBytes(4).toString("hex");
+    lines.push(JSON.stringify({ type: "message", id, parentId, timestamp: new Date(at).toISOString(), message: { ...message, timestamp: at } }));
+    parentId = id;
+    at += 1;
+  }
+  return `${lines.join("\n")}\n`;
 }

@@ -30,9 +30,9 @@ import {
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import { forkSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
-import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
+import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -591,34 +591,32 @@ export class OmpAdapter implements HarnessAdapter {
     return { nativeId: id };
   }
 
+  /**
+   * A new session file holding the seed, then resumed like any other. Where
+   * that file goes (per-project bucket, or flat under a session-dir override)
+   * is omp's call, so a fresh child names the path and id it would use; it
+   * writes nothing before a first prompt, so the file is ours to create.
+   */
   async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
-    const root = await this.resolveSessionDir();
-    const id = uuidv7();
-    const now = new Date();
-    const entry = (message: Obj): string =>
-      JSON.stringify({ type: "message", id: uuidv7(), message, timestamp: now.toISOString() });
-    const lines: string[] = [
-      JSON.stringify({ type: "session", version: 3, id, timestamp: now.toISOString(), cwd: path.resolve(req.cwd), ...(req.seed.title ? { title: req.seed.title, titleSource: "handoff" } : {}) }),
-    ];
-    for (const seedEntry of seedTranscript(req.seed)) {
-      if (seedEntry.role === "user") lines.push(entry({ role: "user", content: seedEntry.text }));
-      else if (seedEntry.role === "tool") lines.push(entry({ role: "assistant", content: [{ type: "text", text: toolRecordText(seedEntry) }] }));
-      else {
-        const content: Obj[] = [];
-        if (seedEntry.thinking) content.push({ type: "thinking", thinking: seedEntry.thinking });
-        if (seedEntry.text) content.push({ type: "text", text: seedEntry.text });
-        lines.push(entry({ role: "assistant", content }));
-      }
+    const fresh = new OmpRpc(this.cliCommand, ["--mode", "rpc-ui", "--cwd", req.cwd], this.env(), req.cwd, () => undefined, () => undefined);
+    let state: Obj | null;
+    try {
+      await fresh.ready;
+      state = await fresh.command<Obj>("get_state");
+    } finally {
+      await fresh.kill();
     }
-    // Same bucket layout the lister scans: per-project dirs under the store root.
-    const bucket = path.resolve(req.cwd).replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
-    await fs.mkdir(path.join(root, bucket), { recursive: true });
-    const target = path.join(root, bucket, `${sessionFileTimestamp(now)}_${id}.jsonl`);
-    const tmp = `${target}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
-    await fs.rename(tmp, target);
+    const id = typeof state?.sessionId === "string" ? state.sessionId : "";
+    const file = typeof state?.sessionFile === "string" ? state.sessionFile : "";
+    if (!id || !file.endsWith(`_${id}.jsonl`)) throw new Error("omp did not say where a new session goes");
+    const body = seedSessionText({ id, cwd: path.resolve(req.cwd), now: new Date(), entries: seedTranscript(req.seed) });
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, body, { mode: 0o600, flag: "wx" });
+    await fs.link(tmp, file).finally(() => fs.unlink(tmp).catch(() => undefined));
     const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd);
     await chat.start(id);
+    if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
     return chat;
   }
 

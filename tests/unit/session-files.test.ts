@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forkSessionText, uuidv7 } from "../../src/server/harness/session-files.js";
+import { forkSessionText, seedSessionText, uuidv7 } from "../../src/server/harness/session-files.js";
 
 /** A Pi-family file: title slot, header, then a tree of entries. */
 function sessionText(): string {
@@ -52,5 +52,30 @@ describe("uuidv7", () => {
     const late = uuidv7(1_800_000_000_000);
     expect(early).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(early < late).toBe(true);
+  });
+
+  it("writes a handoff seed as one parentId chain both harnesses can walk", () => {
+    const text = seedSessionText({
+      id: "seed-1",
+      cwd: "/tmp/project",
+      now: new Date("2026-01-01T00:00:00.000Z"),
+      entries: [
+        { role: "user", text: "q" },
+        { role: "tool", name: "read", summary: "README.md", output: "body" },
+        { role: "assistant", text: "a", thinking: "hmm" },
+      ],
+    });
+    const [header, ...entries] = text.trim().split("\n").map((l) => JSON.parse(l));
+    expect(header).toMatchObject({ type: "session", version: 3, id: "seed-1", timestamp: "2026-01-01T00:00:00.000Z", cwd: "/tmp/project" });
+    expect(entries.map((e) => e.parentId)).toEqual([null, entries[0].id, entries[1].id]);
+    for (const e of entries) {
+      expect(e.id).toMatch(/^[0-9a-f]{8}$/);
+      expect(typeof e.timestamp).toBe("string");
+      expect(typeof e.message.timestamp).toBe("number");
+    }
+    expect(entries[1].message.content[0].text).toContain("README.md");
+    // Assistant entries carry usage, or session totals throw on them.
+    expect(entries[2].message).toMatchObject({ role: "assistant", usage: { input: 0, cost: { total: 0 } }, stopReason: "stop" });
+    expect(entries[2].message.content.map((c: { type: string }) => c.type)).toEqual(["thinking", "text"]);
   });
 });
