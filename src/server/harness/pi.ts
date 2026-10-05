@@ -24,6 +24,7 @@ import {
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
+import type { HandoffSeed } from "./handoff.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -335,6 +336,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsRename: true,
     supportsModelSelection: true,
     supportsFork: true,
+    supportsHandoff: true,
   };
   private modelCache = new Map<string, { at: number; models: ModelInfo[] }>();
 
@@ -451,6 +453,46 @@ export class PiAdapter implements HarnessAdapter {
     await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
     await fs.rename(tmp, targetPath);
     return { nativeId: id };
+  }
+
+  /**
+   * Fresh session file with the seed's transcript recorded as entries, then
+   * opened like any resumed session. Tool records arrive as plain transcript
+   * text (a "Handed off" assistant message), never live tool state.
+   */
+  async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
+    const dir = this.sessionDirFor(req.cwd, await this.resolveAgentDir());
+    await fs.mkdir(dir, { recursive: true });
+    const id = randomUUID();
+    const now = Date.now();
+    const lines: string[] = [JSON.stringify({ type: "session", id, cwd: path.resolve(req.cwd), timestamp: now })];
+    let parent: string | null = null;
+    const append = (message: Obj): void => {
+      const entryId = randomUUID();
+      lines.push(JSON.stringify({ type: "message", id: entryId, parentId: parent, message, timestamp: Date.now() }));
+      parent = entryId;
+    };
+    if (req.seed.title) lines.push(JSON.stringify({ type: "session_info", id: randomUUID(), parentId: parent, name: req.seed.title, timestamp: Date.now() }));
+    if (req.seed.summary) append({ role: "assistant", content: [{ type: "text", text: req.seed.summary }], stopReason: "stop" });
+    for (const turn of req.seed.turns) {
+      append({ role: "user", content: turn.prompt.text });
+      for (const tool of turn.tools) {
+        append({ role: "assistant", content: [{ type: "text", text: `[Handed off from another harness] ${tool.summary}\n${tool.output}` }], stopReason: "stop" });
+      }
+      if (turn.answer) {
+        const content: Obj[] = [];
+        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
+        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        append({ role: "assistant", content, stopReason: "stop" });
+      }
+    }
+    if (req.seed.prompt) append({ role: "user", content: req.seed.prompt });
+    const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
+    const targetPath = path.join(dir, `${stamp}_${id}.jsonl`);
+    const tmp = `${targetPath}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
+    await fs.rename(tmp, targetPath);
+    return this.openChat({ cwd: req.cwd, resumeNativeId: id });
   }
 
   private spawnEnv(cwd: string): NodeJS.ProcessEnv {

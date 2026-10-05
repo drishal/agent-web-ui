@@ -190,6 +190,19 @@ export function App() {
     }
   };
 
+  /** Continue this chat in another harness; the draft (if any) seeds its first turn. */
+  const handoffChat = async (harnessId: string, draft: string): Promise<void> => {
+    if (!chat) return;
+    const prompt = draft.trim() ? draft : undefined;
+    try {
+      const next = await api<ChatSnapshot>(`/api/chats/${chat.chatId}/handoff`, { body: { harness: harnessId, ...(prompt ? { prompt } : {}) } });
+      showChat(next);
+      setBanner({ level: "info", text: `Continued in ${next.harnessId} · model reset to default` });
+      void refreshSessions();
+    } catch (e) {
+      fail(e);
+    }
+  };
   const answer = async (requestId: string, a: InteractionAnswer) => {
     if (!chat) return;
     try {
@@ -430,6 +443,7 @@ export function App() {
                 key={chat.chatId}
                 hero
                 chat={chat}
+                harnesses={boot.harnesses}
                 maxChars={boot.limits.maxMessageChars}
                 placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
                 onSend={send}
@@ -437,6 +451,7 @@ export function App() {
                 onStop={stop}
                 onAnswer={answer}
                 onConfig={configure}
+                onHandoff={(id, draft) => void handoffChat(id, draft)}
               />
             </div>
           </div>
@@ -447,12 +462,14 @@ export function App() {
             <Composer
               key={chat.chatId}
               chat={chat}
+              harnesses={boot.harnesses}
               maxChars={boot.limits.maxMessageChars}
               onSend={send}
               onRefreshModels={refreshModels}
               onStop={stop}
               onAnswer={answer}
               onConfig={configure}
+              onHandoff={(id, draft) => void handoffChat(id, draft)}
             />
           </>
         ) : (

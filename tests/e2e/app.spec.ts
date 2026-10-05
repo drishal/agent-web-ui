@@ -483,6 +483,20 @@ test("a finished turn forks into a new chat holding just that turn", async ({ pa
   await expect(page.getByTestId("turn")).toHaveCount(1);
 });
 
+test("composer harness chip hands the chat off to another harness", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first tool question");
+  await expect(prompts(page)).toHaveText(["first tool question"]);
+  // The chip shows the current harness; its menu lists the others.
+  await page.getByRole("button", { name: "Harness" }).click();
+  await page.getByRole("button", { name: /Handoff to Fake B/ }).click();
+  await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
+  await expect(prompts(page)).toHaveText(["first tool question"]);
+  await expect(status(page)).toHaveText("Idle");
+  await expect(page.getByText(/Continued in .*model reset to default/)).toBeVisible();
+});
+
 const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 test("images can be pasted, dropped, or picked, then removed or sent with the prompt", async ({ page }) => {

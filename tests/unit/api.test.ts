@@ -117,6 +117,28 @@ describe("chat lifecycle over HTTP + SSE", () => {
     sse.close();
   });
 
+  it("hands a chat off to another harness with transcript and draft", async () => {
+    const { agent, ws } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t as TestApp, chat.chatId, agent.cookie);
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "snapshot"));
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "first tool question" });
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "status" && e.status === "idle"));
+    const moved = await agent.post(`/api/chats/${chat.chatId}/handoff`).send({ harness: "fake-b", prompt: "continue there" });
+    expect(moved.status).toBe(201);
+    const copy = moved.body as ChatSnapshot;
+    expect(copy.chatId).not.toBe(chat.chatId);
+    expect(copy.harnessId).toBe("fake-b");
+    expect(copy.items.map((i) => i.kind)).toEqual(["user", "tool", "assistant", "user"]);
+    expect(copy.items[copy.items.length - 1]).toMatchObject({ kind: "user", text: "continue there" });
+    // Same-harness and unknown-harness handoffs are rejected; a fresh chat has
+    // a native id already (in-memory), so emptiness — not missing session — rejects it.
+    expect((await agent.post(`/api/chats/${chat.chatId}/handoff`).send({ harness: "fake" })).status).toBe(400);
+    expect((await agent.post(`/api/chats/${chat.chatId}/handoff`).send({ harness: "nope" })).status).toBe(404);
+    const fresh = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    expect((await agent.post(`/api/chats/${fresh.chatId}/handoff`).send({ harness: "fake-b" })).status).toBe(400);
+  });
+
   it("returns 409 for a normal send while busy, and steers / queues follow-ups", async () => {
     const { agent, ws, t } = await setup({ chunkDelayMs: 15 });
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;

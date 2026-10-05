@@ -10,6 +10,7 @@ import {
   compactSchema,
   createChatSchema,
   forkChatSchema,
+  handoffSchema,
   MAX_IMAGE_BYTES,
   MAX_IMAGES,
   MAX_MESSAGE_CHARS,
@@ -27,6 +28,7 @@ import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
+import { isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
@@ -396,7 +398,29 @@ export function createApp(deps: AppDeps) {
     res.status(201).json((await manager.resume(chat.adapter, chat.workspace, forked.nativeId)).snapshot());
   });
 
-  app.post("/api/chats/:id/requests/:requestId", (req, res) => {
+  app.post("/api/chats/:id/handoff", async (req, res) => {
+    const { harness, through, prompt } = body(handoffSchema, req);
+    const chat = manager.get(req.params.id);
+    const target = availableAdapter(harness);
+    if (target.id === chat.adapter.id) throw new ChatError(400, "same_harness", "That chat is already in this harness");
+    if (!target.capabilities.supportsHandoff) throw new ChatError(400, "unsupported", `${target.displayName} cannot receive handoffs yet`);
+    if (!chat.nativeId) throw new ChatError(409, "not_started", "This chat has no session to hand off yet");
+    // Busy chats stop first (stop-here-continue-there); the source stays open
+    // in aborted state so nothing is lost if seeding fails.
+    if (chat.status === "running" || chat.status === "compacting" || chat.status === "stopping") await chat.abort();
+    const snap = chat.snapshot();
+    const seed = toSeed(snap.items, { title: snap.title, todos: snap.todos, throughTurns: through, prompt });
+    if (isEmptySeed(seed)) throw new ChatError(400, "empty_handoff", "There is nothing to hand off yet");
+    let live;
+    try {
+      live = await target.seedChat({ cwd: chat.workspace.path, seed });
+    } catch (error) {
+      throw new ChatError(502, "handoff_failed", `${target.displayName} could not take this session: ${errorMessage(error)}`);
+    }
+    res.status(201).json((await manager.seedOpen(target, chat.workspace, live)).snapshot());
+  });
+
+  app.post("/api/chats/:id/requests/:requestId", async (req, res) => {
     const chat = manager.get(req.params.id);
     const { answer } = body(answerSchema, req);
     const outcome = chat.answer(req.params.requestId, answer);

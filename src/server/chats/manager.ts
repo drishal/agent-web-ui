@@ -78,6 +78,18 @@ export class ChatManager {
   }
 
   /**
+   * Register an already-open seeded chat (handoff target). Unlike create, the
+   * LiveChat arrives started; load still attaches history/config the same way.
+   */
+  async seedOpen(adapter: HarnessAdapter, workspace: WorkspaceInfo, live: LiveChat): Promise<Chat> {
+    const problem = adapter.workspaceProblem(workspace.path);
+    if (problem) throw new ChatError(422, "workspace_unsupported", problem);
+    const chat = await this.load(adapter, workspace, live);
+    this.register(chat);
+    return chat;
+  }
+
+  /**
    * Build the chat from a started harness session. If that fails (a history too
    * big for the transport, say), the session is closed again rather than left
    * running with nothing attached to it.
@@ -91,7 +103,6 @@ export class ChatManager {
     }
   }
 
-  /** Attach to the live chat for this session if one exists; otherwise open it. */
   async resume(adapter: HarnessAdapter, workspace: WorkspaceInfo, nativeId: string): Promise<Chat> {
     const k = key(adapter.id, nativeId);
     const existing = this.liveChatFor(adapter.id, nativeId);

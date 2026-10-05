@@ -1,7 +1,7 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode, type SlashCommand } from "../../shared/protocol.js";
+import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
@@ -18,6 +18,7 @@ const coarsePointer = () => typeof window !== "undefined" && window.matchMedia?.
 
 export function Composer({
   chat,
+  harnesses,
   maxChars,
   hero,
   placeholder,
@@ -26,8 +27,10 @@ export function Composer({
   onAnswer,
   onConfig,
   onRefreshModels,
+  onHandoff,
 }: {
   chat: ChatState;
+  harnesses: HarnessStatus[];
   maxChars: number;
   hero?: boolean;
   placeholder?: string;
@@ -36,6 +39,7 @@ export function Composer({
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
   onRefreshModels: () => Promise<void>;
+  onHandoff: (harnessId: string, draft: string) => void;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -332,7 +336,7 @@ export function Composer({
                 e.target.value = "";
               }}
             />
-            <ComposerControls chat={chat} onConfig={onConfig} onRefreshModels={onRefreshModels} />
+            <ComposerControls chat={chat} harnesses={harnesses} onConfig={onConfig} onRefreshModels={onRefreshModels} onHandoff={(id) => onHandoff(id, text)} />
             <div className="composer-actions">
               {tooLong ? (
                 <span className="composer-error">

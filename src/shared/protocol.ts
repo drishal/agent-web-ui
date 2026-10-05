@@ -16,6 +16,8 @@ export interface HarnessCapabilities {
   supportsModelSelection: boolean;
   /** The chat can be branched into a new session at a chosen turn. */
   supportsFork: boolean;
+  /** A portable transcript seed can start a fresh session here. */
+  supportsHandoff: boolean;
 }
 
 export interface HarnessStatus {
@@ -323,6 +325,12 @@ export const resumeChatSchema = z.object({
 /** Branch the chat after its Nth user turn (1-based). */
 export const forkChatSchema = z.object({
   through: z.number().int().min(1).max(10_000),
+});
+/** Continue this chat in another harness: transcript seed plus an optional first prompt. */
+export const handoffSchema = z.object({
+  harness: z.string().min(1).max(64),
+  through: z.number().int().min(1).max(10_000).optional(),
+  prompt: z.string().max(MAX_MESSAGE_CHARS).optional(),
 });
 /** Image types both harnesses and the major providers accept. */
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;

@@ -32,6 +32,7 @@ import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type O
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { forkSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
+import type { HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -499,6 +500,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsRename: true,
     supportsModelSelection: true,
     supportsFork: true,
+    supportsHandoff: true,
   };
   private lister: AcpLister;
   private firstPrompts = new FirstPrompts(() => this.resolveSessionDir());
@@ -587,6 +589,41 @@ export class OmpAdapter implements HarnessAdapter {
     await fs.writeFile(tmp, body, { mode: 0o600 });
     await fs.rename(tmp, target);
     return { nativeId: id };
+  }
+
+  async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
+    const root = await this.resolveSessionDir();
+    const id = uuidv7();
+    const now = new Date();
+    const entry = (message: Obj): string =>
+      JSON.stringify({ type: "message", id: uuidv7(), message, timestamp: now.toISOString() });
+    const lines: string[] = [
+      JSON.stringify({ type: "session", version: 3, id, timestamp: now.toISOString(), cwd: path.resolve(req.cwd), ...(req.seed.title ? { title: req.seed.title, titleSource: "handoff" } : {}) }),
+    ];
+    if (req.seed.summary) lines.push(entry({ role: "assistant", content: [{ type: "text", text: req.seed.summary }] }));
+    for (const turn of req.seed.turns) {
+      lines.push(entry({ role: "user", content: turn.prompt.text }));
+      for (const tool of turn.tools) {
+        lines.push(entry({ role: "assistant", content: [{ type: "text", text: `[Handed off from another harness] ${tool.summary}\n${tool.output}` }] }));
+      }
+      if (turn.answer) {
+        const content: Obj[] = [];
+        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
+        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        lines.push(entry({ role: "assistant", content }));
+      }
+    }
+    if (req.seed.prompt) lines.push(entry({ role: "user", content: req.seed.prompt }));
+    // Same bucket layout the lister scans: per-project dirs under the store root.
+    const bucket = path.resolve(req.cwd).replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
+    await fs.mkdir(path.join(root, bucket), { recursive: true });
+    const target = path.join(root, bucket, `${sessionFileTimestamp(now)}_${id}.jsonl`);
+    const tmp = `${target}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
+    await fs.rename(tmp, target);
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd);
+    await chat.start(id);
+    return chat;
   }
 
   /** One throwaway `--no-session` child per workspace (cached) for models and thinking levels. */

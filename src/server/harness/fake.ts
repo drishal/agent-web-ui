@@ -17,6 +17,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, forkCutIndex, historyToItems } from "./agent-events.js";
+import type { HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
   HarnessDiscovery,
@@ -78,6 +79,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsRename: true,
       supportsModelSelection: true,
       supportsFork: true,
+      supportsHandoff: true,
       ...options.capabilities,
     };
   }
@@ -139,6 +141,34 @@ export class FakeAdapter implements HarnessAdapter {
       updatedAt: new Date(),
     });
     return { nativeId };
+  }
+
+  /** Fresh in-memory session with the seed's turns recorded as transcript messages. */
+  async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
+    const session: FakeSession = { nativeId: randomUUID(), cwd: req.cwd, title: req.seed.title ?? "", messages: [], updatedAt: new Date() };
+    this.sessions.set(session.nativeId, session);
+    const push = (message: Record<string, unknown>) => {
+      session.messages.push({ timestamp: Date.now(), ...message });
+    };
+    if (req.seed.summary) {
+      push({ role: "assistant", content: [{ type: "text", text: req.seed.summary }], stopReason: "stop" });
+    }
+    for (const turn of req.seed.turns) {
+      push({ role: "user", content: turn.prompt.text });
+      for (const tool of turn.tools) {
+        const id = randomUUID();
+        push({ role: "assistant", content: [{ type: "toolCall", id, name: tool.name, arguments: {} }], stopReason: "toolUse" });
+        push({ role: "toolResult", toolCallId: id, toolName: tool.name, content: [{ type: "text", text: `[handed off] ${tool.summary}\n${tool.output}` }], isError: false });
+      }
+      if (turn.answer) {
+        const content: unknown[] = [];
+        if (turn.answer.thinking) content.push({ type: "thinking", thinking: turn.answer.thinking });
+        if (turn.answer.text) content.push({ type: "text", text: turn.answer.text });
+        push({ role: "assistant", content, stopReason: "stop" });
+      }
+    }
+    if (req.seed.prompt) push({ role: "user", content: req.seed.prompt });
+    return new FakeLiveChat(session, this.chunkDelayMs);
   }
 
   async openChat(req: OpenChatRequest): Promise<LiveChat> {

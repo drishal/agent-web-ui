@@ -14,7 +14,7 @@ import type {
   SlashCommand,
   TodoItem,
 } from "../../shared/protocol.js";
-
+import type { HandoffSeed } from "./handoff.js";
 export interface HarnessDiscovery {
   available: boolean;
   version?: string;
@@ -140,6 +140,14 @@ export interface HarnessAdapter {
    * capabilities.supportsFork.
    */
   forkSession(req: { cwd: string; nativeId: string; throughTurns: number }): Promise<{ nativeId: string }>;
+  /**
+   * Start a fresh session seeded with a portable transcript (cross-harness
+   * handoff). Tool records arrive as plain transcript text, never live tool
+   * state; `prompt` becomes the first turn after the seed. Returns the live
+   * chat directly (unlike forkSession, the session is already open). Callers
+   * gate on capabilities.supportsHandoff.
+   */
+  seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat>;
   openChat(req: OpenChatRequest): Promise<LiveChat>;
   /** Kill helper processes; called on server shutdown. */
   shutdown(): Promise<void>;
