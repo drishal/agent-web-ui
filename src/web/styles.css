@@ -589,6 +589,10 @@ pre {
   background: var(--orange);
 }
 
+.harness-claude {
+  background: var(--rare);
+}
+
 .segmented .harness-dot {
   margin-right: 6px;
   vertical-align: 1px;
@@ -624,6 +628,10 @@ pre {
 
 .working-ring[data-harness="hermes"] {
   color: var(--orange);
+}
+
+.working-ring[data-harness="claude"] {
+  color: var(--rare);
 }
 
 .project-toggle .working-ring {
@@ -748,6 +756,11 @@ pre {
 .badge-hermes {
   background: color-mix(in srgb, var(--orange) 16%, transparent);
   color: var(--orange);
+}
+
+.badge-claude {
+  background: color-mix(in srgb, var(--rare) 16%, transparent);
+  color: var(--rare);
 }
 
 /* Resize handle on the sidebar's right edge. */
@@ -3166,6 +3179,11 @@ button.harness-chip[data-harness="omp"] {
 button.harness-chip[data-harness="hermes"] {
   background: color-mix(in srgb, var(--orange) 16%, transparent);
   color: var(--orange);
+}
+
+button.harness-chip[data-harness="claude"] {
+  background: color-mix(in srgb, var(--rare) 16%, transparent);
+  color: var(--rare);
 }
 
 button.harness-chip:hover:not(:disabled) {

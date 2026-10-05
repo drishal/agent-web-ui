@@ -1,6 +1,7 @@
 // Adding a harness = one adapter file + one entry in `factories`.
 import { asHarnessId, type HarnessId, type HarnessStatus } from "../../shared/protocol.js";
 import type { ServerConfig } from "../config.js";
+import { ClaudeAdapter } from "./claude.js";
 import { FakeAdapter } from "./fake.js";
 import { HermesAdapter } from "./hermes.js";
 import { OmpAdapter } from "./omp.js";
@@ -13,6 +14,7 @@ const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   pi: () => new PiAdapter(),
   omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home }),
   hermes: () => new HermesAdapter(),
+  claude: (config) => new ClaudeAdapter({ home: config.home }),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
   fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay() }),
   "fake-b": () =>
