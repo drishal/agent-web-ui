@@ -96,8 +96,32 @@ function textContent(message: Obj): string {
   return parts.join("\n");
 }
 
-/** Mirrors pi's buildSessionInfo: header, latest session_info name, user/assistant text scan. */
+/**
+ * Parsed metadata per file, keyed by path and reused while mtime and size are
+ * unchanged: every sidebar refresh lists every project's sessions, and only
+ * the files being written to have changed since the last one.
+ */
+const metaCache = new Map<string, { mtimeMs: number; size: number; meta: SessionMeta | null }>();
+const META_CACHE_MAX = 5000;
+
 async function sessionMeta(file: string): Promise<SessionMeta | null> {
+  let stat: { mtimeMs: number; size: number };
+  try {
+    stat = await fs.stat(file);
+  } catch {
+    metaCache.delete(file);
+    return null;
+  }
+  const cached = metaCache.get(file);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.meta;
+  const meta = await readSessionMeta(file, stat.mtimeMs);
+  if (metaCache.size >= META_CACHE_MAX) metaCache.clear();
+  metaCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, meta });
+  return meta;
+}
+
+/** Mirrors pi's buildSessionInfo: header, latest session_info name, user/assistant text scan. */
+async function readSessionMeta(file: string, statMtime: number): Promise<SessionMeta | null> {
   let parsed: { header: Obj | null; entries: Obj[] };
   try {
     parsed = await readSessionFile(file);
@@ -122,12 +146,6 @@ async function sessionMeta(file: string): Promise<SessionMeta | null> {
       const text = textContent(entry.message);
       if (text) firstMessage = text;
     }
-  }
-  let statMtime: number;
-  try {
-    statMtime = (await fs.stat(file)).mtimeMs;
-  } catch {
-    return null;
   }
   return {
     id: header.id,
