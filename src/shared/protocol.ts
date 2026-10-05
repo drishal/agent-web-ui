@@ -107,6 +107,8 @@ export interface UserItem {
   id: string;
   text: string;
   imageCount?: number;
+  /** A "/" command the harness answered itself: no stored turn, so forks do not count it. */
+  command?: true;
   /** Epoch ms when the harness recorded it, when known. */
   at?: number;
 }

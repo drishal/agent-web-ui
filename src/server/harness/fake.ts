@@ -274,8 +274,7 @@ class FakeLiveChat implements LiveChat {
     if (this.disposed) throw new Error("Chat is closed");
     // Like omp's builtins: runs locally, answers with output, no model turn.
     if (text.trim() === "/fake-status") {
-      this.emit({ type: "user_message", text: "/fake-status" });
-      for (const event of commandOutputEvents("fake status: all good")) this.emit(event);
+      for (const event of commandOutputEvents("/fake-status", "fake status: all good")) this.emit(event);
       this.emit({ type: "settled" });
       return;
     }

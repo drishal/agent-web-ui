@@ -986,8 +986,7 @@ class OmpLiveChat implements LiveChat {
       // A builtin (/context, /usage...) runs locally: no turn and no prompt_result, so show the
       // command as the prompt, then its output, and settle here.
       if (isObj(result) && result.agentInvoked === false) {
-        this.hub.emit({ type: "user_message", text: text.trim() });
-        for (const event of commandOutputEvents(outputs.join("\n\n"))) this.hub.emit(event);
+        for (const event of commandOutputEvents(text.trim(), outputs.join("\n\n"))) this.hub.emit(event);
         this.hub.emit({ type: "settled" });
       } else for (const output of outputs) this.hub.emit({ type: "notice", level: "info", text: output });
     }

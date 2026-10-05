@@ -46,16 +46,22 @@ export function forkCutIndex(messages: unknown[], throughTurns: number): number 
 }
 
 /**
- * Output of a "/" command that ran without a model turn, as that turn's answer.
- * Fenced, because it is terminal text (padded columns, bars) that markdown would reflow.
+ * A "/" command that ran without a model turn: the command as the prompt
+ * (marked, since the harness stores no turn for it) and its output as the
+ * answer. Fenced, because it is terminal text (padded columns, bars) that
+ * markdown would reflow.
  */
-export function commandOutputEvents(output: string): HarnessEvent[] {
+export function commandOutputEvents(command: string, output: string): HarnessEvent[] {
   // Terminal colours and hyperlinks (CSI and OSC sequences) would show as junk in a browser.
   const plain = output.replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, "");
   const text = plain.trim() || "(no output)";
   const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
   const fence = "`".repeat(Math.max(3, longest + 1));
-  return [{ type: "assistant_start" }, { type: "assistant_end", text: `${fence}text\n${text}\n${fence}`, thinking: "" }];
+  return [
+    { type: "user_message", text: command, command: true },
+    { type: "assistant_start" },
+    { type: "assistant_end", text: `${fence}text\n${text}\n${fence}`, thinking: "" },
+  ];
 }
 
 /** pi-ai's per-message `usage` (Pi and omp share it). */

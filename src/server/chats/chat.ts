@@ -234,9 +234,10 @@ class EventReducer {
           id: this.nextId("u"),
           text: event.text,
           ...(event.imageCount ? { imageCount: event.imageCount } : {}),
+          ...(event.command ? { command: true as const } : {}),
           at: Date.now(),
         });
-        if (!this.title) this.setTitle(event.text.slice(0, 80));
+        if (!this.title && !event.command) this.setTitle(event.text.slice(0, 80));
         break;
       case "assistant_start":
         this.finishStreaming();

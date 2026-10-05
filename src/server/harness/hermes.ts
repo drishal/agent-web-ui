@@ -734,8 +734,7 @@ class HermesLiveChat implements LiveChat {
 
   /** A command that ran without a model turn: the command as the prompt, its output, then idle. */
   private commandOutput(command: string, output: string): void {
-    this.emit({ type: "user_message", text: command });
-    for (const event of commandOutputEvents(output)) this.emit(event);
+    for (const event of commandOutputEvents(command, output)) this.emit(event);
     this.emit({ type: "settled" });
   }
 

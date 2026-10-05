@@ -39,8 +39,10 @@ describe("command output", () => {
   it("drops terminal colours and links, and fences the text so markdown leaves it alone", async () => {
     const { commandOutputEvents } = await import("../../src/server/harness/agent-events.js");
     const raw = "Context window: 1000 tokens\n  Skills [\u001b[1m\u001b[38;5;179m░\u001b[22m\u001b[39m] 1%  52 tokens\n\u001b]8;;https://x.y\u0007link\u001b]8;;\u0007 with ``` inside";
-    const end = commandOutputEvents(raw)[1] as { text: string };
+    const events = commandOutputEvents("/context", raw);
+    expect(events[0]).toEqual({ type: "user_message", text: "/context", command: true });
+    const end = events[2] as { text: string };
     expect(end.text).toBe("````text\nContext window: 1000 tokens\n  Skills [░] 1%  52 tokens\nlink with ``` inside\n````");
-    expect((commandOutputEvents("  ")[1] as { text: string }).text).toBe("```text\n(no output)\n```");
+    expect((commandOutputEvents("/x", "  ")[2] as { text: string }).text).toBe("```text\n(no output)\n```");
   });
 });

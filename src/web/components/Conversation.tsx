@@ -352,7 +352,7 @@ const TurnView = memo(function TurnView({
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} />
       {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
-      {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={canFork} onFork={onFork} /> : null}
+      {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} /> : null}
       {!hasProcess && !turn.answer && turn.live ? (
         <div className="process is-live">
           <span className="process-head is-static">

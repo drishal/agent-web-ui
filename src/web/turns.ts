@@ -6,7 +6,7 @@ import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, ToolCategory, Use
 export interface Turn {
   id: string;
   index: number;
-  /** 1-based ordinal of USER-prompted groups (what the server's fork `through` counts); 0 for a preamble. */
+  /** 1-based ordinal of stored user turns (what the server's fork `through` counts); 0 for a preamble or a command the harness answered itself. */
   through: number;
   prompt: UserItem | null;
   /** Everything before the answer: thinking, intermediate text, tools, notices, requests. */
@@ -39,7 +39,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
   let userTurns = 0;
   return groups.map((group, index) => {
     const prompt = group[0]?.kind === "user" ? group[0] : null;
-    const through = prompt ? ++userTurns : 0;
+    const through = prompt && !prompt.command ? ++userTurns : 0;
     const rest = prompt ? group.slice(1) : group;
     const live = busy && index === groups.length - 1;
 

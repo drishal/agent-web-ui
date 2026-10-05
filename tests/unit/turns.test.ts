@@ -17,6 +17,23 @@ const tool = (id: string, category: "read" | "edit" | "command", extra: Record<s
 });
 
 describe("buildTurns", () => {
+  it("numbers stored user turns for forks, skipping preambles and harness-answered commands", () => {
+    const answer = (id: string): ChatItem => ({ kind: "assistant", id, text: "ok", thinking: "", streaming: false });
+    const turns = buildTurns(
+      [
+        { kind: "notice", id: "n", level: "info", text: "started" },
+        { kind: "user", id: "u1", text: "first" },
+        answer("a1"),
+        { kind: "user", id: "u2", text: "/context", command: true },
+        answer("a2"),
+        { kind: "user", id: "u3", text: "second" },
+        answer("a3"),
+      ],
+      "idle",
+    );
+    expect(turns.map((t) => t.through)).toEqual([0, 1, 0, 2]);
+  });
+
   it("splits on prompts and folds the work before the answer", () => {
     const items: ChatItem[] = [
       { kind: "notice", id: "n0", level: "info", text: "startup" },
