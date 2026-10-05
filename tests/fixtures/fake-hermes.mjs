@@ -6,6 +6,7 @@
 //   "ask twice"  two approval requests at once (stacked approvals)
 //   "fail"  end the turn with an error "slow"   stream many chunks
 //   "big"   oversized tool output          "edit"  edit a file (src/app.ts)
+//   "vanish"  the turn stops on a fallback model with no message.complete
 // Session rows for projects.tree/list come from FAKE_HERMES_STATE (JSON file).
 import { readFileSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
@@ -90,6 +91,11 @@ async function runPrompt(text) {
     body += chunk;
     event("reasoning.delta", { text: "hmm " }, sessionId);
     event("message.delta", { text: chunk }, sessionId);
+  }
+  if (/\bvanish\b/.test(text)) {
+    // A reclaimed turn: only session.info says it stopped (and on which model).
+    event("session.info", { model: "fake-fallback", provider: "fake", reasoning_effort: effort, running: false, title, stored_session_id: storedId });
+    return;
   }
   turns += 1;
   const failed = /\bfail\b/.test(text);

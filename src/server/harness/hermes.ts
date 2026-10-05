@@ -410,6 +410,22 @@ class HermesLiveChat implements LiveChat {
       this.emit({ type: "title", title });
     }
     if (isObj(info.usage)) this.usage = info.usage;
+    const model = str(info.model);
+    const provider = str(info.provider);
+    if (model || provider) {
+      this.emit({
+        type: "config",
+        config: {
+          ...(model ? { model: provider ? `${provider}/${model}` : model } : {}),
+          ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort) } : {}),
+        },
+      });
+    }
+    const wasRunning = this.running;
+    this.running = info.running === true;
+    if (this.running && !wasRunning) this.emit({ type: "busy" });
+    // A turn that ends without `message.complete` (reclaimed session, crash) still settles the UI.
+    if (!this.running && wasRunning) this.emit({ type: "settled" });
   }
 
   /**

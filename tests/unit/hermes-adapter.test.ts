@@ -139,6 +139,13 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(assistant).toMatchObject({ error: "fake failure" });
   });
 
+  it("settles a turn and follows the model from session.info alone", async () => {
+    const { chat } = await openChat();
+    await chat.send("vanish now", "normal");
+    await until(() => chat.status === "idle");
+    expect(chat.snapshot().config).toMatchObject({ model: "fake/fake-fallback" });
+  });
+
   it("refuses handoffs, since recording a turn would run it", async () => {
     expect(adapter.capabilities.supportsHandoff).toBe(false);
     await expect(adapter.seedChat()).rejects.toThrow(/cannot take a handoff/);
