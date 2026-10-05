@@ -24,7 +24,8 @@ import {
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
+import { seedTranscript, type HandoffSeed } from "./handoff.js";
+import { seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -440,15 +441,16 @@ export class PiAdapter implements HarnessAdapter {
     }
     const remap = new Map<string, string>();
     for (const entry of kept) if (typeof entry.id === "string") remap.set(entry.id, randomUUID());
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const lines: string[] = [JSON.stringify({ ...header, id, parentSession: req.nativeId, timestamp: Date.now() })];
+    const now = new Date();
+    // pi's header shape: ISO timestamp, parentSession as the source file's path.
+    const lines: string[] = [JSON.stringify({ ...header, id, parentSession: meta.path, timestamp: now.toISOString() })];
     for (const entry of kept) {
       const copy: Obj = { ...entry, id: remap.get(entry.id as string) };
       if (typeof entry.parentId === "string" && remap.has(entry.parentId)) copy.parentId = remap.get(entry.parentId);
       if (typeof copy.firstKeptEntryId === "string" && !remap.has(copy.firstKeptEntryId)) delete copy.firstKeptEntryId;
       lines.push(JSON.stringify(copy));
     }
-    const targetPath = path.join(dir, `${stamp}_${id}.jsonl`);
+    const targetPath = path.join(dir, `${sessionFileTimestamp(now)}_${id}.jsonl`);
     const tmp = `${targetPath}.${process.pid}.tmp`;
     await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
     await fs.rename(tmp, targetPath);
@@ -456,39 +458,22 @@ export class PiAdapter implements HarnessAdapter {
   }
 
   /**
-   * Fresh session file with the seed's transcript recorded as entries, then
-   * opened like any resumed session. Tool records arrive as plain transcript
-   * text (a "Handed off" assistant message), never live tool state.
+   * Fresh session file with the seed's transcript recorded as entries, in
+   * pi's own v3 shape (see seedSessionText), then opened like any resumed
+   * session; the title goes through pi's set_session_name.
    */
   async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
     const dir = this.sessionDirFor(req.cwd, await this.resolveAgentDir());
     await fs.mkdir(dir, { recursive: true });
-    const id = randomUUID();
-    const now = Date.now();
-    const lines: string[] = [JSON.stringify({ type: "session", id, cwd: path.resolve(req.cwd), timestamp: now })];
-    let parent: string | null = null;
-    const append = (message: Obj): void => {
-      const entryId = randomUUID();
-      lines.push(JSON.stringify({ type: "message", id: entryId, parentId: parent, message, timestamp: Date.now() }));
-      parent = entryId;
-    };
-    if (req.seed.title) lines.push(JSON.stringify({ type: "session_info", id: randomUUID(), parentId: parent, name: req.seed.title, timestamp: Date.now() }));
-    for (const entry of seedTranscript(req.seed)) {
-      if (entry.role === "user") append({ role: "user", content: entry.text });
-      else if (entry.role === "tool") append({ role: "assistant", content: [{ type: "text", text: toolRecordText(entry) }], stopReason: "stop" });
-      else {
-        const content: Obj[] = [];
-        if (entry.thinking) content.push({ type: "thinking", thinking: entry.thinking });
-        if (entry.text) content.push({ type: "text", text: entry.text });
-        append({ role: "assistant", content, stopReason: "stop" });
-      }
-    }
-    const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
-    const targetPath = path.join(dir, `${stamp}_${id}.jsonl`);
+    const now = new Date();
+    const id = uuidv7(now.getTime());
+    const targetPath = path.join(dir, `${sessionFileTimestamp(now)}_${id}.jsonl`);
     const tmp = `${targetPath}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, `${lines.join("\n")}\n`, { mode: 0o600 });
+    await fs.writeFile(tmp, seedSessionText({ id, cwd: path.resolve(req.cwd), now, entries: seedTranscript(req.seed) }), { mode: 0o600 });
     await fs.rename(tmp, targetPath);
-    return this.openChat({ cwd: req.cwd, resumeNativeId: id });
+    const chat = await this.openChat({ cwd: req.cwd, resumeNativeId: id });
+    if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
+    return chat;
   }
 
   private spawnEnv(cwd: string): NodeJS.ProcessEnv {
