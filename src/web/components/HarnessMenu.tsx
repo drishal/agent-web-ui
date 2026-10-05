@@ -151,7 +151,7 @@ export function HarnessMenu({
               aria-disabled={c.blocked !== null}
               className={`harness-option${i === active ? " is-active" : ""}${c.blocked !== null ? " is-blocked" : ""}`}
               style={harnessColor(c.harness.id)}
-              title={c.blocked ?? undefined}
+              title={c.blocked ?? c.harness.version}
               onMouseMove={() => enabled(i) && setActive(i)}
               onClick={() => pick(i)}
             >

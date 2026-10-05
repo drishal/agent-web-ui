@@ -3157,10 +3157,12 @@ button.harness-chip:disabled {
   outline: none;
 }
 
+/* The sidebar's menu is exactly as wide as its row; long versions truncate. */
 .is-row > .harness-menu {
   top: calc(100% + 6px);
   right: 0;
   bottom: auto;
+  width: auto;
   min-width: 0;
   max-width: none;
 }
