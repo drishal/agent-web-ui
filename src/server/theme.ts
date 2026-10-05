@@ -137,7 +137,8 @@ export function buildThemeVars(scheme: Scheme): { vars: Record<string, string>; 
     "--accent-hover": bright("base16", accent),
     "--link": role("link", p.base0D as string, 4.5),
     "--thinking": role("thinking", p.base0E as string, 3),
-    "--rare": p.base0F as string,
+    // Gold, as in the built-in themes; base0F is a dark orange in most schemes and read as --orange.
+    "--rare": role("rare", p.base0A as string, 4.5),
     "--danger-hover": bright("base12", p.base08 as string),
     "--ok-hover": bright("base14", p.base0B as string),
   };
