@@ -1,8 +1,9 @@
 // Opt-in smoke tests against the real installed harnesses: `npm run smoke`.
 // Without SMOKE_MODEL nothing calls a model (no tokens). With SMOKE_MODEL set
 // to a model already configured in both harnesses, preferably local (e.g.
-// SMOKE_MODEL=local2/GLM5), it also runs prompt -> stream -> stop. This never
-// starts or reconfigures a model server.
+// SMOKE_MODEL=local2/GLM5), it also runs prompt -> stream -> stop. Claude Code
+// has its own model names, so it takes SMOKE_CLAUDE_MODEL (e.g. haiku). This
+// never starts or reconfigures a model server.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { promises as fs } from "node:fs";
@@ -10,6 +11,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
+import { ClaudeAdapter, liveClaudeChildren } from "../../src/server/harness/claude.js";
 import { HermesAdapter, liveHermesChildren } from "../../src/server/harness/hermes.js";
 import { liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import { PiAdapter } from "../../src/server/harness/pi.js";
@@ -41,13 +43,14 @@ async function until(predicate: () => boolean, ms: number) {
   }
 }
 
-const harnesses: Array<[string, () => HarnessAdapter]> = [
-  ["pi", () => new PiAdapter()],
-  ["omp", () => new OmpAdapter({ agentDir: null, sessionDir: null, home: homedir() })],
-  ["hermes", () => new HermesAdapter()],
+const harnesses: Array<[string, () => HarnessAdapter, string | undefined]> = [
+  ["pi", () => new PiAdapter(), model],
+  ["omp", () => new OmpAdapter({ agentDir: null, sessionDir: null, home: homedir() }), model],
+  ["hermes", () => new HermesAdapter(), model],
+  ["claude", () => new ClaudeAdapter({ home: homedir() }), process.env.SMOKE_CLAUDE_MODEL],
 ];
 
-for (const [name, make] of harnesses) {
+for (const [name, make, model] of harnesses) {
   describe.skipIf(!enabled || !installed(name))(`${name} (real)`, () => {
     it("discovers, opens a session with the harness's normal tools, reports config, and disposes (no model call)", async () => {
       const adapter = make();
@@ -65,6 +68,7 @@ for (const [name, make] of harnesses) {
       await adapter.shutdown();
       expect(liveOmpChildren()).toBe(0);
       expect(liveHermesChildren()).toBe(0);
+      expect(liveClaudeChildren()).toBe(0);
     }, 60_000);
 
     it("lists sessions for a workspace through the harness's own API", async () => {
@@ -97,6 +101,7 @@ for (const [name, make] of harnesses) {
       await fresh.shutdown();
       await adapter.shutdown();
       expect(liveOmpChildren()).toBe(0);
+      expect(liveClaudeChildren()).toBe(0);
     }, 180_000);
   });
 }
