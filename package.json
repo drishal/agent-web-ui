@@ -19,7 +19,6 @@
     "smoke": "SMOKE=1 vitest run tests/smoke"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.0.0",
     "express": "5.2.1",
     "helmet": "8.3.0",
     "react": "19.3.0",

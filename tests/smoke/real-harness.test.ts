@@ -5,6 +5,7 @@
 // starts or reconfigures a model server.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync } from "node:fs";
+import { promises as fs } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -100,26 +101,33 @@ for (const [name, make] of harnesses) {
   });
 }
 
-describe.skipIf(!enabled)("pi resume across restart (session written via Pi's own SessionManager)", () => {
+describe.skipIf(!enabled)("pi resume across restart (session file written by hand)", () => {
   it("lists and resumes a persisted session in a fresh adapter", async () => {
-    const pi = await import("@earendil-works/pi-coding-agent");
     const cwd = workspace();
     const sessionDir = path.join(path.dirname(cwd), "sessions");
     const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
     process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir;
     try {
-      const sm = pi.SessionManager.create(cwd, sessionDir);
-      sm.appendMessage({ role: "user", content: "fixture question", timestamp: Date.now() });
-      sm.appendMessage({
-        role: "assistant",
-        content: [{ type: "text", text: "fixture answer" }],
-        api: "openai-completions",
-        provider: "fixture",
-        model: "fixture",
-        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-        stopReason: "stop",
-        timestamp: Date.now(),
-      } as never);
+      await fs.mkdir(sessionDir, { recursive: true });
+      const id = "0196f2b0-0000-7000-8000-000000000001";
+      const lines = [
+        JSON.stringify({ type: "session", id, cwd, timestamp: Date.now() }),
+        JSON.stringify({
+          type: "message",
+          id: "0196f2b0-0000-7000-8000-000000000002",
+          parentId: null,
+          message: { role: "user", content: "fixture question" },
+          timestamp: Date.now(),
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "0196f2b0-0000-7000-8000-000000000003",
+          parentId: "0196f2b0-0000-7000-8000-000000000002",
+          message: { role: "assistant", content: [{ type: "text", text: "fixture answer" }], stopReason: "stop" },
+          timestamp: Date.now(),
+        }),
+      ];
+      await fs.writeFile(path.join(sessionDir, `2026-10-06-000000_${id}.jsonl`), `${lines.join("\n")}\n`);
       const adapter = new PiAdapter();
       const listed = await adapter.listSessions(cwd);
       expect(listed).toHaveLength(1);
