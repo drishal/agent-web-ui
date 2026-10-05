@@ -567,35 +567,15 @@ pre {
   border-left: 1px solid var(--hairline);
 }
 
-/* Which harness a session belongs to (All view); the Pi/omp switch doubles as the legend. */
+/* Which harness a session belongs to; the harness menu doubles as the legend. The colour
+   comes from the server (HarnessStatus.accent) as --harness, so a new harness needs no CSS. */
 .harness-dot {
   flex: none;
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--muted);
-}
-
-.harness-pi {
-  background: var(--link);
-}
-
-.harness-omp {
-  background: var(--thinking);
-}
-
-.harness-hermes {
-  background: var(--orange);
-}
-
-.harness-claude {
-  background: var(--rare);
-}
-
-.segmented .harness-dot {
-  margin-right: 6px;
-  vertical-align: 1px;
+  background: var(--harness, var(--muted));
 }
 
 /* Same 10px slot as the working ring, so titles don't shift when a run starts. */
@@ -618,20 +598,8 @@ pre {
   animation: spin 0.9s linear infinite;
 }
 
-.working-ring[data-harness="pi"] {
-  color: var(--link);
-}
-
-.working-ring[data-harness="omp"] {
-  color: var(--thinking);
-}
-
-.working-ring[data-harness="hermes"] {
-  color: var(--orange);
-}
-
-.working-ring[data-harness="claude"] {
-  color: var(--rare);
+.working-ring.is-harness {
+  color: var(--harness, var(--accent));
 }
 
 .project-toggle .working-ring {
@@ -743,24 +711,9 @@ pre {
   color: var(--text-2);
 }
 
-.badge-pi {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--link);
-}
-
-.badge-omp {
-  background: color-mix(in srgb, var(--thinking) 18%, transparent);
-  color: var(--thinking);
-}
-
-.badge-hermes {
-  background: color-mix(in srgb, var(--orange) 16%, transparent);
-  color: var(--orange);
-}
-
-.badge-claude {
-  background: color-mix(in srgb, var(--rare) 16%, transparent);
-  color: var(--rare);
+.badge-harness {
+  background: color-mix(in srgb, var(--harness, var(--muted)) 16%, transparent);
+  color: var(--harness, var(--text-2));
 }
 
 /* Resize handle on the sidebar's right edge. */
@@ -1036,50 +989,6 @@ body.is-resizing {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-}
-
-.segmented {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 10px;
-  background: var(--hover);
-}
-
-.segmented button {
-  min-height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 550;
-  white-space: nowrap;
-}
-
-.segmented button.is-active {
-  background: var(--bg);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgb(0 0 0 / calc(var(--shadow-strength) * 1.2));
-}
-
-.segmented button:disabled:not(.is-active) {
-  opacity: 0.45;
-}
-
-.segmented-block {
-  display: flex;
-}
-
-.segmented-block button {
-  flex: 1;
-}
-
-.segmented-small button {
-  min-height: 24px;
-  padding: 0 9px;
-  font-size: 12px;
 }
 
 /* ---- conversation ---------------------------------------------------------- */
@@ -3147,43 +3056,78 @@ body.is-resizing {
   }
 }
 
-/* Harness chip in the composer bar: current harness + handoff menu. */
-.harness-picker {
+/* Harness menu: the sidebar row (switch) and the composer chip (handoff). */
+.harness-menu-wrap {
   position: relative;
   display: inline-flex;
+}
+
+.harness-menu-wrap.is-row {
+  display: flex;
+}
+
+.harness-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.harness-row:hover:not(:disabled) {
+  background: var(--hover-strong, var(--hover));
+}
+
+.harness-row .harness-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 2px;
+}
+
+.harness-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harness-row-meta {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 450;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.harness-row .icon:last-child {
+  flex: none;
+  color: var(--muted);
+}
+
+.harness-row-name + .icon:last-child {
+  margin-left: auto;
 }
 
 button.harness-chip {
   gap: 4px;
   height: 30px;
-  padding: 0 8px 0 4px;
+  padding: 0 8px 0 10px;
   border: 0;
   border-radius: 999px;
-  background: var(--hover);
-  color: var(--text-2);
   font-size: 12.5px;
   font-weight: 550;
   cursor: pointer;
-}
-
-button.harness-chip[data-harness="pi"] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--link);
-}
-
-button.harness-chip[data-harness="omp"] {
-  background: color-mix(in srgb, var(--thinking) 18%, transparent);
-  color: var(--thinking);
-}
-
-button.harness-chip[data-harness="hermes"] {
-  background: color-mix(in srgb, var(--orange) 16%, transparent);
-  color: var(--orange);
-}
-
-button.harness-chip[data-harness="claude"] {
-  background: color-mix(in srgb, var(--rare) 16%, transparent);
-  color: var(--rare);
+  background: color-mix(in srgb, var(--harness, var(--muted)) 16%, transparent);
+  color: var(--harness, var(--text-2));
 }
 
 button.harness-chip:hover:not(:disabled) {
@@ -3210,22 +3154,67 @@ button.harness-chip:disabled {
   border-radius: var(--r-lg);
   background: var(--card);
   box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+  outline: none;
 }
 
-.harness-menu [role="option"] button {
+.is-row > .harness-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.harness-menu-head {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.harness-option {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 6px 8px;
   border-radius: var(--r-md);
-  background: transparent;
-  text-align: left;
+  font-size: 13px;
   cursor: pointer;
 }
 
-.harness-menu [role="option"] button:hover {
+.harness-option.is-active {
   background: var(--hover);
+}
+
+.harness-option.is-blocked {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.harness-option .harness-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.harness-option-name {
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.harness-option-meta {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.harness-option-check {
+  flex: none;
+  color: var(--accent);
 }

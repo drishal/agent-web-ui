@@ -26,9 +26,15 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
   await expect(dialog).toBeHidden();
 }
 
+/** Pick the sidebar's harness from its menu. */
+export async function chooseHarness(page: Page, harness: string): Promise<void> {
+  await page.getByRole("complementary", { name: "Sessions" }).getByRole("button", { name: "Harness" }).click();
+  await page.getByRole("listbox", { name: "Harness" }).getByRole("option", { name: harness, exact: true }).click();
+}
+
 export async function newChat(page: Page, harness?: string): Promise<void> {
   await showSidebar(page);
-  if (harness) await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: harness, exact: true }).click();
+  if (harness) await chooseHarness(page, harness);
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   // A fresh chat always opens as the hero; wait for it rather than for "Idle",
   // which the previous chat may already show.

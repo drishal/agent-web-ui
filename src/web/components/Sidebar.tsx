@@ -4,6 +4,8 @@ import { useDismiss } from "../hooks.js";
 import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSidebar } from "../icons.js";
 import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
 import type { ThemeMode } from "../theme.js";
+import { harnessColor } from "../harness-colors.js";
+import { HarnessMenu } from "./HarnessMenu.js";
 
 /** Sessions shown per project before "Show N more". */
 const VISIBLE_CURRENT = 8;
@@ -31,7 +33,7 @@ function relativeTime(iso: string | null): string {
 
 /** Hermes-style spinning ring for a session whose run is in progress; harness-coloured in the All view. */
 function WorkingRing({ harnessId, colored }: { harnessId?: string | undefined; colored: boolean }) {
-  return <span className="working-ring" data-harness={colored ? harnessId : undefined} role="img" aria-label="Working" title="Working" />;
+  return <span className={`working-ring${colored ? " is-harness" : ""}`} style={colored ? harnessColor(harnessId) : undefined} role="img" aria-label="Working" title="Working" />;
 }
 
 function SessionRow({
@@ -58,7 +60,7 @@ function SessionRow({
         {working ? (
           <WorkingRing harnessId={s.harnessId} colored />
         ) : (
-          <span className={`harness-dot harness-${s.harnessId}`} role="img" aria-label={harnessName} title={harnessName} />
+          <span className="harness-dot" style={harnessColor(s.harnessId)} role="img" aria-label={harnessName} title={harnessName} />
         )}
         <span className="session-title">{s.title}</span>
         <span className="session-meta">
@@ -250,29 +252,14 @@ export function Sidebar(props: {
         </button>
         {props.newChatDisabled ? <p className="sidebar-note">{props.newChatDisabled}</p> : null}
 
-        <div className="segmented segmented-block" role="radiogroup" aria-label="Harness">
-          {props.harnesses.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              role="radio"
-              aria-checked={h.id === props.harnessId}
-              className={h.id === props.harnessId ? "is-active" : ""}
-              disabled={!h.available}
-              onClick={() => props.onHarness(h.id)}
-            >
-              <span className={`harness-dot harness-${h.id}`} aria-hidden="true" />
-              {h.displayName}
-            </button>
-          ))}
-        </div>
-        {props.harnesses
-          .filter((h) => !h.available)
-          .map((h) => (
-            <p key={h.id} className="sidebar-note">
-              {h.displayName}: {h.reason}
-            </p>
-          ))}
+        <HarnessMenu
+          variant="row"
+          label="Harness"
+          menuLabel="Harness"
+          currentId={props.harnessId}
+          choices={props.harnesses.map((h) => ({ harness: h, blocked: h.available ? null : (h.reason ?? "Not available") }))}
+          onPick={props.onHarness}
+        />
         {current?.warnings.map((w) => (
           <p key={w} className="sidebar-note is-warning">
             {w}

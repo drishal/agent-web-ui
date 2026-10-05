@@ -15,6 +15,7 @@ import { StatusBar } from "./components/StatusBar.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { IconMenu, IconMore, IconSidebar } from "./icons.js";
+import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -62,6 +63,9 @@ export function App() {
   }, [textScale]);
 
   const available = useMemo(() => boot?.harnesses.filter((h) => h.available) ?? [], [boot]);
+  useEffect(() => {
+    if (boot) applyHarnessAccents(boot.harnesses);
+  }, [boot]);
   const chatId = chat?.chatId ?? null;
 
   // ---- actions -------------------------------------------------------------------------
@@ -349,7 +353,9 @@ export function App() {
             <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "Agent Web UI"}</h1>
             {chat ? (
               <div className="chat-sub">
-                <span className={`badge badge-${chat.harnessId}`}>{chatHarness?.displayName ?? chat.harnessId}</span>
+                <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>
+                  {chatHarness?.displayName ?? chat.harnessId}
+                </span>
                 <span className={`status status-${chat.status}`} data-testid="chat-status">
                   {STATUS_LABEL[chat.status] ?? chat.status}
                 </span>

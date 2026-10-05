@@ -1,10 +1,44 @@
 // Model and thinking live inside the composer card's bottom row (DeepSeek
 // Harness). Tools are never narrowed: each harness keeps its normal tool set.
+import { useState } from "react";
 import type { ChatState } from "../chat-state.js";
 import type { HarnessStatus } from "../../shared/protocol.js";
 import { IconChevronDown } from "../icons.js";
-import { HarnessPicker } from "./HarnessPicker.js";
+import { HarnessMenu } from "./HarnessMenu.js";
 import { ModelPicker } from "./ModelPicker.js";
+
+/** Why a harness cannot take this chat, or null when it can. */
+function handoffBlock(h: HarnessStatus): string | null {
+  if (!h.available) return h.reason ?? "Not available";
+  return h.capabilities.supportsHandoff ? null : "Cannot receive a handoff";
+}
+
+/**
+ * The composer's harness chip: the chat's harness, and a menu of the others to
+ * hand it off to. It stays disabled while a handoff runs (one POST, one new
+ * session); success navigates away, failure re-enables it.
+ */
+function HandoffChip({ chat, harnesses, onHandoff }: { chat: ChatState; harnesses: HarnessStatus[]; onHandoff: (harnessId: string) => Promise<void> }) {
+  const [pending, setPending] = useState(false);
+  const choices = harnesses.filter((h) => h.id !== chat.harnessId).map((h) => ({ harness: h, blocked: handoffBlock(h) }));
+  const current = harnesses.find((h) => h.id === chat.harnessId);
+  return (
+    <HarnessMenu
+      variant="chip"
+      label="Hand off to another harness"
+      menuLabel="Hand off to"
+      currentId={chat.harnessId}
+      choices={current ? [{ harness: current, blocked: "This chat's harness" }, ...choices] : choices}
+      triggerText={pending ? "Handing off…" : undefined}
+      disabled={pending || chat.status === "disposed" || choices.every((c) => c.blocked !== null)}
+      onPick={(id) => {
+        if (id === chat.harnessId) return;
+        setPending(true);
+        void onHandoff(id).finally(() => setPending(false));
+      }}
+    />
+  );
+}
 
 export function ComposerControls({
   chat,
@@ -25,7 +59,7 @@ export function ComposerControls({
 
   return (
     <div className="composer-controls">
-      <HarnessPicker harnesses={harnesses} currentId={chat.harnessId} disabled={chat.status === "disposed"} onHandoff={onHandoff} />
+      <HandoffChip chat={chat} harnesses={harnesses} onHandoff={onHandoff} />
       {caps.supportsModelSelection ? (
         <ModelPicker
           models={config.models}

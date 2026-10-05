@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { chooseHarness, newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const status = (page: Page) => page.getByTestId("chat-status");
 const answers = (page: Page) => page.getByTestId("answer");
@@ -57,8 +57,34 @@ test("switch harness without reloading; capabilities change the composer", async
   await page.getByRole("button", { name: "Stop and send" }).click();
   await expect(answers(page).last()).toContainText("Echo: change of plan", { timeout: 15_000 });
   await expect(status(page)).toHaveText("Idle", { timeout: 15_000 });
-  await page.getByRole("radio", { name: "Fake", exact: true }).click();
+  await chooseHarness(page, "Fake");
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
+});
+
+test("the harness menu lists every harness in its own colour and works from the keyboard", async ({ page }) => {
+  await signInAndOpen(page);
+  await showSidebar(page);
+  const row = page.getByRole("complementary", { name: "Sessions" }).getByRole("button", { name: "Harness" });
+  await expect(row).toContainText("Fake");
+  await row.focus();
+  await page.keyboard.press("ArrowDown");
+  const menu = page.getByRole("listbox", { name: "Harness" });
+  await expect(menu).toBeFocused();
+  await expect(menu.getByRole("option", { name: "Fake", exact: true })).toHaveAttribute("aria-selected", "true");
+  // Colours come from the server's accents, one per harness, not from per-harness CSS.
+  const dots = menu.locator(".harness-dot");
+  const colours = await dots.evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+  expect(new Set(colours).size).toBe(2);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(row).toContainText("Fake B");
+  await expect(row).toBeFocused();
+  // Escape closes without changing anything.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(row).toContainText("Fake B");
 });
 
 test("steer and follow-up while running, shown in the status stack", async ({ page }) => {
@@ -389,7 +415,7 @@ test("the sidebar scopes sessions to the selected harness and opens them across 
   }
   // From another project, the selected harness's sessions are still listed under their own folder.
   await signInAndOpen(page, "alpha");
-  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake", exact: true }).click();
+  await chooseHarness(page, "Fake");
   const groups = page.getByTestId("project-group");
   await expect(groups.first().locator(".project-name")).toHaveText("alpha");
   const beta = groups.filter({ has: page.locator(".project-name", { hasText: /^beta$/ }) });
@@ -405,7 +431,7 @@ test("the sidebar scopes sessions to the selected harness and opens them across 
   await expect(beta.locator(".session", { hasText: "xproj two" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake");
 
   // Switching the harness swaps the list for that harness's own sessions.
-  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake B", exact: true }).click();
+  await chooseHarness(page, "Fake B");
   await expect(beta.locator(".session")).toHaveCount(1);
   await expect(beta.locator(".session", { hasText: "xproj one" }).locator(".harness-dot")).toHaveAttribute("aria-label", "Fake B");
   await expect(beta.locator(".session", { hasText: "xproj six" })).toHaveCount(0);
@@ -421,7 +447,7 @@ test("the sidebar scopes sessions to the selected harness and opens them across 
   await page.getByRole("searchbox", { name: "Search sessions" }).fill("");
 
   // Opening a session from another project switches to that project.
-  await page.getByRole("radiogroup", { name: "Harness" }).getByRole("radio", { name: "Fake", exact: true }).click();
+  await chooseHarness(page, "Fake");
   await beta.locator(".session", { hasText: "xproj four" }).click();
   await expect(prompts(page)).toHaveText(["xproj four"]);
   await expect(page.locator(".workspace-name")).toHaveText("beta");
@@ -489,8 +515,11 @@ test("composer harness chip hands the chat off to another harness", async ({ pag
   await sendAndWait(page, "first tool question");
   await expect(prompts(page)).toHaveText(["first tool question"]);
   // The chip shows the current harness; its menu lists the others.
-  await page.getByRole("button", { name: "Harness" }).click();
-  await page.getByRole("button", { name: /Handoff to Fake B/ }).click();
+  await page.getByRole("button", { name: "Hand off to another harness" }).click();
+  const targets = page.getByRole("listbox", { name: "Hand off to" });
+  // The chat's own harness is listed but cannot be picked.
+  await expect(targets.getByRole("option", { name: "Fake", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await targets.getByRole("option", { name: "Fake B", exact: true }).click();
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
   await expect(prompts(page)).toHaveText(["first tool question"]);
   await expect(status(page)).toHaveText("Idle");
