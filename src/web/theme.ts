@@ -86,8 +86,8 @@ export function useTheme() {
   const [themeInfo, setThemeInfo] = useState<ThemeInfo | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
 
-  /** Take the theme delivered with the bootstrap payload. */
-  const initTheme = (info: ThemeInfo, choice: ThemeChoice | null): void => {
+  /** Take the theme delivered with the bootstrap payload (null when /api/theme failed). */
+  const initTheme = (info: ThemeInfo | null, choice: ThemeChoice | null): void => {
     setThemeInfo(info);
     setThemeMode(storedThemeMode(info, choice));
   };

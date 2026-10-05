@@ -676,7 +676,10 @@ export class Chat {
 
   private waitForSettle(): Promise<void> {
     if (this.status === "idle" || this.status === "error" || this.status === "disposed") return Promise.resolve();
-    const { promise, resolve } = Promise.withResolvers<void>();
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
     const timer = setTimeout(resolve, SETTLE_TIMEOUT_MS);
     this.settleWaiters.push(() => {
       clearTimeout(timer);

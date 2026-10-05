@@ -10,8 +10,8 @@ import { forgetWorkspace, load } from "./storage.js";
 import { fetchTheme } from "./theme.js";
 
 export interface BootstrapTargets {
-  /** The theme delivered with the bootstrap payload. */
-  onTheme: (info: ThemeInfo, choice: ThemeChoice | null) => void;
+  /** The theme delivered with the bootstrap payload (null when /api/theme failed). */
+  onTheme: (info: ThemeInfo | null, choice: ThemeChoice | null) => void;
   setHarnessId: Dispatch<SetStateAction<string | null>>;
   setWorkspace: Dispatch<SetStateAction<WorkspaceInfo | null>>;
   setRecent: Dispatch<SetStateAction<string[]>>;

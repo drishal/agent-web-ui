@@ -16,7 +16,10 @@ const REQUEST_TIMEOUT_MS = 60_000;
  */
 export function terminateChild(child: ChildProcessWithoutNullStreams, timeoutMs = KILL_TIMEOUT_MS): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
-  const { promise, resolve } = Promise.withResolvers<void>();
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
   let timer: NodeJS.Timeout | undefined;
   const done = () => {
     clearTimeout(timer);
@@ -73,7 +76,12 @@ export class PendingRequests<Id extends string | number> {
   /** Send `payload` and wait for its response; `null` waits forever. */
   send<T = unknown>(payload: Obj, timeoutMessage: string, timeoutMs: number | null = REQUEST_TIMEOUT_MS): Promise<T> {
     const id = this.codec.formatId(this.counter++);
-    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    let resolve!: (value: T) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
     const entry: Pending = { resolve: resolve as (value: unknown) => void, reject };
     if (timeoutMs !== null) {
       entry.timer = setTimeout(() => this.settle(id, { error: new Error(timeoutMessage) }), timeoutMs);
