@@ -117,6 +117,15 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(assistant && assistant.kind === "assistant" && assistant.text.length).toBeLessThan("hermes says slow please".length);
   });
 
+  it("asks a chat's own gateway for its models instead of starting a probe", async () => {
+    const { chat } = await openChat();
+    const before = JSON.parse(readFileSync(state, "utf8")).spawns.length;
+    expect(chat.snapshot().config.models.map((m) => m.key)).toEqual(["fake/fake-model", "fake/fake-mini"]);
+    await chat.refreshModels();
+    expect(JSON.parse(readFileSync(state, "utf8")).spawns.length).toBe(before);
+    expect(before).toBe(1);
+  });
+
   it("lists models with model.options", async () => {
     const models = await adapter.listModels(project);
     expect(models.map((m) => m.key)).toEqual(["fake/fake-model", "fake/fake-mini"]);

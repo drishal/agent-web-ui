@@ -690,8 +690,9 @@ class HermesLiveChat implements LiveChat {
     };
   }
 
+  /** Asked of this chat's own gateway: a probe child would cost a second gateway start (~2 s). */
   private async modelList(): Promise<ModelInfo[]> {
-    this.models ??= await this.adapter.listModels(this.cwd);
+    this.models ??= await this.adapter.listModels(this.cwd, false, (params) => this.live.request<Obj>("model.options", params));
     return this.models;
   }
 
@@ -803,7 +804,7 @@ class HermesLiveChat implements LiveChat {
   }
 
   async refreshModels(): Promise<void> {
-    this.models = await this.adapter.listModels(this.cwd, true);
+    this.models = await this.adapter.listModels(this.cwd, true, (params) => this.live.request<Obj>("model.options", params));
   }
 
   async rename(name: string): Promise<void> {
@@ -946,10 +947,16 @@ export class HermesAdapter implements HarnessAdapter {
     }
   }
 
-  async listModels(cwd: string, refresh = false): Promise<ModelInfo[]> {
+  /**
+   * The gateway's model.options, cached per project. `ask` sends it through a
+   * gateway that is already running (a live chat's); without one a probe
+   * child is started for it.
+   */
+  async listModels(cwd: string, refresh = false, ask?: (params: Obj) => Promise<Obj>): Promise<ModelInfo[]> {
     const cached = this.probes.get(cwd);
     if (!refresh && cached && Date.now() - cached.at < PROBE_TTL_MS) return cached.models;
-    const result = await this.withProbe(cwd, (rpc) => rpc.request<Obj>("model.options", refresh ? { refresh: true } : {}));
+    const params = refresh ? { refresh: true } : {};
+    const result = ask ? await ask(params) : await this.withProbe(cwd, (rpc) => rpc.request<Obj>("model.options", params));
     const models: ModelInfo[] = [];
     for (const provider of Array.isArray(result?.providers) ? result.providers : []) {
       if (!isObj(provider)) continue;
