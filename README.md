@@ -2,11 +2,11 @@
 
 A local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), and **Hermes** (hermes-agent) coding-agent harnesses. Use it from your desktop browser or, through Tailscale Serve, from your phone.
 
-The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits session files and keeps no second transcript database.
+The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits an existing session file and keeps no second transcript database; forks and handoffs only add new sessions in the harness's own store.
 
 ```
 browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAdapter
-                                                        ├─ Pi     (in-process SDK, @earendil-works/pi-coding-agent 1.0.0)
+                                                        ├─ Pi     (child process: `pi --mode rpc`, one per live chat)
                                                         ├─ omp    (child process: `omp --mode rpc-ui`, one per live chat)
                                                         ├─ Hermes (child process: `python -m tui_gateway.entry`, one per live chat)
                                                         └─ fake   (tests only)
@@ -87,7 +87,8 @@ then restart. Other devices get a sign-in form; this machine still opens directl
   - your prompt as a bubble that stays pinned while you scroll through a long turn;
   - one **"Worked for 12s · 3 reads, 1 edit"** line folding the agent's thinking, intermediate notes, tool calls, and approvals (open while running, collapsed after);
   - the answer as plain text with a Copy button;
-  - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi branches with its own primitive (`createBranchedSession`); omp gets a new session file cut to the same branch. Not offered for Hermes, which has no fork.
+  - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi and omp both get a new session file cut to the same branch. Not offered for Hermes, which has no fork, or for a command the harness answered itself (it stores no turn).
+  - **Handoff** from the harness chip in the composer: the chat continues in another harness as a new session holding the transcript — the first prompt and the last 10 turns verbatim, a one-line-per-turn summary of the middle, tool calls as plain records (never replayed), images noted but not carried — and a draft in the composer runs there as the first new turn. A busy chat is stopped first; the source is left as it was. Pi and omp take handoffs; Hermes can hand its chats off but not receive them, since its gateway can only record a turn by running it.
   - a **Changed N files** list for edits and writes.
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Composer card.**
@@ -121,7 +122,7 @@ src/server/
   harness/types.ts          HarnessAdapter / LiveChat contract, normalized HarnessEvent
   harness/registry.ts       adapter registry (one entry per harness)
   harness/agent-events.ts   Pi-family event + transcript normalization (shared by pi/omp)
-  harness/pi.ts             Pi adapter (SDK)
+  harness/pi.ts             Pi adapter (`pi --mode rpc` child process)
   harness/omp.ts            omp adapter (rpc-ui child process, ACP lister)
   harness/hermes.ts         Hermes adapter (tui_gateway JSON-RPC child process)
   harness/fake.ts           deterministic adapter for tests
@@ -174,11 +175,14 @@ ACP has no standard steer or follow-up, so an ACP adapter declares `supportsStee
 
 ### Pi
 
-Pi runs in-process through the pinned SDK (`createAgentSessionServices` → `createAgentSessionFromServices`). It loads Pi's normal global and project settings, AGENTS files, skills, prompt templates, extensions, and custom models through Pi's own loader. Extensions get a web `ExtensionUIContext`: `select`, `confirm`, `input`, and `editor` become dialog cards, `notify` becomes a notice, and status/widgets become chips. TUI-only calls (`custom`, footers, themes) are no-ops.
+Each live chat runs the **installed** `pi` as `pi --mode rpc --session-dir <dir> [--session <id>]` (JSON lines over stdio), so a `pi update` reaches the web UI at once and no pinned SDK can drift from the CLI that wrote your sessions. Pi itself loads its global and project settings, AGENTS files, skills, prompt templates, extensions, and custom models. Extension dialogs arrive as `extension_ui_request`: `select`, `confirm`, `input`, and `editor` become dialog cards, `notify` becomes a notice, and status lines and widgets become chips. The child is up once it answers a `get_state` probe (rpc mode prints nothing unprompted).
 
-**Trust.** The SDK trusts project folders by default; the Pi CLI does not. This adapter mirrors the CLI and never prompts: it uses the stored decision in Pi's trust store, then your `defaultProjectTrust` setting, and otherwise does not trust the folder. A skipped folder shows a notice telling you to run `pi` there once.
+- **Sessions:** listing and fork read Pi's `.jsonl` files directly (header, `session_info` name, the active branch by `parentId`), caching each file's summary while its size and mtime are unchanged.
+- **Context ring:** the total and window come from `get_session_stats` (`contextUsage`); the system prompt / tool definitions / messages split is estimated from `get_messages` the way pi-ai estimates tokens.
 
-Tools are Pi's normal active set (your `defaultTools` plus extension tools); this host never narrows them. Model and thinking changes use `persist: false`, so the web UI never rewrites your Pi defaults.
+**Trust.** Pi decides, as its CLI does outside a terminal: an extension's answer, the stored decision in Pi's trust store, then your `defaultProjectTrust` setting, and otherwise the folder is not trusted. Rpc mode never prompts; run `pi` in a folder once to answer the question there.
+
+Tools are Pi's normal active set (your `defaultTools` plus extension tools); this host never narrows them. Model and thinking changes go through `set_model` and `set_thinking_level`, which change only the session, so the web UI never rewrites your Pi defaults.
 
 ### omp
 
@@ -216,7 +220,7 @@ Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `y
 | Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` |
 | Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) |
 
-omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app never writes inside `~/.pi`, `~/.omp`, or `~/.hermes`, and the browser never sees agent dirs or session file paths.
+omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app writes inside `~/.pi` or `~/.omp` only to add a new session file for a fork or handoff, never inside `~/.hermes`, and the browser never sees agent dirs or session file paths.
 
 ## Security
 
