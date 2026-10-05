@@ -732,6 +732,7 @@ class ClaudeLiveChat implements LiveChat {
 export class ClaudeAdapter implements HarnessAdapter {
   readonly id = asHarnessId("claude");
   readonly displayName = "Claude Code";
+  readonly accent = "rare";
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,

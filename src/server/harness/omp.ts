@@ -489,6 +489,7 @@ class FirstPrompts {
 export class OmpAdapter implements HarnessAdapter {
   readonly id = asHarnessId("omp");
   readonly displayName = "omp";
+  readonly accent = "thinking";
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,

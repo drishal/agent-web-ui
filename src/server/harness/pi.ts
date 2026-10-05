@@ -403,6 +403,7 @@ export class PiAdapter implements HarnessAdapter {
   readonly id = asHarnessId("pi");
   readonly displayName = "Pi";
   readonly cliCommand = "pi";
+  readonly accent = "link";
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,
     supportsFollowUp: true,

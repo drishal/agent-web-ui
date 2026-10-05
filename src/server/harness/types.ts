@@ -122,6 +122,8 @@ export interface HarnessAdapter {
   readonly displayName: string;
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities;
+  /** Its colour, one of HARNESS_ACCENTS; without one the registry assigns a free one. */
+  readonly accent?: string;
   discover(): Promise<HarnessDiscovery>;
   /** Why this harness cannot open the workspace, or null. */
   workspaceProblem(cwd: string): string | null;

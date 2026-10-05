@@ -839,6 +839,7 @@ function toTodos(raw: unknown): TodoItem[] {
 export class HermesAdapter implements HarnessAdapter {
   readonly id = asHarnessId("hermes");
   readonly displayName = "Hermes";
+  readonly accent = "orange";
   readonly cliCommand = process.env.HERMES_BIN?.trim() || "hermes";
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,

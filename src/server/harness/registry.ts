@@ -1,5 +1,5 @@
 // Adding a harness = one adapter file + one entry in `factories`.
-import { asHarnessId, type HarnessId, type HarnessStatus } from "../../shared/protocol.js";
+import { asHarnessId, HARNESS_ACCENTS, type HarnessId, type HarnessStatus } from "../../shared/protocol.js";
 import type { ServerConfig } from "../config.js";
 import { ClaudeAdapter } from "./claude.js";
 import { FakeAdapter } from "./fake.js";
@@ -20,6 +20,26 @@ const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   "fake-b": () =>
     new FakeAdapter({ id: "fake-b", displayName: "Fake B", chunkDelayMs: fakeDelay(), capabilities: { supportsSteer: false } }),
 };
+
+/**
+ * Each adapter's colour: its own when it names one of the theme's accents,
+ * else the first accent no other harness has claimed (cycling once all are taken).
+ */
+export function assignAccents(adapters: HarnessAdapter[]): Map<HarnessId, string> {
+  const known = new Set<string>(HARNESS_ACCENTS);
+  const out = new Map<HarnessId, string>();
+  for (const a of adapters) if (a.accent && known.has(a.accent)) out.set(a.id, a.accent);
+  const taken = new Set(out.values());
+  let spare = HARNESS_ACCENTS.filter((t) => !taken.has(t));
+  let i = 0;
+  for (const a of adapters) {
+    if (out.has(a.id)) continue;
+    if (spare.length === 0) spare = [...HARNESS_ACCENTS];
+    out.set(a.id, spare[i % spare.length] as string);
+    i += 1;
+  }
+  return out;
+}
 
 export class HarnessRegistry {
   private adapters = new Map<HarnessId, HarnessAdapter>();
@@ -48,6 +68,7 @@ export class HarnessRegistry {
   }
 
   async refreshStatus(): Promise<HarnessStatus[]> {
+    const accents = assignAccents(this.list());
     await Promise.all(
       this.list().map(async (adapter) => {
         const d = await adapter.discover().catch((error: unknown) => ({
@@ -65,6 +86,7 @@ export class HarnessRegistry {
           warnings: d.warnings,
           capabilities: adapter.capabilities,
           overrides: d.overrides,
+          accent: accents.get(adapter.id) ?? "muted",
         });
       }),
     );

@@ -31,7 +31,12 @@ export interface HarnessStatus {
   capabilities: HarnessCapabilities;
   /** Config-dir overrides reported as set/unset only. */
   overrides: Record<string, "set" | "unset">;
+  /** The theme colour token (`link`, `thinking`, …) its dot, badge, spinner, and chip use. */
+  accent: string;
 }
+
+/** Theme colour tokens a harness may take, in the order unclaimed harnesses get them. */
+export const HARNESS_ACCENTS = ["link", "thinking", "orange", "rare", "info", "ok"] as const;
 
 export interface WorkspaceInfo {
   id: string;
