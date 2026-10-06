@@ -2155,29 +2155,43 @@ body.is-resizing {
   box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);
 }
 
+/* Attached images: a frame in each image's own colour, its #N on the top
+   edge and its size on the bottom one, so a prompt can say "#2". */
+:root {
+  --image-hue-0: var(--orange);
+  --image-hue-1: var(--info);
+  --image-hue-2: var(--ok);
+  --image-hue-3: var(--thinking);
+  --image-hue-4: var(--rare);
+  --image-hue-5: var(--danger);
+}
+
 .composer-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 2px 0 6px;
+  gap: 16px 12px;
+  margin: 10px 0 14px;
   padding: 0;
   list-style: none;
 }
 
 .composer-image {
   position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  box-shadow: 0 0 0 1px var(--hairline);
+  width: 104px;
+  height: 76px;
+  padding: 4px;
+  border: 1.5px solid color-mix(in srgb, var(--hue) 75%, transparent);
+  border-radius: 11px;
+  animation: settle-in 0.24s var(--ease-out);
 }
 
 .composer-image img {
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: 7px;
   object-fit: cover;
+  background: var(--bg);
 }
 
 .composer-image-open {
@@ -2186,19 +2200,63 @@ body.is-resizing {
   height: 100%;
   padding: 0;
   border: 0;
+  border-radius: 7px;
   background: none;
   cursor: zoom-in;
 }
 
+.composer-image-open img {
+  transition:
+    filter 0.15s ease,
+    transform 0.2s var(--ease-out);
+}
+
 .composer-image-open:hover img {
   filter: brightness(0.92);
+  transform: scale(1.03);
+}
+
+.image-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--hue);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.composer-image-tag,
+.composer-image-size {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
+  padding: 0 5px;
+  background: var(--card);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.composer-image-tag {
+  top: -7px;
+}
+
+.composer-image-size {
+  bottom: -7px;
+  color: var(--hue);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .composer-image-remove {
   position: absolute;
-  z-index: 1;
-  top: 3px;
-  right: 3px;
+  z-index: 2;
+  top: 7px;
+  right: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2209,6 +2267,19 @@ body.is-resizing {
   border-radius: 50%;
   background: color-mix(in srgb, #000 60%, transparent);
   color: #fff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.composer-image:hover .composer-image-remove,
+.composer-image:focus-within .composer-image-remove {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .composer-image-remove {
+    opacity: 1;
+  }
 }
 
 .composer-note {
@@ -2857,18 +2928,139 @@ body.is-resizing {
   overflow-wrap: anywhere;
 }
 
-.image-dialog {
-  width: fit-content;
-  max-width: calc(100vw - 32px);
+/* The image viewer: the picture grows from its thumbnail over a dim backdrop. */
+.image-lightbox {
+  max-width: none;
+  max-height: none;
+  width: 100vw;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  outline: none;
 }
 
-.image-viewer {
+.image-lightbox[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.image-lightbox::backdrop {
+  background: rgb(0 0 0 / 0.78);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.24s ease;
+}
+
+.image-lightbox.is-closing::backdrop {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-lightbox-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  padding: 0 16px;
+}
+
+.image-lightbox-img {
   display: block;
-  max-width: calc(100vw - 68px);
+  max-width: min(92vw, calc(100vw - 140px));
   max-height: calc(100dvh - 120px);
+  border-radius: 10px;
   object-fit: contain;
-  border-radius: var(--r-sm);
-  background: var(--bg);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--hue) 70%, transparent),
+    0 24px 60px rgb(0 0 0 / 0.5);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.image-lightbox-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: rgb(255 255 255 / 0.85);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  animation: rise-in 0.3s var(--ease-out) 0.08s backwards;
+}
+
+.image-lightbox-caption .image-tag {
+  font-size: 12px;
+}
+
+.image-lightbox-caption .muted {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.image-lightbox-close,
+.image-lightbox-nav {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+  transition: background-color 0.12s ease;
+  animation: fade-in 0.3s ease 0.08s backwards;
+}
+
+.image-lightbox-close:hover,
+.image-lightbox-nav:hover {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+}
+
+.image-lightbox-nav.is-prev svg {
+  transform: rotate(180deg);
+}
+
+.image-lightbox.is-closing .image-lightbox-caption,
+.image-lightbox.is-closing .image-lightbox-close,
+.image-lightbox.is-closing .image-lightbox-nav {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+@media (max-width: 640px) {
+  .image-lightbox-img {
+    max-width: calc(100vw - 24px);
+  }
+
+  .image-lightbox-nav {
+    position: fixed;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .image-lightbox-nav.is-prev {
+    left: 16px;
+  }
+
+  .image-lightbox-nav.is-next {
+    right: 16px;
+  }
 }
 
 .picker-section {

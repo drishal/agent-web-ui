@@ -7,9 +7,9 @@ import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
 import { IconArrowUp, IconImage, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
+import { ImageViewer, imageHue, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
-import { Dialog } from "./Dialog.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
@@ -48,7 +48,8 @@ export function Composer({
   const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [viewing, setViewing] = useState<{ image: PendingImage; index: number } | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const thumbs = useRef(new Map<number, HTMLElement>());
   const area = useRef<HTMLTextAreaElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const caps = chat.capabilities;
@@ -234,21 +235,42 @@ export function Composer({
         >
           {images.length > 0 ? (
             <ul className="composer-images" aria-label="Attached images">
-              {images.map((image, i) => (
-                <li key={image.id} className="composer-image">
-                  <button type="button" className="composer-image-open" aria-label={`View image ${i + 1}`} onClick={() => setViewing({ image, index: i })}>
-                    <img src={dataUrl(image)} alt={`Attached image ${i + 1}`} />
-                  </button>
-                  <button
-                    type="button"
-                    className="composer-image-remove"
-                    aria-label={`Remove image ${i + 1}`}
-                    onClick={() => setImages((current) => current.filter((x) => x.id !== image.id))}
-                  >
-                    <IconX size={11} />
-                  </button>
-                </li>
-              ))}
+              {images.map((image, i) => {
+                const size = imageSize(image);
+                return (
+                  <li key={image.id} className="composer-image" style={{ ["--hue" as string]: imageHue(i) }}>
+                    <button
+                      type="button"
+                      className="composer-image-open"
+                      aria-label={`View image #${i + 1}`}
+                      title={`Image #${i + 1}${size ? ` · ${size}` : ""}`}
+                      ref={(el) => {
+                        if (el) thumbs.current.set(i, el);
+                        else thumbs.current.delete(i);
+                      }}
+                      onClick={() => setViewing(i)}
+                    >
+                      <img src={dataUrl(image)} alt={`Attached image #${i + 1}`} />
+                    </button>
+                    <span className="image-tag composer-image-tag" aria-hidden="true">
+                      <IconImage size={10} />#{i + 1}
+                    </span>
+                    {size ? (
+                      <span className="composer-image-size" aria-hidden="true">
+                        {size}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="composer-image-remove"
+                      aria-label={`Remove image #${i + 1}`}
+                      onClick={() => setImages((current) => current.filter((x) => x.id !== image.id))}
+                    >
+                      <IconX size={11} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
           {imageError || blind ? (
@@ -374,10 +396,8 @@ export function Composer({
           </div>
         </div>
       )}
-      {viewing ? (
-        <Dialog title={`Image ${viewing.index + 1}`} className="image-dialog" onClose={() => setViewing(null)}>
-          <img className="image-viewer" src={dataUrl(viewing.image)} alt={`Attached image ${viewing.index + 1}, full size`} />
-        </Dialog>
+      {viewing !== null && images[viewing] ? (
+        <ImageViewer images={images} start={viewing} thumbnail={(i) => thumbs.current.get(i) ?? null} onClose={() => setViewing(null)} />
       ) : null}
     </div>
   );

@@ -9,6 +9,9 @@ const MAX_SIDE = 2048;
 export interface PendingImage extends ImageAttachment {
   /** Local key; crypto.randomUUID is missing on plain-HTTP LAN pages. */
   id: number;
+  /** Pixel size as sent, for the thumbnail's label; null when the browser could not measure it. */
+  width: number | null;
+  height: number | null;
 }
 
 let nextId = 1;
@@ -57,9 +60,22 @@ async function redraw(file: Blob): Promise<Blob> {
   throw new Error("That image is too large, even after shrinking it");
 }
 
+async function measure(blob: Blob): Promise<{ width: number | null; height: number | null }> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const size = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return size;
+  } catch {
+    return { width: null, height: null };
+  }
+}
+
 export async function prepareImage(file: File): Promise<PendingImage> {
   const blob = accepted(file.type) && file.size <= MAX_IMAGE_BYTES ? file : await redraw(file);
   const mimeType = blob.type;
   if (!accepted(mimeType)) throw new Error("That image type is not supported");
-  return { id: nextId++, mimeType, data: await toBase64(blob) };
+  const [data, size] = await Promise.all([toBase64(blob), measure(blob)]);
+  return { id: nextId++, mimeType, data, ...size };
 }
+
