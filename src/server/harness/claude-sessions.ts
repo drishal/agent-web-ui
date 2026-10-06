@@ -199,7 +199,9 @@ export function transcriptMessages(entries: Obj[]): Obj[] {
     if (kind.kind === "tool_results") {
       for (const block of kind.results) {
         const callId = String(block.tool_use_id);
-        out.push({ role: "toolResult", toolCallId: callId, toolName: toolNames.get(callId) ?? "tool", content: toolResultContent(block), isError: block.is_error === true, ...stamp });
+        // An edit's structuredPatch rides on the entry, which holds one result.
+        const details = kind.results.length === 1 && isObj(entry.toolUseResult) ? { details: entry.toolUseResult } : {};
+        out.push({ role: "toolResult", toolCallId: callId, toolName: toolNames.get(callId) ?? "tool", content: toolResultContent(block), isError: block.is_error === true, ...details, ...stamp });
       }
     } else if (kind.kind === "command_output") {
       out.push({ role: "assistant", content: [{ type: "text", text: `\`\`\`text\n${kind.text}\n\`\`\`` }], ...stamp });

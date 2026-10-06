@@ -72,7 +72,7 @@ export type HarnessEvent =
   | { type: "assistant_end"; text: string; thinking: string; error?: string; usage?: StepUsage }
   | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
   | { type: "tool_update"; toolCallId: string; output: string }
-  | { type: "tool_end"; toolCallId: string; output: string; isError: boolean }
+  | { type: "tool_end"; toolCallId: string; output: string; isError: boolean; /** The result's structured side (Pi/omp `details`, Claude Code's tool_use_result). */ details?: unknown }
   | { type: "busy" }
   | { type: "settled" }
   | { type: "compacting"; active: boolean }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../../src/server/config.js";
-import { boundText, editDiffStat, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("loadConfig", () => {
@@ -119,15 +119,11 @@ describe("agent event normalization", () => {
     expect(toolPaths({ i: "do it", input: "[src/a.ts#AB12]\nPUT 1.=2:\n+x\n" })).toEqual(["src/a.ts"]);
   });
 
-  it("counts added and removed lines for edits", () => {
-    expect(editDiffStat({ oldText: "a", newText: "b" })).toEqual({ added: 1, removed: 1 });
-    expect(editDiffStat({ content: "x\ny\n" })).toEqual({ added: 2, removed: 0 });
-    expect(editDiffStat({ diff: "--- a\n+++ b\n@@\n-x\n+y\n+z" })).toEqual({ added: 2, removed: 1 });
-    expect(editDiffStat({ edits: [{ old_string: "a", new_string: "b" }, { old_string: "c\nd", new_string: "c" }] })).toEqual({ added: 2, removed: 3 });
-    expect(editDiffStat({ input: "[f#AB12]\nSWAP 21.=22:\n+theme: \n+  dark: x\n" })).toEqual({ added: 2, removed: 0 });
-    expect(editDiffStat({ path: "f.ts" })).toBeNull();
+  it("takes an edit's count from its output only in the bracketed form", () => {
     expect(outputDiffStat("Edited src/app.ts (+1 -1)")).toEqual({ added: 1, removed: 1 });
     expect(outputDiffStat("# Fake README\nhello")).toBeNull();
+    // Code the output quotes is no count.
+    expect(outputDiffStat("  12→  i = x+1-2;")).toBeNull();
   });
 
   it("shows an edit's patch block verbatim instead of raw JSON", () => {

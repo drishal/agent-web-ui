@@ -135,6 +135,19 @@ export interface AssistantItem {
 
 export type ToolCategory = "read" | "edit" | "write" | "command" | "search" | "web" | "other";
 
+/** One line of a tool's diff. `line` is its number in the file: the new side for add/ctx, the old for del. */
+export interface DiffLine {
+  kind: "add" | "del" | "ctx" | "hunk" | "gap";
+  text: string;
+  line?: number;
+}
+
+export interface ToolDiff {
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+}
+
 export interface ToolItem {
   kind: "tool";
   id: string;
@@ -148,8 +161,10 @@ export interface ToolItem {
   summary: string;
   /** Files named in the arguments (absolute or as given). */
   paths: string[];
-  /** Added/removed lines for an edit or write (from its arguments, refined by its output). */
+  /** Added/removed lines for an edit or write (from its diff, else its output's own count). */
   diffStat?: { added: number; removed: number };
+  /** An edit's or write's lines: the harness's own diff once it answers, the arguments' until then. */
+  diff?: ToolDiff;
   at?: number;
   endedAt?: number;
 }

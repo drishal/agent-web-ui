@@ -1,7 +1,8 @@
 // Normalization for Pi-family agent events and transcript messages. omp is a
 // Pi fork and emits the same shapes over RPC, so both adapters share this.
 // Inputs are untyped on purpose: SDK and wire types never leave the adapters.
-import type { ChatItem, ToolCategory, ToolItem } from "../../shared/protocol.js";
+import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
+import { argsDiff, resultDiff } from "./tool-diff.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -162,103 +163,21 @@ export interface DiffStat {
   removed: number;
 }
 
-const OLD_KEYS = ["oldText", "old_string", "oldStr", "original"];
-const NEW_KEYS = ["newText", "new_string", "newStr", "updated", "content"];
-const DIFF_KEYS = ["diff", "patch", "unifiedDiff"];
-
-const countLines = (text: string) => (text.endsWith("\n") ? text.slice(0, -1).split("\n").length : text ? text.split("\n").length : 0);
-
-/** Count added/removed lines in a unified diff body (dsh's summarizeResult walks the same lines). */
-function countDiffLines(body: string): DiffStat {
-  let added = 0;
-  let removed = 0;
-  for (const line of body.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) added += 1;
-    else if (line.startsWith("-") && !line.startsWith("---")) removed += 1;
-  }
-  return { added, removed };
-}
-
 /**
- * Added/removed lines for an edit or write call, from its structured
- * arguments: a unified diff when one is present, else old/new line counts.
- * Returns null when the call carries nothing countable.
- */
-export function editDiffStat(args: unknown): DiffStat | null {
-  if (!isObj(args)) return null;
-  for (const key of DIFF_KEYS) {
-    const body = args[key];
-    if (typeof body === "string" && body.includes("\n")) {
-      const stat = countDiffLines(body);
-      if (stat.added + stat.removed > 0) return stat;
-    }
-  }
-  // omp's hashline patch block (a file header plus `PUT`/`SWAP`/`replace`
-  // ranges with `+` additions): count the added lines; removals are not
-  // marked, so removed stays 0.
-  const input = args.input;
-  if (typeof input === "string" && (/\[.+#\w+\]/m.test(input) || /\*\*\* Begin Patch/.test(input))) {
-    let added = 0;
-    for (const line of input.split("\n")) if (line.startsWith("+")) added += 1;
-    if (added > 0) return { added, removed: 0 };
-  }
-  let oldText: string | null = null;
-  let newText: string | null = null;
-  for (const key of OLD_KEYS) {
-    if (typeof args[key] === "string") {
-      oldText = args[key] as string;
-      break;
-    }
-  }
-  for (const key of NEW_KEYS) {
-    if (typeof args[key] === "string") {
-      newText = args[key] as string;
-      break;
-    }
-  }
-  // Multi-edit batches: sum each edit's old/new.
-  const edits = Array.isArray(args.edits) ? args.edits : null;
-  if (edits && (oldText === null || newText === null)) {
-    let added = 0;
-    let removed = 0;
-    let any = false;
-    for (const entry of edits) {
-      if (!isObj(entry)) continue;
-      const sub = editDiffStat(entry);
-      if (sub) {
-        added += sub.added;
-        removed += sub.removed;
-        any = true;
-      }
-    }
-    if (any) return { added, removed };
-  }
-  if (oldText === null && newText === null) return null;
-  // A write of fresh content: everything added.
-  if (oldText === null) return { added: countLines(newText as string), removed: 0 };
-  if (newText === null) return { added: 0, removed: countLines(oldText) };
-  // Same-line rewrite reads as one changed line, not one add plus one removal.
-  const oldLines = (oldText as string).split("\n");
-  const newLines = (newText as string).split("\n");
-  if (oldLines.length === newLines.length) {
-    let changed = 0;
-    for (let i = 0; i < oldLines.length; i += 1) if (oldLines[i] !== newLines[i]) changed += 1;
-    return changed > 0 ? { added: changed, removed: changed } : { added: 0, removed: 0 };
-  }
-  return { added: countLines(newText as string), removed: countLines(oldText) };
-}
-
-/**
- * Added/removed lines from an edit tool's output text ("Edited f (+1 -1)",
- * "+12 −3"): the harness's own accounting beats the argument estimate.
+ * Added/removed lines an edit tool's output states as `(+1 -1)`, for a
+ * harness that reports no diff. Only that bracketed form: output often quotes
+ * code, where `x+1-2` is no count.
  */
 export function outputDiffStat(output: string): DiffStat | null {
-  const m = /\(\+(\d+)\s+[-−](\d+)\)|[+＋](\d+)\s*[-−](\d+)/.exec(output);
-  if (!m) return null;
-  const added = Number(m[1] ?? m[3]);
-  const removed = Number(m[2] ?? m[4]);
-  if (!Number.isFinite(added) || !Number.isFinite(removed)) return null;
-  return { added, removed };
+  const m = /\(\+(\d+)\s+[-−](\d+)\)/.exec(output);
+  return m ? { added: Number(m[1]), removed: Number(m[2]) } : null;
+}
+
+/** The diff and its counts for an edit or write, from its result when the harness reported one, else its arguments. */
+export function editShape(diff: ToolDiff | null, output: string | null): Pick<ToolItem, "diff" | "diffStat"> {
+  if (diff) return { diff, diffStat: { added: diff.added, removed: diff.removed } };
+  const stat = output === null ? null : outputDiffStat(output);
+  return stat ? { diffStat: stat } : {};
 }
 /**
  * One-line description of a call: its command, else what a search looks for
@@ -384,6 +303,7 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
           toolCallId: String(event.toolCallId),
           output: toolResultText(event.result),
           isError: event.isError === true,
+          ...(isObj(event.result) && event.result.details !== undefined ? { details: event.result.details } : {}),
         },
       ];
     case "queue_update": {
@@ -469,7 +389,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
           const id = String(block.id);
           const name = String(block.name ?? "tool");
           const category = toolCategory(name);
-          const stat = category === "edit" || category === "write" ? editDiffStat(block.arguments) : null;
+          const edits = category === "edit" || category === "write";
           const tool: ToolItem = {
             kind: "tool",
             id: `t:${id}`,
@@ -481,7 +401,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             category,
             summary: toolSummary(block.arguments),
             paths: toolPaths(block.arguments),
-            ...(stat ? { diffStat: stat } : {}),
+            ...(edits ? editShape(argsDiff(block.arguments), null) : {}),
             ...stamp,
           };
           tools.set(id, tool);
@@ -497,8 +417,11 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
           tool.truncated = bounded.truncated;
           tool.status = raw.isError === true ? "error" : "done";
           if (at !== undefined) tool.endedAt = at;
-          const settled = tool.category === "edit" || tool.category === "write" ? outputDiffStat(bounded.text) : null;
-          if (settled) tool.diffStat = settled;
+          if (tool.category === "edit" || tool.category === "write") {
+            const reported = resultDiff(raw.details, toolResultText(raw));
+            Object.assign(tool, reported ? editShape(reported, null) : tool.diff ? {} : editShape(null, bounded.text));
+            if (tool.status === "error") delete tool.diffStat;
+          }
         }
         break;
       }

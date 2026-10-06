@@ -450,11 +450,13 @@ class ClaudeLiveChat implements LiveChat {
       this.emit({ type: "busy" });
       return;
     }
-    for (const block of Array.isArray(message.content) ? message.content : []) {
-      if (!isObj(block) || block.type !== "tool_result") continue;
+    const results = (Array.isArray(message.content) ? message.content : []).filter((b): b is Obj => isObj(b) && b.type === "tool_result");
+    for (const block of results) {
       const content = block.content;
       const output = typeof content === "string" ? content : textOf(content);
-      this.emit({ type: "tool_end", toolCallId: str(block.tool_use_id), output, isError: block.is_error === true });
+      // The CLI's structured result (an edit's structuredPatch) belongs to the frame; it carries one result per frame.
+      const details = results.length === 1 && frame.tool_use_result !== undefined ? { details: frame.tool_use_result } : {};
+      this.emit({ type: "tool_end", toolCallId: str(block.tool_use_id), output, isError: block.is_error === true, ...details });
     }
   }
 

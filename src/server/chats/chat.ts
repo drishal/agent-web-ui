@@ -21,7 +21,8 @@ import type {
   ToolItem,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
-import { boundText, editDiffStat, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
+import { boundText, editShape, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
+import { argsDiff, resultDiff } from "../harness/tool-diff.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 
 export class ChatError extends Error {
@@ -274,7 +275,7 @@ class EventReducer {
       case "tool_start": {
         this.finishStreaming();
         const category = toolCategory(event.name);
-        const stat = category === "edit" || category === "write" ? editDiffStat(event.args) : null;
+        const edits = category === "edit" || category === "write";
         const tool: ToolItem = {
           kind: "tool",
           id: `t:${event.toolCallId}`,
@@ -286,7 +287,7 @@ class EventReducer {
           category,
           summary: toolSummary(event.args),
           paths: toolPaths(event.args),
-          ...(stat ? { diffStat: stat } : {}),
+          ...(edits ? editShape(argsDiff(event.args), null) : {}),
           at: Date.now(),
         };
         this.put(tool);
@@ -322,15 +323,18 @@ class EventReducer {
                 summary: "",
                 paths: [],
               };
-        // The harness's own line accounting beats the argument estimate.
-        const settled = (base.category === "edit" || base.category === "write" ? outputDiffStat(bounded.text) : null) ?? base.diffStat;
+        const edits = base.category === "edit" || base.category === "write";
+        // The harness's own diff beats the arguments' one; with neither, its output's own count.
+        const reported = edits ? resultDiff(event.details, event.output) : null;
+        const settled: ToolItem = { ...base, ...(!edits ? {} : reported ? editShape(reported, null) : base.diff ? {} : editShape(null, bounded.text)) };
+        // A failed edit keeps the diff it tried, but changed nothing to count.
+        const { diffStat: _attempted, ...uncounted } = settled;
         this.put({
-          ...base,
+          ...(event.isError ? uncounted : settled),
           output: bounded.text,
           truncated: bounded.truncated,
           status: event.isError ? "error" : "done",
           endedAt: Date.now(),
-          ...(settled ? { diffStat: settled } : {}),
         });
         if (base.name.toLowerCase().includes("todo")) this.fx.refreshTodos();
         break;
