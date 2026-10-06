@@ -3,9 +3,9 @@
 import { useState } from "react";
 import type { ChatState } from "../chat-state.js";
 import type { HarnessStatus } from "../../shared/protocol.js";
-import { IconChevronDown } from "../icons.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { ThinkingPicker } from "./ThinkingPicker.js";
 
 /**
  * A handoff target: a harness that keeps past turns gets a copy of the
@@ -74,21 +74,12 @@ export function ComposerControls({
         />
       ) : null}
       {caps.supportsThinkingLevel && config.thinkingLevels.length > 0 ? (
-        <label className="pill-select">
-          <select
-            aria-label="Thinking"
-            value={config.thinkingLevel ?? ""}
-            disabled={!idle}
-            onChange={(e) => void onConfig({ thinkingLevel: e.target.value })}
-          >
-            {config.thinkingLevels.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-          <IconChevronDown size={12} />
-        </label>
+        <ThinkingPicker
+          levels={config.thinkingLevels}
+          current={config.thinkingLevel}
+          disabled={!idle}
+          onSelect={(thinkingLevel) => void onConfig({ thinkingLevel })}
+        />
       ) : null}
     </div>
   );

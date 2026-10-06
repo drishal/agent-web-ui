@@ -12,7 +12,7 @@ import { load, save } from "../storage.js";
 const MAX_RECENT = 5;
 
 /** Visible vertical band for a popover under `el`: the viewport cut by any clipping ancestor. */
-function clipBand(el: HTMLElement): { top: number; bottom: number } {
+export function clipBand(el: HTMLElement): { top: number; bottom: number } {
   let top = 0;
   let bottom = window.innerHeight;
   for (let p = el.parentElement; p; p = p.parentElement) {

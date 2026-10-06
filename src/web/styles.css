@@ -3476,6 +3476,38 @@ body.is-resizing {
   margin-left: 8px;
 }
 
+/* The thinking picker: the model popover, narrower, with a strength meter per level. */
+.model-pop.is-compact {
+  width: 210px;
+}
+
+.model-pop.is-compact .model-list {
+  padding-top: 2px;
+}
+
+.thinking-meter {
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 4px;
+  margin-left: auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+}
+
+.thinking-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--level, 0) * 100%);
+  border-radius: inherit;
+  background: var(--thinking);
+}
+
+.thinking-meter + .model-check {
+  margin-left: 10px;
+}
+
 .model-empty {
   padding: 18px 10px;
   text-align: center;
@@ -3493,7 +3525,8 @@ body.is-resizing {
   }
 
   .model-pop,
-  .model-pop.is-below {
+  .model-pop.is-below,
+  .model-pop.is-compact {
     position: fixed;
     left: 8px;
     right: 8px;

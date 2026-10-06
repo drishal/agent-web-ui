@@ -272,12 +272,18 @@ test("model and thinking changes apply while idle", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Choose a model" }).getByRole("option")).toHaveCount(1);
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
-  await page.getByRole("combobox", { name: "Thinking" }).selectOption("high");
+  await page.getByTestId("thinking-picker").click();
+  await page.getByRole("listbox", { name: "Thinking" }).getByRole("option", { name: "high" }).click();
   await page.reload();
   await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
-  await expect(page.getByRole("combobox", { name: "Thinking" })).toHaveValue("high");
+  await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName("Thinking: high");
   await expect(page.getByTestId("connection")).toContainText("Connected");
   await expect(page.locator(".status-bar")).toContainText("Fake · Fake Slow · high");
+  // By keyboard too: arrows move, Enter picks, and it reads back on the pill.
+  await page.getByTestId("thinking-picker").click();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName(/Thinking: (?!high)/);
 });
 
 test("the model picker searches across providers, remembers recents, and works by keyboard", async ({ page }) => {
