@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, SendMode, WorkspaceInfo } from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
-import { CONN_BANNER, setHash, STATUS_LABEL, useChatStream } from "./chat-stream.js";
+import type { ChatState } from "./chat-state.js";
+import { chatIdFromHash, CONN_BANNER, setHash, STATUS_LABEL, useChatStream } from "./chat-stream.js";
 import { appCommand } from "./commands.js";
 import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
@@ -12,10 +13,12 @@ import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
+import { TabStrip } from "./components/TabStrip.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { IconMenu, IconMore, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
+import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -68,6 +71,46 @@ export function App() {
   }, [boot]);
   const chatId = chat?.chatId ?? null;
 
+  // ---- session tabs ---------------------------------------------------------------------
+
+  const [tabState, setTabState] = useState<TabState>(loadTabs);
+  const tabsRef = useRef(tabState);
+  tabsRef.current = tabState;
+  useEffect(() => saveTabs(tabState), [tabState]);
+  /** Each tab's chat as last shown: switching back shows it at once, and the stream replays what it missed. */
+  const tabCache = useRef(new Map<string, ChatState>());
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  const rememberShown = () => {
+    const { tabs, active } = tabsRef.current;
+    const shown = chatRef.current;
+    const tab = tabs[active];
+    if (shown && tab && tab.chatId === shown.chatId) tabCache.current.set(tab.key, shown);
+  };
+
+  // Whatever chat is shown lives in a tab: adopt one that arrived another way (the URL hash),
+  // and keep the shown tab's title and session in step.
+  useEffect(() => {
+    if (!chat) return;
+    setTabState((st) => {
+      const i = findTab(st, chat);
+      return i < 0 ? placeChat(st, chat) : i === st.active ? syncActive(st, chat) : st;
+    });
+  }, [chat?.chatId, chat?.title, chat?.sessionId]);
+
+  // Background tabs: a tab whose run ended while another was shown gets a dot.
+  // Only a run counts; a harness starting up (Starting → Idle) is no news.
+  const busyBefore = useRef(new Set<string>());
+  useEffect(() => {
+    const busyNow = runningChats(overview.sessions);
+    const finished = new Set([...busyBefore.current].filter((id) => !busyNow.has(id) && id !== chatId));
+    busyBefore.current = busyNow;
+    setTabState((st) => markUnread(st, finished));
+  }, [overview, chatId]);
+
+  const tabStatus = (tab: Tab) =>
+    chat && tab.chatId === chat.chatId ? chat.status : (overview.sessions.find((x) => x.liveChatId !== undefined && x.liveChatId === tab.chatId)?.status ?? null);
+
   // ---- actions -------------------------------------------------------------------------
 
   const chooseHarness = (id: string) => {
@@ -88,7 +131,10 @@ export function App() {
     }
   };
 
-  const showChat = (snapshot: ChatSnapshot) => {
+  /** Show a chat: in its own tab when it has one, else in the shown tab, or a new tab with `newTab`. */
+  const showChat = (snapshot: ChatSnapshot, { newTab = false }: { newTab?: boolean } = {}) => {
+    rememberShown();
+    setTabState((st) => placeChat(st, snapshot, { newTab }));
     setChat(snapshot);
     setBanner(null);
     setDrawerOpen(false);
@@ -103,13 +149,13 @@ export function App() {
     return opened;
   };
 
-  const newChat = async (target: WorkspaceInfo | null = workspace) => {
+  const newChat = async (target: WorkspaceInfo | null = workspace, { newTab = false }: { newTab?: boolean } = {}) => {
     if (!target || !harnessId) return;
     setOpening(true);
     setBanner(null);
     try {
       const ws = await enterWorkspace(target);
-      showChat(await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } }));
+      showChat(await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } }), { newTab });
       void refreshSessions();
     } catch (e) {
       fail(e);
@@ -119,15 +165,109 @@ export function App() {
     }
   };
 
-  const openSession = async (s: ProjectSession) => {
+  /**
+   * Reattach a tab to its chat, or resume its session once the server no longer
+   * holds the chat (a restart, or the idle reaper). A tab with neither is dropped.
+   */
+  const loadTab = async (tab: Tab) => {
+    setOpening(true);
+    setBanner(null);
+    try {
+      if (tab.chatId) {
+        try {
+          const live = await api<ChatSnapshot>(`/api/chats/${tab.chatId}`);
+          setWorkspace(live.workspace);
+          showChat(live);
+          return;
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 404)) throw e;
+        }
+      }
+      if (!tab.sessionId) {
+        setTabState((st) => {
+          const i = st.tabs.findIndex((t) => t.key === tab.key);
+          return i < 0 ? st : closeTab(st, i);
+        });
+        return;
+      }
+      const ws = await api<WorkspaceInfo>("/api/workspaces/open", { body: { path: tab.workspacePath } });
+      setWorkspace(ws);
+      showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } }));
+    } catch (e) {
+      fail(e);
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const activateTab = (index: number) => {
+    const tab = tabsRef.current.tabs[index];
+    if (!tab) return;
+    if (index === tabsRef.current.active && chat?.chatId === tab.chatId) return;
+    rememberShown();
+    setTabState((st) => ({ active: index, tabs: st.tabs.map((t, i) => (i === index && t.unread ? { ...t, unread: undefined } : t)) }));
+    const cached = tabCache.current.get(tab.key);
+    if (cached && cached.chatId === tab.chatId && cached.status !== "disposed") {
+      setWorkspace(cached.workspace);
+      setChat(cached);
+      setBanner(null);
+      return;
+    }
+    void loadTab(tab);
+  };
+
+  const closeTabAt = (index: number) => {
+    const before = tabsRef.current;
+    const closing = before.tabs[index];
+    if (!closing) return;
+    tabCache.current.delete(closing.key);
+    const after = closeTab(before, index);
+    // Updated now, not at the next render: activateTab below reads it.
+    tabsRef.current = after;
+    setTabState(after);
+    if (index !== before.active) return;
+    const next = after.tabs[after.active];
+    if (next) activateTab(after.active);
+    else {
+      setChat(null);
+      setHash(null);
+    }
+  };
+
+  // A shown chat the server dropped (restart, idle reaper) comes back through its tab's session.
+  const resumedGone = useRef(new Set<string>());
+  useEffect(() => {
+    if (!chat?.gone) return;
+    const tab = tabsRef.current.tabs[tabsRef.current.active];
+    if (!tab || tab.chatId !== chat.chatId || !tab.sessionId || resumedGone.current.has(chat.chatId)) return;
+    resumedGone.current.add(chat.chatId);
+    void loadTab({ ...tab, chatId: null });
+  }, [chat?.gone]);
+
+  // On load, the shown tab reattaches unless the URL already names a chat.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!boot || restored.current) return;
+    restored.current = true;
+    const tab = tabsRef.current.tabs[tabsRef.current.active];
+    if (tab && !chatIdFromHash()) void loadTab(tab);
+  }, [boot]);
+
+  const openSession = async (s: ProjectSession, { newTab = false }: { newTab?: boolean } = {}) => {
+    const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
+    if (open >= 0) {
+      activateTab(open);
+      setDrawerOpen(false);
+      return;
+    }
     const target = overview.workspaces.find((w) => w.id === s.workspaceId);
     if (!target) return;
     setOpening(true);
     setBanner(null);
     try {
       const ws = await enterWorkspace(target);
-      if (s.liveChatId) showChat(await api<ChatSnapshot>(`/api/chats/${s.liveChatId}`));
-      else showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }));
+      if (s.liveChatId) showChat(await api<ChatSnapshot>(`/api/chats/${s.liveChatId}`), { newTab });
+      else showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }), { newTab });
     } catch (e) {
       fail(e);
       setDrawerOpen(false);
@@ -319,7 +459,7 @@ export function App() {
         activeSessionId={chat?.sessionId ?? null}
         activeChatId={chatId}
         activeStatus={chat?.status ?? null}
-        onOpenSession={(s) => void openSession(s)}
+        onOpenSession={(s, newTab) => void openSession(s, { newTab })}
         onRefresh={() => void refreshSessions()}
         themeMode={themeMode}
         scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}
@@ -340,6 +480,18 @@ export function App() {
       />
 
       <main className="main">
+        {tabState.tabs.length >= (narrow ? 2 : 1) ? (
+          <TabStrip
+            tabs={tabState.tabs}
+            active={tabState.active}
+            statusOf={tabStatus}
+            harnessName={(id) => boot.harnesses.find((h) => h.id === id)?.displayName ?? id}
+            onActivate={activateTab}
+            onClose={closeTabAt}
+            onNew={() => void newChat(workspace, { newTab: true })}
+            newDisabled={newChatDisabled !== null}
+          />
+        ) : null}
         <header className="chat-header">
           <button type="button" className="icon-btn drawer-open" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
             <IconMenu size={18} />

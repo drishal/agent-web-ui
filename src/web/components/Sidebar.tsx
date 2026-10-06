@@ -44,14 +44,23 @@ function SessionRow({
   active: boolean;
   working: boolean;
   harnessName: string;
-  onOpen: () => void;
+  /** `newTab`: Ctrl/⌘-click or middle-click, as in a browser. */
+  onOpen: (newTab: boolean) => void;
 }) {
   return (
     <li>
       <button
         type="button"
         className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}`}
-        onClick={onOpen}
+        onClick={(e) => onOpen(e.ctrlKey || e.metaKey)}
+        onMouseDown={(e) => {
+          if (e.button === 1) e.preventDefault();
+        }}
+        onAuxClick={(e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          onOpen(true);
+        }}
         aria-current={active ? "true" : undefined}
       >
         {working ? (
@@ -86,7 +95,7 @@ function ProjectGroupView({
   isWorking: (s: ProjectSession) => boolean;
   harnessName: (id: string) => string;
   canStartChat: boolean;
-  onOpen: (s: ProjectSession) => void;
+  onOpen: (s: ProjectSession, newTab: boolean) => void;
   onNewChat: (ws: WorkspaceInfo) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -115,7 +124,7 @@ function ProjectGroupView({
         active={isActive(s)}
         working={isWorking(s)}
         harnessName={harnessName(s.harnessId)}
-        onOpen={() => onOpen(s)}
+        onOpen={(newTab) => onOpen(s, newTab)}
       />,
     );
   }
@@ -179,7 +188,8 @@ export function Sidebar(props: {
   activeChatId: string | null;
   /** The open chat's status (live over SSE), which beats the listing's. */
   activeStatus: ChatStatus | null;
-  onOpenSession: (s: ProjectSession) => void;
+  /** `newTab`: open it in a new tab rather than the shown one. */
+  onOpenSession: (s: ProjectSession, newTab: boolean) => void;
   onRefresh: () => void;
   themeMode: ThemeMode;
   /** The theme.yml scheme, when one is loaded; listed as "base16" with its own name on hover. */

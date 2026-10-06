@@ -3220,3 +3220,123 @@ button.harness-chip:disabled {
   flex: none;
   color: var(--accent);
 }
+
+/* ---- session tabs (Hermes Desktop's) ------------------------------------------
+   The strip takes the sidebar's surface; the shown tab takes the conversation's
+   and its accent underline, so it reads as the page below it. Inactive tabs
+   darken on hover; the ✕ shows on hover, on the shown tab, and on focus. */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  min-height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tab-list {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.session-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  width: clamp(120px, 14vw, 210px);
+  padding: 0 6px 0 12px;
+  border-right: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+
+.session-tab:hover:not(.is-active) {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.session-tab.is-active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.session-tab:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.session-tab .harness-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.session-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-tab-unread {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.session-tab-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.session-tab:hover .session-tab-close,
+.session-tab.is-active .session-tab-close,
+.session-tab:focus-within .session-tab-close {
+  opacity: 1;
+}
+
+.session-tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* A finished-while-away dot takes the ✕'s place until the tab is hovered. */
+.session-tab.is-unread:not(:hover) .session-tab-close {
+  display: none;
+}
+
+.tab-new {
+  flex: none;
+  align-self: center;
+  margin: 0 6px;
+}
+
+@media (hover: none) {
+  .session-tab-close {
+    opacity: 1;
+  }
+}
