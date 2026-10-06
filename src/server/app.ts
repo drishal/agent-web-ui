@@ -26,6 +26,7 @@ import {
   type WorkspaceInfo,
 } from "../shared/protocol.js";
 import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
+import { storedImage } from "./image-store.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
@@ -333,6 +334,16 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(input.workspaceId);
     const chat = await manager.resume(adapter, ws, input.sessionId.slice(prefix.length));
     res.json(chat.snapshot());
+  });
+
+  // An image under a prompt (see image-store): the id is the hash of its bytes, so it never changes.
+  app.get("/api/images/:id", (req, res) => {
+    const image = /^[0-9a-f]{32}$/.test(req.params.id) ? storedImage(req.params.id) : null;
+    if (!image) throw new ChatError(404, "no_image", "That image is no longer held; reload the chat");
+    res.setHeader("Content-Type", image.mimeType);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(image.bytes);
   });
 
   app.get("/api/chats/:id", (req, res) => {

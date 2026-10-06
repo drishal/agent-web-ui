@@ -301,7 +301,7 @@ class FakeLiveChat implements LiveChat {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
     this.emit({ type: "busy" });
-    this.running = this.run(text, signal, images.length).finally(() => {
+    this.running = this.run(text, signal, images).finally(() => {
       this.running = null;
       this.emit({ type: "settled" });
     });
@@ -385,19 +385,21 @@ class FakeLiveChat implements LiveChat {
     if (signal.aborted) throw new Aborted();
   }
 
-  private async run(firstText: string, signal: AbortSignal, firstImages: number): Promise<void> {
+  private async run(firstText: string, signal: AbortSignal, firstImages: ImageAttachment[]): Promise<void> {
     let text: string | undefined = firstText;
     let images = firstImages;
     while (text !== undefined) {
       await this.turn(text, signal, images);
-      images = 0;
+      images = [];
       text = this.followUps.shift();
       if (text !== undefined) this.emitQueue();
     }
   }
 
-  private async turn(text: string, signal: AbortSignal, imageCount = 0): Promise<void> {
-    const images = Array.from({ length: imageCount }, () => ({ type: "image", data: "", mimeType: "image/png" }));
+  private async turn(text: string, signal: AbortSignal, attached: ImageAttachment[] = []): Promise<void> {
+    const imageCount = attached.length;
+    // Kept in the session like Pi keeps them, so a reload shows them again; the live echo, like most harnesses, is a count.
+    const images = attached.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType }));
     this.record({ role: "user", content: imageCount ? [{ type: "text", text }, ...images] : text });
     this.emit({ type: "user_message", text, ...(imageCount ? { imageCount } : {}) });
     if (!this.session.title) {

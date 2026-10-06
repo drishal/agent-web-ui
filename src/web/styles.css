@@ -1049,6 +1049,64 @@ body.is-resizing {
   gap: 5px;
 }
 
+/* A sent prompt's images: one shows as a preview card, several as tiles. */
+.sent-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 2px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.sent-image {
+  position: relative;
+  width: 132px;
+  height: 100px;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.sent-images.is-single .sent-image {
+  width: min(480px, 100%);
+  height: auto;
+  max-height: 260px;
+}
+
+.sent-image-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.sent-image-open img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  transition:
+    filter 0.15s ease,
+    transform 0.25s var(--ease-out);
+}
+
+.sent-images.is-single .sent-image-open img {
+  height: auto;
+  max-height: 260px;
+}
+
+.sent-image-open:hover img {
+  filter: brightness(0.92);
+  transform: scale(1.02);
+}
+
 /* "Worked for …" process fold (DeepSeek Harness), counts (OpenCode). */
 .process {
   margin: 2px 0 12px;
@@ -2155,33 +2213,25 @@ body.is-resizing {
   box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);
 }
 
-/* Attached images: a frame in each image's own colour, its #N on the top
-   edge and its size on the bottom one, so a prompt can say "#2". */
-:root {
-  --image-hue-0: var(--orange);
-  --image-hue-1: var(--info);
-  --image-hue-2: var(--ok);
-  --image-hue-3: var(--thinking);
-  --image-hue-4: var(--rare);
-  --image-hue-5: var(--danger);
-}
-
+/* Attached images: plain rounded frames, each labelled with its #N and size,
+   so a prompt can say "#2". */
 .composer-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 12px;
-  margin: 10px 0 14px;
+  gap: 8px;
+  margin: 4px 0 8px;
   padding: 0;
   list-style: none;
 }
 
 .composer-image {
   position: relative;
-  width: 104px;
-  height: 76px;
-  padding: 4px;
-  border: 1.5px solid color-mix(in srgb, var(--hue) 75%, transparent);
-  border-radius: 11px;
+  width: 112px;
+  height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--bg);
   animation: settle-in 0.24s var(--ease-out);
 }
 
@@ -2189,9 +2239,8 @@ body.is-resizing {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 7px;
   object-fit: cover;
-  background: var(--bg);
+  object-position: top left;
 }
 
 .composer-image-open {
@@ -2200,7 +2249,6 @@ body.is-resizing {
   height: 100%;
   padding: 0;
   border: 0;
-  border-radius: 7px;
   background: none;
   cursor: zoom-in;
 }
@@ -2208,55 +2256,47 @@ body.is-resizing {
 .composer-image-open img {
   transition:
     filter 0.15s ease,
-    transform 0.2s var(--ease-out);
+    transform 0.25s var(--ease-out);
 }
 
 .composer-image-open:hover img {
-  filter: brightness(0.92);
-  transform: scale(1.03);
+  filter: brightness(0.9);
+  transform: scale(1.04);
 }
 
-.image-tag {
+/* "#1 · 473×228" on the image's lower edge. */
+.image-label {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  color: var(--hue);
+  gap: 5px;
+  max-width: calc(100% - 12px);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(4px);
+  color: rgb(255 255 255 / 0.75);
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.composer-image-tag,
-.composer-image-size {
-  position: absolute;
-  left: 50%;
-  z-index: 1;
-  padding: 0 5px;
-  background: var(--card);
-  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1.5;
   white-space: nowrap;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.composer-image-tag {
-  top: -7px;
-}
-
-.composer-image-size {
-  bottom: -7px;
-  color: var(--hue);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
+.image-label strong {
+  color: #fff;
+  font-weight: 700;
 }
 
 .composer-image-remove {
   position: absolute;
   z-index: 2;
-  top: 7px;
-  right: 7px;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2978,7 +3018,7 @@ body.is-resizing {
   border-radius: 10px;
   object-fit: contain;
   box-shadow:
-    0 0 0 1.5px color-mix(in srgb, var(--hue) 70%, transparent),
+    0 0 0 1px rgb(255 255 255 / 0.12),
     0 24px 60px rgb(0 0 0 / 0.5);
   transform-origin: center;
   will-change: transform;
@@ -2998,7 +3038,8 @@ body.is-resizing {
 }
 
 .image-lightbox-caption .image-tag {
-  font-size: 12px;
+  color: #fff;
+  font-weight: 700;
 }
 
 .image-lightbox-caption .muted {

@@ -3,6 +3,7 @@
 // Inputs are untyped on purpose: SDK and wire types never leave the adapters.
 import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { argsDiff, resultDiff } from "./tool-diff.js";
+import { imageRefs } from "../image-store.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -301,7 +302,8 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
       const message = event.message;
       if (!isObj(message)) return [];
       if (message.role === "user") {
-        return [{ type: "user_message", text: textOf(message.content), imageCount: imageCount(message.content) }];
+        const images = imageRefs(message.content);
+        return [{ type: "user_message", text: textOf(message.content), imageCount: imageCount(message.content), ...(images.length > 0 ? { images } : {}) }];
       }
       if (message.role === "assistant") {
         return [{ type: "assistant_start", ...(typeof message.model === "string" ? { model: message.model } : {}) }];
@@ -401,11 +403,13 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
     switch (raw.role) {
       case "user": {
         const count = imageCount(raw.content);
+        const images = imageRefs(raw.content);
         items.push({
           kind: "user",
           id: nextId("u"),
           text: textOf(raw.content),
           ...(count ? { imageCount: count } : {}),
+          ...(images.length > 0 ? { images } : {}),
           ...stamp,
         });
         break;

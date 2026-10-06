@@ -4,7 +4,13 @@
 // same #N label and size as the thumbnail, so "image #2" means one thing.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconChevronRight, IconX } from "../icons.js";
-import { dataUrl, type PendingImage } from "../images.js";
+
+/** An image to show: its source, and its pixel size when known (else read off the loaded picture). */
+export interface ViewImage {
+  src: string;
+  width: number | null;
+  height: number | null;
+}
 
 const OPEN_MS = 280;
 const CLOSE_MS = 200;
@@ -12,11 +18,8 @@ const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 const still = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-/** One image's colour, by its number, so its thumbnail, label, and caption match. */
-export const imageHue = (index: number) => `var(--image-hue-${index % 6})`;
-
 /** "473×228", or nothing when the size is unknown. */
-export const imageSize = (image: PendingImage) => (image.width && image.height ? `${image.width}×${image.height}` : "");
+export const imageSize = (image: { width: number | null; height: number | null }) => (image.width && image.height ? `${image.width}×${image.height}` : "");
 
 /** The transform that puts `to` where `from` is (a FLIP start frame). */
 function fromRect(from: DOMRect, to: DOMRect): string {
@@ -32,7 +35,7 @@ export function ImageViewer({
   thumbnail,
   onClose,
 }: {
-  images: PendingImage[];
+  images: ViewImage[];
   start: number;
   /** The thumbnail of image `i`, to grow from and shrink back into. */
   thumbnail: (i: number) => HTMLElement | null;
@@ -43,6 +46,7 @@ export function ImageViewer({
   const [index, setIndex] = useState(start);
   const closing = useRef(false);
   const image = images[index];
+  const [natural, setNatural] = useState<Record<number, { width: number; height: number }>>({});
 
   // Grow out of the thumbnail once the picture has its final size.
   useLayoutEffect(() => {
@@ -95,13 +99,12 @@ export function ImageViewer({
   }, [index, images.length]);
 
   if (!image) return null;
-  const size = imageSize(image);
+  const size = imageSize(image.width ? image : (natural[index] ?? { width: null, height: null }));
   return (
     <dialog
       ref={dialog}
       className="image-lightbox"
       aria-label={`Image #${index + 1}`}
-      style={{ ["--hue" as string]: imageHue(index) }}
       onCancel={(e) => {
         e.preventDefault();
         close();
@@ -123,7 +126,16 @@ export function ImageViewer({
             <IconChevronRight size={18} />
           </button>
         ) : null}
-        <img ref={picture} className="image-lightbox-img" src={dataUrl(image)} alt={`Image #${index + 1}${size ? `, ${size}` : ""}`} />
+        <img
+          ref={picture}
+          className="image-lightbox-img"
+          src={image.src}
+          alt={`Image #${index + 1}${size ? `, ${size}` : ""}`}
+          onLoad={(e) => {
+            const { naturalWidth: width, naturalHeight: height } = e.currentTarget;
+            if (!image.width) setNatural((n) => ({ ...n, [index]: { width, height } }));
+          }}
+        />
         {images.length > 1 ? (
           <button type="button" className="image-lightbox-nav is-next" aria-label="Next image" onClick={() => step(1)}>
             <IconChevronRight size={18} />

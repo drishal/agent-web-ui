@@ -145,10 +145,18 @@ function toolResultContent(block: Obj): Obj[] {
   return [];
 }
 
+/** A Claude image block (`source: {type: "base64", media_type, data}`) in the Pi-family shape, data kept. */
+function piImage(block: Obj): Obj {
+  const source = isObj(block.source) ? block.source : {};
+  return source.type === "base64" && typeof source.data === "string" && typeof source.media_type === "string"
+    ? { type: "image", data: source.data, mimeType: source.media_type }
+    : { type: "image" };
+}
+
 /** User content in the Pi-family shape: text and image blocks. */
 function userContent(content: unknown): unknown {
   if (!Array.isArray(content)) return content;
-  return content.flatMap((b): Obj[] => (isObj(b) && b.type === "text" ? [{ type: "text", text: String(b.text ?? "") }] : isObj(b) && b.type === "image" ? [{ type: "image" }] : []));
+  return content.flatMap((b): Obj[] => (isObj(b) && b.type === "text" ? [{ type: "text", text: String(b.text ?? "") }] : isObj(b) && b.type === "image" ? [piImage(b)] : []));
 }
 
 /**

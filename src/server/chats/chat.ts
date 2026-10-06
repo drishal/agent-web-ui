@@ -11,6 +11,7 @@ import type {
   ChatStatus,
   ContextUsage,
   ImageAttachment,
+  ImageRef,
   InteractionAnswer,
   InteractionRequest,
   QueueState,
@@ -23,6 +24,7 @@ import type {
 } from "../../shared/protocol.js";
 import { boundText, editShape, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
+import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 
 export class ChatError extends Error {
@@ -235,6 +237,7 @@ class EventReducer {
           id: this.nextId("u"),
           text: event.text,
           ...(event.imageCount ? { imageCount: event.imageCount } : {}),
+          ...(event.images?.length ? { images: event.images } : {}),
           ...(event.command ? { command: true as const } : {}),
           at: Date.now(),
         });
@@ -663,7 +666,20 @@ export class Chat {
     // open, status flaps, config/title/usage refreshes all stay quiet.
     if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = Date.now();
     this.lastSeen = Date.now();
-    this.reducer.apply(event);
+    this.reducer.apply(event.type === "user_message" ? this.withSentImages(event) : event);
+  }
+
+  /**
+   * Images sent from here, oldest first, until the harness echoes their prompt.
+   * Most harnesses echo only a count; the prompt then gets the images it was sent with.
+   */
+  private sentImages: ImageRef[][] = [];
+
+  private withSentImages(event: Extract<HarnessEvent, { type: "user_message" }>): HarnessEvent {
+    if (!event.imageCount) return event;
+    const at = this.sentImages.findIndex((refs) => refs.length === event.imageCount);
+    const sent = at >= 0 ? this.sentImages.splice(at, 1)[0] : undefined;
+    return event.images?.length || !sent ? event : { ...event, images: sent };
   }
 
   private setStatus(status: ChatStatus): void {
@@ -738,6 +754,11 @@ export class Chat {
 
   async send(text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<void> {
     this.assertOpen();
+    if (images.length > 0) {
+      const refs = images.map((i) => rememberImage(i.mimeType, i.data)).filter((r): r is ImageRef => r !== null);
+      // A handful at most: a prompt the harness never echoes must not pin images forever.
+      this.sentImages = [...this.sentImages, refs].slice(-8);
+    }
     this.lastActivity = Date.now();
     this.lastSeen = this.lastActivity;
     const caps = this.adapter.capabilities;

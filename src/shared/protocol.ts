@@ -110,11 +110,19 @@ export interface ChatConfig {
   thinkingLevels: string[];
 }
 
+/** An image under a prompt, served at /api/images/<id>. */
+export interface ImageRef {
+  id: string;
+  mimeType: string;
+}
+
 export interface UserItem {
   kind: "user";
   id: string;
   text: string;
   imageCount?: number;
+  /** The images themselves, when the harness kept them (in order; may be fewer than imageCount). */
+  images?: ImageRef[];
   /** A "/" command the harness answered itself: no stored turn, so forks do not count it. */
   command?: true;
   /** Epoch ms when the harness recorded it, when known. */

@@ -4,13 +4,14 @@
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
+import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
+import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 
 const PIN_DISTANCE_PX = 96;
@@ -192,6 +193,52 @@ function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string })
   }
 }
 
+/** A prompt's images as numbered thumbnails, opening in the viewer. */
+function SentImages({ images }: { images: ImageRef[] }) {
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [sizes, setSizes] = useState<Record<number, { width: number; height: number }>>({});
+  const thumbs = useRef(new Map<number, HTMLElement>());
+  const view = images.map((ref, i) => ({ src: `/api/images/${ref.id}`, width: sizes[i]?.width ?? null, height: sizes[i]?.height ?? null }));
+  return (
+    <>
+      <ul className={`sent-images${images.length === 1 ? " is-single" : ""}`} aria-label="Images">
+        {images.map((ref, i) => {
+          const size = imageSize(view[i] as { width: number | null; height: number | null });
+          return (
+            <li key={`${i}:${ref.id}`} className="sent-image">
+              <button
+                type="button"
+                className="sent-image-open"
+                aria-label={`View image #${i + 1}`}
+                ref={(el) => {
+                  if (el) thumbs.current.set(i, el);
+                  else thumbs.current.delete(i);
+                }}
+                onClick={() => setViewing(i)}
+              >
+                <img
+                  src={view[i]?.src}
+                  alt={`Image #${i + 1}`}
+                  loading="lazy"
+                  onLoad={(e) => {
+                    const { naturalWidth: width, naturalHeight: height } = e.currentTarget;
+                    setSizes((s) => (s[i] ? s : { ...s, [i]: { width, height } }));
+                  }}
+                />
+              </button>
+              <span className="image-label" aria-hidden="true">
+                <strong>#{i + 1}</strong>
+                {size ? <span>{size}</span> : null}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {viewing !== null ? <ImageViewer images={view} start={viewing} thumbnail={(i) => thumbs.current.get(i) ?? null} onClose={() => setViewing(null)} /> : null}
+    </>
+  );
+}
+
 function UserPrompt({ item }: { item: UserItem }) {
   const long = item.text.length > LONG_PROMPT_CHARS || item.text.split("\n").length > LONG_PROMPT_LINES;
   const [expanded, setExpanded] = useState(false);
@@ -199,12 +246,13 @@ function UserPrompt({ item }: { item: UserItem }) {
   return (
     <div className={`turn-prompt${arrival}`}>
       <div className="bubble-stack">
+        {item.images?.length ? <SentImages images={item.images} /> : null}
         <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
           {item.text}
         </div>
-        {item.imageCount ? (
+        {item.imageCount && item.imageCount > (item.images?.length ?? 0) ? (
           <span className="bubble-meta bubble-images">
-            <IconImage size={13} /> {item.imageCount} {item.imageCount === 1 ? "image" : "images"}
+            <IconImage size={13} /> {item.images?.length ? `+${item.imageCount - item.images.length} more` : `${item.imageCount} ${item.imageCount === 1 ? "image" : "images"}`}
           </span>
         ) : null}
         {long ? (

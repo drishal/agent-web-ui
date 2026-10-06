@@ -7,6 +7,7 @@ import type {
   HarnessCapabilities,
   HarnessId,
   ImageAttachment,
+  ImageRef,
   InteractionAnswer,
   InteractionRequest,
   ModelInfo,
@@ -66,7 +67,7 @@ export interface OpenChatRequest {
 
 /** Normalized events every adapter emits. */
 export type HarnessEvent =
-  | { type: "user_message"; text: string; imageCount?: number; command?: true }
+  | { type: "user_message"; text: string; imageCount?: number; images?: ImageRef[]; command?: true }
   | { type: "assistant_start"; model?: string }
   | { type: "assistant_delta"; field: "text" | "thinking"; delta: string }
   | { type: "assistant_end"; text: string; thinking: string; error?: string; usage?: StepUsage }

@@ -7,7 +7,7 @@ import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
 import { IconArrowUp, IconImage, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
-import { ImageViewer, imageHue, imageSize } from "./ImageViewer.js";
+import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
@@ -238,7 +238,7 @@ export function Composer({
               {images.map((image, i) => {
                 const size = imageSize(image);
                 return (
-                  <li key={image.id} className="composer-image" style={{ ["--hue" as string]: imageHue(i) }}>
+                  <li key={image.id} className="composer-image">
                     <button
                       type="button"
                       className="composer-image-open"
@@ -252,14 +252,10 @@ export function Composer({
                     >
                       <img src={dataUrl(image)} alt={`Attached image #${i + 1}`} />
                     </button>
-                    <span className="image-tag composer-image-tag" aria-hidden="true">
-                      <IconImage size={10} />#{i + 1}
+                    <span className="image-label" aria-hidden="true">
+                      <strong>#{i + 1}</strong>
+                      {size ? <span>{size}</span> : null}
                     </span>
-                    {size ? (
-                      <span className="composer-image-size" aria-hidden="true">
-                        {size}
-                      </span>
-                    ) : null}
                     <button
                       type="button"
                       className="composer-image-remove"
@@ -397,7 +393,7 @@ export function Composer({
         </div>
       )}
       {viewing !== null && images[viewing] ? (
-        <ImageViewer images={images} start={viewing} thumbnail={(i) => thumbs.current.get(i) ?? null} onClose={() => setViewing(null)} />
+        <ImageViewer images={images.map((i) => ({ src: dataUrl(i), width: i.width, height: i.height }))} start={viewing} thumbnail={(i) => thumbs.current.get(i) ?? null} onClose={() => setViewing(null)} />
       ) : null}
     </div>
   );

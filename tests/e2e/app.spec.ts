@@ -629,8 +629,8 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   await fire("paste", ".composer-input");
   await expect(strip.getByRole("img")).toHaveCount(1);
   // Each thumbnail carries its number and size, to refer to it by.
-  await expect(strip.locator(".composer-image-tag")).toHaveText("#1");
-  await expect(strip.locator(".composer-image-size")).toHaveText("1×1");
+  await expect(strip.locator(".image-label strong")).toHaveText("#1");
+  await expect(strip.locator(".image-label span")).toHaveText("1×1");
   await page.getByRole("button", { name: "View image #1" }).click();
   const viewer = page.getByRole("dialog", { name: "Image #1" });
   await expect(viewer.getByRole("img", { name: "Image #1, 1×1" })).toBeVisible();
@@ -638,7 +638,7 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   await expect(viewer).toBeHidden();
   await fire("drop", ".composer-card");
   await expect(strip.getByRole("img")).toHaveCount(2);
-  await expect(strip.locator(".composer-image-tag")).toHaveText(["#1", "#2"]);
+  await expect(strip.locator(".image-label strong")).toHaveText(["#1", "#2"]);
   // The viewer steps through them with the arrow keys.
   await page.getByRole("button", { name: "View image #1" }).click();
   await page.keyboard.press("ArrowRight");
@@ -666,8 +666,21 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   // An image needs words to go with it; then both are sent.
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await sendAndWait(page, "what is in this screenshot?");
-  await expect(page.getByTestId("turn").last().locator(".bubble-images")).toHaveText("1 image");
   await expect(strip).toHaveCount(0);
+  // The prompt keeps the picture itself, numbered, and it opens in the viewer.
+  const sent = page.getByTestId("turn").last().getByRole("list", { name: "Images" });
+  const loaded = (list: typeof sent) => list.getByRole("img", { name: "Image #1" }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
+  await expect.poll(() => loaded(sent)).toBe(true);
+  await expect(sent.locator(".image-label strong")).toHaveText("#1");
+  await expect(sent.locator(".image-label span")).toHaveText("1×1");
+  await sent.getByRole("button", { name: "View image #1" }).click();
+  await expect(page.getByRole("dialog", { name: "Image #1" })).toContainText("1×1");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  // After a reload it comes back from the session.
+  await page.reload();
+  const again = page.getByTestId("turn").last().getByRole("list", { name: "Images" });
+  await expect.poll(() => loaded(again)).toBe(true);
 });
 
 test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {
