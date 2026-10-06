@@ -977,8 +977,29 @@ export class HermesAdapter implements HarnessAdapter {
   }
 
   /** Stored session rows across every project (one probe, cached briefly). */
+  private rowRefresh: Promise<StoredRow[]> | null = null;
+
+  /**
+   * Stored session rows, stale-while-revalidate: a probe gateway takes ~2.4 s
+   * to start, and the sidebar list waits for every harness, so once rows are
+   * cached an expired cache is served as is while one refresh runs behind it.
+   * Only the first listing waits. Live chats reach the list separately, so a
+   * session started here shows before the refresh lands.
+   */
   private async rows(cwd: string): Promise<StoredRow[]> {
-    if (this.rowCache && Date.now() - this.rowCache.at < PROBE_TTL_MS) return this.rowCache.rows;
+    const cached = this.rowCache;
+    if (cached && Date.now() - cached.at < PROBE_TTL_MS) return cached.rows;
+    this.rowRefresh ??= this.fetchRows(cwd).finally(() => {
+      this.rowRefresh = null;
+    });
+    if (cached) {
+      this.rowRefresh.catch(() => undefined);
+      return cached.rows;
+    }
+    return this.rowRefresh;
+  }
+
+  private async fetchRows(cwd: string): Promise<StoredRow[]> {
     const tree = await this.withProbe(cwd, (rpc) => rpc.request<Obj>("projects.tree", { preview_limit: 200 }));
     const rows: StoredRow[] = [];
     for (const project of Array.isArray(tree?.projects) ? tree.projects : []) {

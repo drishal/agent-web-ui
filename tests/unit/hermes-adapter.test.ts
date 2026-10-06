@@ -132,6 +132,27 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(models[0]).toMatchObject({ reasoning: true });
   });
 
+  it("serves expired session rows at once and refreshes them behind the list", async () => {
+    expect((await adapter.listSessions(project)).map((s) => s.title)).toEqual(["Fake Hermes session"]);
+    const stored = JSON.parse(readFileSync(state, "utf8"));
+    stored.rows.push({ id: "20261002_130000_fake2", title: "Newer session", cwd: project, last_active: 1790924690, message_count: 1 });
+    writeFileSync(state, JSON.stringify(stored));
+    const realNow = Date.now;
+    Date.now = () => realNow() + 61_000;
+    try {
+      const t0 = realNow();
+      // Expired: the old rows come back without waiting for a probe gateway…
+      expect((await adapter.listSessions(project)).map((s) => s.title)).toEqual(["Fake Hermes session"]);
+      expect(realNow() - t0).toBeLessThan(50);
+      // …and the refresh it started lands for the next listing.
+      await until(() => JSON.parse(readFileSync(state, "utf8")).spawns.length >= 2);
+      await new Promise((r) => setTimeout(r, 300));
+      expect((await adapter.listSessions(project)).map((s) => s.title)).toEqual(["Newer session", "Fake Hermes session"]);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   it("lists stored sessions for the workspace and recent ones across projects", async () => {
     const sessions = await adapter.listSessions(project);
     expect(sessions.map((s) => s.nativeId)).toEqual(["20261002_120000_fake1"]);
