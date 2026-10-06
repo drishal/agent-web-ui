@@ -38,6 +38,7 @@ import {
   type SessionMeta,
   type UsageBaseline,
 } from "./claude-sessions.js";
+import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -765,8 +766,8 @@ export class ClaudeAdapter implements HarnessAdapter {
     const overrides = { CLAUDE_CONFIG_DIR: this.childEnv().CLAUDE_CONFIG_DIR ? "set" : "unset" } as const;
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000, env: this.childEnv() });
-      const version = stdout.trim().split(/\s+/)[0] ?? "";
-      return { available: true, ...(version ? { version } : {}), warnings: [], overrides };
+      const label = versionLabel(stdout);
+      return { available: true, ...(label.version ? label : {}), warnings: [], overrides };
     } catch {
       return { available: false, reason: "The claude CLI is not installed. Install Claude Code, run `claude` once, and log in.", warnings: [], overrides };
     }

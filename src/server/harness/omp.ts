@@ -31,6 +31,7 @@ import {
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import type {
@@ -524,10 +525,10 @@ export class OmpAdapter implements HarnessAdapter {
     const warnings: string[] = [];
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000, env: this.env() });
-      const version = stdout.trim().replace(/^omp\//, "").replace(/^v/, "");
-      const warning = ompVersionWarning(version);
+      const label = versionLabel(stdout.trim().replace(/^omp\//, ""));
+      const warning = ompVersionWarning(label.version);
       if (warning) warnings.push(warning);
-      return { available: true, version, warnings, overrides };
+      return { available: true, ...label, warnings, overrides };
     } catch {
       return {
         available: false,

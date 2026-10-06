@@ -27,6 +27,7 @@ import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-ev
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import { branchMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -424,10 +425,10 @@ export class PiAdapter implements HarnessAdapter {
       [SESSION_DIR_ENV]: process.env[SESSION_DIR_ENV] ? "set" : "unset",
     } as const;
     const warnings: string[] = [];
-    let version: string;
+    let label: { version: string; versionDetail?: string };
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000 });
-      version = stdout.trim().replace(/^v/, "");
+      label = versionLabel(stdout);
     } catch {
       return {
         available: false,
@@ -438,7 +439,7 @@ export class PiAdapter implements HarnessAdapter {
     }
     // No SDK pin: the RPC child IS the installed CLI, so reader and writer are
     // the same binary by construction — the version-skew warning is obsolete.
-    return { available: true, version, warnings, overrides };
+    return { available: true, ...label, warnings, overrides };
   }
 
   workspaceProblem(): string | null {

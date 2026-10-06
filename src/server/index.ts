@@ -94,7 +94,7 @@ async function main(): Promise<void> {
   }
   const registry = HarnessRegistry.fromConfig(config);
   for (const status of await registry.refreshStatus()) {
-    const state = status.available ? `available (${status.version ?? "unknown version"})` : `unavailable: ${status.reason}`;
+    const state = status.available ? `available (${status.versionDetail ?? status.version ?? "unknown version"})` : `unavailable: ${status.reason}`;
     console.log(`  ${status.displayName}: ${state}`);
     for (const w of status.warnings) console.log(`    warning: ${w}`);
     for (const [name, value] of Object.entries(status.overrides)) console.log(`    ${name}: ${value}`);

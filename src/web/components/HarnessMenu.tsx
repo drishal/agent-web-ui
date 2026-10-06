@@ -129,7 +129,11 @@ export function HarnessMenu({
       >
         {variant === "row" ? <span className="harness-dot" aria-hidden="true" /> : null}
         <span className="harness-row-name">{name}</span>
-        {variant === "row" && current?.version ? <span className="harness-row-meta">{current.version}</span> : null}
+        {variant === "row" && current?.version ? (
+          <span className="harness-row-meta" title={current.versionDetail ?? current.version}>
+            {current.version}
+          </span>
+        ) : null}
         <IconChevronDown size={12} />
       </button>
       {open ? (
@@ -153,7 +157,7 @@ export function HarnessMenu({
               aria-disabled={c.blocked !== null}
               className={`harness-option${i === active ? " is-active" : ""}${c.blocked !== null ? " is-blocked" : ""}`}
               style={harnessColor(c.harness.id)}
-              title={c.blocked ?? c.note ?? c.harness.version}
+              title={c.blocked ?? c.note ?? c.harness.versionDetail ?? c.harness.version}
               onMouseMove={() => enabled(i) && setActive(i)}
               onClick={() => pick(i)}
             >

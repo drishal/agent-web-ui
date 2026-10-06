@@ -83,6 +83,7 @@ export class HarnessRegistry {
           displayName: adapter.displayName,
           available: d.available,
           ...("version" in d && d.version ? { version: d.version } : {}),
+          ...("versionDetail" in d && d.versionDetail ? { versionDetail: d.versionDetail } : {}),
           ...(d.reason ? { reason: d.reason } : {}),
           warnings: d.warnings,
           capabilities: adapter.capabilities,

@@ -28,6 +28,7 @@ import {
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
+import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -908,10 +909,10 @@ export class HermesAdapter implements HarnessAdapter {
     const warnings: string[] = [];
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000 });
-      const version = stdout.trim().split("\n")[0]?.replace(/^Hermes Agent\s*/i, "") || "unknown";
+      const label = versionLabel(stdout.trim().split("\n")[0]?.replace(/^Hermes Agent\s*/i, "") || "unknown");
       const runtime = await gatewayRuntime(this.cliCommand);
       if (runtime.source === "PATH") warnings.push("HERMES_PYTHON is not set and the hermes launcher does not export it; using python3 on PATH");
-      return { available: true, version, warnings, overrides: { HERMES_HOME: process.env.HERMES_HOME ? "set" : "unset" } };
+      return { available: true, ...label, warnings, overrides: { HERMES_HOME: process.env.HERMES_HOME ? "set" : "unset" } };
     } catch (error) {
       return {
         available: false,

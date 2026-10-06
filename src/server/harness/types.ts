@@ -17,7 +17,10 @@ import type {
 import type { HandoffSeed } from "./handoff.js";
 export interface HarnessDiscovery {
   available: boolean;
+  /** Short and comparable (versionLabel): 1.0.2, 2026.9.24. */
   version?: string;
+  /** The CLI's full version line, when it says more. */
+  versionDetail?: string;
   reason?: string;
   warnings: string[];
   overrides: Record<string, "set" | "unset">;

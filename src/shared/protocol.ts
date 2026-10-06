@@ -24,7 +24,10 @@ export interface HarnessStatus {
   id: HarnessId;
   displayName: string;
   available: boolean;
+  /** Short and comparable, for the menu: 1.0.2, 18.6.1, 2026.9.24. */
   version?: string;
+  /** The CLI's full version line (the tooltip), when it says more than `version`. */
+  versionDetail?: string;
   /** Why the harness is unavailable or degraded. Never contains paths or secrets. */
   reason?: string;
   warnings: string[];
