@@ -28,7 +28,7 @@ import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
-import { isEmptySeed, toSeed } from "./harness/handoff.js";
+import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
@@ -403,7 +403,6 @@ export function createApp(deps: AppDeps) {
     const chat = manager.get(req.params.id);
     const target = availableAdapter(harness);
     if (target.id === chat.adapter.id) throw new ChatError(400, "same_harness", "That chat is already in this harness");
-    if (!target.capabilities.supportsHandoff) throw new ChatError(400, "unsupported", `${target.displayName} cannot receive handoffs yet`);
     if (!chat.nativeId) throw new ChatError(409, "not_started", "This chat has no session to hand off yet");
     // Busy chats stop first (stop-here-continue-there); the source stays open
     // in aborted state so nothing is lost if seeding fails.
@@ -412,6 +411,21 @@ export function createApp(deps: AppDeps) {
     const seed = toSeed(snap.items, { title: snap.title, todos: snap.todos, throughTurns: through });
     const draft = prompt?.trim() ? prompt : null;
     if (isEmptySeed(seed) && !draft) throw new ChatError(400, "empty_handoff", "There is nothing to hand off yet");
+    if (!target.capabilities.supportsHandoff) {
+      // No store of past turns to write into: a fresh chat whose first prompt is the briefing.
+      let moved: Chat;
+      try {
+        moved = await manager.create(target, chat.workspace);
+      } catch (error) {
+        throw new ChatError(502, "handoff_failed", `${target.displayName} could not take this session: ${errorMessage(error)}`);
+      }
+      const brief = briefPrompt(seed, { from: chat.adapter.displayName, project: chat.workspace.name, draft });
+      await moved.send(brief, "normal").catch(() => undefined);
+      // After the send: some harnesses only have a session to name once the first prompt is in.
+      if (seed.title && target.capabilities.supportsRename) await moved.rename(seed.title).catch(() => undefined);
+      res.status(201).json(moved.snapshot());
+      return;
+    }
     let live;
     try {
       live = await target.seedChat({ cwd: chat.workspace.path, seed });

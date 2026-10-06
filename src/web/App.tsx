@@ -340,8 +340,12 @@ export function App() {
     const prompt = draft.trim() ? draft : undefined;
     try {
       const next = await api<ChatSnapshot>(`/api/chats/${chat.chatId}/handoff`, { body: { harness: harnessId, ...(prompt ? { prompt } : {}) } });
+      const target = boot?.harnesses.find((h) => h.id === harnessId);
+      const turns = chat.items.filter((i) => i.kind === "user" && !i.command).length;
       showChat(next);
-      setBanner({ level: "info", text: `Continued in ${next.harnessId} · model reset to default` });
+      // A harness that keeps past turns got a copy; any other was briefed in its first prompt.
+      const how = target?.capabilities.supportsHandoff ? "" : ` from a summary of ${turns} ${turns === 1 ? "turn" : "turns"}`;
+      setBanner({ level: "info", text: `Continued in ${target?.displayName ?? harnessId}${how} · model reset to default` });
       void refreshSessions();
     } catch (e) {
       fail(e);

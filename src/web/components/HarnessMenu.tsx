@@ -13,6 +13,8 @@ export interface HarnessChoice {
   harness: HarnessStatus;
   /** Why it cannot be picked here, or null when it can. */
   blocked: string | null;
+  /** What picking it does, shown in place of the version. */
+  note?: string;
 }
 
 export function HarnessMenu({
@@ -151,13 +153,13 @@ export function HarnessMenu({
               aria-disabled={c.blocked !== null}
               className={`harness-option${i === active ? " is-active" : ""}${c.blocked !== null ? " is-blocked" : ""}`}
               style={harnessColor(c.harness.id)}
-              title={c.blocked ?? c.harness.version}
+              title={c.blocked ?? c.note ?? c.harness.version}
               onMouseMove={() => enabled(i) && setActive(i)}
               onClick={() => pick(i)}
             >
               <span className="harness-dot" aria-hidden="true" />
               <span className="harness-option-name">{c.harness.displayName}</span>
-              <span className="harness-option-meta">{c.blocked ?? c.harness.version ?? ""}</span>
+              <span className="harness-option-meta">{c.blocked ?? c.note ?? c.harness.version ?? ""}</span>
               {c.harness.id === currentId ? <IconCheck size={13} className="harness-option-check" /> : null}
             </div>
           ))}

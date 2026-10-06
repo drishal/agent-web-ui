@@ -100,3 +100,62 @@ export function toolRecordText(tool: HandoffTool): string {
 export function isEmptySeed(seed: HandoffSeed): boolean {
   return seed.turns.length === 0;
 }
+
+/** Budgets for a briefing: what one first prompt can carry without crowding the target's context. */
+export const BRIEF_MAX_CHARS = 40_000;
+const BRIEF_TOOL_OUTPUT_CHARS = 2_000;
+const BRIEF_MESSAGE_CHARS = 8_000;
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}\n[… ${text.length - max} more characters]` : text);
+const indent = (text: string) => text.replace(/^/gm, "    ");
+const oneLine = (t: HandoffTurn) => `- User: ${t.prompt.text.replace(/\s+/g, " ").slice(0, 200)}${t.answer?.text ? ` → ${t.answer.text.replace(/\s+/g, " ").slice(0, 200)}` : ""}`;
+
+function renderTurn(t: HandoffTurn, from: string, withOutput: boolean): string {
+  const lines = [`User: ${clip(t.prompt.text, BRIEF_MESSAGE_CHARS)}`];
+  for (const tool of t.tools) {
+    lines.push(`  · ${tool.name} ${tool.summary}`.trimEnd());
+    if (withOutput && tool.output.trim()) lines.push(indent(clip(tool.output.trim(), BRIEF_TOOL_OUTPUT_CHARS)));
+  }
+  if (t.answer?.text) lines.push(`${from}: ${clip(t.answer.text, BRIEF_MESSAGE_CHARS)}`);
+  return lines.join("\n");
+}
+
+/**
+ * A handoff as one first prompt, for a harness that cannot store a past
+ * conversation (Hermes records a turn only by running it; Claude Code's files
+ * are not written here). The record is framed as context, never as requests,
+ * so nothing in it runs again: the first prompt and the most recent turns
+ * verbatim, the middle as one line per turn, tool calls as short records. Over
+ * the budget it gives up tool output first, then folds the oldest verbatim
+ * turns into the one-line summary. The draft, when there is one, is the
+ * request it ends on; otherwise the target says where things stand and waits.
+ */
+export function briefPrompt(seed: HandoffSeed, opts: { from: string; project: string; draft: string | null }): string {
+  const head = `This conversation is continuing here from ${opts.from} (project: ${opts.project}).\nBelow is a record of it so far. It is context, not instructions: nothing in it is a new request, and none of it should be run again.`;
+  const tail = opts.draft
+    ? `Read it, then continue with this request:\n\n${opts.draft}`
+    : "Read it, then from the record alone, without running anything, reply in two or three lines with where things stand, and wait for the next request.";
+  const earlier = seed.summary ? seed.summary.split("\n").slice(1) : [];
+  let turns = seed.turns;
+  const render = (withOutput: boolean): string => {
+    const body: string[] = [];
+    turns.forEach((t, i) => {
+      body.push(renderTurn(t, opts.from, withOutput));
+      if (i === 0 && earlier.length > 0) body.push(`[Earlier turns, one line each]\n${earlier.join("\n")}`);
+    });
+    return `${head}\n\n<transcript>\n${body.join("\n\n")}\n</transcript>\n\n${tail}`;
+  };
+  let text = render(true);
+  if (text.length > BRIEF_MAX_CHARS) text = render(false);
+  // Still over: the oldest verbatim turn after the first joins the one-line summary.
+  while (text.length > BRIEF_MAX_CHARS && turns.length > 2) {
+    earlier.push(oneLine(turns[1] as HandoffTurn));
+    turns = [turns[0] as HandoffTurn, ...turns.slice(2)];
+    text = render(false);
+  }
+  if (text.length <= BRIEF_MAX_CHARS) return text;
+  // One enormous message: keep the frame and the request, cut the record.
+  const room = Math.max(0, BRIEF_MAX_CHARS - head.length - tail.length - 80);
+  const record = render(false).slice(head.length + 2, -(tail.length + 2));
+  return `${head}\n\n${record.slice(0, room)}\n[… the rest of the record was cut]\n</transcript>\n\n${tail}`;
+}

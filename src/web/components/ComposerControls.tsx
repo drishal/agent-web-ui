@@ -7,10 +7,13 @@ import { IconChevronDown } from "../icons.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { ModelPicker } from "./ModelPicker.js";
 
-/** Why a harness cannot take this chat, or null when it can. */
-function handoffBlock(h: HarnessStatus): string | null {
-  if (!h.available) return h.reason ?? "Not available";
-  return h.capabilities.supportsHandoff ? null : "Cannot receive a handoff";
+/**
+ * A handoff target: a harness that keeps past turns gets a copy of the
+ * conversation; any other continues from a summary sent as its first prompt.
+ */
+function handoffChoice(h: HarnessStatus) {
+  if (!h.available) return { harness: h, blocked: h.reason ?? "Not available" };
+  return { harness: h, blocked: null, note: h.capabilities.supportsHandoff ? "Copies the conversation" : "Continues from a summary" };
 }
 
 /**
@@ -20,7 +23,7 @@ function handoffBlock(h: HarnessStatus): string | null {
  */
 function HandoffChip({ chat, harnesses, onHandoff }: { chat: ChatState; harnesses: HarnessStatus[]; onHandoff: (harnessId: string) => Promise<void> }) {
   const [pending, setPending] = useState(false);
-  const choices = harnesses.filter((h) => h.id !== chat.harnessId).map((h) => ({ harness: h, blocked: handoffBlock(h) }));
+  const choices = harnesses.filter((h) => h.id !== chat.harnessId).map(handoffChoice);
   const current = harnesses.find((h) => h.id === chat.harnessId);
   return (
     <HarnessMenu

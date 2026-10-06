@@ -45,6 +45,8 @@ export async function makeTestApp(options: {
   themeFile?: string | null;
   chunkDelayMs?: number;
   heartbeatMs?: number;
+  /** Fake B cannot store past turns (as Hermes and Claude Code): handoffs to it are briefings. */
+  fakeBBriefOnly?: boolean;
 } = {}): Promise<TestApp> {
   const root = tempDir();
   const project = path.join(root, "proj");
@@ -52,7 +54,9 @@ export async function makeTestApp(options: {
   const registry = new HarnessRegistry();
   const fake = new FakeAdapter({ chunkDelayMs: options.chunkDelayMs ?? 2 });
   registry.register(fake);
-  registry.register(new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false } }));
+  registry.register(
+    new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false, ...(options.fakeBBriefOnly ? { supportsHandoff: false } : {}) } }),
+  );
   await registry.refreshStatus();
   const { workspaces } = await Workspaces.create([root], root);
   const lan = options.lanHosts ? new Set(options.lanHosts) : null;

@@ -517,8 +517,9 @@ test("composer harness chip hands the chat off to another harness", async ({ pag
   // The chip shows the current harness; its menu lists the others.
   await page.getByRole("button", { name: "Hand off to another harness" }).click();
   const targets = page.getByRole("listbox", { name: "Hand off to" });
-  // The chat's own harness is listed but cannot be picked.
+  // The chat's own harness is listed but cannot be picked; a target says how it continues.
   await expect(targets.getByRole("option", { name: "Fake", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(targets.getByRole("option", { name: "Fake B", exact: true })).toContainText("Copies the conversation");
   await targets.getByRole("option", { name: "Fake B", exact: true }).click();
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
   await expect(prompts(page)).toHaveText(["first tool question"]);

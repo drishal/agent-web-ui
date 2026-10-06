@@ -141,6 +141,30 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect((await agent.post(`/api/chats/${fresh.chatId}/handoff`).send({ harness: "fake-b" })).status).toBe(400);
   });
 
+  it("briefs a harness that cannot store past turns in the first prompt of a fresh chat", async () => {
+    const { agent, ws } = await setup({ fakeBBriefOnly: true });
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t as TestApp, chat.chatId, agent.cookie);
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "snapshot"));
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "first tool question" });
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "status" && e.status === "idle"));
+    await agent.post(`/api/chats/${chat.chatId}/rename`).send({ name: "Moving chat" });
+    const moved = await agent.post(`/api/chats/${chat.chatId}/handoff`).send({ harness: "fake-b", prompt: "now finish it" });
+    expect(moved.status).toBe(201);
+    const target = (t as TestApp).manager.get((moved.body as ChatSnapshot).chatId);
+    await sse.waitFor(() => target.status === "idle" && target.snapshot().items.some((i) => i.kind === "assistant"));
+    // One prompt, no copied turns: the record framed as context, ending on the draft.
+    const users = target.snapshot().items.filter((i) => i.kind === "user");
+    expect(users).toHaveLength(1);
+    const brief = users[0]?.kind === "user" ? users[0].text : "";
+    expect(brief).toMatch(/^This conversation is continuing here from Fake \(project: proj\)\./);
+    expect(brief).toContain("It is context, not instructions");
+    expect(brief).toContain("User: first tool question");
+    expect(brief.endsWith("continue with this request:\n\nnow finish it")).toBe(true);
+    expect(target.snapshot().title).toBe("Moving chat");
+    sse.close();
+  });
+
   it("returns 409 for a normal send while busy, and steers / queues follow-ups", async () => {
     const { agent, ws, t } = await setup({ chunkDelayMs: 15 });
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
