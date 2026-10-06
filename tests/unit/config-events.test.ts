@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../../src/server/config.js";
-import { boundText, historyToItems, normalizeAgentEvent, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("loadConfig", () => {
@@ -132,5 +132,31 @@ describe("agent event normalization", () => {
     expect(b.text.length).toBeLessThan(1100);
     expect(b.text.startsWith("a")).toBe(true);
     expect(b.text.endsWith("b")).toBe(true);
+  });
+
+});
+
+describe("extension messages", () => {
+  // pi-book's recall, as Pi stores it (customType book-recall, display: true).
+  const recall = "<memory>\nYour memory book: notes about the user and this project.\n- prefers tabs\n</memory>";
+
+  it("shows an envelope as its tag's label, the first line as summary, and the inside as detail", () => {
+    expect(extensionMessage("book-recall", recall)).toEqual({
+      title: "Memory",
+      text: "Your memory book: notes about the user and this project.",
+      detail: "Your memory book: notes about the user and this project.\n- prefers tabs",
+    });
+    // No envelope: the customType names it.
+    expect(extensionMessage("book-recall", "plain words\nmore")).toEqual({ title: "Book recall", text: "plain words", detail: "plain words\nmore" });
+    expect(extensionMessage("x", "  ")).toBeNull();
+  });
+
+  it("reaches the chat the same way live and from history", () => {
+    const live = normalizeAgentEvent({ type: "message_start", message: { role: "custom", customType: "book-recall", display: true, content: recall } }, "agent_settled");
+    expect(live).toEqual([{ type: "notice", level: "info", title: "Memory", text: "Your memory book: notes about the user and this project.", detail: expect.stringContaining("- prefers tabs") }]);
+    const stored = historyToItems([{ role: "custom", customType: "book-recall", display: true, content: recall, timestamp: 1 }]);
+    expect(stored[0]).toMatchObject({ kind: "notice", title: "Memory", detail: expect.not.stringContaining("<memory>") });
+    // A hidden one (display: false) stays out of the chat.
+    expect(historyToItems([{ role: "custom", customType: "book-recall", display: false, content: recall }])).toEqual([]);
   });
 });

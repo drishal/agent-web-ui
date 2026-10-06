@@ -119,6 +119,16 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
 
 function NoticeRow({ item }: { item: NoticeItem }) {
   const icon = item.level === "error" ? <IconWarning size={14} /> : item.level === "warning" ? <IconWarning size={14} /> : <IconInfo size={14} />;
+  // An extension's message (a memory recall, say): a quiet row that opens to the full text.
+  if (item.detail) {
+    return (
+      <div className="notice-row notice-detail" data-testid="extension-message">
+        <DisclosureRow icon={icon} title={item.title ?? "Extension"} summary={item.text}>
+          <pre className="thought-body">{item.detail}</pre>
+        </DisclosureRow>
+      </div>
+    );
+  }
   return (
     <div className={`notice-row notice-${item.level}`} role={item.level === "error" ? "alert" : undefined}>
       <span className="notice-icon">{icon}</span>

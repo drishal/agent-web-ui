@@ -51,6 +51,25 @@ export function forkCutIndex(messages: unknown[], throughTurns: number): number 
  * answer. Fenced, because it is terminal text (padded columns, bars) that
  * markdown would reflow.
  */
+/**
+ * An extension's displayed message (the custom role in Pi and omp) as a row.
+ * Their terminal draws these through the extension's own renderer, which a
+ * browser cannot run, and the raw text is often an envelope for the model
+ * (pi-book's recall is <memory>…</memory>). So: the envelope's tag (or the
+ * message's customType) as the label, its first line as the summary, and the
+ * inner text behind a disclosure.
+ */
+export function extensionMessage(customType: unknown, content: unknown): { title: string; text: string; detail: string } | null {
+  const raw = textOf(content).trim();
+  if (!raw) return null;
+  const envelope = /^<([A-Za-z][\w-]*)(?:\s[^>]*)?>\s*([\s\S]*?)\s*<\/\1>$/.exec(raw);
+  const inner = (envelope ? (envelope[2] ?? "") : raw).trim();
+  const label = envelope ? (envelope[1] as string) : typeof customType === "string" && customType ? customType : "Extension";
+  const title = label.replace(/[-_]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  const first = inner.split("\n").find((l) => l.trim()) ?? "";
+  return { title, text: first.trim().slice(0, 160), detail: inner };
+}
+
 export function commandOutputEvents(command: string, output: string): HarnessEvent[] {
   // Terminal colours and hyperlinks (CSI and OSC sequences) would show as junk in a browser.
   const plain = output.replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, "");
@@ -215,8 +234,8 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
         return [{ type: "assistant_start", ...(typeof message.model === "string" ? { model: message.model } : {}) }];
       }
       if (message.role === "custom" && message.display === true) {
-        const text = textOf(message.content);
-        return text ? [{ type: "notice", level: "info", text }] : [];
+        const shown = extensionMessage(message.customType, message.content);
+        return shown ? [{ type: "notice", level: "info", ...shown }] : [];
       }
       return [];
     }
@@ -374,8 +393,8 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
         break;
       case "custom":
         if (raw.display === true) {
-          const text = textOf(raw.content);
-          if (text) items.push({ kind: "notice", id: nextId("n"), level: "info", text });
+          const shown = extensionMessage(raw.customType, raw.content);
+          if (shown) items.push({ kind: "notice", id: nextId("n"), level: "info", ...shown, ...stamp });
         }
         break;
       default:

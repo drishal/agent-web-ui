@@ -1324,6 +1324,12 @@ body.is-resizing {
   font-size: var(--chat-small);
 }
 
+/* An extension's message: the disclosure row fills the line like a tool row does. */
+.notice-row.notice-detail {
+  display: block;
+  padding: 0;
+}
+
 .notice-icon {
   display: inline-flex;
   padding-top: 2px;

@@ -153,7 +153,12 @@ export interface NoticeItem {
   kind: "notice";
   id: string;
   level: "info" | "warning" | "error";
+  /** The line shown; with a `detail`, its one-line summary. */
   text: string;
+  /** A label for an expandable notice (an extension's message: "Memory"). */
+  title?: string;
+  /** The full text behind the disclosure, when `text` only summarizes it. */
+  detail?: string;
   at?: number;
   /** Arrived while the agent was idle (e.g. extension notices on open): not part of any turn's work. */
   ambient?: boolean;

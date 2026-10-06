@@ -16,7 +16,7 @@ import {
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, forkCutIndex, historyToItems } from "./agent-events.js";
+import { commandOutputEvents, extensionMessage, forkCutIndex, historyToItems } from "./agent-events.js";
 import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
@@ -407,6 +407,11 @@ class FakeLiveChat implements LiveChat {
           await this.reply(`Denied: ${text}`, signal);
           return;
         }
+      }
+      if (/\brecall\b/i.test(text)) {
+        // A memory extension's recall, as pi-book injects it (a displayed custom message).
+        const recall = extensionMessage("book-recall", "<memory>\nYour memory book: notes about the user.\n- prefers tabs over spaces\n</memory>");
+        if (recall) this.emit({ type: "notice", level: "info", ...recall });
       }
       if (/\btool\b|\bbig\b|\bask\b/i.test(text)) await this.tool(/\bbig\b/i.test(text) ? "big" : "read", signal);
       if (/\bedit\b/i.test(text)) await this.tool("edit", signal);

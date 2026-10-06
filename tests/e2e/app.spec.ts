@@ -708,3 +708,16 @@ test("the model picker keeps its search and Current line intact when the list ov
   }
   await expect(dialog.locator(".model-current")).toBeInViewport({ ratio: 1 });
 });
+
+test("an extension's message (a memory recall) shows as a labelled row, not its raw envelope", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "recall what you know");
+  await page.getByTestId("process-toggle").last().click();
+  const row = page.getByTestId("extension-message").last();
+  await expect(row).toContainText("Memory");
+  await expect(row).toContainText("Your memory book: notes about the user.");
+  await expect(page.getByText("<memory>")).toHaveCount(0);
+  await row.getByRole("button").first().click();
+  await expect(row).toContainText("- prefers tabs over spaces");
+});
