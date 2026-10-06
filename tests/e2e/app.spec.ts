@@ -61,6 +61,17 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await expect(page.getByRole("button", { name: "Copy reply" }).last()).toBeVisible();
 });
 
+test("an edit row carries its +N −M badge", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "please edit the app");
+  await openFold(page);
+  const row = page.getByTestId("tool-row").last();
+  await expect(row).toHaveAttribute("data-tool", "edit");
+  await expect(row.getByText("+1", { exact: true })).toBeVisible();
+  await expect(row.getByText("−1", { exact: true })).toBeVisible();
+});
+
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

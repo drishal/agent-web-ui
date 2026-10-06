@@ -98,6 +98,11 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
         summary={
           <>
             {summary}
+            {item.diffStat && (item.diffStat.added > 0 || item.diffStat.removed > 0) ? (
+              <span className="diff-stat" aria-label={`${item.diffStat.added} additions, ${item.diffStat.removed} deletions`}>
+                <span className="diff-added">+{item.diffStat.added}</span> <span className="diff-removed">−{item.diffStat.removed}</span>
+              </span>
+            ) : null}
             {failed ? <span className="drow-suffix"> · failed</span> : null}
           </>
         }

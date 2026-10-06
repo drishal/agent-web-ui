@@ -1214,6 +1214,20 @@ body.is-resizing {
   font-family: var(--font-sans);
 }
 
+.diff-stat {
+  flex: none;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-added {
+  color: var(--ok);
+}
+
+.diff-removed {
+  color: var(--danger);
+}
+
 .drow.tone-error .drow-head,
 .drow.tone-error .drow-head:hover {
   color: var(--danger);

@@ -148,6 +148,8 @@ export interface ToolItem {
   summary: string;
   /** Files named in the arguments (absolute or as given). */
   paths: string[];
+  /** Added/removed lines for an edit or write (from its arguments, refined by its output). */
+  diffStat?: { added: number; removed: number };
   at?: number;
   endedAt?: number;
 }

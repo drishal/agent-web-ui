@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../../src/server/config.js";
-import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, editDiffStat, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("loadConfig", () => {
@@ -114,6 +114,16 @@ describe("agent event normalization", () => {
     expect(toolPaths({ target: "docs/README.md" })).toEqual(["docs/README.md"]);
     expect(toolPaths({ file_path: "/x/y.ts", edits: [{ path: "z.ts" }, "w.ts"] })).toEqual(["/x/y.ts", "z.ts", "w.ts"]);
     expect(toolPaths("nope")).toEqual([]);
+  });
+
+  it("counts added and removed lines for edits", () => {
+    expect(editDiffStat({ oldText: "a", newText: "b" })).toEqual({ added: 1, removed: 1 });
+    expect(editDiffStat({ content: "x\ny\n" })).toEqual({ added: 2, removed: 0 });
+    expect(editDiffStat({ diff: "--- a\n+++ b\n@@\n-x\n+y\n+z" })).toEqual({ added: 2, removed: 1 });
+    expect(editDiffStat({ edits: [{ old_string: "a", new_string: "b" }, { old_string: "c\nd", new_string: "c" }] })).toEqual({ added: 2, removed: 3 });
+    expect(editDiffStat({ path: "f.ts" })).toBeNull();
+    expect(outputDiffStat("Edited src/app.ts (+1 -1)")).toEqual({ added: 1, removed: 1 });
+    expect(outputDiffStat("# Fake README\nhello")).toBeNull();
   });
 
   it("keeps harness timestamps on rebuilt history", () => {

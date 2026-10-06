@@ -21,7 +21,7 @@ import type {
   ToolItem,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
-import { boundText, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
+import { boundText, editDiffStat, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 
 export class ChatError extends Error {
@@ -273,6 +273,8 @@ class EventReducer {
       }
       case "tool_start": {
         this.finishStreaming();
+        const category = toolCategory(event.name);
+        const stat = category === "edit" || category === "write" ? editDiffStat(event.args) : null;
         const tool: ToolItem = {
           kind: "tool",
           id: `t:${event.toolCallId}`,
@@ -281,9 +283,10 @@ class EventReducer {
           status: "running",
           output: "",
           truncated: false,
-          category: toolCategory(event.name),
+          category,
           summary: toolSummary(event.args),
           paths: toolPaths(event.args),
+          ...(stat ? { diffStat: stat } : {}),
           at: Date.now(),
         };
         this.put(tool);
@@ -319,12 +322,15 @@ class EventReducer {
                 summary: "",
                 paths: [],
               };
+        // The harness's own line accounting beats the argument estimate.
+        const settled = (base.category === "edit" || base.category === "write" ? outputDiffStat(bounded.text) : null) ?? base.diffStat;
         this.put({
           ...base,
           output: bounded.text,
           truncated: bounded.truncated,
           status: event.isError ? "error" : "done",
           endedAt: Date.now(),
+          ...(settled ? { diffStat: settled } : {}),
         });
         if (base.name.toLowerCase().includes("todo")) this.fx.refreshTodos();
         break;
