@@ -150,3 +150,52 @@ export function seedSessionText(options: { id: string; cwd: string; now: Date; e
   }
   return `${lines.join("\n")}\n`;
 }
+
+/**
+ * The messages a Pi-family session's file holds on its active branch, as the
+ * harness's get_messages would list them, read without starting it: after
+ * the latest compaction, its summary, then the entries it kept (from
+ * firstKeptEntryId) and everything after it. Branch summaries and displayed
+ * custom messages come through in the roles historyToItems reads.
+ */
+export function branchMessages(text: string): unknown[] {
+  const entries: Obj[] = [];
+  let sawHeader = false;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // a torn last line while the harness appends
+    }
+    if (!isObj(parsed)) continue;
+    if (!sawHeader && (parsed.type === "title" || parsed.type === "session")) {
+      if (parsed.type === "session") sawHeader = true;
+      continue;
+    }
+    entries.push(parsed);
+  }
+  const branch = activeBranch(entries);
+  let compaction = -1;
+  for (let i = branch.length - 1; i >= 0; i -= 1) {
+    if (branch[i]?.type === "compaction") {
+      compaction = i;
+      break;
+    }
+  }
+  let range = branch;
+  const out: unknown[] = [];
+  if (compaction >= 0) {
+    const entry = branch[compaction] as Obj;
+    const kept = branch.findIndex((e) => e.id === entry.firstKeptEntryId);
+    out.push({ role: "compactionSummary", summary: entry.summary, ...(typeof entry.timestamp === "string" ? { timestamp: Date.parse(entry.timestamp) } : {}) });
+    range = [...(kept >= 0 && kept < compaction ? branch.slice(kept, compaction) : []), ...branch.slice(compaction + 1)];
+  }
+  for (const entry of range) {
+    if (entry.type === "message" && isObj(entry.message)) out.push(entry.message);
+    else if (entry.type === "branch_summary") out.push({ role: "branchSummary", summary: entry.summary });
+    else if (entry.type === "custom_message") out.push({ role: "custom", content: entry.content, display: entry.display === true });
+  }
+  return out;
+}

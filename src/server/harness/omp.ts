@@ -30,7 +30,7 @@ import {
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import { forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { EventHub } from "./event-hub.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import type {
@@ -590,6 +590,32 @@ export class OmpAdapter implements HarnessAdapter {
     await fs.writeFile(tmp, body, { mode: 0o600 });
     await fs.rename(tmp, target);
     return { nativeId: id };
+  }
+
+  /**
+   * The transcript from the session's file, as omp's get_messages lists it:
+   * omp leaves out model calls that failed or were aborted, so they are left
+   * out here too (checked against omp on real sessions, item for item).
+   */
+  async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    const file = await this.sessionFile(req.nativeId);
+    const text = file ? await fs.readFile(file, "utf8").catch(() => null) : null;
+    if (text === null) return null;
+    let title: string | null = null;
+    let cwd: string | null = null;
+    for (const line of text.split("\n", 2)) {
+      try {
+        const head: unknown = JSON.parse(line);
+        if (!isObj(head)) continue;
+        if (typeof head.title === "string" && head.title.trim()) title = head.title.trim();
+        if (head.type === "session" && typeof head.cwd === "string") cwd = head.cwd;
+      } catch {
+        // not a header line
+      }
+    }
+    if (cwd && path.resolve(cwd) !== path.resolve(req.cwd)) return null;
+    const messages = branchMessages(text).filter((m) => !(isObj(m) && m.role === "assistant" && (m.stopReason === "error" || m.stopReason === "aborted")));
+    return { items: historyToItems(messages), title };
   }
 
   /**

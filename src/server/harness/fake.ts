@@ -52,6 +52,8 @@ export interface FakeAdapterOptions {
   displayName?: string;
   /** Delay between streamed chunks. */
   chunkDelayMs?: number;
+  /** How long resuming a session takes to "start the harness" (the real ones take 0.4–3 s). */
+  resumeDelayMs?: number;
   capabilities?: Partial<HarnessCapabilities>;
 }
 
@@ -64,8 +66,10 @@ export class FakeAdapter implements HarnessAdapter {
   readonly capabilities: HarnessCapabilities;
   readonly sessions = new Map<string, FakeSession>();
   private readonly chunkDelayMs: number;
+  private readonly resumeDelayMs: number;
 
   constructor(options: FakeAdapterOptions = {}) {
+    this.resumeDelayMs = options.resumeDelayMs ?? 0;
     this.id = asHarnessId(options.id ?? "fake");
     this.displayName = options.displayName ?? "Fake";
     this.chunkDelayMs = options.chunkDelayMs ?? 15;
@@ -166,9 +170,17 @@ export class FakeAdapter implements HarnessAdapter {
     return new FakeLiveChat(session, this.chunkDelayMs);
   }
 
+  /** Like the file-backed harnesses: the stored transcript, without "starting" anything. */
+  async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    const session = this.sessions.get(req.nativeId);
+    if (!session || session.cwd !== req.cwd) return null;
+    return { items: historyToItems(session.messages), title: session.title || null };
+  }
+
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     let session: FakeSession | undefined;
     if (req.resumeNativeId) {
+      if (this.resumeDelayMs > 0) await new Promise((r) => setTimeout(r, this.resumeDelayMs));
       session = this.sessions.get(req.resumeNativeId);
       if (!session || session.cwd !== req.cwd) throw new Error("Unknown session");
     } else {

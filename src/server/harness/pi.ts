@@ -26,7 +26,7 @@ import {
 import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
-import { seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { branchMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
   HarnessAdapter,
@@ -551,6 +551,14 @@ export class PiAdapter implements HarnessAdapter {
     const chat = await this.openChat({ cwd: req.cwd, resumeNativeId: id });
     if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
     return chat;
+  }
+
+  async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    const dir = this.sessionDirFor(req.cwd, await this.resolveAgentDir());
+    const meta = (await listSessionFiles(dir)).find((m) => m.id === req.nativeId);
+    if (!meta || (meta.cwd && path.resolve(meta.cwd) !== path.resolve(req.cwd))) return null;
+    const text = await fs.readFile(meta.path, "utf8").catch(() => null);
+    return text === null ? null : { items: historyToItems(branchMessages(text)), title: meta.name || null };
   }
 
   private spawnEnv(cwd: string): NodeJS.ProcessEnv {

@@ -9,6 +9,7 @@ import { PiAdapter } from "./pi.js";
 import type { HarnessAdapter } from "./types.js";
 
 const fakeDelay = () => Number(process.env.AWUI_FAKE_DELAY_MS ?? 15);
+const fakeResumeDelay = () => Number(process.env.AWUI_FAKE_RESUME_MS ?? 0);
 
 const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   pi: () => new PiAdapter(),
@@ -16,7 +17,7 @@ const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   hermes: () => new HermesAdapter(),
   claude: (config) => new ClaudeAdapter({ home: config.home }),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
-  fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay() }),
+  fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay(), resumeDelayMs: fakeResumeDelay() }),
   "fake-b": () =>
     new FakeAdapter({ id: "fake-b", displayName: "Fake B", chunkDelayMs: fakeDelay(), capabilities: { supportsSteer: false } }),
 };

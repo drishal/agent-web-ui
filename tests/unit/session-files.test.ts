@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forkSessionText, seedSessionText, uuidv7 } from "../../src/server/harness/session-files.js";
+import { branchMessages, forkSessionText, seedSessionText, uuidv7 } from "../../src/server/harness/session-files.js";
 
 /** A Pi-family file: title slot, header, then a tree of entries. */
 function sessionText(): string {
@@ -77,5 +77,24 @@ describe("uuidv7", () => {
     // Assistant entries carry usage, or session totals throw on them.
     expect(entries[2].message).toMatchObject({ role: "assistant", usage: { input: 0, cost: { total: 0 } }, stopReason: "stop" });
     expect(entries[2].message.content.map((c: { type: string }) => c.type)).toEqual(["thinking", "text"]);
+  });
+
+  it("reads the active branch's messages from the file, as the harness lists them", () => {
+    const lines = [
+      { type: "title", v: 1, title: "T", source: "auto" },
+      { type: "session", version: 3, id: "s1", cwd: "/p" },
+      { type: "message", id: "u1", parentId: null, message: { role: "user", content: "old" } },
+      { type: "message", id: "a1", parentId: "u1", message: { role: "assistant", content: [{ type: "text", text: "old answer" }] } },
+      { type: "message", id: "u2", parentId: "a1", message: { role: "user", content: "kept" } },
+      // An abandoned attempt off u2: not on the branch.
+      { type: "message", id: "ax", parentId: "u2", message: { role: "assistant", content: [{ type: "text", text: "abandoned" }] } },
+      { type: "message", id: "a2", parentId: "u2", message: { role: "assistant", content: [{ type: "text", text: "kept answer" }] } },
+      { type: "compaction", id: "c1", parentId: "a2", summary: "summary", firstKeptEntryId: "u2", timestamp: "2026-01-01T00:00:00.000Z" },
+      { type: "branch_summary", id: "b1", parentId: "c1", summary: "came back" },
+      { type: "message", id: "u3", parentId: "b1", message: { role: "user", content: "new" } },
+    ];
+    const messages = branchMessages(`${lines.map((l) => JSON.stringify(l)).join("\n")}\n{"type":"message","id":"torn`) as Array<Record<string, unknown>>;
+    expect(messages.map((m) => m.role)).toEqual(["compactionSummary", "user", "assistant", "branchSummary", "user"]);
+    expect(messages.map((m) => (typeof m.content === "string" ? m.content : ""))).toEqual(["", "kept", "", "", "new"]);
   });
 });

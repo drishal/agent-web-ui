@@ -151,6 +151,13 @@ export interface HarnessAdapter {
    */
   seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat>;
   openChat(req: OpenChatRequest): Promise<LiveChat>;
+  /**
+   * The session's transcript read straight from its file, without starting
+   * the harness, so a resumed chat shows at once while the harness starts
+   * behind it. Null when the session is not this project's (or has no file
+   * yet). Harnesses whose history lives only behind their process omit it.
+   */
+  readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
   /** Kill helper processes; called on server shutdown. */
   shutdown(): Promise<void>;
 }

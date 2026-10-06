@@ -887,6 +887,17 @@ export class ClaudeAdapter implements HarnessAdapter {
     throw new Error("Claude Code cannot take a handoff yet");
   }
 
+  async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    const file = await this.sessionFile(req.cwd, req.nativeId);
+    const text = file ? await fs.readFile(file, "utf8").catch(() => null) : null;
+    if (text === null) return null;
+    const entries = parseEntries(text);
+    const meta = sessionMeta(entries, req.nativeId);
+    // Folder names are lossy, so the file's own cwd decides which project it is.
+    if (!meta || (meta.cwd && path.resolve(meta.cwd) !== path.resolve(req.cwd))) return null;
+    return { items: historyToItems(transcriptMessages(entries)), title: meta.title !== meta.firstPrompt.slice(0, 80) ? meta.title : null };
+  }
+
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     const chat = new ClaudeLiveChat(this, req.cwd, req.resumeNativeId ?? null);
     await chat.start();
