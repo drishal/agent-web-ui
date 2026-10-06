@@ -1194,7 +1194,7 @@ body.is-resizing {
 }
 
 .drow-head:not(:disabled):hover,
-.drow.is-open .drow-head {
+.drow.is-open > .drow-head {
   color: var(--text-2);
 }
 
@@ -1221,17 +1221,17 @@ body.is-resizing {
 
 .drow-head:not(:disabled):hover .drow-icon,
 .drow-head:focus-visible .drow-icon,
-.drow.is-open .drow-icon {
+.drow.is-open > .drow-head .drow-icon {
   opacity: 0;
 }
 
 .drow-head:not(:disabled):hover .drow-chevron,
 .drow-head:focus-visible .drow-chevron,
-.drow.is-open .drow-chevron {
+.drow.is-open > .drow-head .drow-chevron {
   opacity: 1;
 }
 
-.drow.is-open .drow-chevron {
+.drow.is-open > .drow-head .drow-chevron {
   transform: rotate(180deg);
 }
 
