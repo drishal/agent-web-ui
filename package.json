@@ -16,6 +16,7 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "set-password": "node scripts/set-password.mjs",
+    "service": "node scripts/service.mjs",
     "smoke": "SMOKE=1 vitest run tests/smoke"
   },
   "dependencies": {

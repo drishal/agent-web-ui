@@ -303,16 +303,26 @@ To install it:
 
 Changing `stylix.base16Scheme` in `shared/stylix.nix` then re-themes the web UI. Until the module is installed, you can point `THEME_FILE` at `~/.pi/agent/themes/stylix.yaml`, or copy any base16 YAML to `theme.yml`.
 
-## Optional autostart (home-manager)
+## Autostart (systemd user service)
 
-Nothing is installed imperatively. [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) defines `systemd.user.services.agent-web-ui`: absolute `${pkgs.nodejs}` and server entry, no secrets, and the shell's `PATH` so `pi`, `omp` and the agents' tools are found. It sets no app settings, so `PORT`, `HOST` and the login come from `~/.config/agentwebui/config.yml`. It is skipped (not restart-looped) until `dist/` is built, and bad settings (such as `HOST=0.0.0.0` without a login) stop it with exit code 78 and the reason in the journal instead of restarting it every 5 seconds. Add it next to the theme module and rebuild. The unit runs the checkout's `dist/`, so after pulling: `npm run build && systemctl --user restart agent-web-ui`.
+[`contrib/systemd/agent-web-ui.service`](contrib/systemd/agent-web-ui.service) runs the checkout's build as a systemd user service. Build first, then install it:
+
+```bash
+npm ci && npm run build
+npm run service -- install      # writes ~/.config/systemd/user/agent-web-ui.service, enables and starts it
+npm run service -- print        # show the unit without installing
+npm run service -- uninstall    # stop, disable, remove
+```
+
+The installed unit holds this checkout's path, the `node` that ran the install, and your shell's `PATH`, so `pi`, `omp`, `hermes`, `claude`, and the agents' own tools are found as in a terminal; after moving either, install again. It sets no app settings, so port, host, and the login come from `~/.config/agentwebui/config.yml`. It is skipped (not restart-looped) until `dist/` is built, a stray kill brings it back (`Restart=always`), and bad settings (such as `HOST=0.0.0.0` without a login) stop it with exit code 78 and the reason in the journal instead of restarting it every 5 seconds. Under systemd the Settings dialog can restart the server. To keep it running while you are logged out: `loginctl enable-linger "$USER"`.
 
 ```bash
 systemctl --user status agent-web-ui
 journalctl --user -u agent-web-ui -n 20     # shows the Local:/LAN:/Serve: addresses
-systemctl --user stop agent-web-ui
-# uninstall: drop the import, rebuild
+git pull && npm ci && npm run build && systemctl --user restart agent-web-ui   # update
 ```
+
+**home-manager:** [`contrib/home-manager/agent-web-ui-service.nix`](contrib/home-manager/agent-web-ui-service.nix) declares the same unit (absolute `${pkgs.nodejs}`, no secrets); add it next to the theme module and rebuild. `npm run service` leaves a unit that home-manager manages alone.
 
 `npm start` keeps working either way.
 

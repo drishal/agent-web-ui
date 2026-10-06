@@ -14,7 +14,7 @@ in
 {
   systemd.user.services.agent-web-ui = {
     Unit = {
-      Description = "Agent Web UI for Pi, omp, and Hermes";
+      Description = "Agent Web UI for Pi, omp, Hermes, and Claude Code";
       # No build yet (or no checkout on this machine): skip instead of restart-looping.
       ConditionPathExists = "${appDir}/dist/server/server/index.js";
     };

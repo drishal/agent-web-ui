@@ -1,0 +1,31 @@
+# agent-web-ui as a systemd user service.
+#
+# `npm run service -- install` fills in the @...@ values for this checkout and
+# enables it. By hand: replace them, save as
+# ~/.config/systemd/user/agent-web-ui.service, then
+#   systemctl --user daemon-reload && systemctl --user enable --now agent-web-ui
+#
+#   Status:  systemctl --user status agent-web-ui
+#   Logs:    journalctl --user -u agent-web-ui -n 20   (the Local:/LAN:/Serve: addresses)
+#   Update:  git pull && npm ci && npm run build && systemctl --user restart agent-web-ui
+
+[Unit]
+Description=Agent Web UI for Pi, omp, Hermes, and Claude Code
+# No build yet: skip instead of restart-looping.
+ConditionPathExists=@APP_DIR@/dist/server/server/index.js
+
+[Service]
+ExecStart="@NODE@" "@APP_DIR@/dist/server/server/index.js"
+WorkingDirectory=@APP_DIR@
+# The shell's PATH when installed, so pi, omp, hermes, claude, and the agents'
+# own tools (git, rg, ...) are found. Port, host, and the login come from
+# ~/.config/agentwebui/config.yml; an Environment=PORT=... here would override it.
+Environment="PATH=@PATH@"
+# SIGTERM is a clean exit (0), so on-failure would leave it dead after a stray kill.
+Restart=always
+RestartSec=5
+# 78 = bad settings (HOST=0.0.0.0 without a login, say): stop and say why in the journal.
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=default.target
