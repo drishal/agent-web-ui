@@ -1,9 +1,9 @@
 // Settings: pairing and sign-out for this device, and the server's
 // config.yml — including the theme and text size every device shares. The
-// server section is editable only from the machine running the server (other
-// devices read it); a save is checked server-side the way startup checks the
-// file, and what takes a restart says so, with a Restart button when systemd
-// supervises.
+// server section is editable from any signed-in device; a save is checked
+// server-side the way startup checks the file (and refused if it would lock out
+// the device making it), and what takes a restart says so, with a Restart
+// button when systemd supervises.
 import { useEffect, useState, type CSSProperties } from "react";
 import type { RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";

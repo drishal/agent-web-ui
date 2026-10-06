@@ -33,7 +33,7 @@ import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
-import { readSettings, writeSettings, type SettingsContext } from "./settings.js";
+import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import type { Workspaces } from "./workspaces.js";
 
@@ -177,25 +177,26 @@ export function createApp(deps: AppDeps) {
     res.json(payload);
   });
 
-  // Settings: everyone signed in may read them; only this machine may change them or restart.
+  // Settings: any signed-in device may read and change them (a save that would lock that device out is refused) and restart.
   const settingsCtx = (): SettingsContext => {
     if (!deps.settings) throw new ChatError(404, "no_settings", "Settings are not available on this server");
     return deps.settings;
   };
-  const thisMachine = (res: Response) => {
-    if (res.locals.local !== true) throw new ChatError(403, "settings_local_only", "Server settings can be changed on the machine running the server");
-  };
+  const requester = (req: Request, res: Response): Requester => ({
+    local: res.locals.local === true,
+    kind: res.locals.hostKind as Requester["kind"],
+    authority: String(res.locals.authority ?? ""),
+    tailscaleUser: res.locals.hostKind === "remote" ? String(req.headers["tailscale-user-login"] ?? "").toLowerCase() || null : null,
+  });
   app.get("/api/settings", (_req, res) => {
-    res.json(readSettings(settingsCtx(), res.locals.local === true));
+    res.json(readSettings(settingsCtx(), true));
   });
   app.put("/api/settings", (req, res) => {
     const ctx = settingsCtx();
-    thisMachine(res);
-    res.json(writeSettings(ctx, body(settingsPatchSchema, req)));
+    res.json(writeSettings(ctx, body(settingsPatchSchema, req), requester(req, res)));
   });
   app.post("/api/settings/restart", (_req, res) => {
     const ctx = settingsCtx();
-    thisMachine(res);
     if (!ctx.canRestart) throw new ChatError(409, "no_supervisor", "Nothing would start the server again: restart it yourself");
     res.status(202).json({ restarting: true });
     // The same graceful stop as a SIGTERM from systemd, which then starts it again (Restart=always).

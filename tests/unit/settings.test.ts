@@ -97,6 +97,21 @@ describe("settings", () => {
     expect(view.restartPending).toEqual(["allowedTailscaleUsers"]);
   });
 
+  it("refuses a save from another device that would shut that device out", () => {
+    const { ctx, file } = setup(`host: 0.0.0.0\nallowed_hosts:\n  - box.tail.ts.net\nauth:\n  username: me\n  password: pass word\n`);
+    const before = readFileSync(file, "utf8");
+    const phone = { local: false, kind: "lan" as const, authority: "192.168.1.5:4783", tailscaleUser: null };
+    const serve = { local: false, kind: "remote" as const, authority: "box.tail.ts.net", tailscaleUser: "me@example.com" };
+    expect(() => writeSettings(ctx, { host: "127.0.0.1" }, phone)).toThrow(/lock this device out/);
+    expect(() => writeSettings(ctx, { allowedHosts: [] }, serve)).toThrow(/box.tail.ts.net would no longer be an allowed host/);
+    expect(() => writeSettings(ctx, { allowedTailscaleUsers: ["someone@else.com"] }, serve)).toThrow(/Tailscale login/);
+    expect(readFileSync(file, "utf8")).toBe(before);
+    // What leaves the device a way in goes through.
+    expect(writeSettings(ctx, { host: "127.0.0.1" }, serve).values.host).toBe("127.0.0.1");
+    expect(writeSettings(ctx, { allowedTailscaleUsers: ["Me@Example.com"] }, serve).values.allowedTailscaleUsers).toEqual(["Me@Example.com"]);
+    expect(writeSettings(ctx, { host: "0.0.0.0", port: 4800 }, phone).values.port).toBe(4800);
+  });
+
   it("has nothing to write to without a settings folder", () => {
     const { ctx } = setup(FILE, { configDir: null });
     expect(readSettings(ctx, true).writable).toBe(false);

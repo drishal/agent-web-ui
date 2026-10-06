@@ -186,14 +186,12 @@ describe("credentials and secrets", () => {
     expect(s.classify("user@127.0.0.1")).toBeNull();
   });
 
-  it("lets every signed-in device read the server settings, and only this machine change them", async () => {
+  it("lets any signed-in device change the server settings, but not lock itself out", async () => {
     t = await makeTestApp({ withPassword: true, lanHosts: [LAN], withSettings: true });
-    const local = await request(t.server).get("/api/settings");
+    // As the running server is: on the network, with a login (set from this machine).
+    const local = await request(t.server).put("/api/settings").send({ host: "0.0.0.0", username: USER, password: PASS });
     expect(local.status).toBe(200);
-    expect(local.body).toMatchObject({ editable: true, writable: true, values: { port: 4783, host: "127.0.0.1" } });
-    const saved = await request(t.server).put("/api/settings").send({ port: 4800 });
-    expect(saved.status).toBe(200);
-    expect(saved.body).toMatchObject({ values: { port: 4800 }, restartPending: ["port"] });
+    expect(local.body).toMatchObject({ editable: true, values: { host: "0.0.0.0", hasPassword: true } });
     expect((await request(t.server).put("/api/settings").send({ port: "x" })).status).toBe(400);
     // Restarting needs a supervisor to bring the server back; this one has none.
     expect((await request(t.server).post("/api/settings/restart")).status).toBe(409);
@@ -201,13 +199,17 @@ describe("credentials and secrets", () => {
     const host = lanHost(t.port);
     const login = await request(t.server).post("/api/login").set("Host", host).send({ username: USER, password: PASS });
     const cookie = String((login.headers["set-cookie"] as unknown as string[])[0]).split(";")[0] as string;
-    const remote = await request(t.server).get("/api/settings").set("Host", host).set("Cookie", cookie);
-    expect(remote.status).toBe(200);
-    expect(remote.body).toMatchObject({ editable: false, values: { port: 4800 } });
-    const denied = await request(t.server).put("/api/settings").set("Host", host).set("Cookie", cookie).send({ port: 4801 });
-    expect(denied.status).toBe(403);
-    expect(denied.body.code).toBe("settings_local_only");
-    expect((await request(t.server).post("/api/settings/restart").set("Host", host).set("Cookie", cookie)).status).toBe(403);
+    const remote = (r: request.Test) => r.set("Host", host).set("Cookie", cookie);
+    const saved = await remote(request(t.server).put("/api/settings")).send({ port: 4800, textScale: 1.1 });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ editable: true, values: { port: 4800, textScale: 1.1 }, restartPending: expect.arrayContaining(["port"]) });
+    // A phone on the LAN cannot move the server to this machine only: it would be shut out.
+    const shut = await remote(request(t.server).put("/api/settings")).send({ host: "127.0.0.1" });
+    expect(shut.status).toBe(422);
+    expect(shut.body).toMatchObject({ code: "invalid_settings", error: expect.stringMatching(/lock this device out/) });
+    expect((await request(t.server).get("/api/settings")).body.values.host).toBe("0.0.0.0");
+    // This machine still can.
+    expect((await request(t.server).put("/api/settings").send({ host: "127.0.0.1" })).status).toBe(200);
     // Not signed in at all: nothing.
     expect((await request(t.server).get("/api/settings").set("Host", host)).status).toBe(401);
   });

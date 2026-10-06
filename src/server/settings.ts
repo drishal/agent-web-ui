@@ -124,13 +124,40 @@ export function readSettings(ctx: SettingsContext, editable: boolean): ServerSet
 
 const invalid = (message: string) => new ChatError(422, "invalid_settings", message);
 
+/** Who is saving. A device other than this machine must still get in once the change takes effect. */
+export interface Requester {
+  local: boolean;
+  kind: "loopback" | "lan" | "remote";
+  /** The Host it came in on (a LAN address, or an allowed Serve name). */
+  authority: string;
+  /** Its Tailscale login, when it came through Tailscale Serve. */
+  tailscaleUser: string | null;
+}
+
+const THIS_MACHINE: Requester = { local: true, kind: "loopback", authority: "127.0.0.1", tailscaleUser: null };
+
+/** Why `effective` would shut out the device saving it, or null. */
+function lockout(effective: ReturnType<typeof loadConfig>, who: Requester): string | null {
+  if (who.local) return null;
+  if (who.kind === "lan" && effective.host !== "0.0.0.0") return "the server would listen on its own machine only, and this device reaches it over the network";
+  if (who.kind === "remote") {
+    const hostname = who.authority.replace(/:\d+$/, "");
+    const allowed = effective.allowedHosts.some((entry) => (entry.includes(":") ? entry === who.authority : entry === hostname));
+    if (!allowed) return `${hostname} would no longer be an allowed host, and this device comes in through it`;
+    if (effective.allowedTailscaleUsers.length > 0 && !(who.tailscaleUser && effective.allowedTailscaleUsers.includes(who.tailscaleUser))) {
+      return "your Tailscale login would no longer be an allowed user";
+    }
+  }
+  return null;
+}
+
 /**
  * Apply a change to config.yml. The result is checked before anything is
  * written: the schema, then loadConfig as startup runs it (host, username
  * rules, host names), then the start-up refusals (other devices with no login
  * to sign in with, no usable workspace root).
  */
-export function writeSettings(ctx: SettingsContext, patch: SettingsPatch): ServerSettings {
+export function writeSettings(ctx: SettingsContext, patch: SettingsPatch, who: Requester = THIS_MACHINE): ServerSettings {
   const file = fileOf(ctx);
   if (!file) throw new ChatError(409, "no_settings_folder", "This server runs without a settings folder (AWUI_CONFIG_DIR is empty)");
   const doc = parseDocument(readFile(file));
@@ -177,6 +204,8 @@ export function writeSettings(ctx: SettingsContext, patch: SettingsPatch): Serve
   if (!effective.workspaceRoots.some((root) => existsSync(root) && statSync(root).isDirectory())) {
     throw invalid("None of the workspace roots is an existing folder");
   }
+  const shut = lockout(effective, who);
+  if (shut) throw invalid(`Not saved: ${shut}, which would lock this device out. Make that change on the machine running the server.`);
 
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.tmp`;
