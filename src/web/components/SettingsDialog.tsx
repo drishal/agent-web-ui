@@ -216,14 +216,16 @@ export function SettingsDialog({
               style={{ "--slider-fill": `${SCALE_MAX <= SCALE_MIN ? 0 : Math.min(100, Math.max(0, ((textScale - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100))}%` } as CSSProperties}
               onChange={(e) => onTextScale(Number(e.target.value))}
             />
+            <span className="text-slider-reset">
+              {textScale !== 1 ? (
+                <button type="button" className="ghost-icon" aria-label="Reset text size" title="Reset to 100%" onClick={() => onTextScale(1)}>
+                  <IconRefresh size={14} />
+                </button>
+              ) : null}
+            </span>
             <output className="text-slider-value" aria-live="off">
               {Math.round(textScale * 100)}%
             </output>
-            {textScale !== 1 ? (
-              <button type="button" className="ghost-icon text-slider-reset" aria-label="Reset text size" title="Reset to 100%" onClick={() => onTextScale(1)}>
-                <IconRefresh size={14} />
-              </button>
-            ) : null}
           </div>
         </div>
         <div className="settings-row">

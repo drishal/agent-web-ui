@@ -30,7 +30,7 @@ test("settings opens from the sidebar gear and shows this device plus the server
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Theme" })).toBeVisible();
-  await expect(settings.getByRole("combobox", { name: "Chat text size" })).toBeVisible();
+  await expect(settings.getByRole("slider", { name: "Chat text size" })).toBeVisible();
   // The e2e server runs without a settings folder, so the server section is read-only.
   await expect(settings).toContainText("nothing to save to");
   await page.keyboard.press("Escape");

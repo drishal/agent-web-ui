@@ -3466,9 +3466,18 @@ button.harness-chip:disabled {
   border-radius: 999px;
 }
 
+.text-slider-reset {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .text-slider-value {
   flex: none;
-  min-width: 92px;
+  min-width: 44px;
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
