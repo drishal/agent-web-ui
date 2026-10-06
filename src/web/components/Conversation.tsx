@@ -23,6 +23,7 @@ function DisclosureRow({
   tone,
   children,
   defaultOpen = false,
+  hideSummaryWhenOpen = false,
   testId,
 }: {
   icon: React.ReactNode;
@@ -31,6 +32,8 @@ function DisclosureRow({
   tone?: "error" | "warn";
   children?: React.ReactNode;
   defaultOpen?: boolean;
+  /** The summary previews the body (thought's first line): hide it once open. */
+  hideSummaryWhenOpen?: boolean;
   testId?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -53,7 +56,7 @@ function DisclosureRow({
           ) : null}
         </span>
         <span className="drow-title">{title}</span>
-        {summary ? (
+        {summary && !(open && hideSummaryWhenOpen) ? (
           <>
             <span className="drow-sep" aria-hidden="true" />
             <span className="drow-summary">{summary}</span>
@@ -75,6 +78,7 @@ const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking:
       icon={streaming ? <Spinner size={13} /> : <IconSpark size={14} />}
       title={streaming ? "Thinking" : "Thought"}
       summary={<span className="drow-prose">{firstLine(thinking)}</span>}
+      hideSummaryWhenOpen
       testId="thought-row"
     >
       <div className="thought-body">{thinking}</div>

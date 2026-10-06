@@ -60,6 +60,19 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await expect(page.getByRole("button", { name: "Copy reply" }).last()).toBeVisible();
 });
 
+test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "hello thought");
+  await openFold(page);
+  const thought = page.getByTestId("thought-row").last();
+  await expect(thought).toContainText("Considering: Echo: hello thought");
+  await thought.getByRole("button").first().click();
+  await expect(thought.locator(".thought-body")).toContainText("Considering: Echo: hello thought");
+  // The header preview hides once open: the text appears exactly once.
+  await expect(thought.getByText("Considering: Echo: hello thought", { exact: false })).toHaveCount(1);
+});
+
 test("switch harness without reloading; capabilities change the composer", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page, "Fake B");
