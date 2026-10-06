@@ -9,6 +9,7 @@ import { api, errorText } from "../api.js";
 import type { ThemeMode } from "../theme.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
+import { IconRefresh } from "../icons.js";
 
 const RESTART_LABEL: Record<RestartSetting, string> = {
   port: "port",
@@ -28,20 +29,6 @@ const lines = (text: string) =>
 
 const SCALE_MIN = TEXT_SCALES[0]?.[1] ?? 0.85;
 const SCALE_MAX = TEXT_SCALES[TEXT_SCALES.length - 1]?.[1] ?? 1.35;
-
-/** Nearest named stop, so a stored custom scale still reads sensibly. */
-function sliderLabel(scale: number): string {
-  let best = TEXT_SCALES[0]?.[0] ?? "";
-  let gap = Infinity;
-  for (const [label, value] of TEXT_SCALES) {
-    const d = Math.abs(value - scale);
-    if (d < gap) {
-      gap = d;
-      best = label;
-    }
-  }
-  return `${Math.round(scale * 100)}% · ${best}`;
-}
 
 /** The form's working copy: lists as one entry per line, the password as a write-only field. */
 interface Draft {
@@ -230,8 +217,13 @@ export function SettingsDialog({
               onChange={(e) => onTextScale(Number(e.target.value))}
             />
             <output className="text-slider-value" aria-live="off">
-              {sliderLabel(textScale)}
+              {Math.round(textScale * 100)}%
             </output>
+            {textScale !== 1 ? (
+              <button type="button" className="ghost-icon text-slider-reset" aria-label="Reset text size" title="Reset to 100%" onClick={() => onTextScale(1)}>
+                <IconRefresh size={14} />
+              </button>
+            ) : null}
           </div>
         </div>
         <div className="settings-row">
