@@ -349,7 +349,10 @@ test("chat text size scales the conversation only", async ({ page }) => {
   const sidebarBefore = await sidebarSize();
   await openSettings(page);
   const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings.getByRole("combobox", { name: "Chat text size" }).selectOption({ label: "Larger" });
+  const slider = settings.getByRole("slider", { name: "Chat text size" });
+  await expect(slider).toBeVisible();
+  await slider.fill("1.22");
+  await expect(settings.getByText("122% · Larger")).toBeVisible();
   await settings.getByRole("button", { name: "Close" }).click();
   await expect.poll(size).toBeGreaterThan(before * 1.15);
   expect(await sidebarSize()).toBe(sidebarBefore);

@@ -3401,6 +3401,80 @@ button.harness-chip:disabled {
   gap: 8px;
 }
 
+/* Chat text size slider: accent fill to the thumb, stop ticks, live value. */
+.text-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.text-slider-input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.text-slider-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left / var(--slider-fill, 50%) 100% no-repeat,
+    var(--hover);
+}
+
+.text-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+
+.text-slider-input::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.text-slider-input::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.text-slider-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+
+.text-slider-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
+.text-slider-value {
+  flex: none;
+  min-width: 92px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: right;
+}
+
 .settings-note {
   margin: 0;
   font-size: 12.5px;

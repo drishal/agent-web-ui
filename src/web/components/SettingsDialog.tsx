@@ -3,7 +3,7 @@
 // editable only from the machine running the server (other devices read it);
 // a save is checked server-side the way startup checks the file, and what
 // takes a restart says so, with a Restart button when systemd supervises.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ThemeMode } from "../theme.js";
@@ -25,6 +25,23 @@ const lines = (text: string) =>
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
+
+const SCALE_MIN = TEXT_SCALES[0]?.[1] ?? 0.85;
+const SCALE_MAX = TEXT_SCALES[TEXT_SCALES.length - 1]?.[1] ?? 1.35;
+
+/** Nearest named stop, so a stored custom scale still reads sensibly. */
+function sliderLabel(scale: number): string {
+  let best = TEXT_SCALES[0]?.[0] ?? "";
+  let gap = Infinity;
+  for (const [label, value] of TEXT_SCALES) {
+    const d = Math.abs(value - scale);
+    if (d < gap) {
+      gap = d;
+      best = label;
+    }
+  }
+  return `${Math.round(scale * 100)}% · ${best}`;
+}
 
 /** The form's working copy: lists as one entry per line, the password as a write-only field. */
 interface Draft {
@@ -196,16 +213,27 @@ export function SettingsDialog({
             ) : null}
           </select>
         </label>
-        <label className="settings-row">
-          <span className="settings-label">Chat text size</span>
-          <select className="select" aria-label="Chat text size" value={String(textScale)} onChange={(e) => onTextScale(Number(e.target.value))}>
-            {TEXT_SCALES.map(([label, value]) => (
-              <option key={label} value={String(value)}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="settings-row settings-slider-row">
+          <span className="settings-label" id="settings-text-size-label">
+            Chat text size
+          </span>
+          <div className="text-slider">
+            <input
+              type="range"
+              className="text-slider-input"
+              aria-label="Chat text size"
+              min={SCALE_MIN}
+              max={SCALE_MAX}
+              step={0.01}
+              value={textScale}
+              style={{ "--slider-fill": `${SCALE_MAX <= SCALE_MIN ? 0 : Math.min(100, Math.max(0, ((textScale - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100))}%` } as CSSProperties}
+              onChange={(e) => onTextScale(Number(e.target.value))}
+            />
+            <output className="text-slider-value" aria-live="off">
+              {sliderLabel(textScale)}
+            </output>
+          </div>
+        </div>
         <div className="settings-row">
           <span className="settings-label">Other devices</span>
           <div className="settings-actions">
