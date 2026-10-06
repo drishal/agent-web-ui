@@ -23,11 +23,11 @@ import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveT
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
-import { useTheme } from "./theme.js";
+import { themeModeOf, useTheme } from "./theme.js";
 
 export function App() {
   const { banner, setBanner, fail } = useBanner();
-  const { themeMode, themeInfo, initTheme, applyMode } = useTheme();
+  const { themeInfo, initTheme, setThemeMode } = useTheme();
   const [harnessId, setHarnessId] = useState<string | null>(() => load<string | null>("harness", null));
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const [recent, setRecent] = useState<string[]>(() => load<string[]>("recentWorkspaces", []));
@@ -36,7 +36,13 @@ export function App() {
   // the next line); this closure only runs on an event, long after this render
   // finished, so the forward reference is safe.
   const { chat, setChat, conn } = useChatStream({ onSignedOut: () => setSignedOut(true) });
-  const { boot, setBoot, bootError, signedOut, setSignedOut } = useBootstrap({ onTheme: initTheme, setHarnessId, setWorkspace, setRecent, setChat });
+  const { boot, setBoot, bootError, signedOut, setSignedOut } = useBootstrap({
+    onTheme: initTheme,
+    setHarnessId,
+    setWorkspace,
+    setRecent,
+    setChat,
+  });
   const { overview, sessionsError, sessionsLoading, refreshSessions } = useSessions({ boot, workspace, chat });
   const {
     sidebarWidth,
@@ -59,10 +65,14 @@ export function App() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [textScale, setTextScale] = useState<number>(() => load<number>("chatScale", 1));
 
-  // ---- chat text size (separate from page zoom, per device) -------------------
+  // ---- shared look: config.yml rules every device; a save applies here at once ----
 
+  const themeMode = themeModeOf(themeInfo, boot?.ui.theme ?? null);
+  const textScale = boot?.ui.textScale ?? 1;
+  useEffect(() => {
+    setThemeMode(themeMode);
+  }, [themeMode, setThemeMode]);
   useEffect(() => {
     document.documentElement.style.setProperty("--chat-scale", String(textScale));
   }, [textScale]);
@@ -476,14 +486,7 @@ export function App() {
       />
       {settingsOpen ? (
         <SettingsDialog
-          themeMode={themeMode}
           scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}
-          onThemeMode={applyMode}
-          textScale={textScale}
-          onTextScale={(v) => {
-            setTextScale(v);
-            save("chatScale", v);
-          }}
           onPair={() => {
             setSettingsOpen(false);
             setPairOpen(true);

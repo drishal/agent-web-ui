@@ -17,6 +17,8 @@ export interface UiSettings {
   /** null: no preference, so a theme.yml is used when present. */
   theme: ThemeChoice | null;
   autocollapseSidebar: boolean;
+  /** Shared chat text size; null: the 100% default. */
+  textScale: number | null;
 }
 
 export class UserConfigError extends Error {}
@@ -31,6 +33,8 @@ const schema = z
     allowed_tailscale_users: z.array(z.string()).optional(),
     theme: themeChoiceSchema.optional(),
     autocollapse_sidebar: z.boolean().optional(),
+    /** Shared chat text size (a scale on the 14.5px base); null when unset. */
+    text_scale: z.number().min(0.5).max(2).optional(),
   })
   .strict();
 
@@ -94,5 +98,5 @@ export function configEnv(c: UserConfig): Record<string, string> {
 
 export function uiSettings(c: UserConfig | undefined): UiSettings {
   const theme = c?.theme === "custom" ? "base16" : (c?.theme ?? null);
-  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true };
+  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null };
 }

@@ -41,13 +41,13 @@ autocollapse_sidebar: false
       WORKSPACE_ROOTS: `/home/x/code${path.delimiter}/srv`,
       ALLOWED_HOSTS: "box.tail.ts.net",
     });
-    expect(uiSettings(read?.config)).toEqual({ theme: "base16", autocollapseSidebar: false });
+    expect(uiSettings(read?.config)).toEqual({ theme: "base16", textScale: null, autocollapseSidebar: false });
     // The old name still works.
     expect(uiSettings(readUserConfig(folder("theme: custom\n"))?.config).theme).toBe("base16");
   });
 
   it("defaults the browser settings, and an empty file is no settings", () => {
-    expect(uiSettings(undefined)).toEqual({ theme: null, autocollapseSidebar: true });
+    expect(uiSettings(undefined)).toEqual({ theme: null, textScale: null, autocollapseSidebar: true });
     expect(readUserConfig(folder(""))?.config).toEqual({});
   });
 

@@ -24,11 +24,12 @@ test("this machine opens straight into the app: no token, no sign-in", async ({ 
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
-test("settings opens from the sidebar gear and shows this device plus the server", async ({ page }) => {
+test("settings opens from the sidebar gear and shows pairing plus the server", async ({ page }) => {
   await signInAndOpen(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Pair phone" })).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Theme" })).toBeVisible();
   await expect(settings.getByRole("slider", { name: "Chat text size" })).toBeVisible();
   // The e2e server runs without a settings folder, so the server section is read-only.
@@ -352,28 +353,15 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await expect(prompts(page).first()).toBeInViewport();
 });
 
-test("chat text size scales the conversation only", async ({ page }) => {
+test("chat text size comes from config.yml, read-only without a settings folder", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
-  await sendAndWait(page, "size check");
-  const size = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="user-prompt"]') as Element).fontSize));
-  const sidebarSize = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".session-title") as Element).fontSize));
-  const before = await size();
-  const sidebarBefore = await sidebarSize();
   await openSettings(page);
   const settings = page.getByRole("dialog", { name: "Settings" });
   const slider = settings.getByRole("slider", { name: "Chat text size" });
   await expect(slider).toBeVisible();
+  await expect(slider).toBeDisabled();
   await expect(settings.getByText("100%", { exact: true })).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Reset text size" })).toHaveCount(0);
-  await slider.fill("1.22");
-  await expect(settings.getByText("122%", { exact: true })).toBeVisible();
-  await settings.getByRole("button", { name: "Reset text size" }).click();
-  await expect(settings.getByText("100%", { exact: true })).toBeVisible();
-  await slider.fill("1.22");
   await settings.getByRole("button", { name: "Close" }).click();
-  await expect.poll(size).toBeGreaterThan(before * 1.15);
-  expect(await sidebarSize()).toBe(sidebarBefore);
 });
 
 test("the stylix theme file drives colors and passes contrast", async ({ page }) => {
@@ -394,13 +382,7 @@ test("the stylix theme file drives colors and passes contrast", async ({ page })
     return (Math.max(fg, back) + 0.05) / (Math.min(fg, back) + 0.05);
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
-  await openSettings(page);
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  // A theme.yml is listed as "base16", whatever its scheme is called.
-  await expect(settings.getByRole("combobox", { name: "Theme" }).locator('option[value="scheme"]')).toHaveText("base16");
-  await settings.getByRole("combobox", { name: "Theme" }).selectOption("light");
-  await settings.getByRole("button", { name: "Close" }).click();
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 255, 255)");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1d2021");
 });
 
 for (const viewport of [

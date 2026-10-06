@@ -43,6 +43,7 @@ describe("settings", () => {
       allowedHosts: [],
       allowedTailscaleUsers: [],
       theme: "base16",
+      textScale: null,
       autocollapseSidebar: true,
     });
   });
@@ -50,16 +51,17 @@ describe("settings", () => {
   it("rewrites the file in place, keeping comments, and says what waits for a restart", () => {
     const { ctx, file, home } = setup(FILE);
     const code = path.join(home, "code");
-    const view = writeSettings(ctx, { port: 4800, theme: null, autocollapseSidebar: false, workspaceRoots: [code] });
+    const view = writeSettings(ctx, { port: 4800, theme: null, textScale: 1.22, autocollapseSidebar: false, workspaceRoots: [code] });
     const text = readFileSync(file, "utf8");
     expect(text).toContain("# My agent-web-ui settings");
     expect(text).toContain("port: 4800 # the usual port");
     expect(text).not.toContain("theme:");
+    expect(text).toContain("text_scale: 1.22");
     expect(text).toContain("autocollapse_sidebar: false");
     expect(text).toContain(`workspace_roots:\n  - ${code}`);
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(view.values).toMatchObject({ port: 4800, theme: null, autocollapseSidebar: false });
-    // Port and roots take a restart; theme and folding apply on the next page load.
+    expect(view.values).toMatchObject({ port: 4800, theme: null, textScale: 1.22, autocollapseSidebar: false });
+    // Port and roots take a restart; theme, text size, and folding apply on the next page load.
     expect(view.restartPending).toEqual(["port", "workspaceRoots"]);
   });
 

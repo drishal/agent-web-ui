@@ -319,8 +319,8 @@ export interface Bootstrap {
   roots: string[];
   home: string;
   theme: { active: string; problem?: string };
-  /** From config.yml. theme: the default look (base16 = theme.yml), null when unset. */
-  ui: { theme: ThemeChoice | null; autocollapseSidebar: boolean };
+  /** From config.yml: the shared look (theme null lets theme.yml decide, scale null is 100%). Re-read on every page load. */
+  ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -400,8 +400,9 @@ export interface ServerSettingsValues {
   workspaceRoots: string[];
   allowedHosts: string[];
   allowedTailscaleUsers: string[];
-  /** Default theme for devices that have not picked one; null lets a theme.yml decide. */
+  /** Shared look for every device; null theme lets a theme.yml decide, null scale is 100%. */
   theme: ThemeChoice | null;
+  textScale: number | null;
   autocollapseSidebar: boolean;
 }
 
@@ -434,6 +435,7 @@ export const settingsPatchSchema = z
     allowedHosts: z.array(z.string().trim().min(1).max(255)).max(64).optional(),
     allowedTailscaleUsers: z.array(z.string().trim().min(1).max(255)).max(64).optional(),
     theme: themeChoiceSchema.nullable().optional(),
+    textScale: z.number().min(0.5).max(2).nullable().optional(),
     autocollapseSidebar: z.boolean().optional(),
   })
   .strict();

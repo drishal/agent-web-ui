@@ -84,6 +84,7 @@ function valuesOf(c: UserConfig, ctx: SettingsContext): ServerSettingsValues {
     allowedHosts: c.allowed_hosts ?? [],
     allowedTailscaleUsers: c.allowed_tailscale_users ?? [],
     theme: c.theme === "custom" ? "base16" : (c.theme ?? null),
+    textScale: c.text_scale ?? null,
     autocollapseSidebar: c.autocollapse_sidebar ?? true,
   };
 }
@@ -147,6 +148,7 @@ export function writeSettings(ctx: SettingsContext, patch: SettingsPatch): Serve
   if (patch.allowedHosts !== undefined) set(["allowed_hosts"], patch.allowedHosts);
   if (patch.allowedTailscaleUsers !== undefined) set(["allowed_tailscale_users"], patch.allowedTailscaleUsers);
   if (patch.theme !== undefined) set(["theme"], patch.theme);
+  if (patch.textScale !== undefined) set(["text_scale"], patch.textScale);
   if (patch.autocollapseSidebar !== undefined) set(["autocollapse_sidebar"], patch.autocollapseSidebar);
   const auth = doc.getIn(["auth"]) as { items?: unknown[] } | undefined;
   if (auth && Array.isArray(auth.items) && auth.items.length === 0) doc.deleteIn(["auth"]);

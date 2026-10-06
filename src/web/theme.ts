@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import type { ThemeChoice, ThemeInfo } from "../shared/protocol.js";
 import { api } from "./api.js";
-import { load, save } from "./storage.js";
 
 export type ThemeMode = "system" | "light" | "dark" | "scheme";
 
@@ -51,23 +50,13 @@ function configMode(choice: ThemeChoice | null, info: ThemeInfo | null): ThemeMo
 }
 
 /**
- * This device's theme: its own pick from the menu, else config.yml's theme,
- * else theme.yml when there is one. A changed config.yml theme wins once, so
- * editing the file is never shadowed by an old pick.
+ * Every device follows config.yml: its theme, else theme.yml when there is
+ * one. A changed file theme wins on the next page load.
  */
-export function storedThemeMode(info: ThemeInfo | null, choice: ThemeChoice | null = null): ThemeMode {
-  if (choice !== null && choice !== load<ThemeChoice | null>("themeConfig", null)) {
-    save("themeConfig", choice);
-    save("theme", null);
-  }
+export function themeModeOf(info: ThemeInfo | null, choice: ThemeChoice | null = null): ThemeMode {
   const fallback = configMode(choice, info) ?? (info?.source === "file" ? "scheme" : "system");
-  const stored = load<ThemeMode | null>("theme", null);
-  if (stored === "scheme" && info?.source !== "file") return fallback === "scheme" ? "system" : fallback;
-  return stored ?? fallback;
-}
-
-export function storeThemeMode(mode: ThemeMode): void {
-  save("theme", mode);
+  if (fallback === "scheme" && info?.source !== "file") return "system";
+  return fallback;
 }
 
 export async function fetchTheme(): Promise<ThemeInfo | null> {
@@ -89,13 +78,7 @@ export function useTheme() {
   /** Take the theme delivered with the bootstrap payload (null when /api/theme failed). */
   const initTheme = (info: ThemeInfo | null, choice: ThemeChoice | null): void => {
     setThemeInfo(info);
-    setThemeMode(storedThemeMode(info, choice));
-  };
-
-  /** Pick a mode from the menu and remember it on this device. */
-  const applyMode = (mode: ThemeMode): void => {
-    setThemeMode(mode);
-    storeThemeMode(mode);
+    setThemeMode(themeModeOf(info, choice));
   };
 
   useEffect(() => {
@@ -112,5 +95,5 @@ export function useTheme() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  return { themeMode, themeInfo, initTheme, applyMode };
+  return { themeMode, themeInfo, initTheme, setThemeMode };
 }

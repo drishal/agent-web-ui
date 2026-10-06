@@ -1,7 +1,7 @@
 # agent-web-ui settings: copy to ~/.config/agentwebui/config.yml.
 # Every key is optional. Restart the server after changing port, host, auth,
-# or the lists (systemctl --user restart agent-web-ui); theme and
-# autocollapse_sidebar apply on the next page load. Environment variables
+# or the lists (systemctl --user restart agent-web-ui); theme, text_scale,
+# and autocollapse_sidebar apply on the next page load. Environment variables
 # (PORT, HOST, AUTH_USERNAME, ...) win over this file.
 
 # Port for the UI and API (1024-65535).
@@ -28,10 +28,11 @@ auth:
 # Optional: Serve requests must also come from one of these Tailscale logins.
 # allowed_tailscale_users: [you@example.com]
 
-# The default look on every device: system (follow light/dark), light, dark,
-# or base16 (theme.yml in this folder: a base16/base24 scheme). The theme menu
-# can still change it per device until this value changes.
+# The shared look on every device: theme is system (follow light/dark),
+# light, dark, or base16 (theme.yml in this folder: a base16/base24 scheme).
+# text_scale sizes the conversation (1 = 100%).
 theme: system
+# text_scale: 1.1
 
 # Fold the sidebar away in narrow windows (below 1200 px; phones use the
 # drawer anyway). A sidebar you collapsed yourself stays collapsed.

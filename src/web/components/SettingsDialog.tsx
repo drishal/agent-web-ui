@@ -1,12 +1,12 @@
-// Settings: this device's look (theme, text size, kept per browser), its
-// sign-in and pairing, and the server's config.yml. The server section is
-// editable only from the machine running the server (other devices read it);
-// a save is checked server-side the way startup checks the file, and what
-// takes a restart says so, with a Restart button when systemd supervises.
+// Settings: pairing and sign-out for this device, and the server's
+// config.yml — including the theme and text size every device shares. The
+// server section is editable only from the machine running the server (other
+// devices read it); a save is checked server-side the way startup checks the
+// file, and what takes a restart says so, with a Restart button when systemd
+// supervises.
 import { useEffect, useState, type CSSProperties } from "react";
 import type { RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
-import type { ThemeMode } from "../theme.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
 import { IconRefresh } from "../icons.js";
@@ -41,6 +41,7 @@ interface Draft {
   allowedHosts: string;
   allowedTailscaleUsers: string;
   theme: ThemeChoice | "";
+  textScale: number;
   autocollapseSidebar: boolean;
 }
 
@@ -55,6 +56,7 @@ function draftOf(v: ServerSettingsValues): Draft {
     allowedHosts: v.allowedHosts.join("\n"),
     allowedTailscaleUsers: v.allowedTailscaleUsers.join("\n"),
     theme: v.theme ?? "",
+    textScale: v.textScale ?? 1,
     autocollapseSidebar: v.autocollapseSidebar,
   };
 }
@@ -73,16 +75,13 @@ function patchOf(d: Draft, v: ServerSettingsValues): SettingsPatch {
   if (!same(lines(d.allowedHosts), v.allowedHosts)) p.allowedHosts = lines(d.allowedHosts);
   if (!same(lines(d.allowedTailscaleUsers), v.allowedTailscaleUsers)) p.allowedTailscaleUsers = lines(d.allowedTailscaleUsers);
   if ((d.theme || null) !== v.theme) p.theme = d.theme || null;
+  if (d.textScale !== (v.textScale ?? 1)) p.textScale = d.textScale;
   if (d.autocollapseSidebar !== v.autocollapseSidebar) p.autocollapseSidebar = d.autocollapseSidebar;
   return p;
 }
 
 export function SettingsDialog({
-  themeMode,
   scheme,
-  onThemeMode,
-  textScale,
-  onTextScale,
   onPair,
   signedInAs,
   onSignOut,
@@ -90,18 +89,14 @@ export function SettingsDialog({
   onUiSaved,
   onClose,
 }: {
-  themeMode: ThemeMode;
   /** A theme.yml is loaded: offer its scheme. */
   scheme: { name: string | null } | null;
-  onThemeMode: (mode: ThemeMode) => void;
-  textScale: number;
-  onTextScale: (scale: number) => void;
   onPair: () => void;
   signedInAs: string | null;
   onSignOut: () => void;
   version: string;
-  /** The file's browser settings changed: the open page follows without a reload. */
-  onUiSaved: (ui: { theme: ThemeChoice | null; autocollapseSidebar: boolean }) => void;
+  /** The file's look settings changed: the open page follows without a reload. */
+  onUiSaved: (ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean }) => void;
   onClose: () => void;
 }) {
   const [server, setServer] = useState<ServerSettings | null>(null);
@@ -139,8 +134,8 @@ export function SettingsDialog({
       setServer(next);
       setDraft(draftOf(next.values));
       setSaved(true);
-      if (patch.theme !== undefined || patch.autocollapseSidebar !== undefined) {
-        onUiSaved({ theme: next.values.theme, autocollapseSidebar: next.values.autocollapseSidebar });
+      if (patch.theme !== undefined || patch.textScale !== undefined || patch.autocollapseSidebar !== undefined) {
+        onUiSaved({ theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar });
       }
     } catch (e) {
       setError(errorText(e));
@@ -187,47 +182,6 @@ export function SettingsDialog({
     <Dialog title="Settings" onClose={onClose} className="dialog-wide settings-dialog">
       <section className="settings-section" aria-labelledby="settings-device">
         <h3 id="settings-device">This device</h3>
-        <label className="settings-row">
-          <span className="settings-label">Theme</span>
-          <select className="select" aria-label="Theme" value={themeMode} onChange={(e) => onThemeMode(e.target.value as ThemeMode)}>
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            {scheme ? (
-              <option value="scheme" title={scheme.name ?? undefined}>
-                base16
-              </option>
-            ) : null}
-          </select>
-        </label>
-        <div className="settings-row settings-slider-row">
-          <span className="settings-label" id="settings-text-size-label">
-            Chat text size
-          </span>
-          <div className="text-slider">
-            <input
-              type="range"
-              className="text-slider-input"
-              aria-label="Chat text size"
-              min={SCALE_MIN}
-              max={SCALE_MAX}
-              step={0.01}
-              value={textScale}
-              style={{ "--slider-fill": `${SCALE_MAX <= SCALE_MIN ? 0 : Math.min(100, Math.max(0, ((textScale - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100))}%` } as CSSProperties}
-              onChange={(e) => onTextScale(Number(e.target.value))}
-            />
-            <span className="text-slider-reset">
-              {textScale !== 1 ? (
-                <button type="button" className="ghost-icon" aria-label="Reset text size" title="Reset to 100%" onClick={() => onTextScale(1)}>
-                  <IconRefresh size={14} />
-                </button>
-              ) : null}
-            </span>
-            <output className="text-slider-value" aria-live="off">
-              {Math.round(textScale * 100)}%
-            </output>
-          </div>
-        </div>
         <div className="settings-row">
           <span className="settings-label">Other devices</span>
           <div className="settings-actions">
@@ -250,7 +204,7 @@ export function SettingsDialog({
             ? "This server runs without a settings folder, so there is nothing to save to."
             : server && !server.editable
               ? "These live in config.yml on the machine running the server; change them there."
-              : "Saved to config.yml. Theme and sidebar apply on the next page load; the rest when the server restarts."}
+              : "Saved to config.yml for every device. Theme, text size, and sidebar apply here at once and on other devices on their next page load; the rest when the server restarts."}
         </p>
         {!draft ? (
           error ? null : <p className="settings-note">Loading…</p>
@@ -263,15 +217,57 @@ export function SettingsDialog({
             }}
           >
             <label className="settings-row">
-              <span className="settings-label">Default theme</span>
-              <select className="select" aria-label="Default theme" disabled={!editable} value={draft.theme} onChange={(e) => update({ theme: e.target.value as ThemeChoice | "" })}>
+              <span className="settings-label">Theme</span>
+              <select className="select" aria-label="Theme" disabled={!editable} value={draft.theme} onChange={(e) => update({ theme: e.target.value as ThemeChoice | "" })}>
                 <option value="">theme.yml if present, else system</option>
                 <option value="system">System</option>
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
-                <option value="base16">base16</option>
+                {scheme ? (
+                  <option value="base16" title={scheme.name ?? undefined}>
+                    base16
+                  </option>
+                ) : (
+                  <option value="base16">base16</option>
+                )}
               </select>
             </label>
+            <div className="settings-row settings-slider-row">
+              <span className="settings-label" id="settings-text-size-label">
+                Chat text size
+              </span>
+              <div className="text-slider">
+                <input
+                  type="range"
+                  className="text-slider-input"
+                  aria-label="Chat text size"
+                  disabled={!editable}
+                  min={SCALE_MIN}
+                  max={SCALE_MAX}
+                  step={0.01}
+                  value={draft.textScale}
+                  style={{ "--slider-fill": `${SCALE_MAX <= SCALE_MIN ? 0 : Math.min(100, Math.max(0, ((draft.textScale - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100))}%` } as CSSProperties}
+                  onChange={(e) => update({ textScale: Number(e.target.value) })}
+                />
+                <span className="text-slider-reset">
+                  {draft.textScale !== 1 ? (
+                    <button
+                      type="button"
+                      className="ghost-icon"
+                      aria-label="Reset text size"
+                      title="Reset to 100%"
+                      disabled={!editable}
+                      onClick={() => update({ textScale: 1 })}
+                    >
+                      <IconRefresh size={14} />
+                    </button>
+                  ) : null}
+                </span>
+                <output className="text-slider-value" aria-live="off">
+                  {Math.round(draft.textScale * 100)}%
+                </output>
+              </div>
+            </div>
             <label className="settings-row settings-check">
               <input type="checkbox" disabled={!editable} checked={draft.autocollapseSidebar} onChange={(e) => update({ autocollapseSidebar: e.target.checked })} />
               <span>Fold the sidebar away in narrow windows</span>
