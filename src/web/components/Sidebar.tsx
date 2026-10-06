@@ -6,6 +6,7 @@ import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../sessio
 import type { ThemeMode } from "../theme.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
+import { WorkingRing } from "./WorkingRing.js";
 
 /** Sessions shown per project before "Show N more". */
 const VISIBLE_CURRENT = 8;
@@ -31,10 +32,6 @@ function relativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
-/** Hermes-style spinning ring for a session whose run is in progress; harness-coloured in the All view. */
-function WorkingRing({ harnessId, colored }: { harnessId?: string | undefined; colored: boolean }) {
-  return <span className={`working-ring${colored ? " is-harness" : ""}`} style={colored ? harnessColor(harnessId) : undefined} role="img" aria-label="Working" title="Working" />;
-}
 
 function SessionRow({
   s,
