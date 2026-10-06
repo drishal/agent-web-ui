@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { historyToItems, toolCategory } from "../../src/server/harness/agent-events.js";
-import { applyReports, asyncReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords } from "../../src/server/harness/subagents.js";
+import { applyReports, asyncReports, detailReports, notifyReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords } from "../../src/server/harness/subagents.js";
 
 describe("subagents", () => {
   it("knows delegation tools, and not todo lists", () => {
@@ -68,6 +68,29 @@ describe("subagents", () => {
     ]);
     expect(detailReports({ proc: { op: "cancel", jobs: [{ id: "X", type: "task", status: "cancelled" }] } })).toEqual([{ id: "X", status: "stopped" }]);
     expect(applyReports(spawned as NonNullable<typeof spawned>, [{ id: "Other", status: "done" }])).toBeNull();
+  });
+
+  it("keeps pi-subagents' background runs running until their notice comes", () => {
+    const start = runsFromArgs({ agent: "scout", task: "count", async: true });
+    const launched = runsFromDetails("call3", { mode: "single", results: [], asyncId: "d2027", asyncDir: "/tmp/runs/d2027" }, start);
+    expect(launched).toMatchObject({ background: true, runs: [{ id: "0", status: "running", ref: "d2027", transcript: true }] });
+    // The launch text is no answer.
+    expect(settleRuns(launched as NonNullable<typeof launched>, "Async: scout [d2027]", false).runs[0]?.status).toBe("running");
+    const notice = notifyReports(
+      "subagent-notify",
+      "Background task completed: **scout**\n\nscout:\nlist.txt has 3 lines.\n\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/d2027",
+    );
+    expect(notice).toEqual([{ id: "d2027", status: "done", output: "list.txt has 3 lines." }]);
+    expect(applyReports(launched as NonNullable<typeof launched>, notice)?.runs[0]).toMatchObject({ status: "done", output: "list.txt has 3 lines." });
+    const grouped = notifyReports(
+      "subagent-notify",
+      "Background tasks completed (2): **a**, **b**\n\n1. a\nfirst\nRetention-managed async directory: /x/r1\n\n2. b\n(no output)\nRetention-managed async directory: /x/r2",
+    );
+    expect(grouped).toEqual([
+      { id: "r1", status: "done", output: "first" },
+      { id: "r2", status: "done" },
+    ]);
+    expect(notifyReports("book-recall", "Background task completed: **x**")).toEqual([]);
   });
 
   it("settles a call that answered in text, and rebuilds runs from history", () => {

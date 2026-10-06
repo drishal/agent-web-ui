@@ -164,6 +164,8 @@ export interface SubagentRun {
   error?: string;
   /** Its own transcript, readable through /api/chats/:id/tools/:toolId/agents/:runId. */
   transcript?: boolean;
+  /** The harness's id for the run it belongs to (pi-subagents' asyncId), to match its later report. */
+  ref?: string;
 }
 
 export interface SubagentsInfo {

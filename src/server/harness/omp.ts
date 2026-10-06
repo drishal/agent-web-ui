@@ -26,6 +26,7 @@ import {
   type ModelInfo,
   type QueueState,
   type SlashCommand,
+  type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
@@ -628,9 +629,10 @@ export class OmpAdapter implements HarnessAdapter {
    * omp keeps each subagent's transcript beside its parent session:
    * `<session>/<id>.jsonl`, and a nested agent's as `<session>/<parent>/<parent>.<id>.jsonl`.
    */
-  async subagentTranscriptFile(nativeId: string, runId: string): Promise<string | null> {
+  async subagentTranscriptFile(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<string | null> {
+    const runId = run.id;
     if (!/^[\w.-]{1,128}$/.test(runId)) return null;
-    const file = await this.sessionFile(nativeId);
+    const file = await this.sessionFile(chat.nativeId);
     if (!file) return null;
     const root = file.slice(0, -".jsonl".length);
     const search = async (dir: string, depth: number): Promise<string | null> => {

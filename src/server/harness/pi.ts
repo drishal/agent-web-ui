@@ -21,6 +21,7 @@ import {
   type ModelInfo,
   type QueueState,
   type SlashCommand,
+  type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
@@ -458,6 +459,20 @@ export class PiAdapter implements HarnessAdapter {
 
   async resolveSessionDir(cwd: string): Promise<string> {
     return this.sessionDirFor(cwd, await this.resolveAgentDir());
+  }
+
+  /**
+   * pi-subagents' background runs report no transcript path; their transcripts
+   * sit in the session folder's subagent-artifacts as
+   * `<run id>_<agent>[_<index>]_transcript.jsonl`.
+   */
+  async subagentTranscriptFile(chat: { cwd: string }, run: SubagentRun): Promise<string | null> {
+    if (!run.ref || !/^[\w-]{1,128}$/.test(run.ref) || !/^[\w.-]{1,64}$/.test(run.agent)) return null;
+    const dir = path.join(this.sessionDirFor(chat.cwd, await this.resolveAgentDir()), "subagent-artifacts");
+    const names = await fs.readdir(dir).catch(() => [] as string[]);
+    const exact = `${run.ref}_${run.agent}_${run.id}_transcript.jsonl`;
+    const hit = names.find((n) => n === exact) ?? names.find((n) => n === `${run.ref}_${run.agent}_transcript.jsonl`);
+    return hit ? path.join(dir, hit) : null;
   }
 
   async listSessions(cwd: string): Promise<NativeSessionSummary[]> {

@@ -13,6 +13,7 @@ import type {
   ModelInfo,
   QueueState,
   SlashCommand,
+  SubagentRun,
   TodoItem,
 } from "../../shared/protocol.js";
 import type { HandoffSeed } from "./handoff.js";
@@ -168,7 +169,7 @@ export interface HarnessAdapter {
    */
   readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
   /** Kill helper processes; called on server shutdown. */
-  /** Where a subagent's transcript lives when its harness keeps it beside the session (omp), or null. */
-  subagentTranscriptFile?(nativeId: string, runId: string): Promise<string | null>;
+  /** Where a subagent's transcript lives when its result did not say (omp's runs; pi-subagents' background ones), or null. */
+  subagentTranscriptFile?(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<string | null>;
   shutdown(): Promise<void>;
 }

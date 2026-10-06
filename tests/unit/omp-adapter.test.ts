@@ -169,6 +169,23 @@ describe("omp adapter (scripted omp)", () => {
     expect(titles["01a0aaaa-0000-7000-8000-000000000000"]).toBe("Untitled");
   });
 
+  it("finds a subagent's transcript beside its session, nested agents included", async () => {
+    const saved = existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { sessions: {}, spawns: [] };
+    const parent = "01a0dddd-0000-7000-8000-000000000000";
+    saved.sessions[parent] = { cwd: project, title: "delegating", messages: [{ role: "user", content: "x" }] };
+    writeFileSync(state, JSON.stringify(saved));
+    const dir = path.join(home, ".omp", "agent", "sessions", "-proj");
+    const stem = path.join(dir, `2026-10-04T19-15-52-234Z_${parent}`);
+    mkdirSync(path.join(stem, "CrookedThrush"), { recursive: true });
+    writeFileSync(`${stem}.jsonl`, "");
+    writeFileSync(path.join(stem, "CrookedThrush.jsonl"), "");
+    writeFileSync(path.join(stem, "CrookedThrush", "CrookedThrush.GleamingTortoise.jsonl"), "");
+    const run = (id: string) => ({ id, agent: "task", task: "", status: "done" as const });
+    expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("CrookedThrush"))).toBe(path.join(stem, "CrookedThrush.jsonl"));
+    expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("GleamingTortoise"))).toBe(path.join(stem, "CrookedThrush", "CrookedThrush.GleamingTortoise.jsonl"));
+    expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("../escape"))).toBeNull();
+  });
+
   it("orders sessions by their last message, not omp's exit records", async () => {
     // omp's session/list says every session changed just now (the fixture, like omp after a session_exit).
     const saved = existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { sessions: {}, spawns: [] };

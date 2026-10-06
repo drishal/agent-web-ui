@@ -4,7 +4,7 @@
 import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
-import { applyReports, asyncReports, detailReports, isAgentTool, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
+import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -311,7 +311,7 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
         return [{ type: "assistant_start", ...(typeof message.model === "string" ? { model: message.model } : {}) }];
       }
       if (message.role === "custom") {
-        const reports = asyncReports(message.customType, message.content, message.details);
+        const reports = [...asyncReports(message.customType, message.content, message.details), ...notifyReports(message.customType, message.content)];
         const shown = message.display === true ? extensionMessage(message.customType, message.content) : null;
         return [...(reports.length > 0 ? [{ type: "subagent_reports" as const, reports }] : []), ...(shown ? [{ type: "notice" as const, level: "info" as const, ...shown }] : [])];
       }
@@ -504,7 +504,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
         items.push({ kind: "notice", id: nextId("n"), level: "info", text: "Returned from another branch (summarized)" });
         break;
       case "custom": {
-        const reports = asyncReports(raw.customType, raw.content, raw.details);
+        const reports = [...asyncReports(raw.customType, raw.content, raw.details), ...notifyReports(raw.customType, raw.content)];
         if (reports.length > 0) report(reports);
         if (raw.display === true) {
           const shown = extensionMessage(raw.customType, raw.content);

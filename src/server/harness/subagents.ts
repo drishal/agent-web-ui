@@ -145,6 +145,11 @@ function merge(prior: SubagentRun | undefined, row: Obj, fallbackId: string): Su
 /** Fold a call's details (a live update or its result) into its runs. */
 export function runsFromDetails(toolCallId: string, details: unknown, prior: SubagentsInfo | null): SubagentsInfo | null {
   if (!isObj(details)) return prior;
+  // pi-subagents' background launch: no rows yet, only the run's id; its notice comes later.
+  const asyncId = str(details.asyncId);
+  if (asyncId && prior) {
+    return { ...prior, background: true, runs: prior.runs.map((r) => ({ ...r, ref: asyncId, status: r.status === "pending" ? "running" : r.status, transcript: true })) };
+  }
   const rows: Obj[] = [];
   // Results are authoritative; progress fills in runs that have no result yet.
   const results = Array.isArray(details.results) ? details.results.filter(isObj) : [];
@@ -255,11 +260,41 @@ export function asyncReports(customType: unknown, content: unknown, details: unk
   return [...out.values()];
 }
 
+/**
+ * pi-subagents' background completion (a `subagent-notify` message):
+ * "Background task completed: **scout** …", a preview of the answer, and the
+ * run's async directory, which ends in its run id; several come as a
+ * numbered list.
+ */
+export function notifyReports(customType: unknown, content: unknown): AgentReport[] {
+  if (customType !== "subagent-notify") return [];
+  const text = typeof content === "string" ? content : Array.isArray(content) ? content.map((b) => (isObj(b) && typeof b.text === "string" ? b.text : "")).join("\n") : "";
+  const single = /^(?:Detached foreground|Background) task (\w+): \*\*([^*]+)\*\*/.exec(text);
+  const grouped = /^Background tasks (\w+) \(\d+\):/.exec(text);
+  if (!single && !grouped) return [];
+  const blocks = single ? [text] : text.split(/\n(?=\d+\. )/).slice(1);
+  return blocks.flatMap((block): AgentReport[] => {
+    const dir = /async directory: (\S+)/.exec(block)?.[1];
+    const id = dir?.replace(/\/+$/, "").split("/").pop();
+    if (!id) return [];
+    const agent = /\*\*([^*]+)\*\*/.exec(block)?.[1] ?? (/^\d+\. (\S+)/.exec(block)?.[1] ?? "");
+    const preview = block
+      .split("\n")
+      .slice(1)
+      .filter((l) => !/^(Retention-managed async directory|Workflow run|Child runs|Reconciled detached child|Session|Parallel handoff):/.test(l))
+      .join("\n")
+      .trim()
+      // The preview opens with the agent's name ("scout:"), which the row already shows.
+      .replace(new RegExp(`^${agent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*\\n`), "");
+    return [{ id, status: status(single ? single[1] : (grouped?.[1] ?? "completed")), ...(preview && preview !== "(no output)" ? { output: bound(preview) } : {}) }];
+  });
+}
+
 /** Apply background reports to a call's runs; null when none of them is this call's. */
 export function applyReports(info: SubagentsInfo, reports: AgentReport[]): SubagentsInfo | null {
   let touched = false;
   const runs = info.runs.map((r): SubagentRun => {
-    const report = reports.find((x) => x.id === r.id);
+    const report = reports.find((x) => x.id === r.id || (r.ref !== undefined && x.id === r.ref));
     if (!report) return r;
     touched = true;
     // Still running: keep what it was doing.

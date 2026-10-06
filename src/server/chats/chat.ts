@@ -917,7 +917,9 @@ export class Chat {
     const run = tool?.kind === "tool" ? tool.subagents?.runs.find((r) => r.id === runId) : undefined;
     if (!tool || tool.kind !== "tool" || !run) throw new ChatError(404, "no_subagent", "No such subagent in this chat");
     const callId = toolId.replace(/^t:/, "");
-    const file = transcriptFile(callId, runId) ?? (this.nativeId && this.adapter.subagentTranscriptFile ? await this.adapter.subagentTranscriptFile(this.nativeId, runId) : null);
+    const file =
+      transcriptFile(callId, runId) ??
+      (this.nativeId && this.adapter.subagentTranscriptFile ? await this.adapter.subagentTranscriptFile({ nativeId: this.nativeId, cwd: this.workspace.path }, run) : null);
     if (!file) return { run, items: [] };
     let text: string;
     try {
