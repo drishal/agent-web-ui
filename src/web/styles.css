@@ -1216,8 +1216,14 @@ body.is-resizing {
 
 .diff-stat {
   flex: none;
-  margin-left: 8px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.drow-aside {
+  flex: none;
+  margin-left: 8px;
+  font-size: calc(var(--chat-small) - 0.6px);
 }
 
 .diff-added {
@@ -1259,16 +1265,363 @@ body.is-resizing {
   font-weight: 600;
 }
 
-/* Tool input/output card (DeepSeek Harness). */
-.io-card {
+/* Tool card (DeepSeek Harness's I/O card): a header naming what the call
+   touched, then its diff, terminal, or input/output. */
+.tool-card {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--hairline);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--code-bg);
   font-family: var(--font-mono);
   font-size: calc(12px * var(--chat-scale));
   line-height: 1.55;
+}
+
+.tool-card.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--hairline));
+}
+
+.tool-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  color: var(--text-2);
+}
+
+.tool-card-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+.tool-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-card-prose {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans);
+}
+
+.tool-card-sep {
+  color: var(--muted);
+  font-family: var(--font-sans);
+}
+
+.tool-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.tool-card-meta .diff-stat {
+  margin-left: 0;
+  font-family: var(--font-mono);
+}
+
+.tool-card-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--link);
+  text-decoration: none;
+}
+
+.tool-card-link:hover {
+  text-decoration: underline;
+}
+
+.tool-chip {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.term-meta {
+  float: right;
+  display: flex;
+  gap: 6px;
+  margin: 0 0 4px 12px;
+}
+
+.tool-chip.is-quiet {
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.tool-card-note {
+  padding: 7px 12px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-card-note.is-error {
+  color: var(--danger);
+}
+
+.tool-card-raw {
+  border-top: 1px solid var(--hairline);
+}
+
+.tool-card-raw > summary {
+  padding: 6px 12px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.tool-card-raw > pre {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 0 12px 10px;
+}
+
+/* Diffs: tinted rows, a number gutter, the changed words marked. */
+.diff {
+  --diff-add-bg: color-mix(in srgb, var(--ok) 11%, transparent);
+  --diff-add-mark: color-mix(in srgb, var(--ok) 30%, transparent);
+  --diff-del-bg: color-mix(in srgb, var(--danger) 10%, transparent);
+  --diff-del-mark: color-mix(in srgb, var(--danger) 28%, transparent);
+  max-height: 440px;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  padding: 4px 0;
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.diff.is-numbered .diff-line {
+  grid-template-columns: minmax(3.2ch, max-content) 20px minmax(0, 1fr);
+}
+
+.diff-no {
+  padding: 0 4px 0 10px;
+  color: var(--muted);
+  opacity: 0.7;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.diff-sign {
+  color: var(--muted);
+  text-align: center;
+  user-select: none;
+}
+
+.diff-text {
+  min-width: 0;
+  padding-right: 12px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line.is-add {
+  background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+
+.diff-line.is-del {
+  background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+
+.diff-line.is-add .diff-sign,
+.diff-line.is-add .diff-no {
+  color: var(--ok);
+  opacity: 1;
+}
+
+.diff-line.is-del .diff-sign,
+.diff-line.is-del .diff-no {
+  color: var(--danger);
+  opacity: 1;
+}
+
+.diff-line.is-add .diff-text,
+.diff-line.is-del .diff-text {
+  color: var(--text);
+}
+
+.diff-word {
+  border-radius: 3px;
+  color: inherit;
+}
+
+.is-add .diff-word {
+  background: var(--diff-add-mark);
+}
+
+.is-del .diff-word {
+  background: var(--diff-del-mark);
+}
+
+.diff-hunk {
+  padding: 3px 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-gap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 12px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.diff-gap::before,
+.diff-gap::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--hairline-strong);
+}
+
+.diff-more {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  background: none;
+  color: var(--link);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+}
+
+/* A command as a terminal: the prompt, then what it printed. */
+.term {
+  position: relative;
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  padding: 9px 12px;
+}
+
+.term-command,
+.term-output {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.term-command {
+  color: var(--text);
+}
+
+.term-prompt {
+  margin-right: 8px;
+  color: var(--ok);
+  font-weight: 600;
+  user-select: none;
+}
+
+.term-output {
+  margin-top: 6px;
+  color: var(--text-2);
+}
+
+.term-output.is-error {
+  color: var(--danger);
+}
+
+.term-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.term-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.1em;
+  margin-top: 4px;
+  vertical-align: text-bottom;
+  background: var(--text-2);
+  animation: blink 1.05s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.io-pending {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 1.4em;
+}
+
+.io-pending > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: dot-wave 1.1s ease-in-out infinite;
+}
+
+.io-pending > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.io-pending > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-wave {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .io-section {
@@ -1330,6 +1683,22 @@ body.is-resizing {
   margin: 0;
   min-width: 0;
   color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.io-kv-row.is-block {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 3px;
+}
+
+.io-kv-pre {
+  margin: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
   white-space: pre-wrap;
   word-break: break-word;
 }

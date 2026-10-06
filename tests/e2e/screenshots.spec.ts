@@ -80,3 +80,17 @@ for (const [name, viewport] of [
     await page.screenshot({ path: `${dir}/picker-${name}-search.png` });
   });
 }
+
+test("capture tool cards", async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 2400 });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "showcase");
+  await page.getByTestId("process-toggle").first().click();
+  for (const row of await page.getByTestId("tool-row").all()) await row.locator("button").first().click();
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${dir}/tools-${scheme}.png`, fullPage: true });
+  }
+});

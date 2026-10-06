@@ -9,6 +9,7 @@ import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, Ic
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Markdown } from "./Markdown.js";
+import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { TurnRail } from "./TurnRail.js";
 
 const PIN_DISTANCE_PX = 96;
@@ -20,6 +21,7 @@ function DisclosureRow({
   icon,
   title,
   summary,
+  aside,
   tone,
   children,
   defaultOpen = false,
@@ -29,6 +31,8 @@ function DisclosureRow({
   icon: React.ReactNode;
   title: React.ReactNode;
   summary?: React.ReactNode;
+  /** Kept whole at the end of the line (a diff count), however long the summary. */
+  aside?: React.ReactNode;
   tone?: "error" | "warn";
   children?: React.ReactNode;
   defaultOpen?: boolean;
@@ -62,6 +66,7 @@ function DisclosureRow({
             <span className="drow-summary">{summary}</span>
           </>
         ) : null}
+        {aside ? <span className="drow-aside">{aside}</span> : null}
       </button>
       {open && expandable ? <div className="drow-body">{children}</div> : null}
     </div>
@@ -70,38 +75,6 @@ function DisclosureRow({
 
 function firstLine(text: string): string {
   return text.trim().split("\n").find((l) => l.trim()) ?? "";
-}
-
-/** One arg value rendered compactly: objects collapse to one line, long text truncates. */
-function argValue(value: unknown): string {
-  if (typeof value === "string") return value.length > 300 ? `${value.slice(0, 300)}…` : value;
-  try {
-    const text = JSON.stringify(value) ?? "";
-    return text.length > 300 ? `${text.slice(0, 300)}…` : text;
-  } catch {
-    return String(value);
-  }
-}
-
-/**
- * Structured args (the JSON the server stored) as key-value rows, like
- * Hermes Desktop's kv content type. Verbatim text (an omp patch block)
- * and unparseable args render as a plain block instead.
- */
-function argEntries(args: string): Array<[string, string]> | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(args);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const out: Array<[string, string]> = [];
-  for (const [key, value] of Object.entries(parsed)) {
-    if (value === undefined || value === null || value === "") continue;
-    out.push([key, argValue(value)]);
-  }
-  return out.length > 0 ? out : null;
 }
 
 const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking: string; streaming: boolean }) {
@@ -122,7 +95,6 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const failed = item.status === "error";
   const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
   const summary = item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
-  const argFields = argEntries(item.args);
   return (
     <div className="tool-row" data-testid="tool-row" data-tool={item.name} data-status={item.status}>
       <DisclosureRow
@@ -131,40 +103,13 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
         summary={
           <>
             {summary}
-            {item.diffStat && (item.diffStat.added > 0 || item.diffStat.removed > 0) ? (
-              <span className="diff-stat" aria-label={`${item.diffStat.added} additions, ${item.diffStat.removed} deletions`}>
-                <span className="diff-added">+{item.diffStat.added}</span> <span className="diff-removed">−{item.diffStat.removed}</span>
-              </span>
-            ) : null}
             {failed ? <span className="drow-suffix"> · failed</span> : null}
           </>
         }
+        aside={item.diffStat ? <DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /> : null}
         {...(failed ? { tone: "error" as const } : {})}
       >
-        <div className="io-card">
-          {item.args ? (
-            <div className="io-section">
-              <span className="io-label">Input</span>
-              {argFields ? (
-                <dl className="io-kv">
-                  {argFields.map(([key, value]) => (
-                    <div className="io-kv-row" key={key}>
-                      <dt className="io-kv-key">{key}</dt>
-                      <dd className="io-kv-value">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <pre className="io-text">{item.args}</pre>
-              )}
-            </div>
-          ) : null}
-          {item.args ? <div className="io-divider" /> : null}
-          <div className="io-section">
-            <span className="io-label">Output{item.truncated ? " (truncated)" : ""}</span>
-            <pre className={`io-text${failed ? " is-error" : ""}`}>{item.output || (item.status === "running" ? "…" : "(no output)")}</pre>
-          </div>
-        </div>
+        <ToolBody item={item} workspace={workspace} />
       </DisclosureRow>
     </div>
   );

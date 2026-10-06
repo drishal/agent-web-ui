@@ -56,7 +56,7 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await expect(row).toHaveAttribute("data-status", "done");
   await expect(row).toContainText("README.md");
   await row.getByRole("button").first().click();
-  await expect(row.locator(".io-card")).toContainText("# Fake README");
+  await expect(row.locator(".tool-card")).toContainText("# Fake README");
   await expect(page.getByTestId("thought-row").last()).toContainText("Thought");
   await expect(page.getByRole("button", { name: "Copy reply" }).last()).toBeVisible();
 });
@@ -71,7 +71,30 @@ test("an edit row carries its +N −M badge", async ({ page }) => {
   await expect(row.getByText("+1", { exact: true })).toBeVisible();
   await expect(row.getByText("−1", { exact: true })).toBeVisible();
   await row.getByRole("button").first().click();
-  await expect(row.locator(".io-kv-key").first()).toHaveText("path");
+  // Opened, it is the diff: the old line in red, the new in green.
+  await expect(row.locator(".diff-line.is-del .diff-text")).toHaveText("a");
+  await expect(row.locator(".diff-line.is-add .diff-text")).toHaveText("b");
+});
+
+test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "showcase");
+  await openFold(page);
+  const tool = (name: string) => page.locator(`[data-testid="tool-row"][data-tool="${name}"]`);
+  for (const name of ["edit", "write", "bash", "grep", "web_fetch"]) await tool(name).getByRole("button").first().click();
+  // Pi's own diff wins over the arguments': its line numbers, its skipped run, the changed words marked.
+  const edit = tool("edit");
+  await expect(edit.locator(".diff-line.is-add .diff-no").first()).toHaveText("11");
+  await expect(edit.locator(".diff-gap")).toHaveCount(1);
+  await expect(edit.locator(".diff-line.is-add .diff-word").first()).toHaveText(", host");
+  await expect(edit.locator(".drow-aside")).toHaveText("+3 −2");
+  await expect(tool("write").locator(".diff-line.is-add")).toHaveCount(4);
+  await expect(tool("write").locator(".drow-aside")).toHaveText("+4");
+  await expect(tool("bash").locator(".term-command")).toHaveText("$npm test -- --run tool-diff");
+  await expect(tool("bash").locator(".term-output")).toContainText("5 passed");
+  await expect(tool("grep").locator(".tool-chip")).toHaveText("listen\\(");
+  await expect(tool("web_fetch").getByRole("link", { name: "https://example.com/docs/listen" })).toBeVisible();
 });
 
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
