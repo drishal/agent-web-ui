@@ -8,6 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, RequestItem, Tool
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
+import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { TurnRail } from "./TurnRail.js";
@@ -95,8 +96,11 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const failed = item.status === "error";
   const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
   const summary = item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
+  const arrival = useArrival(item.id);
+  // Seen running: its icon change (spinner to done) animates.
+  const [live] = useState(item.status === "running");
   return (
-    <div className="tool-row" data-testid="tool-row" data-tool={item.name} data-status={item.status}>
+    <div className={`tool-row${arrival}${live ? " is-live" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
       <DisclosureRow
         icon={icon}
         title={item.name}
@@ -116,11 +120,12 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
 });
 
 function NoticeRow({ item }: { item: NoticeItem }) {
+  const arrival = useArrival(item.id);
   const icon = item.level === "error" ? <IconWarning size={14} /> : item.level === "warning" ? <IconWarning size={14} /> : <IconInfo size={14} />;
   // An extension's message (a memory recall, say): just its label, opening to the full text.
   if (item.detail) {
     return (
-      <div className="notice-row notice-detail" data-testid="extension-message">
+      <div className={`notice-row notice-detail${arrival}`} data-testid="extension-message">
         <DisclosureRow icon={icon} title={item.title ?? "Extension"}>
           <pre className="thought-body">{item.detail}</pre>
         </DisclosureRow>
@@ -128,7 +133,7 @@ function NoticeRow({ item }: { item: NoticeItem }) {
     );
   }
   return (
-    <div className={`notice-row notice-${item.level}`} role={item.level === "error" ? "alert" : undefined}>
+    <div className={`notice-row notice-${item.level}${arrival}`} role={item.level === "error" ? "alert" : undefined}>
       <span className="notice-icon">{icon}</span>
       <span className="notice-text">{item.text}</span>
     </div>
@@ -136,10 +141,11 @@ function NoticeRow({ item }: { item: NoticeItem }) {
 }
 
 function RequestRow({ item }: { item: RequestItem }) {
+  const arrival = useArrival(item.id);
   const outcome = item.outcome ?? "Waiting for you…";
   const tone = /Denied|Cancelled|Dismissed/.test(outcome) ? "warn" : undefined;
   return (
-    <div className="request-row" data-testid="request-row">
+    <div className={`request-row${arrival}`} data-testid="request-row">
       <DisclosureRow
         icon={item.outcome ? (tone ? <IconX size={14} /> : <IconCheck size={14} />) : <Spinner size={13} />}
         title={item.request.kind === "confirm" || item.request.options?.includes("Approve") ? "Approval" : "Question"}
@@ -156,19 +162,25 @@ function RequestRow({ item }: { item: RequestItem }) {
   );
 }
 
+/** Thinking and interim text between tool calls. */
+function ProcessAssistant({ item }: { item: AssistantItem }) {
+  const arrival = useArrival(item.id);
+  return (
+    <div className={`process-step${arrival}`}>
+      {item.thinking ? <ThoughtRow thinking={item.thinking} streaming={item.streaming && !item.text} /> : null}
+      {item.text ? (
+        <div className="process-text">
+          <Markdown text={item.text} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string }) {
   switch (item.kind) {
     case "assistant":
-      return (
-        <>
-          {item.thinking ? <ThoughtRow thinking={item.thinking} streaming={item.streaming && !item.text} /> : null}
-          {item.text ? (
-            <div className="process-text">
-              <Markdown text={item.text} />
-            </div>
-          ) : null}
-        </>
-      );
+      return <ProcessAssistant item={item} />;
     case "tool":
       return <ToolRow item={item} workspace={workspace} />;
     case "notice":
@@ -183,8 +195,9 @@ function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string })
 function UserPrompt({ item }: { item: UserItem }) {
   const long = item.text.length > LONG_PROMPT_CHARS || item.text.split("\n").length > LONG_PROMPT_LINES;
   const [expanded, setExpanded] = useState(false);
+  const arrival = useArrival(item.id);
   return (
-    <div className="turn-prompt">
+    <div className={`turn-prompt${arrival}`}>
       <div className="bubble-stack">
         <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
           {item.text}
@@ -208,8 +221,9 @@ function Answer({ item, through, canFork, onFork }: { item: AssistantItem; throu
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const stopped = item.error === "Stopped";
+  const arrival = useArrival(item.id);
   return (
-    <div className="answer" data-testid="answer">
+    <div className={`answer${arrival}`} data-testid="answer">
       {item.text ? <Markdown text={item.text} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}
@@ -385,18 +399,22 @@ const TurnView = memo(function TurnView({
 });
 
 export function Conversation({
+  chatId,
   items,
   status,
   workspace,
   canFork,
   onFork,
 }: {
+  chatId: string;
   items: ChatItem[];
   status: ChatStatus;
   workspace: string;
   canFork: boolean;
   onFork: (through: number) => void;
 }) {
+  const [arrivals] = useState(() => new Arrivals());
+  arrivals.update(chatId, items);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -471,11 +489,13 @@ export function Conversation({
   return (
     <div className="conversation-wrap">
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
-        <div className="thread">
-          {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
-          ))}
-        </div>
+        <ArrivalsContext.Provider value={arrivals}>
+          <div className="thread">
+            {turns.map((turn) => (
+              <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
+            ))}
+          </div>
+        </ArrivalsContext.Provider>
       </div>
       <TurnRail turns={turns} scroller={scroller} />
       {showJump ? (

@@ -4001,3 +4001,239 @@ button.harness-chip:disabled {
     padding-left: 0;
   }
 }
+
+/* ---- motion ----------------------------------------------------------------
+   Short and eased out: popovers grow from the side they open on, dialogs
+   settle in, rows that arrive during a run slide into place, and what is
+   still working shimmers. Content loaded at once (a resume, a tab switch)
+   never animates; prefers-reduced-motion turns all of it off (top of file). */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@keyframes pop-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+@keyframes icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(-30deg);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* Popovers: up from the composer, down from the sidebar and the header. */
+.command-menu,
+.harness-menu,
+.usage-pop,
+.model-pop {
+  transform-origin: bottom left;
+  animation: pop-up 0.16s var(--ease-out);
+}
+
+.usage-pop {
+  transform-origin: bottom right;
+}
+
+.is-row > .harness-menu,
+.model-pop.is-below {
+  transform-origin: top left;
+  animation-name: pop-down;
+}
+
+.menu-list {
+  transform-origin: top right;
+  animation: pop-down 0.16s var(--ease-out);
+}
+
+.model-backdrop,
+.backdrop.is-open {
+  animation: fade-in 0.18s ease;
+}
+
+/* Options and menu items: hover fills fade instead of snapping. */
+.harness-option,
+.model-option,
+.menu-list button,
+.command-item,
+.session-tab,
+.ghost-icon,
+.drow-head,
+.process-head,
+.picker-item {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+/* Dialogs settle in over a fading backdrop. */
+.dialog[open] {
+  animation: settle-in 0.22s var(--ease-out);
+}
+
+.dialog[open]::backdrop {
+  animation: fade-in 0.22s ease;
+}
+
+@media (max-width: 819px) {
+  .model-pop,
+  .model-pop.is-below {
+    transform-origin: bottom center;
+    animation: rise-in 0.22s var(--ease-out);
+  }
+}
+
+/* Disclosures open with their content easing down; chevrons turn. */
+.drow-body,
+.process-body,
+.tool-card-raw[open] > pre {
+  animation: slide-in 0.18s var(--ease-out);
+}
+
+.drow-chevron,
+.process-chevron {
+  transition:
+    transform 0.2s var(--ease-out),
+    opacity 0.1s ease;
+}
+
+/* Transcript items that arrive while the chat is on screen. */
+.turn-prompt.is-arriving .bubble {
+  transform-origin: bottom right;
+  animation: settle-in 0.26s var(--ease-out);
+}
+
+.tool-row.is-arriving,
+.notice-row.is-arriving,
+.request-row.is-arriving,
+.process-step.is-arriving {
+  animation: slide-in 0.22s var(--ease-out);
+}
+
+.answer.is-arriving {
+  animation: fade-in 0.3s ease;
+}
+
+/* A call seen running: its icon pops when the spinner gives way. */
+.tool-row.is-live:not([data-status="running"]) .drow-icon > svg {
+  animation: icon-in 0.32s var(--ease-spring);
+}
+
+.tool-row.is-live .drow-aside {
+  animation: fade-in 0.3s ease;
+}
+
+/* Working: the label shimmers while the turn, a tool, or a thought runs. */
+.process.is-live .process-label,
+.tool-row[data-status="running"] .drow-title,
+.drow-head:has(.spinner) .drow-title {
+  background: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      var(--muted) 35%,
+      var(--text) 50%,
+      var(--muted) 65%,
+      var(--muted) 100%
+    )
+    0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* Tool cards ease their live output in. */
+.term-output,
+.tool-card-note {
+  animation: fade-in 0.2s ease;
+}
+
+.jump {
+  animation: rise-in-centered 0.2s var(--ease-out);
+}
+
+@keyframes rise-in-centered {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+/* Tabs: a new one grows into the strip. */
+.session-tab {
+  animation: tab-in 0.2s var(--ease-out);
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Buttons give a little under the pointer. */
+.btn:active:not(:disabled),
+.ghost-icon:active:not(:disabled),
+.round-btn:active:not(:disabled),
+.pill-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn,
+.ghost-icon,
+.round-btn,
+.pill-btn {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s ease;
+}

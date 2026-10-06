@@ -637,7 +637,7 @@ export function App() {
           </div>
         ) : chat ? (
           <>
-            <Conversation items={chat.items} status={chat.status} workspace={chat.workspace.path} canFork={chat.capabilities.supportsFork} onFork={forkChat} />
+            <Conversation chatId={chat.chatId} items={chat.items} status={chat.status} workspace={chat.workspace.path} canFork={chat.capabilities.supportsFork} onFork={forkChat} />
             {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
             <Composer
               key={chat.chatId}
