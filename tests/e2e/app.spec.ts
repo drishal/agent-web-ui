@@ -715,9 +715,10 @@ test("an extension's message (a memory recall) shows as a labelled row, not its 
   await sendAndWait(page, "recall what you know");
   await page.getByTestId("process-toggle").last().click();
   const row = page.getByTestId("extension-message").last();
-  await expect(row).toContainText("Memory");
-  await expect(row).toContainText("Your memory book: notes about the user.");
+  // Closed, it is just its label; the text is one click away, without the envelope.
+  await expect(row).toHaveText("Memory");
   await expect(page.getByText("<memory>")).toHaveCount(0);
   await row.getByRole("button").first().click();
+  await expect(row).toContainText("Your memory book: notes about the user.");
   await expect(row).toContainText("- prefers tabs over spaces");
 });

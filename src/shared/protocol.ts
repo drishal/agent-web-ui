@@ -153,7 +153,7 @@ export interface NoticeItem {
   kind: "notice";
   id: string;
   level: "info" | "warning" | "error";
-  /** The line shown; with a `detail`, its one-line summary. */
+  /** The line shown; with a `detail`, a one-line summary of it (the row itself shows only the title). */
   text: string;
   /** A label for an expandable notice (an extension's message: "Memory"). */
   title?: string;
