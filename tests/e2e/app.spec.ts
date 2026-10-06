@@ -70,6 +70,8 @@ test("an edit row carries its +N −M badge", async ({ page }) => {
   await expect(row).toHaveAttribute("data-tool", "edit");
   await expect(row.getByText("+1", { exact: true })).toBeVisible();
   await expect(row.getByText("−1", { exact: true })).toBeVisible();
+  await row.getByRole("button").first().click();
+  await expect(row.locator(".io-kv-key").first()).toHaveText("path");
 });
 
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
