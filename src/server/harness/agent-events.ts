@@ -182,6 +182,15 @@ export function editDiffStat(args: unknown): DiffStat | null {
       if (stat.added + stat.removed > 0) return stat;
     }
   }
+  // omp's hashline patch block (a file header plus `PUT`/`SWAP`/`replace`
+  // ranges with `+` additions): count the added lines; removals are not
+  // marked, so removed stays 0.
+  const input = args.input;
+  if (typeof input === "string" && (/\[.+#\w+\]/m.test(input) || /\*\*\* Begin Patch/.test(input))) {
+    let added = 0;
+    for (const line of input.split("\n")) if (line.startsWith("+")) added += 1;
+    if (added > 0) return { added, removed: 0 };
+  }
   let oldText: string | null = null;
   let newText: string | null = null;
   for (const key of OLD_KEYS) {

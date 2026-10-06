@@ -121,6 +121,7 @@ describe("agent event normalization", () => {
     expect(editDiffStat({ content: "x\ny\n" })).toEqual({ added: 2, removed: 0 });
     expect(editDiffStat({ diff: "--- a\n+++ b\n@@\n-x\n+y\n+z" })).toEqual({ added: 2, removed: 1 });
     expect(editDiffStat({ edits: [{ old_string: "a", new_string: "b" }, { old_string: "c\nd", new_string: "c" }] })).toEqual({ added: 2, removed: 3 });
+    expect(editDiffStat({ input: "[f#AB12]\nSWAP 21.=22:\n+theme: \n+  dark: x\n" })).toEqual({ added: 2, removed: 0 });
     expect(editDiffStat({ path: "f.ts" })).toBeNull();
     expect(outputDiffStat("Edited src/app.ts (+1 -1)")).toEqual({ added: 1, removed: 1 });
     expect(outputDiffStat("# Fake README\nhello")).toBeNull();
