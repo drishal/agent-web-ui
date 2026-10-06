@@ -279,7 +279,7 @@ class EventReducer {
           kind: "tool",
           id: `t:${event.toolCallId}`,
           name: event.name,
-          args: stringifyArgs(event.args),
+          args: stringifyArgs(event.args, category === "edit"),
           status: "running",
           output: "",
           truncated: false,

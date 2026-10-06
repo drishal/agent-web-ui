@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../../src/server/config.js";
-import { boundText, editDiffStat, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, editDiffStat, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("loadConfig", () => {
@@ -125,6 +125,13 @@ describe("agent event normalization", () => {
     expect(editDiffStat({ path: "f.ts" })).toBeNull();
     expect(outputDiffStat("Edited src/app.ts (+1 -1)")).toEqual({ added: 1, removed: 1 });
     expect(outputDiffStat("# Fake README\nhello")).toBeNull();
+  });
+
+  it("shows an edit's patch block verbatim instead of raw JSON", () => {
+    const patch = "[f#AB12]\nSWAP 21.=22:\n+theme: \n+  dark: x\n";
+    expect(stringifyArgs({ i: "do it", input: patch }, true)).toBe(patch);
+    expect(stringifyArgs({ i: "do it", input: patch })).toContain('"input"');
+    expect(stringifyArgs({ path: "f.ts" }, true)).toContain("f.ts");
   });
 
   it("keeps harness timestamps on rebuilt history", () => {

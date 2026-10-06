@@ -96,12 +96,18 @@ function imageCount(content: unknown): number {
   return content.filter((b) => isObj(b) && b.type === "image").length;
 }
 
-export function stringifyArgs(args: unknown): string {
+export function stringifyArgs(args: unknown, verbatimInput = false): string {
   let text: string;
-  try {
-    text = typeof args === "string" ? args : JSON.stringify(args, null, 2) ?? "";
-  } catch {
-    text = String(args);
+  // omp's edit calls carry a hashline patch block (or a context excerpt) in
+  // `input`: show it verbatim, not wrapped in JSON.
+  if (verbatimInput && isObj(args) && typeof args.input === "string" && (args.input as string).trim()) {
+    text = args.input as string;
+  } else {
+    try {
+      text = typeof args === "string" ? args : JSON.stringify(args, null, 2) ?? "";
+    } catch {
+      text = String(args);
+    }
   }
   return boundText(text, MAX_TOOL_ARGS_CHARS).text;
 }
@@ -463,7 +469,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             kind: "tool",
             id: `t:${id}`,
             name,
-            args: stringifyArgs(block.arguments),
+            args: stringifyArgs(block.arguments, category === "edit"),
             status: "running",
             output: "",
             truncated: false,
