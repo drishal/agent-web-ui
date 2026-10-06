@@ -140,6 +140,8 @@ src/server/
 src/web/                    React + Vite client
 ```
 
+**Resume without waiting.** Opening an old Pi, omp, or Claude Code session shows its transcript straight from the session file (`readTranscript`, a few milliseconds) and starts the harness behind it; the status reads *Starting* until it is up, usually under a second. A prompt or model change made meanwhile goes through once it is. Hermes keeps its history behind its gateway, so its sessions open when the gateway is ready. Session listings are warmed at startup, and Hermes's are served from cache while they refresh.
+
 **Single writer.** `chatId → live session` and `harnessId + native session id → chatId` mean the same session is never opened twice in this process. For omp that also means never two child processes. A second tab or device attaches to the existing chat as another SSE subscriber. **Another terminal or process running `pi`/`omp`/`hermes` is not locked out.** Avoid driving the same session from a terminal while it is open here.
 
 **Run lifecycle.** A run is not marked complete at a message end or a bare `agent_end`. Pi's `agent_settled` and omp's `session_settled`/`prompt_result.sessionSettled` decide it. Sends return `202` once the harness accepts them; output streams over SSE.
