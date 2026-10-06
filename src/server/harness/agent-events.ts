@@ -136,6 +136,11 @@ export function toolPaths(args: unknown): string[] {
     if (key === "target" && typeof v === "string" && !/[/.]/.test(v)) continue;
     if (typeof v === "string" && v && v.length < 1024) out.push(v);
   }
+  // omp's patch block names its file in a `[path#hash]` header.
+  if (typeof args.input === "string") {
+    const header = /^\[(.+?)#\w+\]/m.exec(args.input as string);
+    if (header?.[1]) out.push(header[1] as string);
+  }
   for (const key of ["paths", "files", "edits"]) {
     const v = args[key];
     if (!Array.isArray(v)) continue;
