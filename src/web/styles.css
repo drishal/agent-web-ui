@@ -3668,36 +3668,114 @@ body.is-resizing {
   margin-left: 8px;
 }
 
-/* The thinking picker: the model popover, narrower, with a strength meter per level. */
-.model-pop.is-compact {
-  width: 210px;
+/* The thinking picker: an effort slider from Faster to Smarter, one stop per level. */
+.effort-pop {
+  width: 280px;
+  padding: 12px 14px 14px;
+  overflow: visible;
 }
 
-.model-pop.is-compact .model-list {
-  padding-top: 2px;
+.effort-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
 }
 
-.thinking-meter {
-  flex: none;
+.effort-label {
+  color: var(--muted);
+}
+
+.effort-value {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.effort-ends {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.effort-slider {
+  border-radius: 10px;
+  outline: none;
+}
+
+.effort-slider:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.effort-track {
+  --inset: 14px;
   position: relative;
-  width: 34px;
-  height: 4px;
-  margin-left: auto;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--hairline-strong);
+  height: 30px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: none;
 }
 
-.thinking-meter > span {
+.effort-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  width: calc(var(--level, 0) * 100%);
-  border-radius: inherit;
-  background: var(--thinking);
+  width: calc(var(--inset) + var(--pos) * (100% - 2 * var(--inset)));
+  border-radius: 10px 0 0 10px;
+  background: color-mix(in srgb, var(--thinking) 16%, transparent);
+  transition: width 0.2s var(--ease-out);
 }
 
-.thinking-meter + .model-check {
-  margin-left: 10px;
+.effort-stop {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--inset) + var(--at) * (100% - 2 * var(--inset)));
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.55;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.effort-stop.is-passed {
+  background: var(--thinking);
+  opacity: 0.9;
+}
+
+.effort-thumb {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--inset) + var(--pos) * (100% - 2 * var(--inset)));
+  width: 18px;
+  height: 24px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(0 0 0 / 0.06);
+  transform: translate(-50%, -50%);
+  transition:
+    left 0.2s var(--ease-out),
+    transform 0.15s var(--ease-out);
+}
+
+.effort-track:hover .effort-thumb,
+.effort-slider:focus-visible .effort-thumb {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.effort-slider.is-dragging .effort-thumb {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.effort-slider.is-dragging .effort-thumb,
+.effort-slider.is-dragging .effort-fill {
+  transition: transform 0.15s var(--ease-out);
 }
 
 .model-empty {
@@ -3718,7 +3796,7 @@ body.is-resizing {
 
   .model-pop,
   .model-pop.is-below,
-  .model-pop.is-compact {
+  .model-pop.effort-pop {
     position: fixed;
     left: 8px;
     right: 8px;

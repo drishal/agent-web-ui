@@ -1,10 +1,17 @@
-// The thinking level, in the model picker's popover: the same pill, the same
-// rows and check, opening on whichever side has room (a bottom sheet on
-// phones). Levels come weakest first; each carries a small strength meter.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+// The thinking level as an effort slider: "Effort  High" over a track of
+// stops from Faster to Smarter, one per level the harness offers (weakest
+// first), with a knob that is dragged, clicked to, or moved with the arrow
+// keys. A change applies once the knob settles, so dragging across levels
+// sends one change, not one per stop.
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useDismiss } from "../hooks.js";
-import { IconCheck, IconChevronDown } from "../icons.js";
+import { IconChevronDown } from "../icons.js";
 import { clipBand } from "./ModelPicker.js";
+
+/** Quiet time after the last step before the level is sent. */
+const SETTLE_MS = 350;
+
+const title = (level: string) => level.charAt(0).toUpperCase() + level.slice(1);
 
 export function ThinkingPicker({
   levels,
@@ -18,17 +25,37 @@ export function ThinkingPicker({
   onSelect: (level: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
   const [below, setBelow] = useState(false);
+  const at = Math.max(0, levels.indexOf(current ?? ""));
+  const [value, setValue] = useState(at);
+  const [dragging, setDragging] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  const listId = useId();
-  // "off" is no strength at all; the rest climb to full.
-  const graded = levels.filter((l) => l !== "off");
-  const strength = (level: string) => (level === "off" ? 0 : (graded.indexOf(level) + 1) / graded.length);
+  const slider = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLDivElement>(null);
+  const timer = useRef<number | null>(null);
+  const last = levels.length - 1;
+
+  // The harness's answer (or another device's change) moves the knob, unless it is mid-drag.
+  useEffect(() => {
+    if (!dragging && timer.current === null) setValue(at);
+  }, [at, dragging]);
+
+  const commit = (i: number, now = false) => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    const send = () => {
+      timer.current = null;
+      const level = levels[i];
+      if (level !== undefined && level !== current) onSelect(level);
+    };
+    if (now) send();
+    else timer.current = window.setTimeout(send, SETTLE_MS);
+  };
+  useEffect(() => () => void (timer.current !== null && window.clearTimeout(timer.current)), []);
 
   const close = (refocus = true) => {
+    if (timer.current !== null) commit(value, true);
     setOpen(false);
     if (refocus) trigger.current?.focus();
   };
@@ -39,98 +66,117 @@ export function ThinkingPicker({
     const rect = trigger.current.getBoundingClientRect();
     const band = clipBand(trigger.current);
     const room = rect.top - band.top - 16;
-    setBelow(room < 40 + levels.length * 34 && band.bottom - rect.bottom > room);
-    const at = levels.indexOf(current ?? "");
-    setActive(at >= 0 ? at : 0);
-    list.current?.focus();
+    setBelow(room < 150 && band.bottom - rect.bottom > room);
+    slider.current?.focus();
     // Runs only when the picker opens.
   }, [open]);
 
-  useEffect(() => {
-    if (open) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: "nearest" });
-  }, [open, active, listId]);
-
-  const choose = (level: string | undefined) => {
-    if (level === undefined) return;
-    close();
-    if (level !== current) onSelect(level);
+  const move = (i: number, now = false) => {
+    const next = Math.min(last, Math.max(0, i));
+    setValue(next);
+    commit(next, now);
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+  /** The stop nearest the pointer. */
+  const stopAt = (clientX: number) => {
+    const r = track.current?.getBoundingClientRect();
+    if (!r || last <= 0) return 0;
+    const inset = r.height / 2;
+    const ratio = (clientX - r.left - inset) / Math.max(1, r.width - inset * 2);
+    return Math.round(Math.min(1, Math.max(0, ratio)) * last);
+  };
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(true);
+    setValue(stopAt(e.clientX));
+    slider.current?.focus();
+  };
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (dragging) setValue(stopAt(e.clientX));
+  };
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+    setDragging(false);
+    move(stopAt(e.clientX), true);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const keys: Record<string, () => void> = {
-      ArrowDown: () => setActive((i) => Math.min(i + 1, levels.length - 1)),
-      ArrowUp: () => setActive((i) => Math.max(i - 1, 0)),
-      Home: () => setActive(0),
-      End: () => setActive(levels.length - 1),
-      Enter: () => choose(levels[active]),
-      " ": () => choose(levels[active]),
-      Escape: () => close(),
+      ArrowRight: () => move(value + 1),
+      ArrowUp: () => move(value + 1),
+      ArrowLeft: () => move(value - 1),
+      ArrowDown: () => move(value - 1),
+      Home: () => move(0),
+      End: () => move(last),
+      Enter: () => close(),
     };
-    if (e.key === "Tab") return close(false);
     const action = keys[e.key];
+    if (e.key === "Tab") return close(false);
     if (!action) return;
     e.preventDefault();
-    e.stopPropagation();
     action();
   };
 
+  const shown = levels[value] ?? current ?? "default";
+  const position = last > 0 ? value / last : 0;
   return (
     <div className="model-picker" ref={wrap}>
       <button
         ref={trigger}
         type="button"
         className="pill-trigger"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`Thinking: ${current ?? "default"}`}
-        title="Thinking level"
+        title="Thinking effort"
         disabled={disabled}
         data-testid="thinking-picker"
         onClick={() => (open ? close() : setOpen(true))}
-        onKeyDown={(e) => {
-          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-            e.preventDefault();
-            setOpen(true);
-          } else if (open) onKeyDown(e);
-        }}
       >
-        <span className="pill-label">{current ?? "default"}</span>
+        <span className="pill-label">{title(current ?? "default")}</span>
         <IconChevronDown size={12} />
       </button>
       {open ? (
         <>
           <div className="model-backdrop" aria-hidden="true" onClick={() => close(false)} />
-          <div className={`model-pop is-compact${below ? " is-below" : ""}`}>
+          <div className={`model-pop effort-pop${below ? " is-below" : ""}`} role="dialog" aria-label="Thinking effort">
+            <div className="effort-head">
+              <span className="effort-label">Effort</span>
+              <span className="effort-value">{title(shown)}</span>
+            </div>
+            <div className="effort-ends" aria-hidden="true">
+              <span>Faster</span>
+              <span>Smarter</span>
+            </div>
             <div
-              ref={list}
-              className="model-list"
-              id={listId}
-              role="listbox"
-              tabIndex={-1}
+              ref={slider}
+              className={`effort-slider${dragging ? " is-dragging" : ""}`}
+              role="slider"
+              tabIndex={0}
               aria-label="Thinking"
-              aria-activedescendant={`${listId}-${active}`}
+              aria-valuemin={0}
+              aria-valuemax={last}
+              aria-valuenow={value}
+              aria-valuetext={shown}
               onKeyDown={onKeyDown}
             >
-              <div className="model-group-head" aria-hidden="true">
-                <span>Thinking</span>
+              <div
+                ref={track}
+                className="effort-track"
+                style={{ ["--pos" as string]: position }}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={() => setDragging(false)}
+              >
+                <span className="effort-fill" />
+                {levels.map((level, i) => (
+                  <span key={level} className={`effort-stop${i <= value ? " is-passed" : ""}`} style={{ ["--at" as string]: last > 0 ? i / last : 0 }} title={title(level)} />
+                ))}
+                <span className="effort-thumb" />
               </div>
-              {levels.map((level, i) => (
-                <div
-                  key={level}
-                  id={`${listId}-${i}`}
-                  role="option"
-                  aria-selected={level === current}
-                  className={`model-option${i === active ? " is-active" : ""}${level === current ? " is-current" : ""}`}
-                  onPointerMove={() => setActive(i)}
-                  onClick={() => choose(level)}
-                >
-                  <span className="model-name">{level}</span>
-                  <span className="thinking-meter" aria-hidden="true" style={{ ["--level" as string]: strength(level) }}>
-                    <span />
-                  </span>
-                  <span className="model-check">{level === current ? <IconCheck size={13} /> : null}</span>
-                </div>
-              ))}
             </div>
           </div>
         </>

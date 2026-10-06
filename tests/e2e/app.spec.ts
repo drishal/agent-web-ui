@@ -272,18 +272,26 @@ test("model and thinking changes apply while idle", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Choose a model" }).getByRole("option")).toHaveCount(1);
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
+  // The effort slider: End goes to the strongest level, which applies once the knob settles.
   await page.getByTestId("thinking-picker").click();
-  await page.getByRole("listbox", { name: "Thinking" }).getByRole("option", { name: "high" }).click();
+  const effort = page.getByRole("slider", { name: "Thinking" });
+  await expect(effort).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(effort).toHaveAttribute("aria-valuetext", "high");
+  await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName("Thinking: high");
+  await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
   await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName("Thinking: high");
   await expect(page.getByTestId("connection")).toContainText("Connected");
   await expect(page.locator(".status-bar")).toContainText("Fake · Fake Slow · high");
-  // By keyboard too: arrows move, Enter picks, and it reads back on the pill.
+  // A click on the track jumps to the nearest stop: the weakest, at its left end.
   await page.getByTestId("thinking-picker").click();
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName(/Thinking: (?!high)/);
+  const track = page.locator(".effort-track");
+  const box = (await track.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.click(box.x + 4, box.y + box.height / 2);
+  await expect(page.getByRole("slider", { name: "Thinking" })).toHaveAttribute("aria-valuetext", "off");
+  await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName("Thinking: off");
 });
 
 test("the model picker searches across providers, remembers recents, and works by keyboard", async ({ page }) => {
