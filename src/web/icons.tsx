@@ -149,6 +149,14 @@ export const IconRefresh = (p: IconProps) => (
   </Svg>
 );
 /** A window with its left panel marked: collapse / expand the sidebar. */
+export const IconSettings = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="2.1" />
+    <path d="M8 1.6v1.6M8 12.8v1.6M14.4 8h-1.6M3.2 8H1.6M12.53 3.47l-1.13 1.13M4.6 11.4l-1.13 1.13M12.53 12.53l-1.13-1.13M4.6 4.6 3.47 3.47" />
+    <circle cx="8" cy="8" r="4.6" />
+  </Svg>
+);
+
 export const IconSidebar = (p: IconProps) => (
   <Svg {...p}>
     <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.75" />

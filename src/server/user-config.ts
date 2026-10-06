@@ -59,18 +59,24 @@ export function readUserConfig(dir: string | null): { file: string; config: User
   } catch (error) {
     throw new UserConfigError(`${file} is not valid YAML: ${(error as Error).message.split("\n")[0]}`);
   }
-  const parsed = schema.safeParse(raw);
+  const config = checkUserConfig(raw, file);
+  let tightened = false;
+  if (config.auth?.password && (statSync(file).mode & 0o077) !== 0) {
+    chmodSync(file, 0o600);
+    tightened = true;
+  }
+  return { file, config, tightened };
+}
+
+/** config.yml's content checked against its schema (startup and the Settings dialog share it). */
+export function checkUserConfig(raw: unknown, file: string): UserConfig {
+  const parsed = schema.safeParse(raw ?? {});
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const where = issue?.path.length ? issue.path.join(".") : "top level";
     throw new UserConfigError(`${file}: ${where}: ${issue?.message ?? "invalid"}`);
   }
-  let tightened = false;
-  if (parsed.data.auth?.password && (statSync(file).mode & 0o077) !== 0) {
-    chmodSync(file, 0o600);
-    tightened = true;
-  }
-  return { file, config: parsed.data, tightened };
+  return parsed.data;
 }
 
 /** The file's settings as the environment variables loadConfig reads. */

@@ -85,9 +85,16 @@ test.describe("other devices (HOST=0.0.0.0)", () => {
     await page.getByLabel("Password").fill("lan-password-123");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.getByRole("button", { name: "Pair phone" }).click();
-    await expect(page.getByRole("dialog", { name: "Pair a phone" })).toContainText(`http://${lanIp}:${PORT}/`);
+    // Pairing opens in place of Settings; closing it returns to the app.
+    const pair = page.getByRole("dialog", { name: "Pair a phone" });
+    await expect(pair).toContainText(`http://${lanIp}:${PORT}/`);
     await page.keyboard.press("Escape");
+    await expect(pair).toBeHidden();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });

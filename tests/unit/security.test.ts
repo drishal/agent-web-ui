@@ -185,4 +185,30 @@ describe("credentials and secrets", () => {
     expect(s.classify("127.0.0.1.evil.example")).toBeNull();
     expect(s.classify("user@127.0.0.1")).toBeNull();
   });
+
+  it("lets every signed-in device read the server settings, and only this machine change them", async () => {
+    t = await makeTestApp({ withPassword: true, lanHosts: [LAN], withSettings: true });
+    const local = await request(t.server).get("/api/settings");
+    expect(local.status).toBe(200);
+    expect(local.body).toMatchObject({ editable: true, writable: true, values: { port: 4783, host: "127.0.0.1" } });
+    const saved = await request(t.server).put("/api/settings").send({ port: 4800 });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ values: { port: 4800 }, restartPending: ["port"] });
+    expect((await request(t.server).put("/api/settings").send({ port: "x" })).status).toBe(400);
+    // Restarting needs a supervisor to bring the server back; this one has none.
+    expect((await request(t.server).post("/api/settings/restart")).status).toBe(409);
+
+    const host = lanHost(t.port);
+    const login = await request(t.server).post("/api/login").set("Host", host).send({ username: USER, password: PASS });
+    const cookie = String((login.headers["set-cookie"] as unknown as string[])[0]).split(";")[0] as string;
+    const remote = await request(t.server).get("/api/settings").set("Host", host).set("Cookie", cookie);
+    expect(remote.status).toBe(200);
+    expect(remote.body).toMatchObject({ editable: false, values: { port: 4800 } });
+    const denied = await request(t.server).put("/api/settings").set("Host", host).set("Cookie", cookie).send({ port: 4801 });
+    expect(denied.status).toBe(403);
+    expect(denied.body.code).toBe("settings_local_only");
+    expect((await request(t.server).post("/api/settings/restart").set("Host", host).set("Cookie", cookie)).status).toBe(403);
+    // Not signed in at all: nothing.
+    expect((await request(t.server).get("/api/settings").set("Host", host)).status).toBe(401);
+  });
 });

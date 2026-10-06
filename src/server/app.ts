@@ -17,6 +17,7 @@ import {
   openWorkspaceSchema,
   patchConfigSchema,
   renameSchema,
+  settingsPatchSchema,
   resumeChatSchema,
   type ProjectSession,
   sendMessageSchema,
@@ -32,6 +33,7 @@ import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
+import { readSettings, writeSettings, type SettingsContext } from "./settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import type { Workspaces } from "./workspaces.js";
 
@@ -50,6 +52,8 @@ export interface AppDeps {
   webDir: string | null;
   /** Where config.yml lives; its browser settings are re-read on every page load. */
   configDir?: string | null;
+  /** The Settings dialog's view of config.yml; without it the settings routes answer 404. */
+  settings?: SettingsContext;
   heartbeatMs?: number;
   log?: (message: string) => void;
 }
@@ -171,6 +175,31 @@ export function createApp(deps: AppDeps) {
       limits: { maxMessageChars: MAX_MESSAGE_CHARS },
     };
     res.json(payload);
+  });
+
+  // Settings: everyone signed in may read them; only this machine may change them or restart.
+  const settingsCtx = (): SettingsContext => {
+    if (!deps.settings) throw new ChatError(404, "no_settings", "Settings are not available on this server");
+    return deps.settings;
+  };
+  const thisMachine = (res: Response) => {
+    if (res.locals.local !== true) throw new ChatError(403, "settings_local_only", "Server settings can be changed on the machine running the server");
+  };
+  app.get("/api/settings", (_req, res) => {
+    res.json(readSettings(settingsCtx(), res.locals.local === true));
+  });
+  app.put("/api/settings", (req, res) => {
+    const ctx = settingsCtx();
+    thisMachine(res);
+    res.json(writeSettings(ctx, body(settingsPatchSchema, req)));
+  });
+  app.post("/api/settings/restart", (_req, res) => {
+    const ctx = settingsCtx();
+    thisMachine(res);
+    if (!ctx.canRestart) throw new ChatError(409, "no_supervisor", "Nothing would start the server again: restart it yourself");
+    res.status(202).json({ restarting: true });
+    // The same graceful stop as a SIGTERM from systemd, which then starts it again (Restart=always).
+    setTimeout(() => process.kill(process.pid, "SIGTERM"), 300);
   });
 
   app.get("/api/theme", async (_req, res) => {

@@ -66,5 +66,5 @@ export function useBootstrap(targets: BootstrapTargets) {
     };
   }, []);
 
-  return { boot, bootError, signedOut, setSignedOut };
+  return { boot, setBoot, bootError, signedOut, setSignedOut };
 }

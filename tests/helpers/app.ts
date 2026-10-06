@@ -47,6 +47,8 @@ export async function makeTestApp(options: {
   heartbeatMs?: number;
   /** Fake B cannot store past turns (as Hermes and Claude Code): handoffs to it are briefings. */
   fakeBBriefOnly?: boolean;
+  /** Serve the Settings routes over a config.yml in this test's own settings folder. */
+  withSettings?: boolean;
 } = {}): Promise<TestApp> {
   const root = tempDir();
   const project = path.join(root, "proj");
@@ -80,6 +82,18 @@ export async function makeTestApp(options: {
     pairingUrls: [],
     webDir: null,
     heartbeatMs: options.heartbeatMs ?? 20_000,
+    ...(options.withSettings
+      ? {
+          settings: {
+            configDir: path.join(root, "settings"),
+            running: { port: 4783, host: "127.0.0.1" as const, username: "", password: null, workspaceRoots: [root], allowedHosts: [], allowedTailscaleUsers: [] },
+            envSet: new Set<string>(),
+            credentialsFile: path.join(root, "credentials.json"),
+            canRestart: false,
+            home: root,
+          },
+        }
+      : {}),
     log: () => undefined,
   });
   const server = http.createServer(app);

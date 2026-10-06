@@ -388,3 +388,53 @@ export const compactSchema = z.object({ instructions: z.string().max(10_000).opt
 export const answerSchema = z.object({ answer: interactionAnswerSchema });
 
 export type SendMode = z.infer<typeof sendMessageSchema>["mode"];
+
+/** config.yml's settings as the Settings dialog shows them; the password itself never leaves the server. */
+export interface ServerSettingsValues {
+  port: number;
+  host: "127.0.0.1" | "0.0.0.0";
+  /** Sign-in name for other devices ("" when none is set). */
+  username: string;
+  /** A sign-in password is set (in config.yml, or by `npm run set-password`). */
+  hasPassword: boolean;
+  workspaceRoots: string[];
+  allowedHosts: string[];
+  allowedTailscaleUsers: string[];
+  /** Default theme for devices that have not picked one; null lets a theme.yml decide. */
+  theme: ThemeChoice | null;
+  autocollapseSidebar: boolean;
+}
+
+/** Settings that take effect only when the server restarts. */
+export type RestartSetting = "port" | "host" | "username" | "password" | "workspaceRoots" | "allowedHosts" | "allowedTailscaleUsers";
+
+export interface ServerSettings {
+  /** This browser is on the machine running the server: it may change them (other devices only read). */
+  editable: boolean;
+  /** There is a settings folder to write config.yml to (none when AWUI_CONFIG_DIR is ""). */
+  writable: boolean;
+  /** As config.yml says now. */
+  values: ServerSettingsValues;
+  /** Saved but not yet in effect: they wait for a restart. */
+  restartPending: RestartSetting[];
+  /** Settings an environment variable overrides, so config.yml's value has no effect. */
+  envOverrides: Array<keyof ServerSettingsValues>;
+  /** A supervisor (systemd) brings the server back after it exits, so it can restart itself. */
+  canRestart: boolean;
+}
+
+/** A change from the Settings dialog; omitted fields stay as they are. `password: null` removes it. */
+export const settingsPatchSchema = z
+  .object({
+    port: z.number().int().min(1).max(65_535).optional(),
+    host: z.enum(["127.0.0.1", "0.0.0.0"]).optional(),
+    username: z.string().trim().max(64).optional(),
+    password: z.string().max(1024).nullable().optional(),
+    workspaceRoots: z.array(z.string().trim().min(1).max(4096)).max(64).optional(),
+    allowedHosts: z.array(z.string().trim().min(1).max(255)).max(64).optional(),
+    allowedTailscaleUsers: z.array(z.string().trim().min(1).max(255)).max(64).optional(),
+    theme: themeChoiceSchema.nullable().optional(),
+    autocollapseSidebar: z.boolean().optional(),
+  })
+  .strict();
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

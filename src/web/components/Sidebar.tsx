@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss } from "../hooks.js";
-import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSidebar } from "../icons.js";
+import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSettings, IconSidebar } from "../icons.js";
 import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
-import type { ThemeMode } from "../theme.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
@@ -191,21 +190,13 @@ export function Sidebar(props: {
   /** `newTab`: open it in a new tab rather than the shown one. */
   onOpenSession: (s: ProjectSession, newTab: boolean) => void;
   onRefresh: () => void;
-  themeMode: ThemeMode;
-  /** The theme.yml scheme, when one is loaded; listed as "base16" with its own name on hover. */
-  scheme: { name: string | null } | null;
-  onThemeMode: (mode: ThemeMode) => void;
-  textScale: number;
-  onTextScale: (scale: number) => void;
-  onPair: () => void;
-  signedInAs: string | null;
-  onSignOut: () => void;
+  /** Open Settings (theme, text size, pairing, sign-out, and the server's config.yml). */
+  onSettings: () => void;
   /** Drag handle on the right edge (wide screens). */
   resizer?: React.ReactNode;
   onClose: () => void;
   /** Wide screens: fold the sidebar away (the chat header gets the expand button). */
   onCollapse: () => void;
-  version: string;
 }) {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
   const names = useMemo(() => new Map(props.harnesses.map((h) => [h.id as string, h.displayName])), [props.harnesses]);
@@ -240,6 +231,9 @@ export function Sidebar(props: {
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">
           <span className="brand">Agent Web UI</span>
+          <button type="button" className="icon-btn sidebar-settings" aria-label="Settings" title="Settings" onClick={props.onSettings}>
+            <IconSettings size={16} />
+          </button>
           <button
             type="button"
             className="icon-btn sidebar-collapse"
@@ -312,40 +306,6 @@ export function Sidebar(props: {
           </ul>
         </div>
 
-        <footer className="sidebar-foot">
-          <label className="foot-control">
-            <span>Theme</span>
-            <select className="select select-small" value={props.themeMode} onChange={(e) => props.onThemeMode(e.target.value as ThemeMode)}>
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              {props.scheme ? (
-                <option value="scheme" title={props.scheme.name ?? undefined}>
-                  base16
-                </option>
-              ) : null}
-            </select>
-          </label>
-          <label className="foot-control">
-            <span>Text</span>
-            <select className="select select-small" value={String(props.textScale)} onChange={(e) => props.onTextScale(Number(e.target.value))} aria-label="Chat text size">
-              {TEXT_SCALES.map(([label, value]) => (
-                <option key={label} value={String(value)}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="btn btn-small btn-ghost" onClick={props.onPair}>
-            Pair phone
-          </button>
-          {props.signedInAs ? (
-            <button type="button" className="btn btn-small btn-ghost" onClick={props.onSignOut} title={`Signed in as ${props.signedInAs}`}>
-              Sign out
-            </button>
-          ) : null}
-          <span className="version foot-version">v{props.version}</span>
-        </footer>
         {props.resizer}
       </aside>
     </>

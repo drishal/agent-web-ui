@@ -49,6 +49,8 @@ async function main(): Promise<void> {
     }
     throw error;
   }
+  // Which settings the environment overrides (they beat config.yml), noted before the password leaves it.
+  const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS"].filter((n) => process.env[n] !== undefined));
   // The agents' shells inherit process.env; the password must not reach them.
   delete process.env.AUTH_PASSWORD;
   if (settings) console.log(`  settings: ${settings.file}`);
@@ -122,6 +124,23 @@ async function main(): Promise<void> {
     pairingUrls,
     webDir,
     configDir: config.configDir,
+    settings: {
+      configDir: config.configDir,
+      running: {
+        port: config.port,
+        host: config.host === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1",
+        username: settings?.config.auth?.username ?? "",
+        password: settings?.config.auth?.password ?? null,
+        workspaceRoots: config.workspaceRoots,
+        allowedHosts: config.allowedHosts,
+        allowedTailscaleUsers: config.allowedTailscaleUsers,
+      },
+      envSet,
+      credentialsFile: config.credentialsFile,
+      // systemd sets INVOCATION_ID for its services; the unit restarts on any exit.
+      canRestart: Boolean(process.env.INVOCATION_ID),
+      home: config.home,
+    },
     ...(process.env.AWUI_HEARTBEAT_MS ? { heartbeatMs: Number(process.env.AWUI_HEARTBEAT_MS) } : {}),
   });
 

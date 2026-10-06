@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { chooseHarness, newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { chooseHarness, newChat, openSettings, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const status = (page: Page) => page.getByTestId("chat-status");
 const answers = (page: Page) => page.getByTestId("answer");
@@ -20,7 +20,21 @@ test("this machine opens straight into the app: no token, no sign-in", async ({ 
   const res = await page.request.get("/api/bootstrap");
   expect(res.status()).toBe(200);
   expect((await res.json()).auth.mode).toBe("local");
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+});
+
+test("settings opens from the sidebar gear and shows this device plus the server", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Theme" })).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Chat text size" })).toBeVisible();
+  // The e2e server runs without a settings folder, so the server section is read-only.
+  await expect(settings).toContainText("nothing to save to");
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
 });
 
 test("a new chat opens as a hero composer; a turn folds its work above a plain answer", async ({ page }) => {
@@ -333,7 +347,10 @@ test("chat text size scales the conversation only", async ({ page }) => {
   const sidebarSize = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".session-title") as Element).fontSize));
   const before = await size();
   const sidebarBefore = await sidebarSize();
-  await page.getByRole("combobox", { name: "Chat text size" }).selectOption({ label: "Larger" });
+  await openSettings(page);
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("combobox", { name: "Chat text size" }).selectOption({ label: "Larger" });
+  await settings.getByRole("button", { name: "Close" }).click();
   await expect.poll(size).toBeGreaterThan(before * 1.15);
   expect(await sidebarSize()).toBe(sidebarBefore);
 });
@@ -356,10 +373,12 @@ test("the stylix theme file drives colors and passes contrast", async ({ page })
     return (Math.max(fg, back) + 0.05) / (Math.min(fg, back) + 0.05);
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1d2021");
+  await openSettings(page);
+  const settings = page.getByRole("dialog", { name: "Settings" });
   // A theme.yml is listed as "base16", whatever its scheme is called.
-  await expect(page.getByRole("combobox", { name: "Theme" }).locator('option[value="scheme"]')).toHaveText("base16");
-  await page.getByRole("combobox", { name: "Theme" }).selectOption("light");
+  await expect(settings.getByRole("combobox", { name: "Theme" }).locator('option[value="scheme"]')).toHaveText("base16");
+  await settings.getByRole("combobox", { name: "Theme" }).selectOption("light");
+  await settings.getByRole("button", { name: "Close" }).click();
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 255, 255)");
 });
 

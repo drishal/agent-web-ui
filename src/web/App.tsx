@@ -16,6 +16,7 @@ import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
+import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconMenu, IconMore, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
@@ -35,7 +36,7 @@ export function App() {
   // the next line); this closure only runs on an event, long after this render
   // finished, so the forward reference is safe.
   const { chat, setChat, conn } = useChatStream({ onSignedOut: () => setSignedOut(true) });
-  const { boot, bootError, signedOut, setSignedOut } = useBootstrap({ onTheme: initTheme, setHarnessId, setWorkspace, setRecent, setChat });
+  const { boot, setBoot, bootError, signedOut, setSignedOut } = useBootstrap({ onTheme: initTheme, setHarnessId, setWorkspace, setRecent, setChat });
   const { overview, sessionsError, sessionsLoading, refreshSessions } = useSessions({ boot, workspace, chat });
   const {
     sidebarWidth,
@@ -57,6 +58,7 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [textScale, setTextScale] = useState<number>(() => load<number>("chatScale", 1));
 
   // ---- chat text size (separate from page zoom, per device) -------------------
@@ -465,23 +467,36 @@ export function App() {
         activeStatus={chat?.status ?? null}
         onOpenSession={(s, newTab) => void openSession(s, { newTab })}
         onRefresh={() => void refreshSessions()}
-        themeMode={themeMode}
-        scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}
-        onThemeMode={applyMode}
-        textScale={textScale}
-        onTextScale={(v) => {
-          setTextScale(v);
-          save("chatScale", v);
-        }}
-        onPair={() => setPairOpen(true)}
-        signedInAs={boot.auth.mode === "password" ? boot.auth.username : null}
-        onSignOut={() => {
-          void api("/api/logout", { body: {} }).finally(() => window.location.reload());
+        onSettings={() => {
+          setSettingsOpen(true);
+          setDrawerOpen(false);
         }}
         onClose={() => setDrawerOpen(false)}
         onCollapse={() => collapseSidebar(true)}
-        version={boot.version}
       />
+      {settingsOpen ? (
+        <SettingsDialog
+          themeMode={themeMode}
+          scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}
+          onThemeMode={applyMode}
+          textScale={textScale}
+          onTextScale={(v) => {
+            setTextScale(v);
+            save("chatScale", v);
+          }}
+          onPair={() => {
+            setSettingsOpen(false);
+            setPairOpen(true);
+          }}
+          signedInAs={boot.auth.mode === "password" ? boot.auth.username : null}
+          onSignOut={() => {
+            void api("/api/logout", { body: {} }).finally(() => window.location.reload());
+          }}
+          version={boot.version}
+          onUiSaved={(ui) => setBoot((b) => (b ? { ...b, ui } : b))}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
 
       <main className="main">
         {tabState.tabs.length >= (narrow ? 2 : 1) ? (

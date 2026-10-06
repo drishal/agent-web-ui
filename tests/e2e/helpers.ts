@@ -25,11 +25,18 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
   await dialog.getByRole("button", { name: "Open this folder" }).click();
   await expect(dialog).toBeHidden();
 }
-
 /** Pick the sidebar's harness from its menu. */
 export async function chooseHarness(page: Page, harness: string): Promise<void> {
   await page.getByRole("complementary", { name: "Sessions" }).getByRole("button", { name: "Harness" }).click();
   await page.getByRole("listbox", { name: "Harness" }).getByRole("option", { name: harness, exact: true }).click();
+}
+
+
+/** Open the Settings dialog (gear left of the collapse button). */
+export async function openSettings(page: Page): Promise<void> {
+  await showSidebar(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
 export async function newChat(page: Page, harness?: string): Promise<void> {
