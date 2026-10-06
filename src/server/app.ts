@@ -36,7 +36,7 @@ import { readUserConfig, uiSettings } from "./user-config.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
-const RECENT_SESSIONS_PER_HARNESS = 200;
+export const RECENT_SESSIONS_PER_HARNESS = 200;
 
 export interface AppDeps {
   version: string;

@@ -4,7 +4,7 @@ import http from "node:http";
 import type { Socket } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createApp } from "./app.js";
+import { createApp, RECENT_SESSIONS_PER_HARNESS } from "./app.js";
 import { ChatManager } from "./chats/manager.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { liveOmpChildren } from "./harness/omp.js";
@@ -98,6 +98,11 @@ async function main(): Promise<void> {
     console.log(`  ${status.displayName}: ${state}`);
     for (const w of status.warnings) console.log(`    warning: ${w}`);
     for (const [name, value] of Object.entries(status.overrides)) console.log(`    ${name}: ${value}`);
+  }
+  // Warm each harness's session listing now, so the first sidebar load does
+  // not wait for it (a Hermes probe gateway alone takes ~2.4 s to start).
+  for (const adapter of registry.list()) {
+    if (registry.isAvailable(adapter.id)) void adapter.listRecentSessions(RECENT_SESSIONS_PER_HARNESS).catch(() => undefined);
   }
   const theme = new ThemeStore(config.themeFile, config.themeFileExplicit, (m) => console.error(`agent-web-ui: ${m}`));
   const active = await theme.get();
