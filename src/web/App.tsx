@@ -398,13 +398,19 @@ export function App() {
   const closeChat = async () => {
     setMenuOpen(false);
     if (!chat) return;
+    // Closed on purpose: the server's "gone" must not bring it back through its tab.
+    resumedGone.current.add(chat.chatId);
+    const index = tabsRef.current.tabs.findIndex((t) => t.chatId === chat.chatId);
     try {
       await api(`/api/chats/${chat.chatId}/dispose`, { body: {} });
     } catch {
       // already gone
     }
-    setChat(null);
-    setHash(null);
+    if (index >= 0) closeTabAt(index);
+    else {
+      setChat(null);
+      setHash(null);
+    }
     void refreshSessions();
   };
 
