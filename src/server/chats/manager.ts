@@ -3,6 +3,7 @@
 // process running the same harness is NOT locked out (documented in README).
 import { randomUUID } from "node:crypto";
 import type { WorkspaceInfo } from "../../shared/protocol.js";
+import { DeferredLiveChat } from "../harness/deferred.js";
 import type { HarnessAdapter, LiveChat } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
 
@@ -112,15 +113,23 @@ export class ChatManager {
     const problem = adapter.workspaceProblem(workspace.path);
     if (problem) throw new ChatError(422, "workspace_unsupported", problem);
     const open = (async () => {
-      const known = await adapter.listSessions(workspace.path);
-      if (!known.some((s) => s.nativeId === nativeId)) {
-        throw new ChatError(404, "session_not_found", "That session is not in this workspace's session list");
-      }
-      let live;
-      try {
-        live = await adapter.openChat({ cwd: workspace.path, resumeNativeId: nativeId });
-      } catch (error) {
-        throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to resume: ${errorMessage(error)}`);
+      const req = { cwd: workspace.path, resumeNativeId: nativeId };
+      // From the file when the adapter can read it: the chat shows now and the
+      // harness starts behind it; the file read also proves the session is this project's.
+      const transcript = adapter.readTranscript ? await adapter.readTranscript({ cwd: workspace.path, nativeId }).catch(() => null) : null;
+      let live: LiveChat;
+      if (transcript) {
+        live = new DeferredLiveChat(nativeId, transcript, () => adapter.openChat(req), (error) => `${adapter.displayName} failed to resume: ${errorMessage(error)}`);
+      } else {
+        const known = await adapter.listSessions(workspace.path);
+        if (!known.some((s) => s.nativeId === nativeId)) {
+          throw new ChatError(404, "session_not_found", "That session is not in this workspace's session list");
+        }
+        try {
+          live = await adapter.openChat(req);
+        } catch (error) {
+          throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to resume: ${errorMessage(error)}`);
+        }
       }
       const chat = await this.load(adapter, workspace, live);
       this.register(chat);

@@ -89,6 +89,8 @@ export interface LiveChat {
   /** Known once the harness has assigned a session; stable afterwards. */
   readonly nativeId: string | null;
   readonly title: string | null;
+  /** True while the harness behind it is still starting (a resumed chat shown from its file). */
+  readonly starting?: boolean;
   subscribe(listener: HarnessEventListener): () => void;
   /** Active branch only, rebuilt through the harness's public API. */
   history(): Promise<ChatItem[]>;

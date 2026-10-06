@@ -553,6 +553,7 @@ export class Chat {
       live.getTodos().catch(() => []),
     ]);
     const chat = new Chat(chatId, adapter, workspace, live, config);
+    if (live.starting) chat.status = "starting";
     chat.context = context;
     chat.usage = chat.timing.compose(usage);
     chat.todos = todos;
@@ -768,7 +769,8 @@ export class Chat {
 
   async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     this.assertOpen();
-    if (this.status !== "idle" && this.status !== "error") {
+    // While starting the change waits for the harness, which applies it before any run.
+    if (this.status !== "idle" && this.status !== "error" && this.status !== "starting") {
       throw new ChatError(409, "busy", "Settings can only change while the agent is idle");
     }
     const caps = this.adapter.capabilities;
