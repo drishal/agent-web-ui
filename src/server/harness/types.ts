@@ -16,6 +16,7 @@ import type {
   TodoItem,
 } from "../../shared/protocol.js";
 import type { HandoffSeed } from "./handoff.js";
+import type { AgentReport } from "./subagents.js";
 export interface HarnessDiscovery {
   available: boolean;
   /** Short and comparable (versionLabel): 1.0.2, 2026.9.24. */
@@ -72,7 +73,9 @@ export type HarnessEvent =
   | { type: "assistant_delta"; field: "text" | "thinking"; delta: string }
   | { type: "assistant_end"; text: string; thinking: string; error?: string; usage?: StepUsage }
   | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
-  | { type: "tool_update"; toolCallId: string; output: string }
+  | { type: "tool_update"; toolCallId: string; output: string; details?: unknown }
+  /** Background subagents reporting back (omp's async-result): which runs finished, and how. */
+  | { type: "subagent_reports"; reports: AgentReport[] }
   | { type: "tool_end"; toolCallId: string; output: string; isError: boolean; /** The result's structured side (Pi/omp `details`, Claude Code's tool_use_result). */ details?: unknown }
   | { type: "busy" }
   | { type: "settled" }
@@ -165,5 +168,7 @@ export interface HarnessAdapter {
    */
   readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
   /** Kill helper processes; called on server shutdown. */
+  /** Where a subagent's transcript lives when its harness keeps it beside the session (omp), or null. */
+  subagentTranscriptFile?(nativeId: string, runId: string): Promise<string | null>;
   shutdown(): Promise<void>;
 }

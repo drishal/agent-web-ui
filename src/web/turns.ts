@@ -107,6 +107,7 @@ const COUNT_LABELS: Array<[ToolCategory, string, string]> = [
   ["write", "file written", "files written"],
   ["command", "command", "commands"],
   ["web", "web lookup", "web lookups"],
+  ["agent", "delegation", "delegations"],
   ["other", "tool call", "tool calls"],
 ];
 

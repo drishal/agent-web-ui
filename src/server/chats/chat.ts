@@ -18,12 +18,16 @@ import type {
   SendMode,
   SessionUsage,
   SlashCommand,
+  SubagentRun,
   TodoItem,
   ToolItem,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
-import { boundText, editShape, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
+import { promises as fs } from "node:fs";
+import { boundText, editShape, historyToItems, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
+import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords, type AgentReport } from "../harness/subagents.js";
+import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 
@@ -40,6 +44,24 @@ export class ChatError extends Error {
 export interface ChatSubscriber {
   send(id: number, event: ChatEvent): void;
   close(): void;
+}
+
+/** Past this, a subagent transcript is read as its first and last halves. */
+const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
+
+async function readEnds(file: string, size: number): Promise<string> {
+  const half = MAX_TRANSCRIPT_BYTES / 2;
+  const handle = await fs.open(file, "r");
+  try {
+    const head = Buffer.alloc(half);
+    const tail = Buffer.alloc(half);
+    await handle.read(head, 0, half, 0);
+    await handle.read(tail, 0, half, size - half);
+    // Cut lines are dropped by the JSONL readers.
+    return `${head.toString("utf8")}\n${tail.toString("utf8")}`;
+  } finally {
+    await handle.close();
+  }
 }
 
 const MAX_LOG_EVENTS = 5000;
@@ -279,6 +301,7 @@ class EventReducer {
         this.finishStreaming();
         const category = toolCategory(event.name);
         const edits = category === "edit" || category === "write";
+        const runs = category === "agent" ? runsFromArgs(event.args) : null;
         const tool: ToolItem = {
           kind: "tool",
           id: `t:${event.toolCallId}`,
@@ -291,6 +314,7 @@ class EventReducer {
           summary: toolSummary(event.args),
           paths: toolPaths(event.args),
           ...(edits ? editShape(argsDiff(event.args), null) : {}),
+          ...(runs ? { subagents: runs } : {}),
           at: Date.now(),
         };
         this.put(tool);
@@ -300,7 +324,9 @@ class EventReducer {
         const item = this.get(`t:${event.toolCallId}`);
         if (!item || item.kind !== "tool") break;
         const bounded = boundText(event.output);
-        this.upsert({ ...item, output: bounded.text, truncated: bounded.truncated });
+        // Subagent progress replaces the last snapshot (it is not a patch).
+        const runs = item.category === "agent" && event.details !== undefined ? runsFromDetails(event.toolCallId, event.details, item.subagents ?? null) : null;
+        this.upsert({ ...item, output: bounded.text, truncated: bounded.truncated, ...(runs ? { subagents: runs } : {}) });
         this.dirtyTools.add(item.id);
         this.scheduleFlush();
         break;
@@ -330,6 +356,10 @@ class EventReducer {
         // The harness's own diff beats the arguments' one; with neither, its output's own count.
         const reported = edits ? resultDiff(event.details, event.output) : null;
         const settled: ToolItem = { ...base, ...(!edits ? {} : reported ? editShape(reported, null) : base.diff ? {} : editShape(null, bounded.text)) };
+        if (settled.category === "agent") {
+          const runs = runsFromDetails(event.toolCallId, event.details, settled.subagents ?? null);
+          if (runs) settled.subagents = settleRuns(runs, event.output, event.isError);
+        }
         // A failed edit keeps the diff it tried, but changed nothing to count.
         const { diffStat: _attempted, ...uncounted } = settled;
         this.put({
@@ -340,8 +370,14 @@ class EventReducer {
           endedAt: Date.now(),
         });
         if (base.name.toLowerCase().includes("todo")) this.fx.refreshTodos();
+        // A wait or a proc read reports on background runs another call started.
+        const reports = detailReports(event.details);
+        if (reports.length > 0) this.applyReports(reports);
         break;
       }
+      case "subagent_reports":
+        this.applyReports(event.reports);
+        break;
       case "busy":
         if (this.fx.status() !== "stopping") this.fx.setStatus("running");
         break;
@@ -448,6 +484,19 @@ class EventReducer {
   replaceConfig(config: ChatConfig): void {
     this.config = config;
     this.emit({ type: "config", config });
+  }
+
+  /** Background runs reporting in: the call that started them shows it. */
+  private applyReports(reports: AgentReport[]): void {
+    for (const item of this.items) {
+      if (item.kind !== "tool" || !item.subagents) continue;
+      const next = applyReports(item.subagents, reports);
+      if (next) this.put({ ...item, subagents: next });
+    }
+  }
+
+  item(id: string): ChatItem | undefined {
+    return this.get(id);
   }
 
   pendingIds(): string[] {
@@ -860,6 +909,26 @@ export class Chat {
       // Re-read: events during the await may have moved the status on.
       if ((this.status as ChatStatus) === "compacting") this.setStatus("idle");
     }
+  }
+
+  /** A subagent's own transcript, as display items: read from the file its harness wrote. */
+  async subagentTranscript(toolId: string, runId: string): Promise<{ run: SubagentRun; items: ChatItem[] }> {
+    const tool = this.reducer.item(toolId);
+    const run = tool?.kind === "tool" ? tool.subagents?.runs.find((r) => r.id === runId) : undefined;
+    if (!tool || tool.kind !== "tool" || !run) throw new ChatError(404, "no_subagent", "No such subagent in this chat");
+    const callId = toolId.replace(/^t:/, "");
+    const file = transcriptFile(callId, runId) ?? (this.nativeId && this.adapter.subagentTranscriptFile ? await this.adapter.subagentTranscriptFile(this.nativeId, runId) : null);
+    if (!file) return { run, items: [] };
+    let text: string;
+    try {
+      const { size } = await fs.stat(file);
+      // Head and tail of an enormous one: its brief and how it ended.
+      text = size > MAX_TRANSCRIPT_BYTES ? await readEnds(file, size) : await fs.readFile(file, "utf8");
+    } catch {
+      return { run, items: [] };
+    }
+    const messages = transcriptRecords(text) ?? branchMessages(text);
+    return { run, items: historyToItems(messages) };
   }
 
   answer(requestId: string, answer: InteractionAnswer): string {

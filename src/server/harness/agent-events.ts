@@ -4,6 +4,7 @@
 import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
+import { applyReports, asyncReports, detailReports, isAgentTool, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -119,6 +120,7 @@ export function toolCategory(name: string): ToolCategory {
   const n = name.toLowerCase();
   // A todo list is no file: todo_write is not a write.
   if (/todo/.test(n)) return "other";
+  if (isAgentTool(name)) return "agent";
   if (/web|fetch|browse|url|http/.test(n)) return "web";
   if (/(^|_)(edit|ast_edit|apply_patch|patch|multi_?edit|str_replace|replace)($|_)/.test(n)) return "edit";
   if (/(^|_)(write|create|new_file|save)($|_)/.test(n)) return "write";
@@ -308,9 +310,10 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
       if (message.role === "assistant") {
         return [{ type: "assistant_start", ...(typeof message.model === "string" ? { model: message.model } : {}) }];
       }
-      if (message.role === "custom" && message.display === true) {
-        const shown = extensionMessage(message.customType, message.content);
-        return shown ? [{ type: "notice", level: "info", ...shown }] : [];
+      if (message.role === "custom") {
+        const reports = asyncReports(message.customType, message.content, message.details);
+        const shown = message.display === true ? extensionMessage(message.customType, message.content) : null;
+        return [...(reports.length > 0 ? [{ type: "subagent_reports" as const, reports }] : []), ...(shown ? [{ type: "notice" as const, level: "info" as const, ...shown }] : [])];
       }
       return [];
     }
@@ -339,7 +342,14 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
         },
       ];
     case "tool_execution_update":
-      return [{ type: "tool_update", toolCallId: String(event.toolCallId), output: toolResultText(event.partialResult) }];
+      return [
+        {
+          type: "tool_update",
+          toolCallId: String(event.toolCallId),
+          output: toolResultText(event.partialResult),
+          ...(isObj(event.partialResult) && event.partialResult.details !== undefined ? { details: event.partialResult.details } : {}),
+        },
+      ];
     case "tool_execution_end":
       return [
         {
@@ -390,12 +400,20 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
   }
 }
 
+const withRuns = (runs: ToolItem["subagents"] | null) => (runs ? { subagents: runs } : {});
+
 /** Rebuild display items from the active branch's message list. */
 export function historyToItems(messages: unknown[]): ChatItem[] {
   const items: ChatItem[] = [];
   const tools = new Map<string, ToolItem>();
   let n = 0;
   const nextId = (prefix: string) => `h${prefix}${n++}`;
+  const report = (reports: AgentReport[]) => {
+    for (const tool of tools.values()) {
+      const next = tool.subagents ? applyReports(tool.subagents, reports) : null;
+      if (next) tool.subagents = next;
+    }
+  };
   for (const raw of messages) {
     if (!isObj(raw)) continue;
     const at = typeof raw.timestamp === "number" ? raw.timestamp : undefined;
@@ -448,6 +466,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             summary: toolSummary(block.arguments),
             paths: toolPaths(block.arguments),
             ...(edits ? editShape(argsDiff(block.arguments), null) : {}),
+            ...(category === "agent" ? withRuns(runsFromArgs(block.arguments)) : {}),
             ...stamp,
           };
           tools.set(id, tool);
@@ -468,7 +487,14 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             Object.assign(tool, reported ? editShape(reported, null) : tool.diff ? {} : editShape(null, bounded.text));
             if (tool.status === "error") delete tool.diffStat;
           }
+          if (tool.category === "agent") {
+            const runs = runsFromDetails(String(raw.toolCallId), raw.details, tool.subagents ?? null);
+            if (runs) tool.subagents = settleRuns(runs, bounded.text, tool.status === "error");
+          }
         }
+        // A wait or a proc read reports on background runs another call started.
+        const reports = detailReports(raw.details);
+        if (reports.length > 0) report(reports);
         break;
       }
       case "compactionSummary":
@@ -477,12 +503,15 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
       case "branchSummary":
         items.push({ kind: "notice", id: nextId("n"), level: "info", text: "Returned from another branch (summarized)" });
         break;
-      case "custom":
+      case "custom": {
+        const reports = asyncReports(raw.customType, raw.content, raw.details);
+        if (reports.length > 0) report(reports);
         if (raw.display === true) {
           const shown = extensionMessage(raw.customType, raw.content);
           if (shown) items.push({ kind: "notice", id: nextId("n"), level: "info", ...shown, ...stamp });
         }
         break;
+      }
       default:
         break;
     }

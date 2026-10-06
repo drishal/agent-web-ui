@@ -4,6 +4,8 @@
 //   "fail"  end with an error        "slow"  stream many chunks
 //   "big"   produce oversized tool output    "edit"  edit a file (src/app.ts)
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import {
   asHarnessId,
   type ChatConfig,
@@ -425,6 +427,7 @@ class FakeLiveChat implements LiveChat {
       if (/\btool\b|\bbig\b|\bask\b/i.test(text)) await this.tool(/\bbig\b/i.test(text) ? "big" : "read", signal);
       if (/\bedit\b/i.test(text)) await this.tool("edit", signal);
       if (/\bshowcase\b/i.test(text)) for (const call of this.showcase()) await this.call(call, signal);
+      if (/\bsubagents\b/i.test(text)) await this.subagents(signal);
       if (/\bfail\b/i.test(text)) {
         this.emit({ type: "assistant_start", model: this.model });
         await this.pause(signal);
@@ -520,6 +523,69 @@ class FakeLiveChat implements LiveChat {
       // omp's and Pi's form: operations on a phased list.
       { name: "todo_write", args: { _i: "Updating progress", ops: [{ op: "done", task: "Normalize each harness's diff" }, { op: "done", task: "Ship the diff view" }] }, output: "Updated" },
     ];
+  }
+
+  /**
+   * pi-subagents' parallel run, as it reports it: live progress snapshots,
+   * then results with each agent's answer and transcript file.
+   */
+  private async subagents(signal: AbortSignal): Promise<void> {
+    const toolCallId = randomUUID();
+    const args = {
+      tasks: [
+        { agent: "scout", task: "Find where the server starts listening.\n\nReport the file and line." },
+        { agent: "worker", task: "Summarize the startup path in two sentences." },
+      ],
+    };
+    // Inside the (test) workspace, so it goes when the workspace does.
+    const dir = path.join(this.session.cwd, ".awui-fake-subagents");
+    await fs.mkdir(dir, { recursive: true });
+    const transcript = async (i: number, answer: string, tool: string) => {
+      const file = path.join(dir, `${toolCallId}_${i}_transcript.jsonl`);
+      const record = (message: object) => JSON.stringify({ version: 1, recordType: "message", agent: args.tasks[i]?.agent, childIndex: i, ts: Date.now(), message });
+      const call = { type: "toolCall", id: `c${i}`, name: "bash", arguments: { command: tool } };
+      await fs.writeFile(
+        file,
+        [
+          record({ role: "user", content: [{ type: "text", text: `Task: ${args.tasks[i]?.task}` }] }),
+          record({ role: "assistant", content: [{ type: "thinking", thinking: "Looking around first." }, call] }),
+          record({ role: "toolResult", toolCallId: `c${i}`, toolName: "bash", content: [{ type: "text", text: "src/server.ts:13:listen(port, host);" }], isError: false }),
+          record({ role: "assistant", content: [{ type: "text", text: answer }] }),
+        ].join("\n"),
+      );
+      return file;
+    };
+    const progress = (status0: string, status1: string) => [
+      { index: 0, agent: "scout", status: status0, task: "[prompt redacted]", recentTools: [{ tool: "bash", args: "rg -n listen src" }], toolCount: 1, tokens: 1800, durationMs: 1200 },
+      { index: 1, agent: "worker", status: status1, task: "[prompt redacted]", recentTools: [], toolCount: 0, tokens: 0, durationMs: 0 },
+    ];
+    this.emit({ type: "assistant_start", model: this.model });
+    this.record({ role: "assistant", content: [{ type: "toolCall", id: toolCallId, name: "subagent", arguments: args }], stopReason: "toolUse" });
+    this.emit({ type: "assistant_end", text: "", thinking: "" });
+    this.emit({ type: "tool_start", toolCallId, name: "subagent", args });
+    await this.pause(signal, 2);
+    this.emit({ type: "tool_update", toolCallId, output: "(running...)", details: { mode: "parallel", progress: progress("running", "pending") } });
+    await this.pause(signal, 12);
+    this.emit({ type: "tool_update", toolCallId, output: "(running...)", details: { mode: "parallel", progress: progress("completed", "running") } });
+    await this.pause(signal, 12);
+    const answers = ["`src/server.ts:13` calls `listen(port, host)`.", "The server reads its config, then listens on the configured host and port."];
+    const results = await Promise.all(
+      answers.map(async (answer, i) => ({
+        index: i,
+        agent: args.tasks[i]?.agent,
+        task: "[prompt redacted]",
+        exitCode: 0,
+        model: this.model,
+        finalOutput: answer,
+        usage: { input: 2100, output: 240, cacheRead: 0, cacheWrite: 0, cost: 0.0012, turns: 2 },
+        toolCalls: [{ text: "$ rg -n listen src", expandedText: "$ rg -n listen src" }],
+        transcriptPath: await transcript(i, answer, i === 0 ? "rg -n listen src" : "sed -n 1,40p src/server.ts"),
+      })),
+    );
+    const output = answers.join("\n\n");
+    const details = { mode: "parallel", results };
+    this.record({ role: "toolResult", toolCallId, toolName: "subagent", content: [{ type: "text", text: output }], isError: false, details });
+    this.emit({ type: "tool_end", toolCallId, output, isError: false, details });
   }
 
   private async call(call: FakeCall, signal: AbortSignal): Promise<void> {

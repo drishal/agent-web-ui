@@ -406,6 +406,11 @@ export function createApp(deps: AppDeps) {
     res.json(chat.snapshot().config);
   });
 
+  // A subagent's own transcript, for the viewer: read from the file its harness wrote.
+  app.get("/api/chats/:id/tools/:toolId/agents/:runId", async (req, res) => {
+    res.json(await manager.get(req.params.id).subagentTranscript(req.params.toolId, req.params.runId));
+  });
+
   app.get("/api/chats/:id/commands", async (req, res) => {
     res.json({ commands: await manager.get(req.params.id).commands() });
   });

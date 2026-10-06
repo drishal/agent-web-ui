@@ -11,6 +11,7 @@ import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
+import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 
@@ -96,7 +97,7 @@ const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking:
 const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; workspace: string }) {
   const failed = item.status === "error";
   const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
-  const summary = item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
+  const summary = item.subagents ? runsSummary(item.subagents) : item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
   const arrival = useArrival(item.id);
   // Seen running: its icon change (spinner to done) animates.
   const [live] = useState(item.status === "running");
@@ -113,8 +114,14 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
         }
         aside={item.diffStat ? <DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /> : null}
         {...(failed ? { tone: "error" as const } : {})}
+        // Agents seen working start open, so their progress shows as it happens.
+        defaultOpen={Boolean(item.subagents) && live}
       >
-        <ToolBody item={item} workspace={workspace} />
+        {item.subagents ? (
+          <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
+        ) : (
+          <ToolBody item={item} workspace={workspace} />
+        )}
       </DisclosureRow>
     </div>
   );
@@ -178,7 +185,7 @@ function ProcessAssistant({ item }: { item: AssistantItem }) {
   );
 }
 
-function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string }) {
+export function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string }) {
   switch (item.kind) {
     case "assistant":
       return <ProcessAssistant item={item} />;
@@ -537,13 +544,15 @@ export function Conversation({
   return (
     <div className="conversation-wrap">
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
-        <ArrivalsContext.Provider value={arrivals}>
-          <div className="thread">
-            {turns.map((turn) => (
-              <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
-            ))}
-          </div>
-        </ArrivalsContext.Provider>
+        <ChatIdContext.Provider value={chatId}>
+          <ArrivalsContext.Provider value={arrivals}>
+            <div className="thread">
+              {turns.map((turn) => (
+                <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
+              ))}
+            </div>
+          </ArrivalsContext.Provider>
+        </ChatIdContext.Provider>
       </div>
       <TurnRail turns={turns} scroller={scroller} />
       {showJump ? (

@@ -624,6 +624,30 @@ export class OmpAdapter implements HarnessAdapter {
     return (await this.sessionFiles.fill((await this.lister.list(undefined, pages)).filter((s) => s.cwd))).slice(0, limit);
   }
 
+  /**
+   * omp keeps each subagent's transcript beside its parent session:
+   * `<session>/<id>.jsonl`, and a nested agent's as `<session>/<parent>/<parent>.<id>.jsonl`.
+   */
+  async subagentTranscriptFile(nativeId: string, runId: string): Promise<string | null> {
+    if (!/^[\w.-]{1,128}$/.test(runId)) return null;
+    const file = await this.sessionFile(nativeId);
+    if (!file) return null;
+    const root = file.slice(0, -".jsonl".length);
+    const search = async (dir: string, depth: number): Promise<string | null> => {
+      const names = await fs.readdir(dir).catch(() => [] as string[]);
+      const hit = names.find((n) => n === `${runId}.jsonl` || n.endsWith(`.${runId}.jsonl`));
+      if (hit) return path.join(dir, hit);
+      if (depth === 0) return null;
+      for (const name of names) {
+        if (name.includes(".")) continue;
+        const found = await search(path.join(dir, name), depth - 1);
+        if (found) return found;
+      }
+      return null;
+    };
+    return search(root, 3);
+  }
+
   /** The .jsonl of a session, across the store's per-project buckets. */
   private async sessionFile(nativeId: string): Promise<string | null> {
     const root = await this.resolveSessionDir();

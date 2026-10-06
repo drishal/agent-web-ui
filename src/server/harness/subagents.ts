@@ -1,0 +1,301 @@
+// Delegation calls as subagent runs, one shape for every harness:
+//  - omp's `task`: { context, tasks: [{ name, agent, task }] }; its details
+//    carry `progress[]` (id, agent, status, recentTools, toolCount, tokens,
+//    cost, durationMs) and, when it ran in the background, `async`; results
+//    arrive later as an `async-result` message, and each agent's transcript is
+//    `<parent session>/<id>.jsonl` (nested agents a level deeper).
+//  - pi-subagents' `subagent`: { agent, task } | { tasks } | { chain }; its
+//    details carry `results[]` (index, agent, exitCode, usage, model,
+//    finalOutput, progress, sessionFile, transcriptPath) and live `progress[]`.
+//  - Claude Code's `Task`/`Agent`: { subagent_type, description, prompt }; the
+//    result text is its answer.
+// Transcript paths stay on the server (keyed by tool call and run), so the
+// browser can ask for a run's transcript but never names a file.
+import type { SubagentRun, SubagentsInfo } from "../../shared/protocol.js";
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+const MAX_OUTPUT_CHARS = 12_000;
+const MAX_ACTIVITY = 4;
+const MAX_FILES = 2_000;
+
+/** Whether a tool delegates to subagents. */
+export function isAgentTool(name: string): boolean {
+  return /^(task|subagent|agent|delegate|spawn_agents?)$/i.test(name);
+}
+
+const bound = (text: string) => (text.length > MAX_OUTPUT_CHARS ? `${text.slice(0, MAX_OUTPUT_CHARS)}\n…` : text);
+
+/** `${toolCallId}/${runId}` → the run's transcript file. */
+const files = new Map<string, string>();
+
+function rememberFile(toolCallId: string, runId: string, file: string | undefined): boolean {
+  if (!file || !file.endsWith(".jsonl")) return false;
+  const key = `${toolCallId}/${runId}`;
+  files.delete(key);
+  files.set(key, file);
+  if (files.size > MAX_FILES) files.delete(files.keys().next().value as string);
+  return true;
+}
+
+/** The transcript file a run's harness reported, if any. */
+export function transcriptFile(toolCallId: string, runId: string): string | null {
+  return files.get(`${toolCallId}/${runId}`) ?? null;
+}
+
+/** The runs a call's arguments describe, before anything has started. */
+export function runsFromArgs(args: unknown): SubagentsInfo | null {
+  if (!isObj(args)) return null;
+  const one = (raw: Obj, i: number): SubagentRun => ({
+    id: str(raw.name) ?? str(raw.id) ?? String(i),
+    agent: str(raw.agent) ?? str(raw.subagent_type) ?? "agent",
+    task: str(raw.task) ?? str(raw.assignment) ?? str(raw.prompt) ?? str(raw.description) ?? "",
+    status: "pending",
+  });
+  for (const [key, mode] of [
+    ["tasks", "parallel"],
+    ["chain", "chain"],
+  ] as const) {
+    const list = args[key];
+    if (Array.isArray(list) && list.length > 0) {
+      return { mode, runs: list.filter(isObj).map(one), ...(args.async === true ? { background: true } : {}) };
+    }
+  }
+  if (str(args.agent) || str(args.subagent_type) || str(args.task) || str(args.prompt)) {
+    return { mode: "single", runs: [one(args, 0)], ...(args.async === true ? { background: true } : {}) };
+  }
+  return null;
+}
+
+function status(raw: unknown, exitCode?: number): SubagentRun["status"] {
+  const s = String(raw ?? "").toLowerCase();
+  if (/complete|success|done|finish/.test(s)) return "done";
+  if (/fail|error/.test(s)) return "failed";
+  if (/abort|cancel|stop|kill|interrupt/.test(s)) return "stopped";
+  if (/run|active|start|detached/.test(s)) return "running";
+  if (/pend|queue|wait/.test(s)) return "pending";
+  if (exitCode !== undefined) return exitCode === 0 ? "done" : "failed";
+  return "running";
+}
+
+function activity(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const lines = raw.flatMap((t) => {
+    if (typeof t === "string") return [t];
+    if (!isObj(t)) return [];
+    const tool = str(t.tool) ?? str(t.name) ?? "tool";
+    const args = str(t.args) ?? str(t.summary) ?? "";
+    return [`${tool}${args ? ` ${args.replace(/\s+/g, " ").slice(0, 140)}` : ""}`];
+  });
+  return lines.length > 0 ? lines.slice(-MAX_ACTIVITY) : undefined;
+}
+
+/** The final assistant text in Pi-family messages. */
+function lastAnswer(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (!isObj(m) || m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    const text = m.content.flatMap((b) => (isObj(b) && b.type === "text" && typeof b.text === "string" ? [b.text] : [])).join("\n");
+    if (text.trim()) return text;
+  }
+  return undefined;
+}
+
+/** One progress or result row as a run, over what was known before. */
+function merge(prior: SubagentRun | undefined, row: Obj, fallbackId: string): SubagentRun {
+  const progress = isObj(row.progress) ? row.progress : {};
+  const usage = isObj(row.usage) ? row.usage : {};
+  const exitCode = num(row.exitCode);
+  // pi-subagents redacts the brief in its details; the arguments' copy stays.
+  // omp wraps the brief ("Complete assignment thoroughly: …") and keeps the original as `assignment`.
+  const task = str(row.assignment) ?? (str(row.task) && !/^\[prompt redacted\]/.test(String(row.task)) ? String(row.task) : (prior?.task ?? ""));
+  const output = str(row.finalOutput) ?? str(row.output) ?? str(row.result) ?? lastAnswer(row.messages);
+  const tokens = num(row.tokens) ?? num(progress.tokens) ?? (num(usage.input) !== undefined ? (num(usage.input) ?? 0) + (num(usage.output) ?? 0) : undefined);
+  const model = str(row.model) ?? str(progress.model) ?? prior?.model;
+  const run: SubagentRun = {
+    id: fallbackId,
+    agent: str(row.agent) ?? prior?.agent ?? "agent",
+    task,
+    // A live row says how it is doing; a finished one only how it exited.
+    status: (row.status ?? progress.status) !== undefined ? status(row.status ?? progress.status) : status(undefined, exitCode),
+  };
+  if (row.stopped === true || row.interrupted === true) run.status = "stopped";
+  if (model) run.model = model;
+  const toolCount = num(row.toolCount) ?? num(progress.toolCount) ?? (Array.isArray(row.toolCalls) ? row.toolCalls.length : undefined) ?? prior?.toolCount;
+  if (toolCount !== undefined) run.toolCount = toolCount;
+  if (tokens !== undefined) run.tokens = tokens;
+  const cost = num(row.cost) ?? num(usage.cost) ?? prior?.cost;
+  if (cost !== undefined) run.cost = cost;
+  const duration = num(row.durationMs) ?? num(progress.durationMs) ?? prior?.durationMs;
+  if (duration !== undefined) run.durationMs = duration;
+  const recent = activity(row.recentTools ?? progress.recentTools) ?? (run.status === "running" ? prior?.activity : undefined);
+  if (recent && run.status === "running") run.activity = recent;
+  if (output) run.output = bound(output);
+  else if (prior?.output) run.output = prior.output;
+  const error = str(row.error) ?? str(progress.error) ?? str(row.errorMessage);
+  if (error) run.error = error;
+  if (prior?.transcript) run.transcript = true;
+  return run;
+}
+
+/** Fold a call's details (a live update or its result) into its runs. */
+export function runsFromDetails(toolCallId: string, details: unknown, prior: SubagentsInfo | null): SubagentsInfo | null {
+  if (!isObj(details)) return prior;
+  const rows: Obj[] = [];
+  // Results are authoritative; progress fills in runs that have no result yet.
+  const results = Array.isArray(details.results) ? details.results.filter(isObj) : [];
+  const progress = Array.isArray(details.progress) ? details.progress.filter(isObj) : [];
+  if (results.length === 0 && progress.length === 0) return prior;
+  const keyOf = (row: Obj, i: number) => str(row.id) ?? (num(row.index) !== undefined ? String(row.index) : String(i));
+  const seen = new Set<string>();
+  for (const [i, row] of results.entries()) {
+    seen.add(keyOf(row, i));
+    rows.push(row);
+  }
+  for (const [i, row] of progress.entries()) if (!seen.has(keyOf(row, i))) rows.push(row);
+
+  const before = prior?.runs ?? [];
+  const used = new Set<SubagentRun>();
+  const runs = rows.map((row, i) => {
+    const key = keyOf(row, i);
+    // A run the arguments named by position takes the id the harness gave it (omp's InclinedBoar).
+    const match = before.find((r) => r.id === key) ?? before.find((r, at) => r.id === String(at) && at === (num(row.index) ?? i));
+    if (match) used.add(match);
+    const run = merge(match, row, key);
+    if (rememberFile(toolCallId, run.id, str(row.transcriptPath) ?? str(row.sessionFile))) run.transcript = true;
+    // omp names each run's transcript after its id (<session>/<id>.jsonl); the adapter finds it.
+    if (str(row.id)) run.transcript = true;
+    return run;
+  });
+  // Runs the arguments named that no row mentions yet stay as they were.
+  for (const r of before) if (!used.has(r) && !runs.some((x) => x.id === r.id)) runs.push(r);
+  const asyncState = isObj(details.async) ? details.async : null;
+  return {
+    ...(str(details.mode) ? { mode: String(details.mode) } : prior?.mode ? { mode: prior.mode } : {}),
+    ...(asyncState || details.background === true || prior?.background ? { background: true } : {}),
+    runs,
+  };
+}
+
+/** A call's runs once it ended without details worth folding: Claude Code's answer text, or a failure. */
+export function settleRuns(info: SubagentsInfo, output: string, isError: boolean): SubagentsInfo {
+  if (info.background) return info;
+  const open = info.runs.filter((r) => r.status === "pending" || r.status === "running");
+  if (open.length === 0) return info;
+  return {
+    ...info,
+    runs: info.runs.map((r) =>
+      r.status === "pending" || r.status === "running"
+        ? { ...r, status: isError ? "failed" : "done", ...(open.length === 1 && output.trim() && !r.output ? { output: bound(output) } : {}) }
+        : r,
+    ),
+  };
+}
+
+export interface AgentReport {
+  id: string;
+  status: SubagentRun["status"];
+  durationMs?: number;
+  output?: string;
+  model?: string;
+}
+
+/** The answer inside omp's `<task-result …>` text: its `<output>`, else its `<preview>`. */
+function resultBody(text: string): string | undefined {
+  const m = /<output>([\s\S]*?)(?:<\/output>|$)/.exec(text) ?? /<preview[^>]*>([\s\S]*?)(?:<\/preview>|$)/.exec(text);
+  return m?.[1]?.trim() || undefined;
+}
+
+/** omp's job snapshots (`jobs[]` in a wait, a proc read or kill, a background delivery) as reports on its task runs. */
+function jobReports(jobs: unknown): AgentReport[] {
+  if (!Array.isArray(jobs)) return [];
+  return jobs.filter(isObj).flatMap((job): AgentReport[] => {
+    const id = str(job.id) ?? str(job.jobId);
+    if (job.type !== "task" || !id) return [];
+    const data = isObj(job.schema) ? job.schema.data : undefined;
+    const output = data !== undefined ? (typeof data === "string" ? data : JSON.stringify(data, null, 2)) : resultBody(String(job.resultText ?? ""));
+    const model = str(job.resolvedModel);
+    return [
+      {
+        id,
+        status: job.status === undefined ? "done" : status(job.status),
+        ...(num(job.durationMs) !== undefined ? { durationMs: num(job.durationMs) } : {}),
+        ...(output ? { output: bound(output) } : {}),
+        ...(model ? { model } : {}),
+      },
+    ];
+  });
+}
+
+/** Reports on task runs in any tool result's details (omp's wait, read proc://, write proc://…/kill). */
+export function detailReports(details: unknown): AgentReport[] {
+  if (!isObj(details)) return [];
+  return [...jobReports(details.jobs), ...(isObj(details.proc) ? jobReports(details.proc.jobs) : [])];
+}
+
+/**
+ * omp's background delivery (an `async-result` message): which task runs
+ * finished, how, and a preview of what they said.
+ */
+export function asyncReports(customType: unknown, content: unknown, details: unknown): AgentReport[] {
+  if (customType !== "async-result") return [];
+  const text = typeof content === "string" ? content : Array.isArray(content) ? content.map((b) => (isObj(b) && typeof b.text === "string" ? b.text : "")).join("\n") : "";
+  const out = new Map<string, AgentReport>();
+  for (const report of jobReports(isObj(details) ? details.jobs : undefined)) out.set(report.id, report);
+  for (const m of text.matchAll(/<task-result id="([^"]+)"[^>]*?status="([^"]+)"[^>]*>([\s\S]*?)(?:<\/task-result>|$)/g)) {
+    const id = m[1] as string;
+    const prior = out.get(id);
+    const body = resultBody(m[3] as string);
+    out.set(id, { ...prior, id, status: status(m[2]), ...(prior?.output ? {} : body ? { output: bound(body) } : {}) });
+  }
+  return [...out.values()];
+}
+
+/** Apply background reports to a call's runs; null when none of them is this call's. */
+export function applyReports(info: SubagentsInfo, reports: AgentReport[]): SubagentsInfo | null {
+  let touched = false;
+  const runs = info.runs.map((r): SubagentRun => {
+    const report = reports.find((x) => x.id === r.id);
+    if (!report) return r;
+    touched = true;
+    // Still running: keep what it was doing.
+    const { activity, ...rest } = r;
+    return {
+      ...rest,
+      ...(report.status === "running" && activity ? { activity } : {}),
+      status: report.status,
+      ...(report.durationMs !== undefined ? { durationMs: report.durationMs } : {}),
+      ...(report.output ? { output: report.output } : {}),
+      ...(report.model ? { model: report.model } : {}),
+    };
+  });
+  return touched ? { ...info, runs } : null;
+}
+
+/** A pi-subagents transcript (records of `{ recordType: "message", message }`) as Pi-family messages. */
+export function transcriptRecords(text: string): unknown[] | null {
+  const out: unknown[] = [];
+  let records = false;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isObj(entry) || typeof entry.recordType !== "string") return records ? out : null;
+    records = true;
+    if (entry.recordType !== "message" || !isObj(entry.message)) continue;
+    const m = entry.message;
+    if (m.role === "system") continue;
+    // The launcher's audit copy of the prompt; the real brief follows it.
+    if (m.role === "user" && /^\[prompt redacted\]/.test(JSON.stringify(m.content).replace(/^\[\{"type":"text","text":"/, ""))) continue;
+    out.push({ ...m, ...(typeof entry.ts === "number" ? { timestamp: entry.ts } : {}) });
+  }
+  return records ? out : null;
+}

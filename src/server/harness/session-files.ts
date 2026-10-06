@@ -195,7 +195,9 @@ export function branchMessages(text: string): unknown[] {
   for (const entry of range) {
     if (entry.type === "message" && isObj(entry.message)) out.push(entry.message);
     else if (entry.type === "branch_summary") out.push({ role: "branchSummary", summary: entry.summary });
-    else if (entry.type === "custom_message") out.push({ role: "custom", customType: entry.customType, content: entry.content, display: entry.display === true });
+    else if (entry.type === "custom_message") {
+      out.push({ role: "custom", customType: entry.customType, content: entry.content, display: entry.display === true, ...(entry.details !== undefined ? { details: entry.details } : {}) });
+    }
   }
   return out;
 }

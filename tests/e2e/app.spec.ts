@@ -824,3 +824,31 @@ test("an extension's message (a memory recall) shows as a labelled row, not its 
   await expect(row).toContainText("Your memory book: notes about the user.");
   await expect(row).toContainText("- prefers tabs over spaces");
 });
+
+test("subagents show live, then their answers, and open their own transcripts", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "run subagents please");
+  // Seen working, the delegation is open: one agent running, the other queued.
+  const row = page.locator('[data-testid="tool-row"][data-tool="subagent"]');
+  await expect(row.locator(".run-status.is-running")).toHaveCount(1);
+  await expect(row.locator(".run-activity")).toContainText("bash rg -n listen src");
+  await expect(page.locator(".answer-actions")).toBeVisible({ timeout: 20000 });
+  await openFold(page);
+  // Settled, it opens like any other row.
+  await row.getByRole("button").first().click();
+  await expect(row.locator(".runs")).toBeVisible();
+  await expect(row.locator(".drow-summary")).toHaveText("2 agents · 2 done");
+  await expect(row.locator(".tool-card-meta")).toHaveText("2/2 done");
+  await expect(row.locator(".run-agent")).toHaveText(["scout", "worker"]);
+  await row.locator(".run-head").first().click();
+  await expect(row.locator(".run-brief")).toContainText("Find where the server starts listening.");
+  await expect(row.locator(".run-output")).toContainText("src/server.ts:13");
+  await row.getByRole("button", { name: "Open transcript" }).click();
+  const panel = page.getByRole("dialog", { name: "Transcript of 0" });
+  await expect(panel.locator(".run-panel-brief")).toContainText("Task: Find where the server starts listening.");
+  await expect(panel.getByTestId("tool-row")).toHaveAttribute("data-tool", "bash");
+  await expect(panel.locator(".run-panel-text")).toContainText("calls listen(port, host)");
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+});

@@ -141,7 +141,37 @@ export interface AssistantItem {
   endedAt?: number;
 }
 
-export type ToolCategory = "read" | "edit" | "write" | "command" | "search" | "web" | "other";
+export type ToolCategory = "read" | "edit" | "write" | "command" | "search" | "web" | "agent" | "other";
+
+/** One subagent a delegation call started (omp's task, pi-subagents' subagent, Claude Code's Task). */
+export interface SubagentRun {
+  /** Stable within the call: the harness's agent id (omp's CrookedThrush), else its launch index. */
+  id: string;
+  /** Its agent type: scout, worker, general-purpose. */
+  agent: string;
+  /** The brief it was given. */
+  task: string;
+  status: "pending" | "running" | "done" | "failed" | "stopped";
+  model?: string;
+  toolCount?: number;
+  tokens?: number;
+  cost?: number;
+  durationMs?: number;
+  /** While it runs: its latest tool calls, newest last. */
+  activity?: string[];
+  /** Its final answer (bounded). */
+  output?: string;
+  error?: string;
+  /** Its own transcript, readable through /api/chats/:id/tools/:toolId/agents/:runId. */
+  transcript?: boolean;
+}
+
+export interface SubagentsInfo {
+  /** single, parallel, chain; omp's background runs report back later. */
+  mode?: string;
+  background?: boolean;
+  runs: SubagentRun[];
+}
 
 /** One line of a tool's diff. `line` is its number in the file: the new side for add/ctx, the old for del. */
 export interface DiffLine {
@@ -173,6 +203,8 @@ export interface ToolItem {
   diffStat?: { added: number; removed: number };
   /** An edit's or write's lines: the harness's own diff once it answers, the arguments' until then. */
   diff?: ToolDiff;
+  /** A delegation call's subagents, with their live progress and results. */
+  subagents?: SubagentsInfo;
   at?: number;
   endedAt?: number;
 }

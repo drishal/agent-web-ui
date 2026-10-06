@@ -64,6 +64,15 @@ export const IconTool = (p: IconProps) => (
     <path d="M9.75 2.25a3.25 3.25 0 00-3.4 4.4L2.25 10.75v3h3l4.1-4.1a3.25 3.25 0 004.4-3.4l-2 2-2-.5-.5-2z" />
   </Svg>
 );
+/** A lead and a helper: delegation to subagents. */
+export const IconAgents = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="6" cy="5" r="2.25" />
+    <path d="M1.75 13.5c.4-2.4 2.1-3.75 4.25-3.75s3.85 1.35 4.25 3.75" />
+    <circle cx="11.25" cy="5.75" r="1.75" />
+    <path d="M11.5 9.6c1.6.2 2.5 1.3 2.75 3" />
+  </Svg>
+);
 export const IconSpark = (p: IconProps) => (
   <Svg {...p}>
     <path d="M8 1.75v3M8 11.25v3M1.75 8h3M11.25 8h3M3.6 3.6l2 2M10.4 10.4l2 2M12.4 3.6l-2 2M5.6 10.4l-2 2" />
@@ -221,6 +230,8 @@ export function ToolIcon({ category, size }: { category: ToolCategory; size?: nu
       return <IconSearch {...props} />;
     case "web":
       return <IconGlobe {...props} />;
+    case "agent":
+      return <IconAgents {...props} />;
     default:
       return <IconTool {...props} />;
   }
