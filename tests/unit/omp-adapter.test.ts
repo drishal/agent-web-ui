@@ -1,9 +1,9 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
 import { ChatManager } from "../../src/server/chats/manager.js";
-import { firstPrompt, liveOmpChildren, OmpAdapter, ompVersionWarning } from "../../src/server/harness/omp.js";
+import { firstPrompt, lastMessageAt, liveOmpChildren, OmpAdapter, ompVersionWarning } from "../../src/server/harness/omp.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -169,6 +169,26 @@ describe("omp adapter (scripted omp)", () => {
     expect(titles["01a0aaaa-0000-7000-8000-000000000000"]).toBe("Untitled");
   });
 
+  it("orders sessions by their last message, not omp's exit records", async () => {
+    // omp's session/list says every session changed just now (the fixture, like omp after a session_exit).
+    const saved = existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { sessions: {}, spawns: [] };
+    const opened = "01a0bbbb-0000-7000-8000-000000000000";
+    const talked = "01a0cccc-0000-7000-8000-000000000000";
+    saved.sessions[opened] = { cwd: project, title: "opened, then closed", messages: [{ role: "user", content: "x" }] };
+    saved.sessions[talked] = { cwd: project, title: "talked in", messages: [{ role: "user", content: "y" }] };
+    writeFileSync(state, JSON.stringify(saved));
+    const dir = path.join(home, ".omp", "agent", "sessions", "-proj");
+    mkdirSync(dir, { recursive: true });
+    const message = (at: string) => ({ type: "message", timestamp: at, message: { role: "user", content: "hi" } });
+    const exit = (at: string) => ({ type: "custom", customType: "session_exit", data: { reason: "sigterm" }, timestamp: at });
+    const write = (id: string, entries: object[]) => writeFileSync(path.join(dir, `2026-10-01T10-00-00-000Z_${id}.jsonl`), entries.map((e) => JSON.stringify(e)).join("\n"));
+    write(opened, [{ type: "session", cwd: project }, message("2026-10-01T10:00:00.000Z"), exit("2026-10-06T09:00:00.000Z")]);
+    write(talked, [{ type: "session", cwd: project }, message("2026-10-02T10:00:00.000Z")]);
+    const listed = (await adapter.listSessions(project)).filter((s) => s.nativeId === opened || s.nativeId === talked);
+    expect(listed.map((s) => s.nativeId)).toEqual([talked, opened]);
+    expect(listed[1]?.updatedAt?.toISOString()).toBe("2026-10-01T10:00:00.000Z");
+  });
+
   /** A saved session whose history no longer fits omp's 1 MiB v1 frame. */
   async function bigSession(): Promise<string> {
     const { chat, live } = await openChat();
@@ -288,6 +308,18 @@ describe("omp adapter (scripted omp)", () => {
     child.kill("SIGKILL");
     await until(() => chat.status === "error");
     expect(chat.snapshot().items.some((i) => i.kind === "notice" && i.level === "error" && /stopped unexpectedly/.test(i.text))).toBe(true);
+  });
+});
+
+describe("lastMessageAt", () => {
+  it("takes the newest message's time from a file's tail, skipping other entries and a cut-off line", () => {
+    const jsonl = [
+      'age":{"role":"user","content":"cut"},"timestamp":"2026-01-01T00:00:00.000Z"}',
+      JSON.stringify({ type: "message", timestamp: "2026-10-04T19:10:48.008Z", message: { role: "assistant", content: [] } }),
+      JSON.stringify({ type: "custom", customType: "session_exit", timestamp: "2026-10-06T09:06:24.801Z", data: { reason: "message" } }),
+    ].join("\n");
+    expect(lastMessageAt(jsonl)?.toISOString()).toBe("2026-10-04T19:10:48.008Z");
+    expect(lastMessageAt(JSON.stringify({ type: "custom", timestamp: "2026-10-06T00:00:00Z" }))).toBeNull();
   });
 });
 

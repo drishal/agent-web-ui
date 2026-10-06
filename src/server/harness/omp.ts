@@ -73,6 +73,8 @@ const CONTEXT_REPORT_TIMEOUT_MS = 5_000;
 /** omp's protocol v2 ceiling for one reassembled frame. */
 const MAX_REASSEMBLED_BYTES = 64 * 1024 * 1024;
 const FIRST_PROMPT_BYTES = 64 * 1024;
+/** How much of a session file's end is read for its last message. */
+const LAST_MESSAGE_BYTES = 64 * 1024;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
 
@@ -428,62 +430,121 @@ export function firstPrompt(jsonl: string): string | null {
 }
 
 /**
- * ACP `session/list` gives only omp's stored title, which stays empty when its
- * title generation never ran (a run that ended on tool calls, say). omp's own
- * picker then shows the first prompt; this does the same. Read-only: the first
- * 64 kB of `<sessionDir>/<cwd>/<time>_<id>.jsonl`, cached by file size.
+ * When the newest message in an omp session file's tail (JSONL) was written,
+ * or null. Other entries do not count: omp appends a `session_exit` every time
+ * its process ends, so merely opening a chat and closing it again would
+ * otherwise make it the newest.
  */
-class FirstPrompts {
-  private cache = new Map<string, { size: number; title: string | null }>();
+export function lastMessageAt(jsonl: string): Date | null {
+  const lines = jsonl.split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i] as string;
+    if (!line.includes('"message"')) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // the read window can cut the first line short
+    }
+    if (!isObj(entry) || entry.type !== "message") continue;
+    const at = typeof entry.timestamp === "number" ? entry.timestamp : Date.parse(String(entry.timestamp ?? ""));
+    if (Number.isFinite(at)) return new Date(at);
+  }
+  return null;
+}
+
+/**
+ * What ACP `session/list` gets wrong, read from the session files themselves.
+ * Its title stays empty when omp's title generation never ran (a run that
+ * ended on tool calls, say); omp's own picker then shows the first prompt, and
+ * so does this. Its `updatedAt` moves whenever omp writes anything, including
+ * the `session_exit` it records on every shutdown, so a chat only opened and
+ * closed would jump to the top; recency is the last message instead.
+ * Read-only: the first and last 64 kB of `<sessionDir>/<cwd>/<time>_<id>.jsonl`,
+ * cached by file size.
+ */
+class SessionFiles {
+  private titles = new Map<string, { size: number; title: string | null }>();
+  private recency = new Map<string, { size: number; at: Date | null }>();
+  private files = new Map<string, string>();
 
   constructor(private readonly root: () => Promise<string>) {}
 
+  /** Titles and recency corrected from the files, newest first. */
   async fill<T extends NativeSessionSummary>(sessions: T[]): Promise<T[]> {
-    const untitled = sessions.filter((s) => !s.title);
-    if (untitled.length > 0) {
-      const files = await this.locate(new Set(untitled.map((s) => s.nativeId)));
-      await Promise.all(
-        untitled.map(async (s) => {
-          const file = files.get(s.nativeId);
-          s.title = (file ? await this.read(s.nativeId, file) : null) ?? "Untitled";
-        }),
-      );
-    }
-    return sessions;
+    const files = await this.locate(new Set(sessions.map((s) => s.nativeId)));
+    await Promise.all(
+      sessions.map(async (s) => {
+        const file = files.get(s.nativeId);
+        if (!s.title) s.title = (file ? await this.title(s.nativeId, file) : null) ?? "Untitled";
+        const at = file ? await this.lastMessage(s.nativeId, file) : null;
+        if (at) s.updatedAt = at;
+      }),
+    );
+    return sessions.sort((a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0));
   }
 
   private async locate(ids: Set<string>): Promise<Map<string, string>> {
-    const root = await this.root();
+    const missing = [...ids].filter((id) => !this.files.has(id));
+    if (missing.length > 0) {
+      const wanted = new Set(missing);
+      const root = await this.root();
+      const dirs = await fs.readdir(root).catch(() => [] as string[]);
+      await Promise.all(
+        dirs.map(async (dir) => {
+          for (const name of await fs.readdir(path.join(root, dir)).catch(() => [] as string[])) {
+            const id = name.endsWith(".jsonl") ? name.slice(name.lastIndexOf("_") + 1, -".jsonl".length) : "";
+            if (wanted.has(id)) this.files.set(id, path.join(root, dir, name));
+          }
+        }),
+      );
+    }
     const found = new Map<string, string>();
-    const dirs = await fs.readdir(root).catch(() => [] as string[]);
-    await Promise.all(
-      dirs.map(async (dir) => {
-        for (const name of await fs.readdir(path.join(root, dir)).catch(() => [] as string[])) {
-          const id = name.endsWith(".jsonl") ? name.slice(name.lastIndexOf("_") + 1, -".jsonl".length) : "";
-          if (ids.has(id)) found.set(id, path.join(root, dir, name));
-        }
-      }),
-    );
+    for (const id of ids) {
+      const file = this.files.get(id);
+      if (file) found.set(id, file);
+    }
     return found;
   }
 
-  private async read(id: string, file: string): Promise<string | null> {
+  /** `bytes` of the file from its start or its end, or null when unchanged since `cachedSize`. */
+  private async readWindow(file: string, bytes: number, fromEnd: boolean, cachedSize: number | undefined): Promise<{ size: number; text: string | null } | null> {
     let handle: fs.FileHandle | undefined;
     try {
       handle = await fs.open(file, "r");
       const { size } = await handle.stat();
-      const cached = this.cache.get(id);
-      if (cached && cached.size === size) return cached.title;
-      const buf = Buffer.alloc(Math.min(size, FIRST_PROMPT_BYTES));
-      await handle.read(buf, 0, buf.length, 0);
-      const title = firstPrompt(buf.toString("utf8"));
-      this.cache.set(id, { size, title });
-      return title;
+      if (cachedSize === size) return { size, text: null };
+      const length = Math.min(size, bytes);
+      const buf = Buffer.alloc(length);
+      await handle.read(buf, 0, length, fromEnd ? size - length : 0);
+      return { size, text: buf.toString("utf8") };
     } catch {
+      // Moved or deleted: look it up again next time.
+      for (const [id, f] of this.files) if (f === file) this.files.delete(id);
       return null;
     } finally {
       await handle?.close();
     }
+  }
+
+  private async title(id: string, file: string): Promise<string | null> {
+    const cached = this.titles.get(id);
+    const read = await this.readWindow(file, FIRST_PROMPT_BYTES, false, cached?.size);
+    if (!read) return null;
+    if (read.text === null) return cached?.title ?? null;
+    const title = firstPrompt(read.text);
+    this.titles.set(id, { size: read.size, title });
+    return title;
+  }
+
+  private async lastMessage(id: string, file: string): Promise<Date | null> {
+    const cached = this.recency.get(id);
+    const read = await this.readWindow(file, LAST_MESSAGE_BYTES, true, cached?.size);
+    if (!read) return null;
+    if (read.text === null) return cached?.at ?? null;
+    const at = lastMessageAt(read.text);
+    this.recency.set(id, { size: read.size, at });
+    return at;
   }
 }
 
@@ -505,7 +566,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsHandoff: true,
   };
   private lister: AcpLister;
-  private firstPrompts = new FirstPrompts(() => this.resolveSessionDir());
+  private sessionFiles = new SessionFiles(() => this.resolveSessionDir());
   private probeCache = new Map<string, { at: number; models: ModelInfo[]; levels: string[] }>();
 
   constructor(private readonly options: OmpOptions) {
@@ -555,12 +616,12 @@ export class OmpAdapter implements HarnessAdapter {
   }
 
   async listSessions(cwd: string): Promise<NativeSessionSummary[]> {
-    return this.firstPrompts.fill(await this.lister.list(cwd));
+    return this.sessionFiles.fill(await this.lister.list(cwd));
   }
 
   async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
     const pages = Math.max(1, Math.ceil(limit / ACP_SESSION_PAGE));
-    return this.firstPrompts.fill((await this.lister.list(undefined, pages)).filter((s) => s.cwd).slice(0, limit));
+    return (await this.sessionFiles.fill((await this.lister.list(undefined, pages)).filter((s) => s.cwd))).slice(0, limit);
   }
 
   /** The .jsonl of a session, across the store's per-project buckets. */
