@@ -1368,6 +1368,10 @@ body.is-resizing {
   margin: 0 0 4px 12px;
 }
 
+.term-meta .tool-chip {
+  max-width: none;
+}
+
 .tool-chip.is-quiet {
   white-space: nowrap;
   background: var(--surface-2);
@@ -1405,6 +1409,65 @@ body.is-resizing {
   max-height: 220px;
   overflow-y: auto;
   padding: 0 12px 10px;
+}
+
+/* A todo call as a checklist. */
+.todo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  font-family: var(--font-sans);
+  font-size: var(--chat-small);
+}
+
+.todo-card-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 6px;
+  color: var(--text-2);
+}
+
+.todo-card-phase {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.todo-card-row:first-child .todo-card-phase {
+  margin-top: 0;
+}
+
+.todo-card-icon {
+  display: inline-flex;
+  align-self: center;
+  color: var(--muted);
+}
+
+.todo-card-row.is-done .todo-card-icon {
+  color: var(--ok);
+}
+
+.todo-card-row.is-done .todo-card-text,
+.todo-card-row.is-cancelled .todo-card-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.todo-card-row.is-active .todo-card-icon {
+  color: var(--accent);
+}
+
+.todo-card-row.is-active .todo-card-text {
+  color: var(--text);
+  font-weight: 550;
 }
 
 /* Diffs: tinted rows, a number gutter, the changed words marked. */

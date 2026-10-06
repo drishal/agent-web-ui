@@ -119,6 +119,19 @@ describe("agent event normalization", () => {
     expect(toolPaths({ i: "do it", input: "[src/a.ts#AB12]\nPUT 1.=2:\n+x\n" })).toEqual(["src/a.ts"]);
   });
 
+  it("sums up a todo call in words, not its JSON", () => {
+    const todos = [
+      { content: "a", status: "completed" },
+      { content: "b", status: "in_progress", activeForm: "Doing b" },
+      { content: "c", status: "pending" },
+    ];
+    expect(toolSummary({ todos })).toBe("1/3 todos done · Doing b");
+    expect(toolSummary({ _i: "x", ops: [{ op: "init", list: [{ phase: "P", items: ["a", "b"] }, { phase: "Q", items: ["c"] }] }] })).toBe("Planned 3 tasks");
+    expect(toolSummary({ ops: [{ op: "done", task: "a" }, { op: "done", task: "b" }] })).toBe("Done: a, b");
+    expect(toolSummary({ op: "init", list: [{ phase: "Fix", items: ["one"] }] })).toBe("Planned 1 task");
+    expect(toolCategory("todo_write")).toBe("other");
+  });
+
   it("takes an edit's count from its output only in the bracketed form", () => {
     expect(outputDiffStat("Edited src/app.ts (+1 -1)")).toEqual({ added: 1, removed: 1 });
     expect(outputDiffStat("# Fake README\nhello")).toBeNull();

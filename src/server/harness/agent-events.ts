@@ -116,6 +116,8 @@ export function stringifyArgs(args: unknown, verbatimInput = false): string {
 /** Coarse tool kind, used for per-turn counts ("3 reads, 2 edits") and changed files. */
 export function toolCategory(name: string): ToolCategory {
   const n = name.toLowerCase();
+  // A todo list is no file: todo_write is not a write.
+  if (/todo/.test(n)) return "other";
   if (/web|fetch|browse|url|http/.test(n)) return "web";
   if (/(^|_)(edit|ast_edit|apply_patch|patch|multi_?edit|str_replace|replace)($|_)/.test(n)) return "edit";
   if (/(^|_)(write|create|new_file|save)($|_)/.test(n)) return "write";
@@ -179,6 +181,44 @@ export function editShape(diff: ToolDiff | null, output: string | null): Pick<To
   const stat = output === null ? null : outputDiffStat(output);
   return stat ? { diffStat: stat } : {};
 }
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * A todo call in words: Claude Code's and Hermes's whole list (`todos`) as
+ * its progress and current item; omp's and Pi's operations (`ops`, or one
+ * `op`) as what they did.
+ */
+function todoSummary(args: Obj): string | null {
+  if (Array.isArray(args.todos) && args.todos.every(isObj)) {
+    const todos = args.todos as Obj[];
+    const done = todos.filter((t) => /done|complete/.test(String(t.status))).length;
+    const current = todos.find((t) => /progress|active/.test(String(t.status)));
+    const label = current ? String(current.activeForm ?? current.content ?? current.text ?? "") : "";
+    return oneLine(`${done}/${plural(todos.length, "todo")} done${label ? ` · ${label}` : ""}`);
+  }
+  const ops = Array.isArray(args.ops) ? args.ops.filter(isObj) : typeof args.op === "string" ? [args] : null;
+  if (!ops || ops.length === 0) return null;
+  const parts = ops.map((op) => {
+    const kind = String(op.op ?? "");
+    const items = Array.isArray(op.list) ? op.list.reduce((n: number, phase) => n + (isObj(phase) && Array.isArray(phase.items) ? phase.items.length : 0), 0) : 0;
+    const what = typeof op.task === "string" ? op.task : typeof op.text === "string" ? op.text : "";
+    if (kind === "init" || kind === "replace") return `Planned ${plural(items, "task")}`;
+    if (kind === "done" || kind === "complete") return `Done: ${what}`;
+    if (kind === "start" || kind === "progress") return `Started: ${what}`;
+    if (kind === "add" || kind === "append") return `Added ${what || plural(Array.isArray(op.items) ? op.items.length : 1, "task")}`;
+    return what ? `${kind}: ${what}` : kind;
+  });
+  // "Done: a · Done: b" reads as "Done: a, b".
+  const merged: string[] = [];
+  for (const part of parts.filter(Boolean)) {
+    const prev = merged[merged.length - 1];
+    const lead = /^(Done|Started): /.exec(part)?.[0];
+    if (lead && prev?.startsWith(lead)) merged[merged.length - 1] = `${prev}, ${part.slice(lead.length)}`;
+    else merged.push(part);
+  }
+  return oneLine(merged.join(" · "));
+}
+
 /**
  * One-line description of a call: its command, else what a search looks for
  * (and where, unless that is just the working directory), else its path, else
@@ -188,6 +228,8 @@ export function editShape(diff: ToolDiff | null, output: string | null): Pick<To
 export function toolSummary(args: unknown): string {
   if (typeof args === "string") return oneLine(args);
   if (!isObj(args)) return "";
+  const todo = todoSummary(args);
+  if (todo) return todo;
   const paths = toolPaths(args);
   for (const key of ["command", "cmd", "script", "code"]) {
     if (typeof args[key] === "string") return oneLine(args[key] as string);

@@ -95,6 +95,13 @@ test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", a
   await expect(tool("bash").locator(".term-output")).toContainText("5 passed");
   await expect(tool("grep").locator(".tool-chip")).toHaveText("listen\\(");
   await expect(tool("web_fetch").getByRole("link", { name: "https://example.com/docs/listen" })).toBeVisible();
+  // Todos read as a checklist, never as JSON.
+  await expect(tool("TodoWrite").locator(".drow-summary")).toHaveText("1/3 todos done · Shipping the diff view");
+  await tool("TodoWrite").getByRole("button").first().click();
+  await expect(tool("TodoWrite").locator(".todo-card-row.is-done")).toHaveText("Normalize each harness's diff");
+  await expect(tool("TodoWrite").locator(".todo-card-row.is-active")).toHaveText("Ship the diff view");
+  await expect(tool("todo_write").locator(".drow-summary")).toHaveText("Done: Normalize each harness's diff, Ship the diff view");
+  await expect(page.getByTestId("process-toggle").last()).toContainText("1 file written");
 });
 
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {

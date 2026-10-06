@@ -504,7 +504,19 @@ class FakeLiveChat implements LiveChat {
       { name: "grep", args: { pattern: "listen\\(", path: "src" }, output: "src/server.ts:13:listen(port, host);\nsrc/net.ts:4:export function listen(port: number, host?: string) {" },
       { name: "read", args: { path: `${cwd}/src/net.ts`, offset: 1, limit: 20 }, output: "1\timport { createServer } from \"node:http\";\n2\t\n3\texport function listen(port: number, host?: string) {\n4\t  createServer().listen(port, host);\n5\t}" },
       { name: "web_fetch", args: { url: "https://example.com/docs/listen" }, output: "Example Domain\nThis domain is for use in illustrative examples in documents." },
-      { name: "todo_write", args: { todos: [{ content: "Ship the diff view", status: "in_progress" }], merge: false }, output: "Updated 1 todo" },
+      {
+        name: "TodoWrite",
+        args: {
+          todos: [
+            { content: "Normalize each harness's diff", status: "completed", activeForm: "Normalizing diffs" },
+            { content: "Ship the diff view", status: "in_progress", activeForm: "Shipping the diff view" },
+            { content: "Polish the tool cards", status: "pending", activeForm: "Polishing tool cards" },
+          ],
+        },
+        output: "Todos have been modified successfully",
+      },
+      // omp's and Pi's form: operations on a phased list.
+      { name: "todo_write", args: { _i: "Updating progress", ops: [{ op: "done", task: "Normalize each harness's diff" }, { op: "done", task: "Ship the diff view" }] }, output: "Updated" },
     ];
   }
 

@@ -5,7 +5,7 @@
 // one card with a header naming what it touched.
 import { useMemo, useState, type ReactNode } from "react";
 import type { DiffLine, ToolDiff, ToolItem } from "../../shared/protocol.js";
-import { IconFile, IconGlobe, IconSearch, IconTerminal } from "../icons.js";
+import { IconCheck, IconCircle, IconDot, IconFile, IconGlobe, IconSearch, IconTerminal, IconX } from "../icons.js";
 import { relativePath } from "../turns.js";
 
 type Args = Record<string, unknown>;
@@ -202,6 +202,68 @@ function lineRange(args: Args | null): string | null {
   return null;
 }
 
+interface TodoEntry {
+  text: string;
+  status: "done" | "active" | "pending" | "cancelled";
+  phase?: string;
+}
+
+const todoStatus = (raw: unknown): TodoEntry["status"] => {
+  const s = String(raw ?? "");
+  return /done|complete/.test(s) ? "done" : /progress|active|doing/.test(s) ? "active" : /cancel|abandon|skip/.test(s) ? "cancelled" : "pending";
+};
+
+/**
+ * A todo call as a checklist: Claude Code's and Hermes's whole list, or what
+ * omp's and Pi's operations planned and ticked off. Null when the arguments
+ * are not a todo call.
+ */
+function todoEntries(args: Args | null): TodoEntry[] | null {
+  if (!args) return null;
+  const obj = (v: unknown): v is Args => typeof v === "object" && v !== null && !Array.isArray(v);
+  if (Array.isArray(args.todos)) {
+    return args.todos.filter(obj).map((t) => ({ text: String(t.content ?? t.text ?? t.title ?? ""), status: todoStatus(t.status) }));
+  }
+  const ops = Array.isArray(args.ops) ? args.ops.filter(obj) : typeof args.op === "string" ? [args] : null;
+  if (!ops) return null;
+  const out: TodoEntry[] = [];
+  for (const op of ops) {
+    const kind = String(op.op ?? "");
+    if (Array.isArray(op.list)) {
+      for (const phase of op.list.filter(obj)) {
+        for (const task of Array.isArray(phase.items) ? phase.items : []) {
+          out.push({ text: String(task), status: "pending", ...(typeof phase.phase === "string" ? { phase: phase.phase } : {}) });
+        }
+      }
+    } else if (typeof op.task === "string" || typeof op.text === "string") {
+      const status: TodoEntry["status"] = /done|complete/.test(kind) ? "done" : /start|progress/.test(kind) ? "active" : /drop|remove|cancel/.test(kind) ? "cancelled" : "pending";
+      out.push({ text: String(op.task ?? op.text), status });
+    }
+  }
+  return out.length > 0 ? out : null;
+}
+
+const TODO_ICON: Record<TodoEntry["status"], ReactNode> = {
+  done: <IconCheck size={13} />,
+  active: <IconDot size={13} />,
+  pending: <IconCircle size={13} />,
+  cancelled: <IconX size={13} />,
+};
+
+function TodoList({ entries }: { entries: TodoEntry[] }) {
+  return (
+    <ul className="todo-card">
+      {entries.map((t, i) => (
+        <li key={`${i}:${t.text}`} className={`todo-card-row is-${t.status}`}>
+          {t.phase && t.phase !== entries[i - 1]?.phase ? <span className="todo-card-phase">{t.phase}</span> : null}
+          <span className="todo-card-icon">{TODO_ICON[t.status]}</span>
+          <span className="todo-card-text">{t.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ToolBody({ item, workspace }: { item: ToolItem; workspace: string }) {
   const args = useMemo(() => parseArgs(item.args), [item.args]);
   const failed = item.status === "error";
@@ -293,6 +355,17 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
         )}
       </CardHead>,
       <Output item={item} label={null} />,
+    );
+  }
+
+  const todos = /todo/i.test(item.name) ? todoEntries(args) : null;
+  if (todos) {
+    return card(
+      null,
+      <>
+        <TodoList entries={todos} />
+        {failed ? <div className="tool-card-note is-error">{item.output}</div> : null}
+      </>,
     );
   }
 
