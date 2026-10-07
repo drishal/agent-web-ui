@@ -49,6 +49,8 @@ export async function makeTestApp(options: {
   fakeBBriefOnly?: boolean;
   /** Serve the Settings routes over a config.yml in this test's own settings folder. */
   withSettings?: boolean;
+  /** Keep file checkpoints (in this test's own folder). */
+  withCheckpoints?: boolean;
 } = {}): Promise<TestApp> {
   const root = tempDir();
   const project = path.join(root, "proj");
@@ -82,6 +84,7 @@ export async function makeTestApp(options: {
     pairingUrls: [],
     webDir: null,
     heartbeatMs: options.heartbeatMs ?? 20_000,
+    ...(options.withCheckpoints ? { checkpointsDir: path.join(root, ".state", "checkpoints") } : {}),
     ...(options.withSettings
       ? {
           settings: {

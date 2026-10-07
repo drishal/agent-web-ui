@@ -32,6 +32,7 @@ import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns,
 import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
+import type { ChatCheckpoints, CheckpointHost } from "../checkpoints.js";
 
 export class ChatError extends Error {
   constructor(
@@ -578,7 +579,7 @@ class EventReducer {
   }
 }
 
-export class Chat {
+export class Chat implements CheckpointHost {
   readonly createdAt = Date.now();
   status: ChatStatus = "idle";
   generation = 0;
@@ -594,6 +595,9 @@ export class Chat {
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
   /** Set while a status change is not news (a prompt the harness refused). */
   private quiet = false;
+  /** File checkpoints before each prompt, where the project is in a git repository. */
+  checkpoints?: ChatCheckpoints;
+  private checkpointTurns: number[] = [];
 
   private readonly log = new EventLog();
   private readonly timing = new Timing();
@@ -619,7 +623,10 @@ export class Chat {
       refreshContext: () => void this.refreshContext(),
       refreshUsage: () => void this.refreshUsage(),
       refreshTodos: () => void this.refreshTodos(),
-      sessionAssigned: () => this.onSession?.(this),
+      sessionAssigned: () => {
+        this.onSession?.(this);
+        this.checkpoints?.sessionAssigned();
+      },
     });
   }
 
@@ -697,6 +704,7 @@ export class Chat {
       context: this.context,
       usage: this.usage,
       todos: [...this.todos],
+      checkpoints: [...this.checkpointTurns],
       generation: this.generation,
       lastEventId: this.log.lastEventId,
     };
@@ -729,6 +737,7 @@ export class Chat {
     if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = Date.now();
     this.lastSeen = Date.now();
     this.reducer.apply(event.type === "user_message" ? this.withSentImages(event) : event);
+    if (event.type === "user_message") this.checkpoints?.onUserTurn(event.text, event.command === true);
   }
 
   /**
@@ -742,6 +751,16 @@ export class Chat {
     const at = this.sentImages.findIndex((refs) => refs.length === event.imageCount);
     const sent = at >= 0 ? this.sentImages.splice(at, 1)[0] : undefined;
     return event.images?.length || !sent ? event : { ...event, images: sent };
+  }
+
+  userTurns(): string[] {
+    return this.reducer.items.flatMap((i) => (i.kind === "user" && !i.command ? [i.text] : []));
+  }
+
+  setCheckpointTurns(turns: number[]): void {
+    if (turns.length === this.checkpointTurns.length && turns.every((t, i) => t === this.checkpointTurns[i])) return;
+    this.checkpointTurns = turns;
+    this.reducer.emit({ type: "checkpoints", turns: [...turns] });
   }
 
   private setStatus(status: ChatStatus): void {
@@ -849,11 +868,13 @@ export class Chat {
       case "steer":
         if (!caps.supportsSteer) throw new ChatError(400, "unsupported", "This harness cannot steer");
         if (this.status !== "running") throw new ChatError(409, "not_running", "Nothing is running to steer");
+        await this.checkpoints?.beforePrompt(text);
         await this.live.steer(text, images);
         return;
       case "followUp":
         if (!caps.supportsFollowUp) throw new ChatError(400, "unsupported", "This harness has no follow-up queue");
         if (this.status !== "running") throw new ChatError(409, "not_running", "Nothing is running to follow");
+        await this.checkpoints?.beforePrompt(text);
         await this.live.followUp(text, images);
         return;
       case "stopAndSend":
@@ -865,6 +886,9 @@ export class Chat {
     }
     if (this.status === "error") this.status = "idle";
     this.setStatus("running");
+    // The files as they are before this prompt; the status already says busy, so nothing else starts meanwhile.
+    await this.checkpoints?.beforePrompt(text);
+    if (this.status !== "running") return;
     this.timing.markHandoff();
     try {
       await this.live.prompt(text, images);

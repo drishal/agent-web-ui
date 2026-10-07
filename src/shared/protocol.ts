@@ -365,6 +365,25 @@ export interface QueueState {
   followUp: string[];
 }
 
+/** What restoring a checkpoint does to a file: puts its old content back, deletes it (it is new since), or brings it back (deleted since). */
+export type CheckpointChange = "restore" | "delete" | "recreate";
+
+export interface CheckpointFile {
+  /** Relative to the repository's top level. */
+  path: string;
+  change: CheckpointChange;
+}
+
+export interface CheckpointPreview {
+  files: CheckpointFile[];
+}
+
+export interface CheckpointRestored {
+  files: CheckpointFile[];
+  /** The tree from just before: restoring it puts the files back as they were. */
+  undo: string;
+}
+
 export interface ChatSnapshot {
   chatId: string;
   harnessId: HarnessId;
@@ -382,6 +401,8 @@ export interface ChatSnapshot {
   context: ContextUsage | null;
   usage: SessionUsage | null;
   todos: TodoItem[];
+  /** User turns (fork's 1-based count) whose files can be put back as they were before the prompt. */
+  checkpoints: number[];
   generation: number;
   lastEventId: number;
 }
@@ -400,6 +421,7 @@ export type ChatEvent =
   | { type: "context"; context: ContextUsage | null }
   | { type: "usage"; usage: SessionUsage | null }
   | { type: "todos"; todos: TodoItem[] }
+  | { type: "checkpoints"; turns: number[] }
   | { type: "disposed"; reason: string };
 
 export interface ThemeInfo {
@@ -494,6 +516,15 @@ export const patchConfigSchema = z
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(200) });
 export const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048) });
 export const pushTestSchema = z.object({ endpoint: z.string().url().max(2048).optional() });
+
+export const restoreSchema = z.object({
+  /** The files to put back: some or all of what the preview listed. */
+  paths: z.array(z.string().min(1).max(4096)).min(1).max(5000),
+});
+export const putBackSchema = z.object({
+  tree: z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/),
+  paths: z.array(z.string().min(1).max(4096)).min(1).max(5000).optional(),
+});
 
 /** Pin or archive a session; pinning unarchives it and archiving unpins it. */
 export const sessionMarkSchema = z
