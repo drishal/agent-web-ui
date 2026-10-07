@@ -212,6 +212,16 @@ pre {
     opacity: 0.35;
   }
 }
+/* Text-wrap balance keeps short multi-line text (headings, empty states,
+   dialog titles) from ending on a lone word. */
+h1,
+h2,
+h3,
+.empty-main p,
+.dialog-title {
+  text-wrap: balance;
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,
