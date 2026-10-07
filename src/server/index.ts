@@ -12,6 +12,7 @@ import { HarnessRegistry } from "./harness/registry.js";
 import { hashPassword, loadCredentials, PasswordAuth } from "./auth.js";
 import { cachedLanHosts, sampleLanHosts } from "./network.js";
 import { loadOrCreateSecret, Security } from "./security.js";
+import { SessionMarks } from "./session-marks.js";
 import { ThemeStore } from "./theme.js";
 import { configDir, configEnv, readUserConfig, UserConfigError } from "./user-config.js";
 import { Workspaces } from "./workspaces.js";
@@ -110,6 +111,7 @@ async function main(): Promise<void> {
   const active = await theme.get();
   console.log(`  theme: ${active.name ?? "built-in light/dark"}`);
   const manager = new ChatManager();
+  const marks = await SessionMarks.open(config.stateDir);
   const lanUrls = config.host === "0.0.0.0" ? sampleLanHosts().ipv4.map((ip) => `http://${ip}:${config.port}/`) : [];
   const pairingUrls = [...lanUrls, ...config.allowedHosts.map((h) => `https://${h}/`)];
   const webDir = process.env.AWUI_WEB_DIR ?? path.join(root, "dist", "web");
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
     pairingUrls,
     webDir,
     configDir: config.configDir,
+    marks,
     settings: {
       configDir: config.configDir,
       running: {

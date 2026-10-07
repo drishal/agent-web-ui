@@ -418,6 +418,21 @@ describe("sessions across projects", () => {
     const current = (await agent.get(`/api/sessions?path=${encodeURIComponent(empty)}`).expect(200)).body as SessionsOverview;
     expect(current.workspaces.map((w) => w.name)).toContain("empty");
   });
+
+  it("pins and archives sessions, one mark at a time", async () => {
+    const { agent, t } = await setup();
+    t.fake.sessions.set("a1", { nativeId: "a1", cwd: t.project, title: "Fix the build", messages: [{}], updatedAt: new Date() });
+    const marks = async () => ((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.map((s) => [s.id, s.pinned, s.archived]);
+
+    expect((await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1", pinned: true }).expect(200)).body).toEqual({ pinned: true });
+    expect(await marks()).toEqual([["fake:a1", true, undefined]]);
+    // Archiving unpins: a session lives in one place in the list.
+    expect((await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1", archived: true }).expect(200)).body).toEqual({ archived: true });
+    expect(await marks()).toEqual([["fake:a1", undefined, true]]);
+    expect((await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1", archived: false }).expect(200)).body).toEqual({});
+    expect(await marks()).toEqual([["fake:a1", undefined, undefined]]);
+    await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1" }).expect(400);
+  });
 });
 
 describe("todos", () => {

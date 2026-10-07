@@ -71,6 +71,10 @@ export interface SessionSummary {
   liveChatId?: string;
   /** That live chat's status, so lists can show which sessions are working. */
   status?: ChatStatus;
+  /** Kept at the top of the list (a mark this server keeps, shared by every device). */
+  pinned?: true;
+  /** Hidden from the list unless archived sessions are shown. */
+  archived?: true;
 }
 
 /** A session together with the project it belongs to. */
@@ -443,6 +447,14 @@ export const patchConfigSchema = z
     message: "empty patch",
   });
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(200) });
+/** Pin or archive a session; pinning unarchives it and archiving unpins it. */
+export const sessionMarkSchema = z
+  .object({
+    sessionId: z.string().min(1).max(512),
+    pinned: z.boolean().optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((v) => v.pinned !== undefined || v.archived !== undefined, { message: "empty mark" });
 export const compactSchema = z.object({ instructions: z.string().max(10_000).optional() });
 export const answerSchema = z.object({ answer: interactionAnswerSchema });
 

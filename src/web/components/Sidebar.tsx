@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss } from "../hooks.js";
-import { IconChevronDown, IconFolder, IconMore, IconPlus, IconSearch, IconSettings, IconSidebar } from "../icons.js";
-import { dateBucket, groupByProject, isBusy, type ProjectGroup } from "../session-groups.js";
+import { IconArchive, IconChevronDown, IconFolder, IconMore, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar } from "../icons.js";
+import { archivedCount, dateBucket, groupByProject, isBusy, pinnedSessions, type ProjectGroup } from "../session-groups.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
@@ -32,25 +32,67 @@ function relativeTime(iso: string | null): string {
 }
 
 
+export type MarkChange = { pinned?: boolean; archived?: boolean };
+
+/** Pin and archive, from the row's ⋯ button or a right-click (a long press on phones). */
+function RowMenu({ s, anchor, onMark, onClose }: { s: ProjectSession; anchor: DOMRect; onMark: (change: MarkChange) => void; onClose: () => void }) {
+  const below = anchor.bottom + 120 < window.innerHeight;
+  const style = {
+    position: "fixed" as const,
+    right: Math.max(8, window.innerWidth - anchor.right),
+    ...(below ? { top: anchor.bottom + 4 } : { bottom: window.innerHeight - anchor.top + 4 }),
+  };
+  const pick = (change: MarkChange) => {
+    onClose();
+    onMark(change);
+  };
+  return (
+    <>
+      <div className="menu-backdrop" onClick={onClose} aria-hidden="true" />
+      <ul className="menu-list row-menu" role="menu" style={style} onKeyDown={(e) => e.key === "Escape" && onClose()}>
+        <li role="none">
+          <button type="button" role="menuitem" autoFocus onClick={() => pick({ pinned: !s.pinned })}>
+            <IconPin size={14} /> {s.pinned ? "Unpin" : "Pin"}
+          </button>
+        </li>
+        <li role="none">
+          <button type="button" role="menuitem" onClick={() => pick({ archived: !s.archived })}>
+            <IconArchive size={14} /> {s.archived ? "Unarchive" : "Archive"}
+          </button>
+        </li>
+      </ul>
+    </>
+  );
+}
+
 function SessionRow({
   s,
   active,
   working,
   harnessName,
+  project,
   onOpen,
+  onMark,
 }: {
   s: ProjectSession;
   active: boolean;
   working: boolean;
   harnessName: string;
+  /** Shown beside the title where the row is out of its project (the pinned list). */
+  project?: string;
   /** `newTab`: Ctrl/⌘-click or middle-click, as in a browser. */
   onOpen: (newTab: boolean) => void;
+  onMark: (change: MarkChange) => void;
 }) {
+  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  // A session not saved yet has nothing to mark.
+  const markable = !s.id.includes(":live-");
   return (
-    <li>
+    <li className={`session-item${menuAt ? " is-menu-open" : ""}`}>
       <button
         type="button"
-        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}`}
+        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}${s.archived ? " is-archived" : ""}`}
         onClick={(e) => onOpen(e.ctrlKey || e.metaKey)}
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault();
@@ -60,7 +102,13 @@ function SessionRow({
           e.preventDefault();
           onOpen(true);
         }}
+        onContextMenu={(e) => {
+          if (!markable) return;
+          e.preventDefault();
+          setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
+        }}
         aria-current={active ? "true" : undefined}
+        title={project ? `${s.title} · ${project}` : undefined}
       >
         {working ? (
           <WorkingRing harnessId={s.harnessId} colored />
@@ -69,10 +117,25 @@ function SessionRow({
         )}
         <span className="session-title">{s.title}</span>
         <span className="session-meta">
+          {project ? <span className="session-project">{project}</span> : null}
           {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
           <span className="session-time">{relativeTime(s.updatedAt)}</span>
         </span>
       </button>
+      {markable ? (
+        <button
+          ref={moreRef}
+          type="button"
+          className="icon-btn session-more"
+          aria-label={`More for ${s.title}`}
+          aria-haspopup="menu"
+          aria-expanded={menuAt !== null}
+          onClick={() => setMenuAt(moreRef.current?.getBoundingClientRect() ?? null)}
+        >
+          <IconMore size={14} />
+        </button>
+      ) : null}
+      {menuAt ? <RowMenu s={s} anchor={menuAt} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
     </li>
   );
 }
@@ -86,6 +149,7 @@ function ProjectGroupView({
   harnessName,
   canStartChat,
   onOpen,
+  onMark,
   onNewChat,
 }: {
   group: ProjectGroup;
@@ -95,6 +159,7 @@ function ProjectGroupView({
   harnessName: (id: string) => string;
   canStartChat: boolean;
   onOpen: (s: ProjectSession, newTab: boolean) => void;
+  onMark: (s: ProjectSession, change: MarkChange) => void;
   onNewChat: (ws: WorkspaceInfo) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -124,6 +189,7 @@ function ProjectGroupView({
         working={isWorking(s)}
         harnessName={harnessName(s.harnessId)}
         onOpen={(newTab) => onOpen(s, newTab)}
+        onMark={(change) => onMark(s, change)}
       />,
     );
   }
@@ -189,6 +255,8 @@ export function Sidebar(props: {
   activeStatus: ChatStatus | null;
   /** `newTab`: open it in a new tab rather than the shown one. */
   onOpenSession: (s: ProjectSession, newTab: boolean) => void;
+  /** Pin or archive a session. */
+  onMarkSession: (s: ProjectSession, change: MarkChange) => void;
   onRefresh: () => void;
   /** Open Settings (theme, text size, pairing, sign-out, and the server's config.yml). */
   onSettings: () => void;
@@ -200,15 +268,12 @@ export function Sidebar(props: {
 }) {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
   const names = useMemo(() => new Map(props.harnesses.map((h) => [h.id as string, h.displayName])), [props.harnesses]);
-  const groups = useMemo(
-    () =>
-      groupByProject(props.overview, {
-        currentId: props.workspace?.id ?? null,
-        query: props.query,
-        harnessId: props.harnessId,
-      }),
-    [props.overview, props.workspace, props.query, props.harnessId],
-  );
+  const [showArchived, setShowArchived] = useState(false);
+  const groupOptions = { currentId: props.workspace?.id ?? null, query: props.query, harnessId: props.harnessId, showArchived };
+  const groups = useMemo(() => groupByProject(props.overview, groupOptions), [props.overview, props.workspace, props.query, props.harnessId, showArchived]);
+  const pinned = useMemo(() => pinnedSessions(props.overview, groupOptions), [props.overview, props.query, props.harnessId]);
+  const archived = archivedCount(props.overview, props.harnessId);
+  const projectName = (s: ProjectSession) => props.overview.workspaces.find((w) => w.id === s.workspaceId)?.name ?? "";
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
 
@@ -294,6 +359,31 @@ export function Sidebar(props: {
                 <span className="skeleton-row" />
               </li>
             ) : null}
+            {pinned.length > 0 ? (
+              <li className="project-group is-open pinned-group" data-testid="pinned-group">
+                <div className="project-head">
+                  <span className="project-toggle is-static">
+                    <IconPin size={14} />
+                    <span className="project-name">Pinned</span>
+                    <span className="group-count">{pinned.length}</span>
+                  </span>
+                </div>
+                <ul className="session-sublist">
+                  {pinned.map((s) => (
+                    <SessionRow
+                      key={s.id}
+                      s={s}
+                      active={isActive(s)}
+                      working={isWorking(s)}
+                      harnessName={names.get(s.harnessId) ?? s.harnessId}
+                      project={projectName(s)}
+                      onOpen={(newTab) => props.onOpenSession(s, newTab)}
+                      onMark={(change) => props.onMarkSession(s, change)}
+                    />
+                  ))}
+                </ul>
+              </li>
+            ) : null}
             {groups.map((g) => (
               <ProjectGroupView
                 key={g.workspace.id}
@@ -304,10 +394,18 @@ export function Sidebar(props: {
                 harnessName={(id) => names.get(id) ?? id}
                 canStartChat={props.canStartChat}
                 onOpen={props.onOpenSession}
+                onMark={props.onMarkSession}
                 onNewChat={props.onNewChatIn}
               />
             ))}
-            {!props.sessionsLoading && groups.length === 0 && !props.sessionsError ? (
+            {archived > 0 && !searching ? (
+              <li>
+                <button type="button" className="show-more archived-toggle" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
+                  <IconArchive size={13} /> {showArchived ? "Hide archived" : `Show ${archived} archived`}
+                </button>
+              </li>
+            ) : null}
+            {!props.sessionsLoading && groups.length === 0 && pinned.length === 0 && !props.sessionsError ? (
               <li className="sidebar-note">{searching ? "No matching sessions" : "No sessions yet. Choose a folder and start a chat."}</li>
             ) : null}
           </ul>
