@@ -1,0 +1,7 @@
+schema = 1
+id = "agent-web-ui"
+name = "Agent Web UI"
+version = "0.1.0"
+description = "Opens the Agent Web UI in a Tern browser beside your shells."
+icon = "sparkle"
+window = "window.luau"

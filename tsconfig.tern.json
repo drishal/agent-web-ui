@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "outDir": "dist/tern"
+  },
+  "include": ["src/tern/**/*.ts", "src/web/chat-state.ts", "src/web/turns.ts", "src/shared/**/*.ts"]
+}

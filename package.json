@@ -5,21 +5,26 @@
   "description": "Local, private web UI for Pi, omp, and Hermes coding-agent harnesses",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "awui": "dist/tern/tern/main.js"
+  },
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.tern.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsc -p tsconfig.server.json && tsc -p tsconfig.tern.json && chmod +x dist/tern/tern/main.js",
     "start": "node dist/server/server/index.js",
     "set-password": "node scripts/set-password.mjs",
     "service": "node scripts/service.mjs",
+    "tern": "tern plugin link tern",
     "smoke": "SMOKE=1 vitest run tests/smoke"
   },
   "dependencies": {
+    "@stencil-hq/tern": "0.1.0",
     "express": "5.2.1",
     "helmet": "8.3.0",
     "react": "19.3.0",

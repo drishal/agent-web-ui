@@ -39,6 +39,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | Script | What it does |
 |---|---|
 | `npm run dev` | Backend under `tsx watch` plus Vite on :5173, proxying `/api`. Prints a `Dev UI: http://127.0.0.1:5173/` link. |
+| `npm run tern` | Links the [Tern](#tern) plugin in `tern/`, so Tern can open the UI in its own browser. |
 | `npm run set-password` | Alternative to `auth.password`: sets the login for other devices, storing a salted scrypt hash only. Changing it signs every device out. |
 | `npm run typecheck` | Strict TypeScript for server, web, and tests |
 | `npm test` | Vitest unit and integration tests. Uses only fake and scripted harnesses, so no model tokens are spent. |
@@ -143,6 +144,7 @@ src/server/
   theme.ts                  base16/base24 parsing, contrast-checked CSS variables
   app.ts, index.ts          Express 5 routes, SSE, startup/shutdown
 src/web/                    React + Vite client
+src/tern/                   awui: the Tern-native client (TSP views over the same API and SSE)
 ```
 
 **Resume without waiting.** Opening an old Pi, omp, or Claude Code session shows its transcript straight from the session file (`readTranscript`, a few milliseconds) and starts the harness behind it; the status reads *Starting* until it is up, usually under a second. A prompt or model change made meanwhile goes through once it is. Hermes keeps its history behind its gateway, so its sessions open when the gateway is ready. Session listings are warmed at startup, and Hermes's are served from cache while they refresh.
@@ -276,6 +278,23 @@ tailscale serve status
 ### LAN (`HOST=0.0.0.0`)
 
 With `host: 0.0.0.0` in `config.yml`, startup prints `LAN: http://<ip>:4783/` for each address. NixOS blocks inbound ports by default, so open it on your LAN interface in the dotfiles, e.g. `networking.firewall.interfaces."enp14s0".allowedTCPPorts = [ 4783 ];` in `hosts/common/firewall.nix`. Prefer Tailscale over exposing it on Wi-Fi you do not control.
+
+## Tern
+
+`awui` is the UI drawn natively by [Tern](https://docs.stencil.so/tern/), through its Surface Protocol, the way omp draws itself there: run it in a Tern pane inside a project and it opens a chat with the server's agents in that folder. It is a frontend like the browser: the server runs the agents and keeps the chat, so leaving `awui` leaves the chat running, and the web UI shows the same chat live. It needs the server running and the folder under the workspace roots.
+
+```bash
+npm run build
+ln -s "$PWD/dist/tern/tern/main.js" ~/.local/bin/awui   # or anywhere on PATH
+awui                    # a new chat with the first available harness
+awui --harness claude   # ...or this one
+awui --resume           # this folder's latest session (--resume <id> for another)
+awui --chat <id>        # a chat the server has open (the web UI's #chat=<id>)
+```
+
+The transcript uses Tern's own tool cards, diffs, subagent rows and folds; a question the agent asks sits above the composer. Enter sends (it steers while the agent works), Shift+Enter starts a line, Esc stops the agent, Ctrl+P picks the model, Ctrl+T cycles the thinking level, 1–9 answer a question, and Ctrl+D on an empty composer leaves. Tern's tab shows the chat's title and whether the agent works or waits on you. `--url` or `AWUI_URL` points it at another server (default `http://127.0.0.1:4783`). To have Tern's **New agent block** open it instead of omp, set `"agent_command"` in Tern's `settings.json` to the `awui` command.
+
+`npm run tern` links a smaller plugin in `tern/` instead: **Agent Web UI** in Tern's command palette opens the web UI itself in a Tern browser picture in picture (`tern plugin unlink agent-web-ui` undoes it).
 
 ## Theme
 
