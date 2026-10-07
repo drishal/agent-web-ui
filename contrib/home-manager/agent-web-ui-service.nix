@@ -9,7 +9,8 @@
 #            Uninstall:  remove this import and run home-manager switch.
 
 let
-  appDir = "%h/Desktop/git-stuff/webui";
+  # Point this at your checkout of the repository.
+  appDir = "%h/.../webui";
 in
 {
   systemd.user.services.agent-web-ui = {
