@@ -504,45 +504,118 @@ export function Conversation({
   onForkRef.current = onFork;
   const fork = useCallback((through: number) => onForkRef.current(through), []);
 
-  const onScroll = useCallback(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinned.current = distance <= PIN_DISTANCE_PX;
-    setShowJump(!pinned.current);
-  }, []);
+  // A smooth scroll aims at the scrollHeight of the moment it starts, and the
+  // delta handler / ResizeObserver force-scrolling would cancel it, so while
+  // one runs jumpingRef holds them off. It ends on scrollend (or once scrolling
+  // has been still for a moment, for browsers without scrollend), or when the
+  // user takes over with the wheel, pointer, or keys.
+  const jumpingRef = useRef(false);
+  const settleTimer = useRef(0);
+  const wrap = useRef<HTMLDivElement>(null);
 
-  const jump = useCallback(() => {
+  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+  // Land a glide; if the reply grew while it ran, cover the rest instantly.
+  const settle = useCallback(() => {
+    window.clearTimeout(settleTimer.current);
     const el = scroller.current;
-    if (!el) return;
+    if (!el || !jumpingRef.current) return;
+    jumpingRef.current = false;
     el.scrollTop = el.scrollHeight;
     pinned.current = true;
     setShowJump(false);
   }, []);
 
+  const armSettle = useCallback(() => {
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(settle, 300);
+  }, [settle]);
+
+  const glide = useCallback(
+    (el: HTMLDivElement) => {
+      jumpingRef.current = true;
+      pinned.current = true;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      armSettle();
+    },
+    [armSettle],
+  );
+
+  const onScroll = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinned.current = distance <= PIN_DISTANCE_PX;
+    if (jumpingRef.current) armSettle();
+    setShowJump(!pinned.current && !jumpingRef.current);
+  }, [armSettle]);
+
+  const jump = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    setShowJump(false);
+    if (reducedMotion()) {
+      el.scrollTop = el.scrollHeight;
+      pinned.current = true;
+    } else {
+      glide(el);
+    }
+  }, [glide]);
+
+  // Smooth scroll only when a new turn appears (the chat's "alive" beat);
+  // token deltas and window resizes stay instant.
+  const turnCountRef = useRef(0);
   useLayoutEffect(() => {
     if (pinned.current) {
       const el = scroller.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      if (!el) return;
+      const grew = turnsRef.current.length > turnCountRef.current;
+      turnCountRef.current = turnsRef.current.length;
+      if (jumpingRef.current) return;
+      // Loading a transcript or switching tabs also adds turns; only a short
+      // stretch (a turn just appended) is worth animating.
+      const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (grew && below > 1 && below <= el.clientHeight && !reducedMotion()) {
+        glide(el);
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     } else {
-      setShowJump(true);
+      turnCountRef.current = turnsRef.current.length;
+      if (!jumpingRef.current) setShowJump(true);
     }
-  }, [items]);
+  }, [items, glide]);
 
   useEffect(() => {
     const el = scroller.current;
-    if (!el) return;
+    const outer = wrap.current;
+    if (!el || !outer) return;
     const observer = new ResizeObserver(() => {
-      if (pinned.current) el.scrollTop = el.scrollHeight;
+      if (pinned.current && !jumpingRef.current) el.scrollTop = el.scrollHeight;
     });
     observer.observe(el);
     const inner = el.firstElementChild;
     if (inner) observer.observe(inner);
-    return () => observer.disconnect();
-  }, []);
+    // Listen on the wrap so a turn-rail click also takes over from a glide.
+    const takeOver = () => {
+      jumpingRef.current = false;
+    };
+    outer.addEventListener("wheel", takeOver, { passive: true });
+    outer.addEventListener("pointerdown", takeOver);
+    outer.addEventListener("keydown", takeOver);
+    el.addEventListener("scrollend", settle);
+    return () => {
+      observer.disconnect();
+      outer.removeEventListener("wheel", takeOver);
+      outer.removeEventListener("pointerdown", takeOver);
+      outer.removeEventListener("keydown", takeOver);
+      el.removeEventListener("scrollend", settle);
+      window.clearTimeout(settleTimer.current);
+    };
+  }, [settle]);
 
   return (
-    <div className="conversation-wrap">
+    <div className="conversation-wrap" ref={wrap}>
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <ChatIdContext.Provider value={chatId}>
           <ArrivalsContext.Provider value={arrivals}>
