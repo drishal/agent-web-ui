@@ -234,6 +234,18 @@ h3,
   color: var(--text);
 }
 
+@keyframes pop {
+  0% {
+    transform: scale(0.7);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -3363,6 +3375,15 @@ body.is-resizing {
 
 .empty-main p {
   margin: 0;
+}
+
+/* Copy feedback: the checkmark pops in on swap. Reduced-motion disables it
+   globally (top of file). */
+.ghost-icon > .icon {
+  transition: transform 0.12s ease;
+}
+.ghost-icon[aria-label="Copied"] > .icon {
+  animation: pop 0.22s var(--ease-out);
 }
 
 /* ---- responsive --------------------------------------------------------------------------- */
