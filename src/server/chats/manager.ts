@@ -2,7 +2,7 @@
 // native session: `harnessId + nativeId -> chatId`. Another terminal or
 // process running the same harness is NOT locked out (documented in README).
 import { randomUUID } from "node:crypto";
-import type { WorkspaceInfo } from "../../shared/protocol.js";
+import type { LimitAccount, WorkspaceInfo } from "../../shared/protocol.js";
 import { DeferredLiveChat } from "../harness/deferred.js";
 import type { HarnessAdapter, LiveChat } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
@@ -19,6 +19,8 @@ export class ChatManager {
   private bySession = new Map<string, string>();
   private opening = new Map<string, Promise<Chat>>();
   private reaper: NodeJS.Timeout;
+  /** Any chat's harness reported its subscription limits. */
+  onLimits?: (account: LimitAccount) => void;
 
   constructor(private readonly idleDisposeMs = IDLE_DISPOSE_MS) {
     this.reaper = setInterval(() => void this.reap(), REAP_INTERVAL_MS);
@@ -44,6 +46,7 @@ export class ChatManager {
     this.chats.set(chat.chatId, chat);
     chat.onSession = (c) => this.claimSession(c);
     chat.onDisposed = (c) => this.forget(c);
+    chat.onLimits = (account) => this.onLimits?.(account);
     if (chat.nativeId) this.claimSession(chat);
   }
 

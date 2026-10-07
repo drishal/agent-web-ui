@@ -9,6 +9,7 @@ import { appCommand } from "./commands.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
+import { LimitsMeter } from "./components/LimitsMeter.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar, type MarkChange } from "./components/Sidebar.js";
@@ -22,6 +23,7 @@ import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
+import { useLimits } from "./limits.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
 import { isBusy } from "./session-groups.js";
 import { useSessions } from "./sessions.js";
@@ -134,6 +136,16 @@ export function App() {
     busyBefore.current = busyNow;
     setTabState((st) => markUnread(st, finished));
   }, [overview, chatId]);
+
+  // Runs the shown chat finished: the limits meter re-reads after each.
+  const [settledRuns, setSettledRuns] = useState(0);
+  const shownStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = chat?.status ?? null;
+    if (status === "idle" && shownStatus.current === "running") setSettledRuns((n) => n + 1);
+    shownStatus.current = status;
+  }, [chat?.status]);
+  const limits = useLimits(Boolean(boot), settledRuns);
 
   const tabStatus = (tab: Tab) =>
     chat && tab.chatId === chat.chatId ? chat.status : (overview.sessions.find((x) => x.liveChatId !== undefined && x.liveChatId === tab.chatId)?.status ?? null);
@@ -578,6 +590,7 @@ export function App() {
     >
       <Sidebar
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
+        footer={<LimitsMeter limits={limits} />}
         open={drawerOpen}
         harnesses={boot.harnesses}
         harnessId={harnessId}

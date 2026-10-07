@@ -38,6 +38,7 @@ import {
   type SessionMeta,
   type UsageBaseline,
 } from "./claude-sessions.js";
+import { claudeLimits } from "./limits.js";
 import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
@@ -367,6 +368,7 @@ class ClaudeLiveChat implements LiveChat {
           const resets = num(info.resetsAt) ? ` until ${new Date(num(info.resetsAt) * 1000).toLocaleTimeString()}` : "";
           this.emit({ type: "notice", level: "error", text: `Claude usage limit reached${resets}` });
         }
+        this.emit({ type: "limits", account: claudeLimits(info) });
         return;
       }
       default:

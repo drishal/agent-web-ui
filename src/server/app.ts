@@ -38,6 +38,7 @@ import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
+import { Limits } from "./limits.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -60,6 +61,8 @@ export interface AppDeps {
   heartbeatMs?: number;
   /** Pinned and archived sessions; in memory when absent. */
   marks?: SessionMarks;
+  /** Subscription limits; in memory when absent. */
+  limits?: Limits;
   log?: (message: string) => void;
 }
 
@@ -100,6 +103,8 @@ function toSession(
 export function createApp(deps: AppDeps) {
   const { registry, manager, workspaces, security, theme } = deps;
   const marks = deps.marks ?? SessionMarks.inMemory();
+  const limits = deps.limits ?? Limits.inMemory(registry);
+  manager.onLimits = (account) => limits.report(account);
   const log = deps.log ?? ((m: string) => console.error(m));
   const app = express();
   app.disable("x-powered-by");
@@ -325,6 +330,10 @@ export function createApp(deps: AppDeps) {
       errors,
     };
     res.json(overview);
+  });
+
+  app.get("/api/limits", async (_req, res) => {
+    res.json(await limits.get());
   });
 
   app.post("/api/sessions/marks", async (req, res) => {

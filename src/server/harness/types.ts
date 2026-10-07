@@ -10,6 +10,7 @@ import type {
   ImageRef,
   InteractionAnswer,
   InteractionRequest,
+  LimitAccount,
   ModelInfo,
   QueueState,
   SlashCommand,
@@ -89,6 +90,8 @@ export type HarnessEvent =
   | { type: "request"; request: InteractionRequest }
   | { type: "request_cancelled"; requestId: string; outcome: string }
   | { type: "extension_status"; key: string; text: string | null }
+  /** The subscription's rate limits, as the harness last heard them (Claude Code's rate_limit_event). */
+  | { type: "limits"; account: LimitAccount }
   | { type: "fatal"; message: string };
 
 export type HarnessEventListener = (event: HarnessEvent) => void;
@@ -168,6 +171,8 @@ export interface HarnessAdapter {
    * yet). Harnesses whose history lives only behind their process omit it.
    */
   readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
+  /** The subscription limits of every account the harness is signed in to (omp's `usage`). */
+  usageLimits?(): Promise<LimitAccount[]>;
   /** Kill helper processes; called on server shutdown. */
   /** Where a subagent's transcript lives when its result did not say (omp's runs; pi-subagents' background ones), or null. */
   subagentTranscriptFile?(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<string | null>;
