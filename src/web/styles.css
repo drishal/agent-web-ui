@@ -222,6 +222,18 @@ h3,
   text-wrap: balance;
 }
 
+/* Selection follows the theme everywhere the OS default would clash: the
+   composer textarea and code blocks (--selection is themed; the general rule
+   is at the top of the file). */
+.composer-input ::selection,
+.composer-input::selection,
+.md pre ::selection,
+.md pre::selection,
+.md code ::selection {
+  background: var(--selection);
+  color: var(--text);
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,
