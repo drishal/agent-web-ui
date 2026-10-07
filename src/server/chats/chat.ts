@@ -592,6 +592,8 @@ export class Chat {
   onLimits?: (account: LimitAccount) => void;
   /** A run finished or failed, or the agent asks for an answer: news for devices that want it. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
+  /** Set while a status change is not news (a prompt the harness refused). */
+  private quiet = false;
 
   private readonly log = new EventLog();
   private readonly timing = new Timing();
@@ -748,8 +750,8 @@ export class Chat {
     this.status = status;
     this.reducer.emit({ type: "status", status });
     // A run that ends on its own is news; one stopped from here is not.
-    if (before === "running" && status === "idle") this.onNews?.(this, "done", this.lastLine("assistant") ?? "Finished");
-    else if (status === "error" && before !== "starting") this.onNews?.(this, "error", this.lastLine("notice") ?? "Failed");
+    if (!this.quiet && before === "running" && status === "idle") this.onNews?.(this, "done", this.lastLine("assistant") ?? "Finished");
+    else if (!this.quiet && status === "error" && before !== "starting") this.onNews?.(this, "error", this.lastLine("notice") ?? "Failed");
     if (status === "idle" || status === "error") {
       const waiters = this.settleWaiters;
       this.settleWaiters = [];
@@ -868,7 +870,9 @@ export class Chat {
       await this.live.prompt(text, images);
     } catch (error) {
       this.reducer.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
+      this.quiet = true;
       this.setStatus("idle");
+      this.quiet = false;
       throw new ChatError(422, "prompt_rejected", errorMessage(error));
     }
   }
