@@ -2555,6 +2555,12 @@ body.is-resizing {
   background: var(--hover);
 }
 
+/* The ring sweeps as context grows instead of snapping between percent steps.
+   stroke-dasharray is animatable; the reduced-motion rule kills it. */
+.context-ring circle:last-child {
+  transition: stroke-dasharray 0.3s var(--ease-out);
+}
+
 .context-ring.tone-warn {
   color: var(--warn);
 }
