@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
@@ -272,7 +272,22 @@ function UserPrompt({ item }: { item: UserItem }) {
   );
 }
 
-function Answer({ item, through, canFork, onFork }: { item: AssistantItem; through: number; canFork: boolean; onFork: (through: number) => void }) {
+function Answer({
+  item,
+  through,
+  canFork,
+  onFork,
+  canRestore,
+  onRestore,
+}: {
+  item: AssistantItem;
+  through: number;
+  canFork: boolean;
+  onFork: (through: number) => void;
+  /** The files as they were before this turn's prompt can be put back. */
+  canRestore: boolean;
+  onRestore: (through: number) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const stopped = item.error === "Stopped";
@@ -315,6 +330,17 @@ function Answer({ item, through, canFork, onFork }: { item: AssistantItem; throu
               onClick={() => onFork(through)}
             >
               <IconFork size={14} />
+            </button>
+          ) : null}
+          {canRestore ? (
+            <button
+              type="button"
+              className="ghost-icon"
+              aria-label="Undo file changes from here"
+              title="Undo file changes from this turn on"
+              onClick={() => onRestore(through)}
+            >
+              <IconUndo size={14} />
             </button>
           ) : null}
         </div>
@@ -406,6 +432,8 @@ const TurnView = memo(function TurnView({
   workspace,
   canFork,
   onFork,
+  canRestore,
+  onRestore,
 }: {
   turn: Turn;
   open: boolean;
@@ -413,6 +441,8 @@ const TurnView = memo(function TurnView({
   workspace: string;
   canFork: boolean;
   onFork: (through: number) => void;
+  canRestore: boolean;
+  onRestore: (through: number) => void;
 }) {
   if (!turn.prompt) {
     // Startup notices before any prompt: plain rows, no fold.
@@ -429,7 +459,9 @@ const TurnView = memo(function TurnView({
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} />
       {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
-      {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} /> : null}
+      {turn.answer ? (
+        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
+      ) : null}
       {!hasProcess && !turn.answer && turn.live ? (
         <div className="process is-live">
           <span className="process-head is-static">
@@ -460,6 +492,8 @@ export function Conversation({
   workspace,
   canFork,
   onFork,
+  checkpoints,
+  onRestore,
 }: {
   chatId: string;
   items: ChatItem[];
@@ -467,6 +501,9 @@ export function Conversation({
   workspace: string;
   canFork: boolean;
   onFork: (through: number) => void;
+  /** Turns whose files can be put back as they were before the prompt. */
+  checkpoints: number[];
+  onRestore: (through: number) => void;
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -503,6 +540,10 @@ export function Conversation({
   const onForkRef = useRef(onFork);
   onForkRef.current = onFork;
   const fork = useCallback((through: number) => onForkRef.current(through), []);
+  const onRestoreRef = useRef(onRestore);
+  onRestoreRef.current = onRestore;
+  const restore = useCallback((through: number) => onRestoreRef.current(through), []);
+  const idle = status === "idle" || status === "error";
 
   // A smooth scroll aims at the scrollHeight of the moment it starts, and the
   // delta handler / ResizeObserver force-scrolling would cancel it, so while
@@ -621,7 +662,17 @@ export function Conversation({
           <ArrivalsContext.Provider value={arrivals}>
             <div className="thread">
               {turns.map((turn) => (
-                <TurnView key={turn.id} turn={turn} open={overrides[turn.id] ?? turn.live} onToggle={onToggle} workspace={workspace} canFork={canFork} onFork={fork} />
+                <TurnView
+                  key={turn.id}
+                  turn={turn}
+                  open={overrides[turn.id] ?? turn.live}
+                  onToggle={onToggle}
+                  workspace={workspace}
+                  canFork={canFork}
+                  onFork={fork}
+                  canRestore={idle && turn.through > 0 && checkpoints.includes(turn.through)}
+                  onRestore={restore}
+                />
               ))}
             </div>
           </ArrivalsContext.Provider>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { errorText } from "./api.js";
 
 export type BannerLevel = "info" | "warning" | "error";
-export type Banner = { level: BannerLevel; text: string } | null;
+export type Banner = { level: BannerLevel; text: string; action?: { label: string; run: () => void } } | null;
 
 export function useBanner() {
   const [banner, setBanner] = useState<Banner>(null);

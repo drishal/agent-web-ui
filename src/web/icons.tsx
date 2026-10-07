@@ -133,6 +133,12 @@ export const IconArchive = (p: IconProps) => (
     <path d="M3 5.75v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-6.5M6.5 8.5h3" />
   </Svg>
 );
+export const IconUndo = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5.5 3.25 2.75 6l2.75 2.75" />
+    <path d="M2.75 6h6.5a4 4 0 0 1 0 8h-2.5" />
+  </Svg>
+);
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />

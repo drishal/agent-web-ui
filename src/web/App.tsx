@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, PushNote, SendMode, ServerSettings, ThemeChoice, WorkspaceInfo } from "../shared/protocol.js";
+import type {
+  ChatSnapshot,
+  CheckpointRestored,
+  ImageAttachment,
+  InteractionAnswer,
+  ProjectSession,
+  PushNote,
+  SendMode,
+  ServerSettings,
+  ThemeChoice,
+  WorkspaceInfo,
+} from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
@@ -19,6 +30,7 @@ import { TabStrip } from "./components/TabStrip.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { ReviewPanel } from "./components/ReviewPanel.js";
+import { RestoreDialog } from "./components/RestoreDialog.js";
 import { collectChanges } from "./review.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
@@ -76,6 +88,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  /** The turn whose checkpoint the restore dialog shows. */
+  const [restoreTurn, setRestoreTurn] = useState<number | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -397,6 +411,34 @@ export function App() {
     try {
       showChat(await api<ChatSnapshot>(`/api/chats/${chat.chatId}/fork`, { body: { through } }));
     } catch (e) {
+      fail(e);
+    }
+  };
+
+  /** Put files back as they were before turn `through`; the banner offers to put them back again. */
+  const restoreFiles = async (through: number, paths: string[], alsoFork: boolean): Promise<void> => {
+    if (!chat) return;
+    const chatId = chat.chatId;
+    try {
+      const done = await api<CheckpointRestored>(`/api/chats/${chatId}/checkpoints/${through}/restore`, { body: { paths } });
+      setRestoreTurn(null);
+      const n = done.files.length;
+      const putBack = async () => {
+        try {
+          await api<CheckpointRestored>(`/api/chats/${chatId}/checkpoints/put-back`, { body: { tree: done.undo, paths: done.files.map((f) => f.path) } });
+          setBanner({ level: "info", text: `Put ${n} ${n === 1 ? "file" : "files"} back as they were` });
+        } catch (e) {
+          fail(e);
+        }
+      };
+      if (alsoFork) await forkChat(through - 1);
+      setBanner({
+        level: "info",
+        text: `Undid changes to ${n} ${n === 1 ? "file" : "files"} from turn ${through} on${alsoFork ? ", and forked the chat before it" : ". The agent was not told"}`,
+        action: { label: "Put back", run: () => void putBack() },
+      });
+    } catch (e) {
+      setRestoreTurn(null);
       fail(e);
     }
   };
@@ -777,6 +819,11 @@ export function App() {
         {banner ? (
           <div className={`banner banner-${banner.level}`} role={banner.level === "error" ? "alert" : "status"}>
             <span>{banner.text}</span>
+            {banner.action ? (
+              <button type="button" className="btn btn-small banner-action" onClick={banner.action.run}>
+                {banner.action.label}
+              </button>
+            ) : null}
             <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setBanner(null)}>
               ✕
             </button>
@@ -820,7 +867,16 @@ export function App() {
           </div>
         ) : chat ? (
           <>
-            <Conversation chatId={chat.chatId} items={chat.items} status={chat.status} workspace={chat.workspace.path} canFork={chat.capabilities.supportsFork} onFork={forkChat} />
+            <Conversation
+              chatId={chat.chatId}
+              items={chat.items}
+              status={chat.status}
+              workspace={chat.workspace.path}
+              canFork={chat.capabilities.supportsFork}
+              onFork={forkChat}
+              checkpoints={chat.checkpoints ?? []}
+              onRestore={setRestoreTurn}
+            />
             {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
             <Composer
               key={chat.chatId}
@@ -882,6 +938,15 @@ export function App() {
               setRenameOpen(false);
             }
           }}
+        />
+      ) : null}
+      {restoreTurn !== null && chat ? (
+        <RestoreDialog
+          chatId={chat.chatId}
+          through={restoreTurn}
+          canFork={chat.capabilities.supportsFork}
+          onRestore={(paths, alsoFork) => restoreFiles(restoreTurn, paths, alsoFork)}
+          onClose={() => setRestoreTurn(null)}
         />
       ) : null}
       {reviewOpen && chat ? (

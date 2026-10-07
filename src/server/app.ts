@@ -22,6 +22,10 @@ import {
   sessionMarkSchema,
   pushSubscriptionSchema,
   pushTestSchema,
+  putBackSchema,
+  restoreSchema,
+  type CheckpointPreview,
+  type CheckpointRestored,
   type ProjectSession,
   sendMessageSchema,
   type SessionsOverview,
@@ -42,6 +46,7 @@ import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
+import { Checkpoints } from "./checkpoints.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -68,6 +73,8 @@ export interface AppDeps {
   limits?: Limits;
   /** Notes and Web Push for devices that turned notifications on; in memory when absent. */
   notifier?: Notifier;
+  /** Where file checkpoints live (shadow repositories, and each session's list); none when absent. */
+  checkpointsDir?: string | null;
   log?: (message: string) => void;
 }
 
@@ -111,6 +118,7 @@ export function createApp(deps: AppDeps) {
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
+  if (deps.checkpointsDir) manager.checkpoints = { service: new Checkpoints(deps.checkpointsDir), sessionsDir: path.join(deps.checkpointsDir, "sessions") };
   manager.onNews = (chat, kind, text) => {
     notifier.notify({ kind, chatId: chat.chatId, sessionId: chat.sessionId, title: chat.title || "New chat", body: text });
   };
@@ -491,6 +499,41 @@ export function createApp(deps: AppDeps) {
     if (chat.status !== "idle") throw new ChatError(409, "busy", "Compact only while idle");
     chat.compact(instructions).catch((error: unknown) => log(`compact failed: ${errorMessage(error)}`));
     res.status(202).json({ accepted: true });
+  });
+
+  // File checkpoints: what restoring a turn would do, doing it, and putting the files back again.
+  const checkpointsOf = (chat: Chat, write: boolean) => {
+    if (!chat.checkpoints) throw new ChatError(404, "no_checkpoints", "This chat keeps no file checkpoints");
+    if (write && chat.status !== "idle" && chat.status !== "error") throw new ChatError(409, "busy", "Wait until the agent is idle");
+    return chat.checkpoints;
+  };
+  const turnOf = (raw: string) => {
+    const turn = Number(raw);
+    if (!Number.isInteger(turn) || turn < 1) throw new ChatError(400, "bad_turn", "Not a turn");
+    return turn;
+  };
+  const checkpointFailure = (error: unknown): never => {
+    throw error instanceof ChatError ? error : new ChatError(422, "checkpoint_failed", errorMessage(error));
+  };
+  app.get("/api/chats/:id/checkpoints/:turn", async (req, res) => {
+    const cp = checkpointsOf(manager.get(req.params.id), false);
+    const { files } = await cp.preview(turnOf(req.params.turn)).catch(checkpointFailure);
+    res.json({ files } satisfies CheckpointPreview);
+  });
+  app.post("/api/chats/:id/checkpoints/:turn/restore", async (req, res) => {
+    const cp = checkpointsOf(manager.get(req.params.id), true);
+    const { paths } = body(restoreSchema, req);
+    res.json((await cp.restore(turnOf(req.params.turn), paths).catch(checkpointFailure)) satisfies CheckpointRestored);
+  });
+  app.post("/api/chats/:id/checkpoints/put-back", async (req, res) => {
+    const cp = checkpointsOf(manager.get(req.params.id), true);
+    const { tree, paths } = body(putBackSchema, req);
+    const all = paths ?? (await cp.previewTree(tree).catch(checkpointFailure)).files.map((f) => f.path);
+    if (all.length === 0) {
+      res.json({ files: [], undo: tree } satisfies CheckpointRestored);
+      return;
+    }
+    res.json((await cp.restore(null, all, tree).catch(checkpointFailure)) satisfies CheckpointRestored);
   });
 
   app.post("/api/chats/:id/fork", async (req, res) => {

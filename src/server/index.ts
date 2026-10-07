@@ -133,6 +133,7 @@ async function main(): Promise<void> {
     marks,
     limits,
     notifier,
+    checkpointsDir: path.join(config.stateDir, "checkpoints"),
     settings: {
       configDir: config.configDir,
       running: {

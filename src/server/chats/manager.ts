@@ -6,6 +6,7 @@ import type { LimitAccount, PushNote, WorkspaceInfo } from "../../shared/protoco
 import { DeferredLiveChat } from "../harness/deferred.js";
 import type { HarnessAdapter, LiveChat } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
+import { ChatCheckpoints, type Checkpoints } from "../checkpoints.js";
 
 const IDLE_DISPOSE_MS = 30 * 60_000;
 const REAP_INTERVAL_MS = 60_000;
@@ -21,6 +22,8 @@ export class ChatManager {
   private reaper: NodeJS.Timeout;
   /** Any chat's harness reported its subscription limits. */
   onLimits?: (account: LimitAccount) => void;
+  /** File checkpoints before prompts, and where each session's list of them is kept. */
+  checkpoints?: { service: Checkpoints; sessionsDir: string };
   /** Any chat finished a run, failed, or asks for an answer. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
 
@@ -50,6 +53,10 @@ export class ChatManager {
     chat.onDisposed = (c) => this.forget(c);
     chat.onLimits = (account) => this.onLimits?.(account);
     chat.onNews = (c, kind, body) => this.onNews?.(c, kind, body);
+    if (this.checkpoints) {
+      chat.checkpoints = new ChatCheckpoints(this.checkpoints.service, chat, this.checkpoints.sessionsDir);
+      void chat.checkpoints.start();
+    }
     if (chat.nativeId) this.claimSession(chat);
   }
 
