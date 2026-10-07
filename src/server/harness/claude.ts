@@ -571,13 +571,16 @@ class ClaudeLiveChat implements LiveChat {
     const answers: Record<string, string> = {};
     const questions = (input.questions as unknown[]).filter(isObj);
     for (const [i, q] of questions.entries()) {
-      const options = (Array.isArray(q.options) ? q.options : []).map((o) => (isObj(o) ? str(o.label) : String(o))).filter(Boolean);
+      const raw = (Array.isArray(q.options) ? q.options : []).filter((o) => (isObj(o) ? str(o.label) : String(o)));
+      const options = raw.map((o) => (isObj(o) ? str(o.label) : String(o)));
+      const details = raw.map((o) => (isObj(o) ? str(o.description) : ""));
       const answer = await this.dialogs.open({
         id: `${id}:${i}`,
         kind: options.length > 0 ? "select" : "input",
         title: str(q.header) || "Claude Code asks",
         message: str(q.question),
         ...(options.length > 0 ? { options } : {}),
+        ...(details.some(Boolean) ? { optionDetails: details } : {}),
         createdAt: Date.now(),
       });
       if (this.withdrawn.has(id)) return void this.withdrawn.delete(id);

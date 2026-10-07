@@ -1,10 +1,11 @@
 // Pending harness requests take over the composer card (DeepSeek Harness),
 // with OpenCode's button order (Deny ghost, Approve primary on the right) and
 // Hermes Desktop's stacked silhouettes when more requests are queued.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { InteractionAnswer, InteractionRequest } from "../../shared/protocol.js";
 import { useNow } from "../hooks.js";
 import { IconStop } from "../icons.js";
+import { choicesOf, splitStep } from "../questions.js";
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
   const now = useNow(true);
@@ -15,6 +16,52 @@ function isApproval(r: InteractionRequest): boolean {
   if (r.kind === "confirm") return true;
   const opts = (r.options ?? []).map((o) => o.toLowerCase());
   return r.kind === "select" && opts.length === 2 && opts.includes("approve") && opts.includes("deny");
+}
+
+/** A question as a list: one row per option, numbered (1–9 pick it), its description under it. */
+function ChoiceList({ request, busy, onAnswer }: { request: InteractionRequest; busy: boolean; onAnswer: (answer: InteractionAnswer) => void }) {
+  const list = useRef<HTMLOListElement>(null);
+  const choices = choicesOf(request);
+  const first = Math.max(0, choices.findIndex((c) => c.recommended));
+  const buttons = () => [...(list.current?.querySelectorAll<HTMLButtonElement>(".choice") ?? [])];
+  return (
+    <ol
+      ref={list}
+      className="choice-list"
+      aria-label="Options"
+      onKeyDown={(e) => {
+        const all = buttons();
+        const at = all.indexOf(document.activeElement as HTMLButtonElement);
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          all[(at + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length]?.focus();
+        }
+      }}
+    >
+      {choices.map((c, i) => (
+        <li key={`${i}:${c.value}`}>
+          <button
+            type="button"
+            className={`choice${c.recommended ? " is-recommended" : ""}${c.other ? " is-other" : ""}`}
+            disabled={busy}
+            autoFocus={i === first}
+            onClick={() => onAnswer({ kind: "select", value: c.value })}
+          >
+            <span className="choice-key" aria-hidden="true">
+              {i < 9 ? i + 1 : ""}
+            </span>
+            <span className="choice-body">
+              <span className="choice-label">
+                {c.label}
+                {c.recommended ? <span className="choice-tag">Recommended</span> : null}
+              </span>
+              {c.detail ? <span className="choice-detail">{c.detail}</span> : null}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 export function ApprovalStack({
@@ -34,23 +81,42 @@ export function ApprovalStack({
   const [value, setValue] = useState(request.prefill ?? "");
   useEffect(() => setValue(request.prefill ?? ""), [request.id, request.prefill]);
   const approval = isApproval(request);
-  const [headline, ...restLines] = request.title.split("\n");
-  const detail = [restLines.join("\n").trim(), request.message?.trim()].filter(Boolean).join("\n\n");
+  const [titleLine = "", ...restLines] = request.title.split("\n");
+  const message = request.message?.trim() ?? "";
+  const question = request.kind === "select" && !approval;
+  // A question's short title is a label (Claude Code's "Approach"); its message is the question itself.
+  const labelled = question && message !== "" && restLines.length === 0 && titleLine.length <= 32;
+  const { text: headline, step } = splitStep(labelled ? message : titleLine);
+  const detail = labelled ? "" : [restLines.join("\n").trim(), message].filter(Boolean).join("\n\n");
   const behind = Math.min(pending.length - 1, 2);
   const approveValue = request.options?.find((o) => o.toLowerCase() === "approve") ?? "Approve";
   const denyValue = request.options?.find((o) => o.toLowerCase() === "deny") ?? "Deny";
 
   return (
     <div className={`approval-stack behind-${behind}`} data-testid="approval-card">
-      <section className="approval-card" aria-label="The agent is waiting for you" role="group">
+      <section
+        className="approval-card"
+        aria-label="The agent is waiting for you"
+        role="group"
+        onKeyDown={(e) => {
+          if (!question || busy || e.ctrlKey || e.metaKey || e.altKey || !/^[1-9]$/.test(e.key)) return;
+          if ((e.target as HTMLElement).closest("input, textarea")) return;
+          const option = request.options?.[Number(e.key) - 1];
+          if (option === undefined) return;
+          e.preventDefault();
+          onAnswer(request, { kind: "select", value: option });
+        }}
+      >
         <header className="approval-strip">
           <span className="approval-dot" aria-hidden="true" />
           <span>{approval ? "Waiting for approval" : "Waiting for your answer"}</span>
+          {labelled ? <span className="approval-chip">{titleLine}</span> : null}
+          {step ? <span className="approval-chip">{step}</span> : null}
           {request.expiresAt ? <Countdown expiresAt={request.expiresAt} /> : null}
           {pending.length > 1 ? <span className="approval-more">{pending.length - 1} more</span> : null}
         </header>
         <div className="approval-headline">{headline}</div>
-        {detail ? <pre className="approval-detail">{detail}</pre> : null}
+        {detail ? question ? <p className="approval-message">{detail}</p> : <pre className="approval-detail">{detail}</pre> : null}
 
         {request.kind === "input" || request.kind === "editor" ? (
           <form
@@ -85,51 +151,45 @@ export function ApprovalStack({
               </button>
             </div>
           </form>
-        ) : (
-          <div className={`approval-actions${!approval && (request.options?.length ?? 0) > 3 ? " is-list" : ""}`}>
+        ) : approval ? (
+          <div className="approval-actions">
             <button type="button" className="btn btn-ghost btn-danger-text" onClick={onStop} disabled={stopping}>
               <IconStop size={12} /> {stopping ? "Stopping…" : "Stop"}
             </button>
             <span className="approval-spacer" />
-            {approval ? (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={busy}
-                  onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: false } : { kind: "select", value: denyValue })}
-                >
-                  Deny
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={busy}
-                  autoFocus
-                  onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: true } : { kind: "select", value: approveValue })}
-                >
-                  Approve
-                </button>
-              </>
-            ) : (
-              <>
-                {(request.options ?? []).map((option, i) => (
-                  <button
-                    key={`${i}:${option}`}
-                    type="button"
-                    className={`btn${i === 0 ? " btn-primary" : ""}`}
-                    disabled={busy}
-                    onClick={() => onAnswer(request, { kind: "select", value: option })}
-                  >
-                    {option}
-                  </button>
-                ))}
-                <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => onAnswer(request, { kind: "cancel" })}>
-                  Dismiss
-                </button>
-              </>
-            )}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: false } : { kind: "select", value: denyValue })}
+            >
+              Deny
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              autoFocus
+              onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: true } : { kind: "select", value: approveValue })}
+            >
+              Approve
+            </button>
           </div>
+        ) : (
+          <>
+            <ChoiceList request={request} busy={busy} onAnswer={(a) => onAnswer(request, a)} />
+            <div className="approval-foot">
+              <button type="button" className="btn btn-small btn-ghost btn-danger-text" onClick={onStop} disabled={stopping}>
+                <IconStop size={11} /> {stopping ? "Stopping…" : "Stop"}
+              </button>
+              <span className="approval-hint">
+                {(request.options?.length ?? 0) > 1 ? `1–${Math.min(9, request.options?.length ?? 0)} to choose · ` : ""}↑↓ to move
+              </span>
+              <button type="button" className="btn btn-small btn-ghost" disabled={busy} onClick={() => onAnswer(request, { kind: "cancel" })}>
+                Dismiss
+              </button>
+            </div>
+          </>
         )}
       </section>
     </div>
