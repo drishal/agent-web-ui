@@ -16,6 +16,7 @@ import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
+import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconMenu, IconMore, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
@@ -403,6 +404,13 @@ export function App() {
     }
   };
 
+  const exportChat = () => {
+    setMenuOpen(false);
+    if (!chat) return;
+    const name = boot?.harnesses.find((h) => h.id === chat.harnessId)?.displayName ?? chat.harnessId;
+    downloadText(exportFileName(chat.title), chatMarkdown(chat, name));
+  };
+
   const closeChat = async () => {
     setMenuOpen(false);
     if (!chat) return;
@@ -584,6 +592,11 @@ export function App() {
                         </button>
                       </li>
                     ) : null}
+                    <li role="none">
+                      <button type="button" role="menuitem" disabled={!hasPrompt} onClick={exportChat}>
+                        Export as Markdown
+                      </button>
+                    </li>
                     <li role="none">
                       <button type="button" role="menuitem" onClick={() => void closeChat()}>
                         Close chat
