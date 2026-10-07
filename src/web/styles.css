@@ -3109,6 +3109,145 @@ body.is-resizing {
   flex: 1;
 }
 
+.approval-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.approval-message {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: calc(13.5px * var(--chat-scale));
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A question's options (Claude Code's AskUserQuestion, omp's ask): full-width numbered rows. */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 46vh;
+  margin: 2px 0 8px;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.choice:hover:not(:disabled),
+.choice:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
+  background: var(--hover);
+}
+
+.choice.is-recommended {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.choice.is-other .choice-label {
+  color: var(--text-2);
+}
+
+.choice:disabled {
+  opacity: 0.55;
+}
+
+.choice-key {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 600 11px var(--font-mono);
+}
+
+.choice.is-recommended .choice-key {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choice-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: calc(14px * var(--chat-scale));
+  font-weight: 560;
+  overflow-wrap: anywhere;
+}
+
+.choice-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.choice-detail {
+  color: var(--muted);
+  font-size: calc(12.5px * var(--chat-scale));
+  line-height: 1.45;
+}
+
+.approval-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.approval-hint {
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+@media (hover: none) {
+  .approval-hint {
+    visibility: hidden;
+  }
+}
+
 .approval-form {
   display: flex;
   flex-direction: column;

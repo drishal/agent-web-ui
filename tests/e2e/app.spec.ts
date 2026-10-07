@@ -202,6 +202,29 @@ test("an approval takes over the composer and is recorded in the turn", async ({
   await expect(page.locator('[data-testid="tool-row"][data-status="done"]')).toHaveCount(1);
 });
 
+test("a question lists its options as numbered rows, and a number picks one", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "quiz please");
+  const card = page.getByTestId("approval-card");
+  await expect(card).toContainText("Waiting for your answer");
+  await expect(card.locator(".approval-chip")).toHaveText("1 of 2");
+  await expect(card.locator(".approval-headline")).toHaveText("Move both theme AND text size into config.yml?");
+  await expect(card.locator(".choice-label")).toHaveText(["Both sharedRecommended", "Only text size shared, theme stays per-device", "Other (type your own)"]);
+  await expect(card.locator(".choice.is-recommended")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("2");
+  await expect(card).toHaveCount(0);
+  await expect(page.getByTestId("answer").last()).toContainText("Chose: Only text size shared, theme stays per-device");
+
+  await send(page, "quiz described");
+  await expect(card.locator(".approval-chip")).toHaveText("Settings");
+  await expect(card.locator(".approval-headline")).toHaveText("Should the theme and the text size both move into config.yml?");
+  await expect(card.locator(".choice-detail")).toHaveText(["Every device gets the same look.", "The theme stays per device.", "Keep both in each browser."]);
+  await card.getByRole("button", { name: "Dismiss" }).click();
+  await expect(card).toHaveCount(0);
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);

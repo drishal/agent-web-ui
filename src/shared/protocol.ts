@@ -248,6 +248,8 @@ export interface InteractionRequest {
   title: string;
   message?: string;
   options?: string[];
+  /** A line under each option, where the harness describes them (Claude Code's questions). */
+  optionDetails?: string[];
   placeholder?: string;
   prefill?: string;
   /** Absolute epoch ms when the harness gives up on its own. */

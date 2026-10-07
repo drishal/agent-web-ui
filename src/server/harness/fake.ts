@@ -3,6 +3,7 @@
 //   "tool"  run a fake tool          "ask"   raise a confirm request first
 //   "fail"  end with an error        "slow"  stream many chunks
 //   "big"   produce oversized tool output    "edit"  edit a file (src/app.ts)
+//   "quiz"  ask a multiple-choice question (omp's style; "quiz described": Claude Code's)
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -419,6 +420,11 @@ class FakeLiveChat implements LiveChat {
           return;
         }
       }
+      if (/\bquiz\b/i.test(text)) {
+        const chose = await this.question(signal, /\bdescribed\b/i.test(text));
+        await this.reply(`Chose: ${chose}`, signal);
+        return;
+      }
       if (/\brecall\b/i.test(text)) {
         // A memory extension's recall, as pi-book injects it (a displayed custom message).
         const recall = extensionMessage("book-recall", "<memory>\nYour memory book: notes about the user.\n- prefers tabs over spaces\n</memory>");
@@ -628,6 +634,43 @@ class FakeLiveChat implements LiveChat {
           message: tool === "bash" ? "npm test -- --watch=false" : "The fake agent wants to read README.md",
           createdAt: Date.now(),
         },
+      });
+    });
+  }
+
+  /** A select request as omp's ask tool sends one, or, `described`, as Claude Code's AskUserQuestion. */
+  private question(signal: AbortSignal, described: boolean): Promise<string> {
+    const id = randomUUID();
+    return new Promise<string>((resolve, reject) => {
+      const onAbort = () => {
+        if (this.pending.delete(id)) this.emit({ type: "request_cancelled", requestId: id, outcome: "cancelled" });
+        reject(new Aborted());
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.pending.set(id, (answer) => {
+        signal.removeEventListener("abort", onAbort);
+        if (answer === null || answer.kind === "cancel") return reject(new Aborted());
+        resolve(answer.kind === "select" || answer.kind === "input" ? answer.value : "?");
+      });
+      this.emit({
+        type: "request",
+        request: described
+          ? {
+              id,
+              kind: "select",
+              title: "Settings",
+              message: "Should the theme and the text size both move into config.yml?",
+              options: ["Both shared", "Only text size", "Neither"],
+              optionDetails: ["Every device gets the same look.", "The theme stays per device.", "Keep both in each browser."],
+              createdAt: Date.now(),
+            }
+          : {
+              id,
+              kind: "select",
+              title: "Move both theme AND text size into config.yml? (1/2)",
+              options: ["Both shared (Recommended)", "Only text size shared, theme stays per-device", "Other (type your own)"],
+              createdAt: Date.now(),
+            },
       });
     });
   }
