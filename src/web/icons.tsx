@@ -122,6 +122,17 @@ export const IconFork = (p: IconProps) => (
     <path d="M11.75 6.25a6.25 6.25 0 0 1-6.25 6.25" />
   </Svg>
 );
+export const IconPin = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 2h4M6.75 2v4.25L4.5 9h7L9.25 6.25V2M8 9v5" />
+  </Svg>
+);
+export const IconArchive = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2" y="2.75" width="12" height="3" rx="0.75" />
+    <path d="M3 5.75v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-6.5M6.5 8.5h3" />
+  </Svg>
+);
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />

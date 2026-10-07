@@ -59,5 +59,17 @@ export function useSessions({ boot, workspace, chat }: { boot: Bootstrap | null;
     return () => window.clearInterval(timer);
   }, [backgroundBusy, refreshSessions]);
 
-  return { overview, sessionsError, sessionsLoading, refreshSessions };
+  /** Show a pin or archive at once; the server's answer replaces it (a later refresh agrees). */
+  const markSession = useCallback((sessionId: string, mark: { pinned?: true; archived?: true }) => {
+    setOverview((o) => ({
+      ...o,
+      sessions: o.sessions.map((s) => {
+        if (s.id !== sessionId) return s;
+        const { pinned: _p, archived: _a, ...rest } = s;
+        return { ...rest, ...mark };
+      }),
+    }));
+  }, []);
+
+  return { overview, sessionsError, sessionsLoading, refreshSessions, markSession };
 }

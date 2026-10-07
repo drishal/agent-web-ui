@@ -10,7 +10,7 @@ import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
-import { Sidebar } from "./components/Sidebar.js";
+import { Sidebar, type MarkChange } from "./components/Sidebar.js";
 import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
@@ -43,7 +43,7 @@ export function App() {
     setRecent,
     setChat,
   });
-  const { overview, sessionsError, sessionsLoading, refreshSessions } = useSessions({ boot, workspace, chat });
+  const { overview, sessionsError, sessionsLoading, refreshSessions, markSession } = useSessions({ boot, workspace, chat });
   const {
     sidebarWidth,
     setSidebarWidth,
@@ -395,6 +395,14 @@ export function App() {
     }
   };
 
+  const markSessionAs = async (s: ProjectSession, change: MarkChange) => {
+    try {
+      markSession(s.id, await api<{ pinned?: true; archived?: true }>("/api/sessions/marks", { body: { sessionId: s.id, ...change } }));
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   const closeChat = async () => {
     setMenuOpen(false);
     if (!chat) return;
@@ -482,6 +490,7 @@ export function App() {
         activeChatId={chatId}
         activeStatus={chat?.status ?? null}
         onOpenSession={(s, newTab) => void openSession(s, { newTab })}
+        onMarkSession={(s, change) => void markSessionAs(s, change)}
         onRefresh={() => void refreshSessions()}
         onSettings={() => {
           setSettingsOpen(true);

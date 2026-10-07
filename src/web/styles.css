@@ -730,6 +730,82 @@ h3,
   color: var(--muted);
 }
 
+/* Pin and archive: a ⋯ over the row's time on hover; on touch screens on the open session's
+   row, and a long press on any row. */
+.session-item {
+  position: relative;
+}
+
+.session-more {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+.session-item:hover .session-more,
+.session-item.is-menu-open .session-more,
+.session-more:focus-visible {
+  opacity: 1;
+}
+
+.session-item:hover .session-meta,
+.session-item.is-menu-open .session-meta {
+  visibility: hidden;
+}
+
+@media (hover: none) {
+  .session-more {
+    pointer-events: none;
+  }
+
+  .session-item:has(> .session.is-active) .session-more {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .session-item:has(> .session.is-active) .session-meta {
+    visibility: hidden;
+  }
+}
+
+.session.is-archived .session-title {
+  color: var(--muted);
+}
+
+.session-project {
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-toggle.is-static {
+  cursor: default;
+}
+
+.pinned-group .session-sublist {
+  border-left-color: transparent;
+}
+
+.row-menu {
+  position: fixed;
+}
+
+.row-menu button,
+.menu-list button:has(> .icon) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archived-toggle {
+  margin-top: 6px;
+}
+
 .live-dot {
   width: 6px;
   height: 6px;

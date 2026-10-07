@@ -19,6 +19,7 @@ import {
   renameSchema,
   settingsPatchSchema,
   resumeChatSchema,
+  sessionMarkSchema,
   type ProjectSession,
   sendMessageSchema,
   type SessionsOverview,
@@ -36,6 +37,7 @@ import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
+import { SessionMarks } from "./session-marks.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -56,6 +58,8 @@ export interface AppDeps {
   /** The Settings dialog's view of config.yml; without it the settings routes answer 404. */
   settings?: SettingsContext;
   heartbeatMs?: number;
+  /** Pinned and archived sessions; in memory when absent. */
+  marks?: SessionMarks;
   log?: (message: string) => void;
 }
 
@@ -95,6 +99,7 @@ function toSession(
 
 export function createApp(deps: AppDeps) {
   const { registry, manager, workspaces, security, theme } = deps;
+  const marks = deps.marks ?? SessionMarks.inMemory();
   const log = deps.log ?? ((m: string) => console.error(m));
   const app = express();
   app.disable("x-powered-by");
@@ -310,12 +315,21 @@ export function createApp(deps: AppDeps) {
         workspaceId: chat.workspace.id,
       });
     }
+    for (const [id, s] of sessions) {
+      const mark = marks.get(id);
+      if (mark) sessions.set(id, { ...s, ...mark });
+    }
     const overview: SessionsOverview = {
       workspaces: [...projects.values()],
       sessions: [...sessions.values()].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
       errors,
     };
     res.json(overview);
+  });
+
+  app.post("/api/sessions/marks", async (req, res) => {
+    const { sessionId, ...change } = body(sessionMarkSchema, req);
+    res.json(await marks.set(sessionId, change));
   });
 
   app.post("/api/chats", async (req, res) => {
