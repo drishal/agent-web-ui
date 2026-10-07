@@ -20,6 +20,8 @@ import {
   settingsPatchSchema,
   resumeChatSchema,
   sessionMarkSchema,
+  pushSubscriptionSchema,
+  pushTestSchema,
   type ProjectSession,
   sendMessageSchema,
   type SessionsOverview,
@@ -39,6 +41,7 @@ import { readSettings, writeSettings, type Requester, type SettingsContext } fro
 import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
+import { Notifier, pushEndpointProblem } from "./notify.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -63,6 +66,8 @@ export interface AppDeps {
   marks?: SessionMarks;
   /** Subscription limits; in memory when absent. */
   limits?: Limits;
+  /** Notes and Web Push for devices that turned notifications on; in memory when absent. */
+  notifier?: Notifier;
   log?: (message: string) => void;
 }
 
@@ -105,6 +110,10 @@ export function createApp(deps: AppDeps) {
   const marks = deps.marks ?? SessionMarks.inMemory();
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
+  const notifier = deps.notifier ?? Notifier.inMemory();
+  manager.onNews = (chat, kind, text) => {
+    notifier.notify({ kind, chatId: chat.chatId, sessionId: chat.sessionId, title: chat.title || "New chat", body: text });
+  };
   const log = deps.log ?? ((m: string) => console.error(m));
   const app = express();
   app.disable("x-powered-by");
@@ -332,6 +341,32 @@ export function createApp(deps: AppDeps) {
     res.json(overview);
   });
 
+  // Notifications. A push only wakes the device's service worker, which then reads the notes here.
+  app.get("/api/push/key", (_req, res) => {
+    res.json({ key: notifier.applicationServerKey });
+  });
+  app.post("/api/push/subscribe", async (req, res) => {
+    const { endpoint } = body(pushSubscriptionSchema, req);
+    const problem = pushEndpointProblem(endpoint);
+    if (problem) throw new ChatError(422, "bad_push_endpoint", problem);
+    await notifier.subscribe(endpoint);
+    res.json({ ok: true });
+  });
+  app.post("/api/push/unsubscribe", async (req, res) => {
+    await notifier.unsubscribe(body(pushSubscriptionSchema, req).endpoint);
+    res.json({ ok: true });
+  });
+  app.post("/api/push/test", (req, res) => {
+    const { endpoint } = body(pushTestSchema, req);
+    res.json(notifier.notify({ kind: "done", chatId: "", sessionId: null, title: "Agent Web UI", body: "Notifications work on this device" }, endpoint));
+  });
+  /** Notes after `since` (epoch ms, as `now` last said); without it, the last two minutes. */
+  app.get("/api/notifications", (req, res) => {
+    const raw = typeof req.query.since === "string" && /^\d{1,15}$/.test(req.query.since) ? Number(req.query.since) : null;
+    const now = Date.now();
+    res.json({ notes: notifier.since(raw ?? now - 120_000), now });
+  });
+
   app.get("/api/limits", async (_req, res) => {
     res.json(await limits.get());
   });
@@ -557,5 +592,5 @@ export function createApp(deps: AppDeps) {
 }
 
 function noStoreHtml(res: Response, filePath: string): void {
-  if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-store");
+  if (filePath.endsWith(".html") || path.basename(filePath) === "sw.js") res.setHeader("Cache-Control", "no-store");
 }

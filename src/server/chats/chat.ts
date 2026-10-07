@@ -15,6 +15,7 @@ import type {
   InteractionAnswer,
   InteractionRequest,
   LimitAccount,
+  PushNote,
   QueueState,
   SendMode,
   SessionUsage,
@@ -589,6 +590,8 @@ export class Chat {
   onDisposed?: (chat: Chat) => void;
   /** The harness reported its subscription limits. */
   onLimits?: (account: LimitAccount) => void;
+  /** A run finished or failed, or the agent asks for an answer: news for devices that want it. */
+  onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
 
   private readonly log = new EventLog();
   private readonly timing = new Timing();
@@ -717,6 +720,7 @@ export class Chat {
       this.onLimits?.(event.account);
       return;
     }
+    if (event.type === "request") this.onNews?.(this, "ask", event.request.title);
     // Viewing must not promote the chat: only real conversation (a prompt sent
     // or a turn finished) counts as activity for sidebar ordering. Replay on
     // open, status flaps, config/title/usage refreshes all stay quiet.
@@ -740,13 +744,33 @@ export class Chat {
 
   private setStatus(status: ChatStatus): void {
     if (this.status === status || this.status === "disposed") return;
+    const before = this.status;
     this.status = status;
     this.reducer.emit({ type: "status", status });
+    // A run that ends on its own is news; one stopped from here is not.
+    if (before === "running" && status === "idle") this.onNews?.(this, "done", this.lastLine("assistant") ?? "Finished");
+    else if (status === "error" && before !== "starting") this.onNews?.(this, "error", this.lastLine("notice") ?? "Failed");
     if (status === "idle" || status === "error") {
       const waiters = this.settleWaiters;
       this.settleWaiters = [];
       for (const w of waiters) w();
     }
+  }
+
+  /** The first line of the latest answer (or error notice), without Markdown marks. */
+  private lastLine(kind: "assistant" | "notice"): string | null {
+    const items = this.reducer.items;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i] as ChatItem;
+      if (item.kind === "user") return null;
+      const text = item.kind === "assistant" && kind === "assistant" ? item.text : item.kind === "notice" && kind === "notice" && item.level === "error" ? item.text : "";
+      const line = text
+        .split("\n")
+        .map((l) => l.replace(/^[\s>#*+-]+|[*_`]/g, "").trim())
+        .find(Boolean);
+      if (line) return line.length > 140 ? `${line.slice(0, 139)}…` : line;
+    }
+    return null;
   }
 
   private async refreshContext(): Promise<void> {

@@ -10,6 +10,15 @@ import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
 import { IconRefresh } from "../icons.js";
+import type { NotifyState } from "../notify.js";
+
+const NOTIFY_NOTE: Record<NotifyState["mode"], string> = {
+  off: "When a run finishes, fails, or asks for an answer.",
+  push: "On, even with this page closed.",
+  page: "On while this page stays open in the background.",
+  blocked: "Blocked in the browser's site settings for this address; allow them there first.",
+  unsupported: "This browser cannot show notifications.",
+};
 
 const RESTART_LABEL: Record<RestartSetting, string> = {
   port: "port",
@@ -86,6 +95,9 @@ export function SettingsDialog({
   signedInAs,
   onSignOut,
   version,
+  notify,
+  onToggleNotify,
+  onTestNotify,
   onUiSaved,
   onClose,
 }: {
@@ -95,6 +107,9 @@ export function SettingsDialog({
   signedInAs: string | null;
   onSignOut: () => void;
   version: string;
+  notify: NotifyState;
+  onToggleNotify: () => Promise<void>;
+  onTestNotify: () => Promise<void>;
   /** The file's look settings changed: the open page follows without a reload. */
   onUiSaved: (ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean }) => void;
   onClose: () => void;
@@ -176,6 +191,21 @@ export function SettingsDialog({
     setError("The server has not come back yet; check its log (journalctl --user -u agent-web-ui).");
   };
 
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
+  const notifyOn = notify.mode === "push" || notify.mode === "page";
+  const notifyAction = async (action: () => Promise<void>) => {
+    setNotifyBusy(true);
+    setNotifyError(null);
+    try {
+      await action();
+    } catch (e) {
+      setNotifyError(errorText(e));
+    } finally {
+      setNotifyBusy(false);
+    }
+  };
+
   const pendingText = server?.restartPending.map((k) => RESTART_LABEL[k]).join(", ") ?? "";
 
   return (
@@ -195,6 +225,29 @@ export function SettingsDialog({
             ) : null}
           </div>
         </div>
+        <div className="settings-row">
+          <span className="settings-label">Notifications</span>
+          <div className="settings-actions">
+            {notifyOn ? (
+              <button type="button" className="btn btn-small" disabled={notifyBusy} onClick={() => void notifyAction(onTestNotify)}>
+                Send a test
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`btn btn-small${notifyOn ? "" : " btn-primary"}`}
+              disabled={notifyBusy || notify.mode === "unsupported"}
+              aria-pressed={notifyOn}
+              onClick={() => void notifyAction(onToggleNotify)}
+            >
+              {notifyOn ? "Turn off" : "Turn on"}
+            </button>
+          </div>
+        </div>
+        <p className="settings-note" data-testid="notify-note">
+          {notifyError ??
+            `${NOTIFY_NOTE[notify.mode]}${notify.why === "insecure" ? " Push needs HTTPS (Tailscale Serve) or this machine." : notify.why === "no-push" ? " This browser has no push service." : ""}`}
+        </p>
       </section>
 
       <section className="settings-section" aria-labelledby="settings-server">

@@ -435,6 +435,32 @@ describe("sessions across projects", () => {
   });
 });
 
+describe("notifications", () => {
+  it("notes a finished run and a question for an answer, but not a run stopped from here", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    const notes = async () => ((await agent.get("/api/notifications?since=0").expect(200)).body as { notes: Array<{ kind: string; chatId: string; body: string }> }).notes;
+
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "hello" });
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "running");
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    expect(await notes()).toEqual([expect.objectContaining({ kind: "done", chatId: chat.chatId, body: "Echo: hello" })]);
+
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "please ask first" });
+    await sse.waitFor(() => t.manager.get(chat.chatId).snapshot().pending.length > 0);
+    expect((await notes()).map((n) => n.kind)).toEqual(["done", "ask"]);
+    await agent.post(`/api/chats/${chat.chatId}/abort`);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    expect((await notes()).map((n) => n.kind)).toEqual(["done", "ask"]);
+
+    // Subscriptions only to a browser push service.
+    await agent.post("/api/push/subscribe").send({ endpoint: "https://example.com/push" }).expect(422);
+    expect((await agent.get("/api/push/key").expect(200)).body.key).toMatch(/^[\w-]{87}$/);
+    sse.close();
+  });
+});
+
 describe("todos", () => {
   it("publishes the harness todo list after a run", async () => {
     t = await makeTestApp();
