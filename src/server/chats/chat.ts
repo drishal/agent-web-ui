@@ -14,6 +14,7 @@ import type {
   ImageRef,
   InteractionAnswer,
   InteractionRequest,
+  LimitAccount,
   QueueState,
   SendMode,
   SessionUsage,
@@ -586,6 +587,8 @@ export class Chat {
   lastSeen = Date.now();
   onSession?: (chat: Chat) => void;
   onDisposed?: (chat: Chat) => void;
+  /** The harness reported its subscription limits. */
+  onLimits?: (account: LimitAccount) => void;
 
   private readonly log = new EventLog();
   private readonly timing = new Timing();
@@ -710,6 +713,10 @@ export class Chat {
   }
 
   apply(event: HarnessEvent): void {
+    if (event.type === "limits") {
+      this.onLimits?.(event.account);
+      return;
+    }
     // Viewing must not promote the chat: only real conversation (a prompt sent
     // or a turn finished) counts as activity for sidebar ordering. Replay on
     // open, status flaps, config/title/usage refreshes all stay quiet.

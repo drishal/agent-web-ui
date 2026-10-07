@@ -453,6 +453,139 @@ h3,
   min-height: 0;
 }
 
+/* Usage limits (sidebar footer): folded to one line with the fullest window. */
+.limits {
+  flex: none;
+  margin: 0 -4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.limits-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+.limits-head:hover {
+  background: var(--hover);
+}
+
+.limits-title {
+  font-weight: 600;
+}
+
+.limits-top {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.limits-top.is-warn {
+  color: var(--warn);
+}
+
+.limits-top.is-full {
+  color: var(--danger);
+}
+
+.limits-chevron {
+  flex: none;
+  transform: rotate(180deg);
+  transition: transform 0.12s ease;
+}
+
+.limits.is-open .limits-chevron {
+  transform: none;
+}
+
+.limits-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 4px 8px 6px;
+}
+
+.limits-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.limits-plan {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.limits-plan.is-full {
+  color: var(--danger);
+}
+
+.limits-window {
+  display: grid;
+  grid-template-columns: 5.2em 1fr 3em;
+  align-items: center;
+  column-gap: 8px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.limits-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.limits-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ok);
+  transition: width 0.4s var(--ease-out);
+}
+
+.limits-fill.is-warn {
+  background: var(--warn);
+}
+
+.limits-fill.is-full {
+  background: var(--danger);
+}
+
+.limits-pct {
+  text-align: right;
+}
+
+.limits-reset {
+  grid-column: 2 / -1;
+  font-size: 10.5px;
+}
+
 .search-field {
   display: flex;
   align-items: center;

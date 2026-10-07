@@ -308,6 +308,37 @@ export interface SessionUsage {
   tokensPerSecond: number | null;
 }
 
+/** One rate-limit window of a subscription: Claude's five hours or seven days, a provider's month. */
+export interface LimitWindow {
+  /** "5 hours", "7 days", "30 days". */
+  label: string;
+  /** Share used, 0–1; null when the source gives only a status. */
+  used: number | null;
+  /** Epoch ms. */
+  resetsAt: number | null;
+}
+
+/** A subscription's limits, as a harness reports them. No account names or emails. */
+export interface LimitAccount {
+  /** Stable while the server runs: `claude`, `omp:openai-codex:0`. */
+  id: string;
+  /** The harness that reported it. */
+  source: string;
+  provider: string;
+  plan?: string;
+  windows: LimitWindow[];
+  /** Requests are refused until a window resets. */
+  limited: boolean;
+  /** Epoch ms of the report. */
+  at: number;
+}
+
+export interface UsageLimits {
+  accounts: LimitAccount[];
+  /** One line per harness that could not report. */
+  errors: string[];
+}
+
 export interface TodoItem {
   phase?: string;
   text: string;

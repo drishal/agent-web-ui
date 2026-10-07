@@ -23,6 +23,7 @@ import {
   type ImageAttachment,
   type InteractionAnswer,
   type InteractionKind,
+  type LimitAccount,
   type ModelInfo,
   type QueueState,
   type SlashCommand,
@@ -32,6 +33,7 @@ import {
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { ompLimits } from "./limits.js";
 import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
@@ -577,6 +579,12 @@ export class OmpAdapter implements HarnessAdapter {
 
   env(): NodeJS.ProcessEnv {
     return buildOmpEnv(this.options.env ?? process.env, this.options.agentDir, this.options.sessionDir);
+  }
+
+  /** Every signed-in account's limits; omp asks each provider, which takes a few seconds. */
+  async usageLimits(): Promise<LimitAccount[]> {
+    const { stdout } = await run(this.cliCommand, ["usage", "--json", "--redact"], { timeout: 30_000, env: this.env(), maxBuffer: 4 * 1024 * 1024 });
+    return ompLimits(JSON.parse(stdout) as unknown);
   }
 
   async discover(): Promise<HarnessDiscovery> {

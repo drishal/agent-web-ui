@@ -262,6 +262,8 @@ export function Sidebar(props: {
   onSettings: () => void;
   /** Drag handle on the right edge (wide screens). */
   resizer?: React.ReactNode;
+  /** Under the session list: the usage limits meter. */
+  footer?: React.ReactNode;
   onClose: () => void;
   /** Wide screens: fold the sidebar away (the chat header gets the expand button). */
   onCollapse: () => void;
@@ -411,6 +413,7 @@ export function Sidebar(props: {
           </ul>
         </div>
 
+        {props.footer}
         {props.resizer}
       </aside>
     </>
