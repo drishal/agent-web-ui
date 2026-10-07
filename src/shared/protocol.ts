@@ -339,6 +339,20 @@ export interface UsageLimits {
   errors: string[];
 }
 
+/** Something a device is told about: a run finished or failed, or the agent asks for an answer. */
+export interface PushNote {
+  id: string;
+  kind: "done" | "error" | "ask";
+  chatId: string;
+  sessionId: string | null;
+  /** The chat's title. */
+  title: string;
+  /** One line: the answer's start, the question, or the error. */
+  body: string;
+  /** Epoch ms. */
+  at: number;
+}
+
 export interface TodoItem {
   phase?: string;
   text: string;
@@ -478,6 +492,9 @@ export const patchConfigSchema = z
     message: "empty patch",
   });
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(200) });
+export const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048) });
+export const pushTestSchema = z.object({ endpoint: z.string().url().max(2048).optional() });
+
 /** Pin or archive a session; pinning unarchives it and archiving unpins it. */
 export const sessionMarkSchema = z
   .object({

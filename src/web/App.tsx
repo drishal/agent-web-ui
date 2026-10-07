@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, SendMode, ServerSettings, ThemeChoice, WorkspaceInfo } from "../shared/protocol.js";
+import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, PushNote, SendMode, ServerSettings, ThemeChoice, WorkspaceInfo } from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
@@ -24,6 +24,7 @@ import { IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
+import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
 import { isBusy } from "./session-groups.js";
 import { useSessions } from "./sessions.js";
@@ -315,6 +316,28 @@ export function App() {
       setOpening(false);
     }
   };
+
+  /** A notification was clicked: show its chat, or resume its session once the server no longer holds the chat. */
+  const openNote = async (note: PushNote) => {
+    if (!note.chatId) return;
+    const tab = findTab(tabsRef.current, { chatId: note.chatId, sessionId: note.sessionId });
+    if (tab >= 0) {
+      activateTab(tab);
+      return;
+    }
+    try {
+      const live = await api<ChatSnapshot>(`/api/chats/${note.chatId}`);
+      setWorkspace(live.workspace);
+      showChat(live, { newTab: true });
+    } catch (e) {
+      const session = note.sessionId ? overview.sessions.find((x) => x.id === note.sessionId) : undefined;
+      if (session) void openSession(session, { newTab: true });
+      else fail(e);
+    }
+  };
+  const openNoteRef = useRef(openNote);
+  openNoteRef.current = openNote;
+  const { notify, toggleNotify, testNotify } = useNotifications(Boolean(boot), (note) => void openNoteRef.current(note));
 
   const send = async (text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<boolean> => {
     if (!chat) return false;
@@ -634,6 +657,9 @@ export function App() {
             void api("/api/logout", { body: {} }).finally(() => window.location.reload());
           }}
           version={boot.version}
+          notify={notify}
+          onToggleNotify={toggleNotify}
+          onTestNotify={testNotify}
           onUiSaved={(ui) => setBoot((b) => (b ? { ...b, ui } : b))}
           onClose={() => setSettingsOpen(false)}
         />
