@@ -287,6 +287,13 @@ export function Sidebar(props: {
           </div>
           {props.sessionsError ? <p className="sidebar-note is-warning">{props.sessionsError}</p> : null}
           <ul className="session-list" aria-busy={props.sessionsLoading} aria-label="Sessions by project">
+            {props.sessionsLoading && groups.length === 0 ? (
+              <li className="skeleton-list" aria-hidden="true">
+                <span className="skeleton-row" />
+                <span className="skeleton-row" />
+                <span className="skeleton-row" />
+              </li>
+            ) : null}
             {groups.map((g) => (
               <ProjectGroupView
                 key={g.workspace.id}
