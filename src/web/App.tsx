@@ -18,9 +18,11 @@ import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
+import { ReviewPanel } from "./components/ReviewPanel.js";
+import { collectChanges } from "./review.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
-import { IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
+import { IconEdit, IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
@@ -73,6 +75,7 @@ export function App() {
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -137,6 +140,8 @@ export function App() {
     busyBefore.current = busyNow;
     setTabState((st) => markUnread(st, finished));
   }, [overview, chatId]);
+
+  const changedFiles = useMemo(() => (chat ? collectChanges(chat.items, chat.workspace.path).length : 0), [chat?.items, chat?.workspace.path]);
 
   // Runs the shown chat finished: the limits meter re-reads after each.
   const [settledRuns, setSettledRuns] = useState(0);
@@ -490,6 +495,7 @@ export function App() {
       if (busy) items.push({ id: "stop", section: "Actions", label: "Stop", run: stop });
       if (chat.capabilities.supportsRename) items.push({ id: "rename", section: "Actions", label: "Rename chat", run: () => setRenameOpen(true) });
       if (chat.capabilities.supportsCompact) items.push({ id: "compact", section: "Actions", label: "Compact context", disabled: chat.status === "idle" ? undefined : "Wait until the agent is idle", run: () => void compact() });
+      items.push({ id: "review", section: "Actions", label: "Review changes", hint: changedFiles > 0 ? `${changedFiles} ${changedFiles === 1 ? "file" : "files"}` : undefined, disabled: changedFiles > 0 ? undefined : "No files changed yet", run: () => setReviewOpen(true) });
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
@@ -703,6 +709,11 @@ export function App() {
               </div>
             ) : null}
           </div>
+          {chat && changedFiles > 0 ? (
+            <button type="button" className="btn btn-small review-open" title="Review the changes and comment on them" onClick={() => setReviewOpen(true)}>
+              <IconEdit size={14} /> <span className="review-label">Review</span> <span className="review-count">{changedFiles}</span>
+            </button>
+          ) : null}
           <button type="button" className="icon-btn palette-open" aria-label="Commands" title="Commands (Ctrl+K)" onClick={() => setPaletteOpen(true)}>
             <IconSearch size={16} />
           </button>
@@ -871,6 +882,24 @@ export function App() {
               setRenameOpen(false);
             }
           }}
+        />
+      ) : null}
+      {reviewOpen && chat ? (
+        <ReviewPanel
+          key={chat.chatId}
+          chatId={chat.chatId}
+          items={chat.items}
+          workspace={chat.workspace.path}
+          sendLabel={chat.status === "idle" || chat.status === "error" ? "Send to the agent" : "Send as follow-up"}
+          sendBlocked={
+            chat.status === "disposed"
+              ? "This chat is closed"
+              : chat.status === "idle" || chat.status === "error" || chat.capabilities.supportsFollowUp
+                ? null
+                : "Wait until the agent is idle"
+          }
+          onSend={(prompt) => send(prompt, chat.status === "idle" || chat.status === "error" ? "normal" : "followUp")}
+          onClose={() => setReviewOpen(false)}
         />
       ) : null}
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
