@@ -3,7 +3,7 @@
 // terminal, a read under its file, a search under its pattern, a fetch under
 // its URL, and anything else as its arguments' key-value rows. Each sits in
 // one card with a header naming what it touched.
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { DiffLine, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { IconCheck, IconCircle, IconDot, IconFile, IconGlobe, IconSearch, IconTerminal, IconX } from "../icons.js";
 import { relativePath } from "../turns.js";
@@ -111,13 +111,26 @@ function lineText(text: string, mark: [number, number] | undefined): ReactNode {
 
 const SIGN: Record<DiffLine["kind"], string> = { add: "+", del: "−", ctx: " ", hunk: "", gap: "" };
 
-export function DiffView({ diff }: { diff: ToolDiff }) {
-  const [all, setAll] = useState(false);
+export function DiffView({
+  diff,
+  expanded = false,
+  onLine,
+  notes,
+}: {
+  diff: ToolDiff;
+  /** Every line at once, without the "Show all" fold. */
+  expanded?: boolean;
+  /** Lines are buttons: the review panel's "comment on this line". */
+  onLine?: (index: number, line: DiffLine) => void;
+  /** Shown under a line, by its index. */
+  notes?: ReadonlyMap<number, ReactNode>;
+}) {
+  const [all, setAll] = useState(expanded);
   const marks = useMemo(() => wordMarks(diff.lines), [diff.lines]);
   const numbered = diff.lines.some((l) => l.line !== undefined);
   const shown = all ? diff.lines : diff.lines.slice(0, FOLDED_LINES);
   return (
-    <div className={`diff${numbered ? " is-numbered" : ""}`} role="table" aria-label="Changes">
+    <div className={`diff${numbered ? " is-numbered" : ""}${onLine ? " is-commentable" : ""}`} role="table" aria-label="Changes">
       {shown.map((l, i) =>
         l.kind === "gap" ? (
           <div className="diff-gap" role="row" key={i}>
@@ -128,13 +141,32 @@ export function DiffView({ diff }: { diff: ToolDiff }) {
             {l.text}
           </div>
         ) : (
-          <div className={`diff-line is-${l.kind}`} role="row" key={i}>
-            {numbered ? <span className="diff-no">{l.line ?? ""}</span> : null}
-            <span className="diff-sign" aria-label={l.kind === "add" ? "added" : l.kind === "del" ? "removed" : undefined}>
-              {SIGN[l.kind]}
-            </span>
-            <span className="diff-text">{lineText(l.text, marks.get(i))}</span>
-          </div>
+          <Fragment key={i}>
+            <div
+              className={`diff-line is-${l.kind}${notes?.has(i) ? " has-note" : ""}`}
+              role="row"
+              {...(onLine
+                ? {
+                    tabIndex: 0,
+                    title: "Comment on this line",
+                    onClick: () => onLine(i, l),
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onLine(i, l);
+                      }
+                    },
+                  }
+                : {})}
+            >
+              {numbered ? <span className="diff-no">{l.line ?? ""}</span> : null}
+              <span className="diff-sign" aria-label={l.kind === "add" ? "added" : l.kind === "del" ? "removed" : undefined}>
+                {SIGN[l.kind]}
+              </span>
+              <span className="diff-text">{lineText(l.text, marks.get(i))}</span>
+            </div>
+            {notes?.get(i) ?? null}
+          </Fragment>
         ),
       )}
       {!all && diff.lines.length > FOLDED_LINES ? (

@@ -3234,6 +3234,199 @@ body.is-resizing {
   background: rgb(0 0 0 / 0.4);
 }
 
+/* Review (OpenCode's review tab): a sheet on the right with every file the chat changed; a
+   diff line takes a comment, and the comments go to the agent as one prompt. */
+.review {
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  width: min(760px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-float), -1px 0 0 var(--hairline-strong);
+}
+
+.review[open] {
+  display: flex;
+  animation: review-in 0.22s var(--ease-out);
+}
+
+@keyframes review-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.review::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+.review-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.review-head h2 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+
+.review-head p {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.review-files {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 16px 24px;
+}
+
+.review-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.review-file + .review-file {
+  margin-top: 18px;
+}
+
+.review-path {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -16px 6px;
+  padding: 8px 16px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.review-path code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-edit {
+  margin-bottom: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.review-edit-head {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
+.review-edit .diff {
+  max-height: none;
+}
+
+.diff.is-commentable .diff-line {
+  cursor: pointer;
+}
+
+.diff.is-commentable .diff-line:hover,
+.diff.is-commentable .diff-line:focus-visible {
+  outline: none;
+  box-shadow: inset 2px 0 0 var(--accent);
+  background-color: var(--hover);
+}
+
+.diff-line.has-note {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.review-note {
+  margin: 4px 10px 8px 34px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--hairline));
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 7%, var(--card));
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+  white-space: normal;
+}
+
+.review-note p {
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+}
+
+.review-input {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  font: inherit;
+}
+
+.review-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.review-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+}
+
+.review-foot > span {
+  margin-right: auto;
+}
+
+.review-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+@media (max-width: 640px) {
+  .review-label {
+    display: none;
+  }
+}
+
+.review-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Command palette (Ctrl+K): a search box over one list, near the top like an editor's. */
 .palette {
   margin: min(12vh, 96px) auto auto;
