@@ -116,7 +116,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 - **Approvals and dialogs** take over the composer card. Several pending requests stack, the first answer wins, and Stop cancels them.
 - **Turn rail** on the right (wide screens): one mark per turn; hover for the prompt, click to jump.
 - **Status bar** at the bottom (desktop): connection, harness · model · thinking, project path, version. Phones show a banner only when the connection drops.
-- **Chat menu (⋯):** Rename, Compact context, Close chat.
+- **Chat menu (⋯):** Rename, Compact context, Export as Markdown (prompts, the tools each turn ran with their edit diffs, and the answers; thinking is left out), Close chat.
 - **Buttons** show a Material-style ink ripple: it grows from where you press, fades on release, starts from the centre for Enter/Space, and is off when your system asks for reduced motion.
 
 TUI-only slash commands are not emulated. New, Resume, Rename, Compact, model, thinking, and tools are the web actions.
