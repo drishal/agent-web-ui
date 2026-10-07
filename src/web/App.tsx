@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, SendMode, WorkspaceInfo } from "../shared/protocol.js";
+import type { ChatSnapshot, ImageAttachment, InteractionAnswer, ProjectSession, SendMode, ServerSettings, ThemeChoice, WorkspaceInfo } from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
 import type { ChatState } from "./chat-state.js";
 import { chatIdFromHash, CONN_BANNER, setHash, STATUS_LABEL, useChatStream } from "./chat-stream.js";
 import { appCommand } from "./commands.js";
+import { CommandPalette } from "./components/CommandPalette.js";
 import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
 import { Loader } from "./components/Loader.js";
@@ -18,9 +19,11 @@ import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
-import { IconMenu, IconMore, IconSidebar } from "./icons.js";
+import { IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
+import { isPaletteKey, type PaletteItem } from "./palette.js";
+import { isBusy } from "./session-groups.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -66,6 +69,17 @@ export function App() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isPaletteKey(e)) return;
+      e.preventDefault();
+      setPaletteOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  }, []);
 
   // ---- shared look: config.yml rules every device; a save applies here at once ----
 
@@ -411,6 +425,94 @@ export function App() {
     downloadText(exportFileName(chat.title), chatMarkdown(chat, name));
   };
 
+  /** The shared look, as Settings saves it: config.yml's theme, for every device. */
+  const chooseTheme = async (theme: ThemeChoice) => {
+    try {
+      const next = await api<ServerSettings>("/api/settings", { method: "PUT", body: { theme } });
+      setBoot((b) => (b ? { ...b, ui: { theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const paletteItems = (): PaletteItem[] => {
+    if (!boot) return [];
+    const items: PaletteItem[] = [];
+    const harnessName = (id: string) => boot.harnesses.find((h) => h.id === id)?.displayName ?? id;
+    const busy = chat ? isBusy(chat.status) : false;
+    const idle = chat ? chat.status === "idle" || chat.status === "error" : false;
+    const waitIdle = idle ? undefined : "Wait until the agent is idle";
+    items.push({ id: "new", section: "Actions", label: "New chat", hint: workspace?.name, disabled: newChatDisabled ?? undefined, run: () => void newChat() });
+    items.push({
+      id: "new-tab",
+      section: "Actions",
+      label: "New chat in a new tab",
+      disabled: newChatDisabled ?? undefined,
+      searchOnly: true,
+      run: () => void newChat(workspace, { newTab: true }),
+    });
+    if (chat && chat.status !== "disposed") {
+      if (busy) items.push({ id: "stop", section: "Actions", label: "Stop", run: stop });
+      if (chat.capabilities.supportsRename) items.push({ id: "rename", section: "Actions", label: "Rename chat", run: () => setRenameOpen(true) });
+      if (chat.capabilities.supportsCompact) items.push({ id: "compact", section: "Actions", label: "Compact context", disabled: chat.status === "idle" ? undefined : "Wait until the agent is idle", run: () => void compact() });
+      items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
+      items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
+    }
+    items.push({ id: "folder", section: "Actions", label: "Choose project folder…", run: () => setPickerOpen(true) });
+    items.push({ id: "sidebar", section: "Actions", label: collapsed ? "Show sidebar" : "Hide sidebar", searchOnly: true, run: () => collapseSidebar(!collapsed) });
+    items.push({ id: "settings", section: "Actions", label: "Settings", run: () => setSettingsOpen(true) });
+    items.push({ id: "pair", section: "Actions", label: "Pair a phone", searchOnly: true, run: () => setPairOpen(true) });
+
+    // Pinned first, then newest; the eight at the top show before anything is typed.
+    const sessions = [...overview.sessions.filter((x) => x.pinned), ...overview.sessions.filter((x) => !x.pinned)];
+    sessions.forEach((x, i) => {
+      const project = overview.workspaces.find((w) => w.id === x.workspaceId)?.name ?? "";
+      items.push({
+        id: `s:${x.id}`,
+        section: "Sessions",
+        label: x.title,
+        hint: project,
+        keywords: `${harnessName(x.harnessId)}${x.pinned ? " pinned" : ""}${x.archived ? " archived" : ""}`,
+        searchOnly: i >= 8 || x.archived,
+        current: (chat?.sessionId !== null && chat?.sessionId === x.id) || (x.liveChatId !== undefined && x.liveChatId === chat?.chatId),
+        run: () => void openSession(x),
+      });
+    });
+
+    if (chat && chat.status !== "disposed" && chat.capabilities.supportsModelSelection) {
+      for (const m of chat.config.models) {
+        items.push({ id: `m:${m.key}`, section: "Model", label: m.name, hint: m.provider, keywords: m.key, searchOnly: true, current: m.key === chat.config.model, disabled: waitIdle, run: () => void configure({ model: m.key }) });
+      }
+    }
+    if (chat && chat.status !== "disposed" && chat.capabilities.supportsThinkingLevel) {
+      for (const level of chat.config.thinkingLevels) {
+        items.push({ id: `t:${level}`, section: "Thinking", label: `Thinking: ${level}`, searchOnly: true, current: level === chat.config.thinkingLevel, disabled: waitIdle, run: () => void configure({ thinkingLevel: level }) });
+      }
+    }
+    for (const h of boot.harnesses) {
+      items.push({
+        id: `h:${h.id}`,
+        section: "Harness",
+        label: `Harness: ${h.displayName}`,
+        hint: "for new chats",
+        searchOnly: true,
+        current: h.id === harnessId,
+        disabled: h.available ? undefined : (h.reason ?? "Not available"),
+        run: () => chooseHarness(h.id),
+      });
+    }
+    const themes: Array<[ThemeChoice, string]> = [
+      ["system", "System"],
+      ["light", "Light"],
+      ["dark", "Dark"],
+      ...(themeInfo?.source === "file" ? ([["base16", themeInfo.name ?? "Base16 scheme"]] as Array<[ThemeChoice, string]>) : []),
+    ];
+    for (const [choice, label] of themes) {
+      items.push({ id: `theme:${choice}`, section: "Theme", label: `Theme: ${label}`, hint: "every device", searchOnly: true, current: choice === themeMode, run: () => void chooseTheme(choice) });
+    }
+    return items;
+  };
+
   const closeChat = async () => {
     setMenuOpen(false);
     if (!chat) return;
@@ -562,6 +664,9 @@ export function App() {
               </div>
             ) : null}
           </div>
+          <button type="button" className="icon-btn palette-open" aria-label="Commands" title="Commands (Ctrl+K)" onClick={() => setPaletteOpen(true)}>
+            <IconSearch size={16} />
+          </button>
           {chat && chat.status !== "disposed" ? (
             <div className="menu">
               <button type="button" className="icon-btn" aria-label="Chat actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((v) => !v)}>
@@ -729,6 +834,7 @@ export function App() {
           }}
         />
       ) : null}
+      {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
       {pairOpen ? <PairDialog urls={boot.pairing.urls} username={boot.auth.username} onClose={() => setPairOpen(false)} /> : null}
     </div>
   );

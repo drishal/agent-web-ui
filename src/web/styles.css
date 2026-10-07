@@ -3101,6 +3101,102 @@ body.is-resizing {
   background: rgb(0 0 0 / 0.4);
 }
 
+/* Command palette (Ctrl+K): a search box over one list, near the top like an editor's. */
+.palette {
+  margin: min(12vh, 96px) auto auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--text);
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(560px, calc(100dvh - 32px));
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  overflow: hidden;
+}
+
+.palette[open] {
+  display: flex;
+}
+
+.palette::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+.palette-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.palette-search {
+  padding: 12px 14px;
+}
+
+.palette-search input {
+  font-size: 15px;
+}
+
+.palette-kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 5px;
+  font: 11px var(--font-mono, monospace);
+  color: var(--muted);
+}
+
+.palette-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 6px 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-hint {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.palette-check {
+  flex: none;
+  color: var(--accent);
+}
+
+.palette-option.is-disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.palette-empty {
+  padding: 18px 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (hover: none) {
+  .palette-kbd {
+    display: none;
+  }
+}
+
 .dialog-body {
   padding: 16px 18px 18px;
 }
