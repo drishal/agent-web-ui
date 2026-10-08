@@ -106,6 +106,12 @@ export class DeferredLiveChat implements LiveChat {
     return (await this.harness(true)).steer(text, images);
   }
 
+  async rewind(turn: number, text: string, images?: ImageAttachment[]): Promise<void> {
+    const harness = await this.harness(true);
+    if (!harness.rewind) throw new Error("This harness cannot replace a past message");
+    return harness.rewind(turn, text, images);
+  }
+
   async followUp(text: string, images?: ImageAttachment[]): Promise<void> {
     return (await this.harness(true)).followUp(text, images);
   }
