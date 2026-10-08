@@ -28,6 +28,7 @@ import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-ev
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import { branchMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
 import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
@@ -417,7 +418,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: true,
     supportsHandoff: true,
-    supportsRewind: false,
+    supportsRewind: rewindExtension() !== null,
   };
   private modelCache = new Map<string, { at: number; models: ModelInfo[] }>();
 
@@ -621,7 +622,7 @@ export class PiAdapter implements HarnessAdapter {
       const found = (await listSessionFiles(dir)).some((m) => m.id === req.resumeNativeId);
       if (!found) throw new Error("Session not found in Pi's session list");
     }
-    const args = ["--mode", "rpc", "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
+    const args = ["--mode", "rpc", ...rewindExtensionArgs(), "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
     if (req.resumeNativeId) args.push("--session", req.resumeNativeId);
     const chat = new PiLiveChat(this.cliCommand, args, this.spawnEnv(req.cwd), req.cwd);
     await chat.start();
@@ -858,6 +859,19 @@ class PiLiveChat implements LiveChat {
       ...(images?.length ? { images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : {}),
     });
     if (isObj(data) && String(data.disposition ?? "") === "handled") this.hub.emit({ type: "settled" });
+  }
+
+  /** In place, through the /rewind-to extension this child was started with. */
+  async rewind(turn: number, text: string, images?: ImageAttachment[]): Promise<void> {
+    await rewindWithExtension("Pi", turn, {
+      commandNames: async () => (await this.listCommands()).map((c) => c.name),
+      runCommand: async (command) => {
+        const data = await this.live.command<Obj>("prompt", { message: command });
+        return isObj(data) && String(data.disposition ?? "") === "handled";
+      },
+      history: () => this.history(),
+    });
+    await this.prompt(text, images);
   }
 
   async steer(text: string, images?: ImageAttachment[]): Promise<void> {

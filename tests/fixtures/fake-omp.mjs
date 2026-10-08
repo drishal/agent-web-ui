@@ -198,6 +198,8 @@ if (args[0] === "acp") {
           commands: [
             { name: "context", description: "Show estimated context usage breakdown", source: process.env.FAKE_OMP_CONTEXT ?? "builtin" },
             { name: "usage", source: "builtin" },
+            // Loaded with -e, as the adapter starts omp.
+            ...(args.some((a) => a.endsWith("rewind-to.ts")) ? [{ name: "rewind-to", source: "extension" }] : []),
           ],
         });
       case "get_session_stats": {
@@ -228,6 +230,17 @@ if (args[0] === "acp") {
             ].join("\n"),
           });
           return ok(cmd.id, "prompt", { agentInvoked: false });
+        }
+        // The rewind-to extension: back to just before the nth prompt; omp answers with a bare success.
+        if (/^\/rewind-to \d+$/.test(cmd.message) && args.some((a) => a.endsWith("rewind-to.ts"))) {
+          const n = Number(cmd.message.split(" ")[1]);
+          const s = load();
+          const m = s.sessions[sessionId].messages;
+          let seen = 0;
+          const at = m.findIndex((x) => x.role === "user" && ++seen === n);
+          if (at >= 0) m.splice(at);
+          save(s);
+          return out({ id: cmd.id, type: "response", command: "prompt", success: true });
         }
         if (running) return out({ id: cmd.id, type: "response", command: "prompt", success: false, error: "busy" });
         ok(cmd.id, "prompt", { agentInvoked: true });
