@@ -13,6 +13,7 @@ import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
+import { useAddToDraft } from "../draft-bus.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
 
@@ -83,6 +84,16 @@ export function Composer({
   }, [text]);
 
   const tooLong = text.length > maxChars;
+
+  useAddToDraft((added) => {
+    setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${added}` : added));
+    window.requestAnimationFrame(() => {
+      const el = area.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  });
 
   // Compact before send (T3 Code's chip): offered once the context is half full, on by
   // default from COMPACT_DEFAULT; the choice lasts until a message goes.

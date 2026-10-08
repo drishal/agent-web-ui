@@ -10,6 +10,8 @@ import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
+import { QuoteButton } from "./QuoteButton.js";
+import { quoteParts } from "../draft-bus.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
@@ -365,7 +367,17 @@ function UserPrompt({
           />
         ) : (
           <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
-            {item.text}
+            {quoteParts(item.text).map((part, i) =>
+              part.quote ? (
+                <blockquote key={i} className="bubble-quote">
+                  {part.text}
+                </blockquote>
+              ) : (
+                <span key={i} className="bubble-text">
+                  {part.text}
+                </span>
+              ),
+            )}
           </div>
         )}
         {item.imageCount && item.imageCount > (item.images?.length ?? 0) ? (
@@ -870,6 +882,7 @@ export function Conversation({
           </ArrivalsContext.Provider>
         </ChatIdContext.Provider>
       </div>
+      <QuoteButton scope={scroller} />
       <TurnRail turns={turns} scroller={scroller} />
       {showJump ? (
         <button type="button" className="jump" onClick={jump}>
