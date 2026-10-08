@@ -18,6 +18,8 @@ export interface HarnessCapabilities {
   supportsFork: boolean;
   /** A portable transcript seed can start a fresh session here. */
   supportsHandoff: boolean;
+  /** A past prompt can be replaced in place: the session drops it and what followed, then runs the new one (Hermes). */
+  supportsRewind: boolean;
 }
 
 export interface HarnessStatus {
@@ -522,6 +524,7 @@ export const resumeChatSchema = z.object({
 export const forkChatSchema = z.object({
   through: z.number().int().min(1).max(10_000),
 });
+/** Replace user turn `turn` (1-based, as fork counts) and everything after it with a new prompt, in place. */
 /** Continue this chat in another harness: transcript seed plus an optional first prompt. */
 export const handoffSchema = z.object({
   harness: z.string().min(1).max(64),
@@ -550,6 +553,11 @@ export const imageAttachmentSchema = z.object({
     .regex(/^[A-Za-z0-9+/]+={0,2}$/, "not base64"),
 });
 
+export const rewindSchema = z.object({
+  turn: z.number().int().min(1).max(10_000),
+  text: z.string().min(1).max(MAX_MESSAGE_CHARS),
+  images: z.array(imageAttachmentSchema).max(MAX_IMAGES).default([]),
+});
 export const sendMessageSchema = z.object({
   // Text stays required with images: some providers reject an empty text block.
   text: z.string().min(1).max(MAX_MESSAGE_CHARS),

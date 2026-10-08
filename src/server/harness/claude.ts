@@ -753,6 +753,7 @@ export class ClaudeAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: true,
     supportsHandoff: false,
+    supportsRewind: false,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
   private metaCache = new Map<string, { mtimeMs: number; size: number; meta: SessionMeta | null }>();

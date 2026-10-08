@@ -94,6 +94,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsModelSelection: true,
       supportsFork: true,
       supportsHandoff: true,
+      supportsRewind: true,
       ...options.capabilities,
     };
   }
@@ -290,6 +291,15 @@ class FakeLiveChat implements LiveChat {
       { phase: "Plan", text: "Write the fix", status: "in_progress" },
       { phase: "Verify", text: "Run the tests", status: "pending" },
     ];
+  }
+
+  /** As Hermes does it: the session drops user turn `turn` and what followed, then runs the new prompt. */
+  async rewind(turn: number, text: string, images: ImageAttachment[] = []): Promise<void> {
+    let seen = 0;
+    const cut = this.session.messages.findIndex((m) => (m as { role?: unknown }).role === "user" && ++seen === turn);
+    if (cut < 0) throw new Error("That message is no longer in the session");
+    this.session.messages.splice(cut);
+    return this.prompt(text, images);
   }
 
   async prompt(text: string, images: ImageAttachment[] = []): Promise<void> {

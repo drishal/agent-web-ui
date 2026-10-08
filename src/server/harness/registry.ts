@@ -19,7 +19,7 @@ const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
   fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay(), resumeDelayMs: fakeResumeDelay() }),
   "fake-b": () =>
-    new FakeAdapter({ id: "fake-b", displayName: "Fake B", chunkDelayMs: fakeDelay(), capabilities: { supportsSteer: false } }),
+    new FakeAdapter({ id: "fake-b", displayName: "Fake B", chunkDelayMs: fakeDelay(), capabilities: { supportsSteer: false, supportsRewind: false } }),
 };
 
 /**

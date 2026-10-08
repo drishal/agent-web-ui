@@ -68,6 +68,24 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(chat.snapshot().config).toMatchObject({ model: "fake/fake-model", thinkingLevel: "medium" });
   });
 
+  it("replaces a past prompt in place, cutting the session at that message's row", async () => {
+    const { chat, live } = await openChat();
+    for (const text of ["one", "two", "three"]) {
+      await chat.send(text, "normal");
+      await until(() => chat.status === "idle");
+    }
+    await chat.rewind(2, "two, reworded");
+    await until(() => chat.status === "idle");
+    const users = (items: Awaited<ReturnType<typeof live.history>>) => items.flatMap((i) => (i.kind === "user" ? [i.text] : []));
+    expect(users(chat.snapshot().items)).toEqual(["one", "two, reworded"]);
+    // The gateway's own transcript was cut the same way.
+    expect(users(await live.history())).toEqual(["one", "two, reworded"]);
+    // The first message needs the extra consent the gateway asks for; the adapter gives it.
+    await chat.rewind(1, "from the top");
+    await until(() => chat.status === "idle");
+    expect(users(await live.history())).toEqual(["from the top"]);
+  });
+
   it("sums per-turn usage into lifetime totals across turns", async () => {
     const { chat, live } = await openChat();
     await chat.send("first", "normal");

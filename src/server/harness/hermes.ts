@@ -735,6 +735,31 @@ class HermesLiveChat implements LiveChat {
   }
 
   /**
+   * Hermes Desktop's edit: prompt.submit cuts the session before a user
+   * message (by its durable row id; Hermes soft-archives what it drops) and
+   * runs the new prompt in its place.
+   */
+  async rewind(turn: number, text: string, images: ImageAttachment[] = []): Promise<void> {
+    const id = this.requireSession();
+    const result = await this.live.request<Obj>("session.history", { session_id: id });
+    const users = (Array.isArray(result?.messages) ? result.messages : []).filter((m): m is Obj => isObj(m) && m.role === "user");
+    const target = users[turn - 1];
+    if (!target) throw new Error("That message is no longer in the session");
+    for (const image of images) {
+      await this.live.request("image.attach_bytes", { session_id: id, content_base64: image.data, filename: `pasted.${image.mimeType.split("/")[1] ?? "png"}` });
+    }
+    const rowId = num(target.row_id);
+    await this.live.request("prompt.submit", {
+      session_id: id,
+      text,
+      confirm_truncate: true,
+      ...(rowId !== null ? { truncate_before_row_id: rowId } : { truncate_before_user_ordinal: turn - 1 }),
+      ...(turn === 1 ? { confirm_empty_truncate: true } : {}),
+    });
+    this.emit({ type: "user_message", text, ...(images.length > 0 ? { imageCount: images.length } : {}) });
+  }
+
+  /**
    * "/" commands never go through prompt.submit; the Hermes TUI runs them as
    * slash.exec (built-ins answer with output), which sends skills and plugins
    * on to command.dispatch (error 4018). A dispatch that returns a message
@@ -879,6 +904,7 @@ export class HermesAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: false,
     supportsHandoff: false,
+    supportsRewind: true,
   };
   private probes = new Map<string, { at: number; models: ModelInfo[] }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;

@@ -5,7 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { GitFileDiff, GitStatus } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
-import { ago, GROUP_LABEL, groupFiles, OPERATION_LABEL, stateLetter, type GroupedFile } from "../git.js";
+import { GROUP_LABEL, groupFiles, OPERATION_LABEL, stateLetter, type GroupedFile } from "../git.js";
+import { ago } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { IconBranch, IconCheck, IconChevronDown, IconChevronRight, IconRefresh, IconX } from "../icons.js";
 import { DiffBadge, DiffView } from "./ToolBody.js";

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChatSnapshot,
+  CheckpointPreview,
   CheckpointRestored,
   ImageAttachment,
   InteractionAnswer,
@@ -9,6 +10,7 @@ import type {
   SendMode,
   ServerSettings,
   ThemeChoice,
+  UserItem,
   WorkspaceInfo,
 } from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
@@ -41,6 +43,7 @@ import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
 import { isBusy } from "./session-groups.js";
+import { sentAttachments } from "./images.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -440,6 +443,53 @@ export function App() {
     } catch (e) {
       setRestoreTurn(null);
       fail(e);
+    }
+  };
+
+  /**
+   * Retry or edit prompt `through`: replaced in place where the harness can
+   * (Hermes), else run in a branch from before it (a fork; a fresh chat for
+   * the first prompt), keeping the model. `undoFiles` first puts the files
+   * back as they were before that prompt.
+   */
+  const rerun = async (through: number, item: UserItem, text: string, undoFiles: boolean): Promise<boolean> => {
+    if (!chat) return false;
+    const from = chat;
+    try {
+      if (undoFiles && from.checkpoints.includes(through)) {
+        const preview = await api<CheckpointPreview>(`/api/chats/${from.chatId}/checkpoints/${through}`);
+        if (preview.files.length > 0) await api(`/api/chats/${from.chatId}/checkpoints/${through}/restore`, { body: { paths: preview.files.map((f) => f.path) } });
+      }
+      const images = item.images?.length ? await sentAttachments(item.images) : [];
+      const withImages = images.length > 0 ? { images } : {};
+      if (from.capabilities.supportsRewind) {
+        await api(`/api/chats/${from.chatId}/rewind`, { body: { turn: through, text, ...withImages } });
+        setBanner(undoFiles ? { level: "info", text: `Undid the file changes from message ${through} on` } : null);
+        return true;
+      }
+      const next =
+        through > 1
+          ? await api<ChatSnapshot>(`/api/chats/${from.chatId}/fork`, { body: { through: through - 1 } })
+          : await api<ChatSnapshot>("/api/chats", { body: { harnessId: from.harnessId, workspaceId: from.workspace.id } });
+      const patch: { model?: string; thinkingLevel?: string } = {};
+      if (from.capabilities.supportsModelSelection && from.config.model && next.config.model !== from.config.model && next.config.models.some((m) => m.key === from.config.model)) {
+        patch.model = from.config.model;
+      }
+      if (from.capabilities.supportsThinkingLevel && from.config.thinkingLevel && next.config.thinkingLevel !== from.config.thinkingLevel) {
+        patch.thinkingLevel = from.config.thinkingLevel;
+      }
+      if (patch.model || patch.thinkingLevel) await api(`/api/chats/${next.chatId}/config`, { method: "PATCH", body: patch }).catch(() => undefined);
+      showChat(next);
+      await api(`/api/chats/${next.chatId}/messages`, { body: { text, mode: "normal", ...withImages } });
+      setBanner({
+        level: "info",
+        text: `Branched from before message ${through}${undoFiles ? ", with its file changes undone" : ""}; the original chat is still in the sidebar`,
+      });
+      void refreshSessions();
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
     }
   };
 
@@ -876,6 +926,11 @@ export function App() {
               onFork={forkChat}
               checkpoints={chat.checkpoints ?? []}
               onRestore={setRestoreTurn}
+              promptActions={{
+                inPlace: chat.capabilities.supportsRewind,
+                retry: (through, item) => void rerun(through, item, item.text, false),
+                edit: (through, item, text, undoFiles) => rerun(through, item, text, undoFiles),
+              }}
             />
             {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
             <Composer

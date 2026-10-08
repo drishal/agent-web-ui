@@ -1321,6 +1321,87 @@ body.is-resizing {
   overflow-wrap: anywhere;
 }
 
+/* A prompt's time, Retry, Edit, and Copy: revealed on hover (Claude's chat), faint on touch screens. */
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: -2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.turn-prompt:hover .prompt-actions,
+.prompt-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .prompt-actions {
+    opacity: 0.7;
+  }
+}
+
+.prompt-actions .ghost-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.prompt-time {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.turn-prompt.is-editing .bubble-stack {
+  width: min(100%, 680px);
+  max-width: none;
+}
+
+.prompt-editor {
+  width: 100%;
+  padding: 10px 12px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline));
+  border-radius: var(--r-xl);
+  background: var(--bubble);
+}
+
+.prompt-editor-input {
+  display: block;
+  width: 100%;
+  min-height: 3em;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--chat-font);
+  line-height: 1.55;
+}
+
+.prompt-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.prompt-editor-note,
+.prompt-editor-check {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prompt-editor-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .bubble.is-clamped {
   max-height: calc(1.55em * 6 + 20px);
   overflow: hidden;
