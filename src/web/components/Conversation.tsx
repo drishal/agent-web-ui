@@ -462,7 +462,7 @@ function Answer({
   const arrival = useArrival(item.id);
   return (
     <div className={`answer${arrival}`} data-testid="answer">
-      {item.text ? <Markdown text={item.text} /> : null}
+      {item.text ? <Markdown text={item.text} allowRun={!item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}
       {item.error && !stopped ? <p className="answer-error">{item.error}</p> : null}

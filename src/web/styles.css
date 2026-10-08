@@ -1389,6 +1389,116 @@ body.is-resizing {
   display: block;
 }
 
+/* Code blocks: a small bar with the language, Run (one-line shell blocks), and Copy. */
+.code-block {
+  position: relative;
+  margin: 0.7em 0;
+}
+
+.md .code-block pre {
+  margin: 0;
+}
+
+.code-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.code-block:hover .code-actions,
+.code-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .code-actions {
+    opacity: 1;
+  }
+}
+
+.code-lang {
+  margin-right: 4px;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+}
+
+.code-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.code-action:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.code-action.is-run {
+  color: var(--accent);
+}
+
+.run-output {
+  margin-top: 6px;
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--ok);
+  border-radius: var(--r-md);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.run-output.is-failed {
+  border-left-color: var(--danger);
+}
+
+.run-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
+}
+
+.run-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+}
+
+.run-meta {
+  color: var(--muted);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.md .run-text {
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .turn-prompt {
   position: sticky;
   top: 0;

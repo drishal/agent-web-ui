@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CodeBlock } from "./CodeBlock.js";
 
 const SAFE_SCHEMES = new Set(["http:", "https:", "mailto:"]);
 
@@ -37,10 +38,38 @@ const components: Components = {
   ),
 };
 
-function MarkdownImpl({ text }: { text: string }) {
+interface Hast {
+  type: string;
+  tagName?: string;
+  value?: string;
+  properties?: { className?: unknown };
+  children?: Hast[];
+}
+
+const hastText = (node: Hast | undefined): string => (node ? (node.value ?? "") + (node.children ?? []).map(hastText).join("") : "");
+
+/** Code blocks with Copy, and Run on one-line shell blocks when `allowRun` (a finished answer). */
+function withCode(allowRun: boolean): Components {
+  return {
+    ...components,
+    pre: ({ node, children }) => {
+      const code = (node as Hast | undefined)?.children?.find((c) => c.tagName === "code");
+      const classes = Array.isArray(code?.properties?.className) ? (code.properties.className as string[]) : [];
+      const lang = classes.find((c) => c.startsWith("language-"))?.slice(9) ?? null;
+      return (
+        <CodeBlock lang={lang} code={hastText(code)} allowRun={allowRun}>
+          {children}
+        </CodeBlock>
+      );
+    },
+  };
+}
+
+function MarkdownImpl({ text, allowRun = false }: { text: string; allowRun?: boolean }) {
+  const parts = useMemo(() => withCode(allowRun), [allowRun]);
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml urlTransform={safeUrl} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml urlTransform={safeUrl} components={parts}>
         {text}
       </ReactMarkdown>
     </div>

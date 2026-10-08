@@ -322,6 +322,23 @@ test("selecting text in an answer offers to quote it into the message", async ({
   await expect(bubble.locator(".bubble-text")).toHaveText("Why?");
 });
 
+test("a one-line shell block in an answer runs in the project and its output can join the message", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await page.getByRole("textbox", { name: "Message" }).fill("try this:\n```bash\necho hello from $(basename \"$PWD\")\n```");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const block = page.getByTestId("answer").last().locator(".code-block");
+  await expect(block).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  await block.hover();
+  await block.getByRole("button", { name: "Run" }).click();
+  const out = page.getByTestId("run-output");
+  await expect(out.locator(".run-text")).toHaveText("hello from alpha");
+  await expect(out.locator(".run-meta")).toContainText("exit 0");
+  await out.getByRole("button", { name: "Add to message" }).click();
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(/^```\n\$ echo hello from .*\nhello from alpha\n```\n\(exit 0\)\n\n$/);
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);
