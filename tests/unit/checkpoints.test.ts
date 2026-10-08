@@ -23,6 +23,21 @@ afterEach(async () => {
 });
 
 describe("file checkpoints", () => {
+  it("restores a file named like pathspec magic as that file, not a pattern", async () => {
+    const dir = tempDir("awui-cp-magic-");
+    repo(dir);
+    const cp = new Checkpoints(path.join(tempDir("awui-cp-state-"), "checkpoints"));
+    const top = (await cp.repoOf(dir)) as string;
+    writeFileSync(path.join(dir, ":(glob)*"), "kept\n");
+    const then = await cp.snapshot(top);
+    writeFileSync(path.join(dir, ":(glob)*"), "changed\n");
+    writeFileSync(path.join(dir, "app.ts"), "const a = 9;\n");
+    await cp.restore(top, then.tree, [":(glob)*"]);
+    expect(readFileSync(path.join(dir, ":(glob)*"), "utf8")).toBe("kept\n");
+    // As a pattern it would have matched every file; app.ts keeps its edit.
+    expect(readFileSync(path.join(dir, "app.ts"), "utf8")).toBe("const a = 9;\n");
+  });
+
   it("snapshots the work tree without touching the project's own git, and restores chosen files", async () => {
     const dir = tempDir("awui-cp-");
     repo(dir);
