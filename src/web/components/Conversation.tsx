@@ -6,7 +6,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
-import { ago, buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, type Turn } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -173,10 +173,12 @@ function RequestRow({ item }: { item: RequestItem }) {
 /** Thinking and interim text between tool calls. */
 function ProcessAssistant({ item }: { item: AssistantItem }) {
   const arrival = useArrival(item.id);
+  const text = saysSomething(item.text);
+  if (!text && !item.thinking.trim()) return null;
   return (
     <div className={`process-step${arrival}`}>
-      {item.thinking ? <ThoughtRow thinking={item.thinking} streaming={item.streaming && !item.text} /> : null}
-      {item.text ? (
+      {item.thinking.trim() ? <ThoughtRow thinking={item.thinking} streaming={item.streaming && !text} /> : null}
+      {text ? (
         <div className="process-text">
           <Markdown text={item.text} />
         </div>

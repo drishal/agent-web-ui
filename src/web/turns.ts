@@ -50,7 +50,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     for (let i = rest.length - 1; i >= 0; i--) {
       const item = rest[i] as ChatItem;
       if (item.kind === "tool" || item.kind === "request") break;
-      if (item.kind === "assistant" && (item.text || item.error)) {
+      if (item.kind === "assistant" && (item.text.trim() || item.error)) {
         answerIndex = i;
         break;
       }
@@ -169,3 +169,7 @@ export function modelSwitches(turns: Turn[]): Map<string, string> {
 export function modelName(model: string, models: ReadonlyArray<{ key: string; id: string; name: string }>): string {
   return models.find((m) => m.key === model || m.id === model)?.name ?? model;
 }
+
+/** Text worth a row in the fold: some letter or digit, not a stray "." or blank lines a model sent between tool calls. */
+export const saysSomething = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
+
