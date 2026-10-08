@@ -59,7 +59,7 @@ export async function makeTestApp(options: {
   const fake = new FakeAdapter({ chunkDelayMs: options.chunkDelayMs ?? 2 });
   registry.register(fake);
   registry.register(
-    new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false, ...(options.fakeBBriefOnly ? { supportsHandoff: false } : {}) } }),
+    new FakeAdapter({ id: "fake-b", displayName: "Fake B", capabilities: { supportsSteer: false, supportsRewind: false, ...(options.fakeBBriefOnly ? { supportsHandoff: false } : {}) } }),
   );
   await registry.refreshStatus();
   const { workspaces } = await Workspaces.create([root], root);

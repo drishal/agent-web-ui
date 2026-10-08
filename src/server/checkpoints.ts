@@ -234,6 +234,13 @@ export class ChatCheckpoints {
     void this.persist();
   }
 
+  /** Turns from `turn` on were replaced (a rewind): their checkpoints no longer belong to them. */
+  forgetFrom(turn: number): void {
+    for (const n of [...this.turns.keys()]) if (n >= turn) this.turns.delete(n);
+    this.publish();
+    void this.persist();
+  }
+
   /** The session got its id: what was taken before it can now be kept. */
   sessionAssigned(): void {
     void this.persist();

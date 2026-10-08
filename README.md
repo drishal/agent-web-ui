@@ -91,6 +91,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 - **New chat.** Opens as a centred composer.
 - **Each turn** shows:
   - your prompt as a bubble that stays pinned while you scroll through a long turn;
+  - under it, on hover (Claude's chat; faint on phones): when it was sent, **Retry**, **Edit**, and **Copy**. Retry runs the prompt again, with its images; Edit opens it in place (Ctrl/⌘+Enter sends, Esc cancels) and, when the turn has a file checkpoint, can undo its file changes first. Hermes replaces the message in the same session, as Hermes Desktop does (`prompt.submit` cutting at the message's stored row, which Hermes soft-archives rather than deletes). Pi, omp, and Claude Code keep a session's past as it is (their own /fork and /branch also start a new session), so there both run in a branch from before the message, on the same model and thinking level: a fork, or a fresh chat for the first message. The original chat stays in the sidebar.
   - one **"Worked for 12s · 3 reads, 1 edit"** line folding the agent's thinking, intermediate notes, tool calls, and approvals (open while running, collapsed after);
   - the answer as plain text with a Copy button;
   - **Fork from here** on a finished answer: the session is copied through that turn into a new chat and opens in its place. Pi, omp, and Claude Code each get a new session file cut to the same branch. Not offered for Hermes, which has no fork, or for a command the harness answered itself (it stores no turn).

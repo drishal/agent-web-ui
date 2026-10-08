@@ -567,6 +567,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: true,
     supportsHandoff: true,
+    supportsRewind: false,
   };
   private lister: AcpLister;
   private sessionFiles = new SessionFiles(() => this.resolveSessionDir());

@@ -225,6 +225,36 @@ test("a question lists its options as numbered rows, and a number picks one", as
   await expect(card).toHaveCount(0);
 });
 
+test("a prompt's actions show on hover: edit replaces it in place, retry branches where the harness cannot", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first idea");
+  await sendAndWait(page, "second idea");
+  const second = page.locator(".turn-prompt").nth(1);
+  const actions = second.getByTestId("prompt-actions");
+  await expect(actions).toHaveCSS("opacity", "0");
+  await second.hover();
+  await expect(actions).toHaveCSS("opacity", "1");
+  await actions.getByRole("button", { name: "Edit" }).click();
+  const editor = page.getByRole("textbox", { name: "Edit message" });
+  await expect(editor).toHaveValue("second idea");
+  await expect(page.locator(".prompt-editor-note")).toHaveText("Replaces this message and everything after it");
+  await editor.fill("a better second idea");
+  await page.keyboard.press("Control+Enter");
+  await expect(page.getByTestId("user-prompt")).toHaveText(["first idea", "a better second idea"]);
+  await expect(page.getByTestId("answer").last()).toContainText("Echo: a better second idea", { timeout: 15_000 });
+  await expect(page.getByTestId("turn")).toHaveCount(2);
+
+  // Fake B cannot replace a message: Retry runs it again in a branch, and the original stays.
+  await newChat(page, "Fake B");
+  await sendAndWait(page, "only question");
+  const first = page.locator(".turn-prompt").first();
+  await first.hover();
+  await first.getByRole("button", { name: "Retry" }).click();
+  await expect(page.locator(".banner")).toContainText("Branched from before message 1");
+  await expect(page.getByTestId("answer").last()).toContainText("Echo: only question", { timeout: 15_000 });
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);

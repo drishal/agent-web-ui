@@ -79,3 +79,18 @@ export async function prepareImage(file: File): Promise<PendingImage> {
   return { id: nextId++, mimeType, data, ...size };
 }
 
+
+/** A sent prompt's images, fetched back from the server to send again (retry, edit); the ones it no longer holds are left out. */
+export async function sentAttachments(refs: ReadonlyArray<{ id: string; mimeType: string }>): Promise<ImageAttachment[]> {
+  const out: ImageAttachment[] = [];
+  for (const ref of refs) {
+    if (!accepted(ref.mimeType)) continue;
+    try {
+      const res = await fetch(`/api/images/${ref.id}`, { credentials: "same-origin" });
+      if (res.ok) out.push({ mimeType: ref.mimeType, data: await toBase64(await res.blob()) });
+    } catch {
+      // gone: send without it
+    }
+  }
+  return out;
+}

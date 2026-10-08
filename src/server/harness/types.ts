@@ -117,6 +117,12 @@ export interface LiveChat {
   /** Resolves once the harness accepted the prompt; the run streams as events. */
   prompt(text: string, images?: ImageAttachment[]): Promise<void>;
   steer(text: string, images?: ImageAttachment[]): Promise<void>;
+  /**
+   * Drop user turn `turn` (1-based) and everything after it from the session,
+   * then run `text` as the new turn, in this same session. Only harnesses with
+   * capabilities.supportsRewind implement it.
+   */
+  rewind?(turn: number, text: string, images?: ImageAttachment[]): Promise<void>;
   followUp(text: string, images?: ImageAttachment[]): Promise<void>;
   /** Aborts the run, clears queues where supported, resolves when idle. */
   abort(): Promise<void>;

@@ -96,15 +96,3 @@ export const OPERATION_LABEL: Record<NonNullable<GitStatus["operation"]>, string
   revert: "Reverting",
   bisect: "Bisecting",
 };
-
-/** "3m ago", "2h ago", "4d ago", else the date. */
-export function ago(at: number, now = Date.now()): string {
-  const min = Math.max(0, Math.round((now - at) / 60_000));
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return new Date(at).toLocaleDateString();
-}

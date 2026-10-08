@@ -5,8 +5,8 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
-import { buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
+import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { ago, buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -246,26 +246,180 @@ function SentImages({ images }: { images: ImageRef[] }) {
   );
 }
 
-function UserPrompt({ item }: { item: UserItem }) {
+/** Retry and Edit replace a prompt in place (where the harness can), else branch from before it; App does the work. */
+export interface PromptActions {
+  /** The chat replaces prompts in place rather than branching. */
+  inPlace: boolean;
+  retry: (through: number, item: UserItem) => void;
+  /** Resolves true once the edited prompt went out (the editor then closes). */
+  edit: (through: number, item: UserItem, text: string, undoFiles: boolean) => Promise<boolean>;
+}
+
+function PromptEditor({
+  item,
+  hasCheckpoint,
+  inPlace,
+  onSend,
+  onCancel,
+}: {
+  item: UserItem;
+  hasCheckpoint: boolean;
+  inPlace: boolean;
+  onSend: (text: string, undoFiles: boolean) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(item.text);
+  const [undoFiles, setUndoFiles] = useState(hasCheckpoint);
+  const [sending, setSending] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.5)}px`;
+  }, [text]);
+  useEffect(() => {
+    const el = ref.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  const send = async () => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    if (!(await onSend(text, undoFiles))) setSending(false);
+  };
+  return (
+    <div className="prompt-editor">
+      <textarea
+        ref={ref}
+        className="prompt-editor-input"
+        aria-label="Edit message"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      <div className="prompt-editor-foot">
+        {hasCheckpoint ? (
+          <label className="prompt-editor-check">
+            <input type="checkbox" checked={undoFiles} onChange={(e) => setUndoFiles(e.target.checked)} />
+            Undo file changes from here too
+          </label>
+        ) : (
+          <span className="prompt-editor-note">{inPlace ? "Replaces this message and everything after it" : "Sends as a new branch; this chat stays as it is"}</span>
+        )}
+        <button type="button" className="btn btn-small btn-ghost" onClick={onCancel} disabled={sending}>
+          Cancel
+        </button>
+        <button type="button" className="btn btn-small btn-primary" onClick={() => void send()} disabled={sending || !text.trim()}>
+          {sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UserPrompt({
+  item,
+  through,
+  canBranch,
+  hasCheckpoint,
+  actions,
+}: {
+  item: UserItem;
+  through: number;
+  /** Retry and Edit are offered (the agent is idle, and the chat can branch here). */
+  canBranch: boolean;
+  hasCheckpoint: boolean;
+  actions: PromptActions;
+}) {
   const long = item.text.length > LONG_PROMPT_CHARS || item.text.split("\n").length > LONG_PROMPT_LINES;
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const arrival = useArrival(item.id);
   return (
-    <div className={`turn-prompt${arrival}`}>
+    <div className={`turn-prompt${arrival}${editing ? " is-editing" : ""}`}>
       <div className="bubble-stack">
         {item.images?.length ? <SentImages images={item.images} /> : null}
-        <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
-          {item.text}
-        </div>
+        {editing ? (
+          <PromptEditor
+            item={item}
+            hasCheckpoint={hasCheckpoint}
+            inPlace={actions.inPlace}
+            onCancel={() => setEditing(false)}
+            onSend={async (text, undoFiles) => {
+              const ok = await actions.edit(through, item, text, undoFiles);
+              if (ok) setEditing(false);
+              return ok;
+            }}
+          />
+        ) : (
+          <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
+            {item.text}
+          </div>
+        )}
         {item.imageCount && item.imageCount > (item.images?.length ?? 0) ? (
           <span className="bubble-meta bubble-images">
             <IconImage size={13} /> {item.images?.length ? `+${item.imageCount - item.images.length} more` : `${item.imageCount} ${item.imageCount === 1 ? "image" : "images"}`}
           </span>
         ) : null}
-        {long ? (
+        {long && !editing ? (
           <button type="button" className="link-btn" onClick={() => setExpanded((v) => !v)}>
             {expanded ? "Show less" : "Show more"}
           </button>
+        ) : null}
+        {!editing ? (
+          <div className="prompt-actions" data-testid="prompt-actions">
+            {item.at ? (
+              <span className="prompt-time" title={new Date(item.at).toLocaleString()}>
+                {ago(item.at)}
+              </span>
+            ) : null}
+            {canBranch ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-icon"
+                  aria-label="Retry"
+                  title={actions.inPlace ? "Retry: run this again, replacing what followed (files stay as they are)" : "Retry: run this again as a new branch (files stay as they are)"}
+                  onClick={() => actions.retry(through, item)}
+                >
+                  <IconRefresh size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="ghost-icon"
+                  aria-label="Edit"
+                  title={actions.inPlace ? "Edit: change this and run it again, replacing what followed" : "Edit: change this and run it as a new branch"}
+                  onClick={() => setEditing(true)}
+                >
+                  <IconEdit size={14} />
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="ghost-icon"
+              aria-label={copied ? "Copied" : "Copy message"}
+              title="Copy"
+              onClick={() => {
+                void navigator.clipboard?.writeText(item.text).then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            </button>
+          </div>
         ) : null}
       </div>
     </div>
@@ -434,6 +588,9 @@ const TurnView = memo(function TurnView({
   onFork,
   canRestore,
   onRestore,
+  canBranch,
+  hasCheckpoint,
+  promptActions,
 }: {
   turn: Turn;
   open: boolean;
@@ -443,6 +600,9 @@ const TurnView = memo(function TurnView({
   onFork: (through: number) => void;
   canRestore: boolean;
   onRestore: (through: number) => void;
+  canBranch: boolean;
+  hasCheckpoint: boolean;
+  promptActions: PromptActions;
 }) {
   if (!turn.prompt) {
     // Startup notices before any prompt: plain rows, no fold.
@@ -457,7 +617,7 @@ const TurnView = memo(function TurnView({
   const hasProcess = turn.process.length > 0 || Boolean(turn.answer?.thinking);
   return (
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
-      <UserPrompt item={turn.prompt} />
+      <UserPrompt item={turn.prompt} through={turn.through} canBranch={canBranch} hasCheckpoint={hasCheckpoint} actions={promptActions} />
       {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
       {turn.answer ? (
         <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
@@ -494,6 +654,7 @@ export function Conversation({
   onFork,
   checkpoints,
   onRestore,
+  promptActions,
 }: {
   chatId: string;
   items: ChatItem[];
@@ -504,6 +665,7 @@ export function Conversation({
   /** Turns whose files can be put back as they were before the prompt. */
   checkpoints: number[];
   onRestore: (through: number) => void;
+  promptActions: PromptActions;
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -544,6 +706,13 @@ export function Conversation({
   onRestoreRef.current = onRestore;
   const restore = useCallback((through: number) => onRestoreRef.current(through), []);
   const idle = status === "idle" || status === "error";
+  const actionsRef = useRef(promptActions);
+  actionsRef.current = promptActions;
+  const inPlace = promptActions.inPlace;
+  const actions = useMemo<PromptActions>(
+    () => ({ inPlace, retry: (t, i) => actionsRef.current.retry(t, i), edit: (t, i, text, undo) => actionsRef.current.edit(t, i, text, undo) }),
+    [inPlace],
+  );
 
   // A smooth scroll aims at the scrollHeight of the moment it starts, and the
   // delta handler / ResizeObserver force-scrolling would cancel it, so while
@@ -672,6 +841,9 @@ export function Conversation({
                   onFork={fork}
                   canRestore={idle && turn.through > 0 && checkpoints.includes(turn.through)}
                   onRestore={restore}
+                  canBranch={idle && turn.through > 0 && (inPlace || turn.through === 1 || canFork)}
+                  hasCheckpoint={turn.through > 0 && checkpoints.includes(turn.through)}
+                  promptActions={actions}
                 />
               ))}
             </div>

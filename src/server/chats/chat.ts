@@ -247,6 +247,18 @@ class EventReducer {
     return namespacedSessionId(this.harnessId, this.nativeId);
   }
 
+  /** Drop user turn `turn` (1-based, commands not counted) and every item after it. */
+  truncateBeforeUserTurn(turn: number): void {
+    this.finishStreaming();
+    let seen = 0;
+    const cut = this.items.findIndex((i) => i.kind === "user" && !i.command && ++seen === turn);
+    if (cut < 0) return;
+    this.items = this.items.slice(0, cut);
+    this.index = new Map(this.items.map((item, i) => [item.id, i]));
+    this.currentAssistant = null;
+    this.dirtyTools.clear();
+  }
+
   /** Seed from the harness's stored history: its items and the title it knows. */
   load(items: ChatItem[], title: string | null): void {
     for (const item of items) this.upsert(item);
@@ -898,6 +910,45 @@ export class Chat implements CheckpointHost {
       this.setStatus("idle");
       this.quiet = false;
       throw new ChatError(422, "prompt_rejected", errorMessage(error));
+    }
+  }
+
+  /** Replace user turn `turn` and everything after it with `text`, in this same session (capabilities.supportsRewind). */
+  async rewind(turn: number, text: string, images: ImageAttachment[] = []): Promise<void> {
+    this.assertOpen();
+    if (!this.adapter.capabilities.supportsRewind || !this.live.rewind) throw new ChatError(400, "unsupported", `${this.adapter.displayName} cannot replace a past message`);
+    if (this.status !== "idle" && this.status !== "error") throw new ChatError(409, "busy", "Wait until the agent is idle");
+    if (turn > this.userTurns().length) throw new ChatError(400, "bad_turn", "There is no such message");
+    if (images.length > 0) {
+      const refs = images.map((i) => rememberImage(i.mimeType, i.data)).filter((r): r is ImageRef => r !== null);
+      this.sentImages = [...this.sentImages, refs].slice(-8);
+    }
+    this.lastActivity = Date.now();
+    this.lastSeen = this.lastActivity;
+    if (this.status === "error") this.status = "idle";
+    this.setStatus("running");
+    await this.checkpoints?.beforePrompt(text);
+    if ((this.status as ChatStatus) !== "running") return;
+    // The cut shows everywhere at once; the new turn then streams in after it.
+    this.reducer.truncateBeforeUserTurn(turn);
+    this.checkpoints?.forgetFrom(turn);
+    this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
+    this.timing.markHandoff();
+    try {
+      await this.live.rewind(turn, text, images);
+    } catch (error) {
+      // The harness kept its history: show that again.
+      const items = await this.live.history().catch(() => null);
+      if (items) {
+        this.reducer.truncateBeforeUserTurn(1);
+        this.reducer.load(items, this.title || null);
+      }
+      this.reducer.notice("error", `Could not replace the message: ${errorMessage(error)}`, true);
+      this.quiet = true;
+      this.setStatus("idle");
+      this.quiet = false;
+      this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
+      throw new ChatError(422, "rewind_failed", errorMessage(error));
     }
   }
 

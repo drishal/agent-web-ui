@@ -417,6 +417,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: true,
     supportsHandoff: true,
+    supportsRewind: false,
   };
   private modelCache = new Map<string, { at: number; models: ModelInfo[] }>();
 

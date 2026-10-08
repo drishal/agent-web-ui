@@ -435,6 +435,37 @@ describe("sessions across projects", () => {
   });
 });
 
+describe("rewind", () => {
+  it("replaces a past prompt and what followed in the same session, and refuses where the harness cannot", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    const settled = async () => sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    for (const text of ["first", "second", "third"]) {
+      await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text }).expect(202);
+      await sse.waitFor(() => t.manager.get(chat.chatId).status === "running");
+      await settled();
+    }
+    const sessionId = t.manager.get(chat.chatId).sessionId;
+    await agent.post(`/api/chats/${chat.chatId}/rewind`).send({ turn: 2, text: "second, again" }).expect(202);
+    await settled();
+    const texts = (items: ChatSnapshot["items"]) => items.flatMap((i) => (i.kind === "user" ? [i.text] : i.kind === "assistant" && i.text ? [i.text.split("\n")[0]] : []));
+    const live = t.manager.get(chat.chatId).snapshot();
+    expect(texts(live.items)).toEqual(["first", "Echo: first", "second, again", "Echo: second, again"]);
+    expect(live.sessionId).toBe(sessionId);
+    // Viewers got the cut as a fresh snapshot, and the harness's own session agrees.
+    expect(sse.chatEvents().filter((e) => e.type === "snapshot").length).toBeGreaterThanOrEqual(2);
+    const stored = t.fake.sessions.get(String(sessionId).replace(/^fake:/, ""));
+    expect(stored?.messages.filter((m) => (m as { role?: string }).role === "user").length).toBe(2);
+    await agent.post(`/api/chats/${chat.chatId}/rewind`).send({ turn: 9, text: "x" }).expect(400);
+
+    const other = (await agent.post("/api/chats").send({ harnessId: "fake-b", workspaceId: ws.id })).body as ChatSnapshot;
+    expect(other.capabilities.supportsRewind).toBe(false);
+    await agent.post(`/api/chats/${other.chatId}/rewind`).send({ turn: 1, text: "x" }).expect(400);
+    sse.close();
+  });
+});
+
 describe("notifications", () => {
   it("notes a finished run and a question for an answer, but not a run stopped from here", async () => {
     const { agent, ws, t } = await setup();

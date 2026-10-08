@@ -28,6 +28,7 @@ let effort = "medium";
 let aborted = false;
 let turns = 0;
 const messages = [];
+let rowIds = 100;
 const approvals = [];
 
 const state = () => {
@@ -109,7 +110,7 @@ async function runPrompt(text) {
   event("message.complete", { text: body, status: aborted ? "interrupted" : failed ? "error" : "complete", ...(failed ? { error: "fake failure" } : {}), reasoning: "hmm ", usage: emitUsage() }, sessionId);
   event("session.info", { model, provider: "fake", reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
   const now = Date.now() / 1000;
-  messages.push({ role: "user", text, timestamp: now });
+  messages.push({ role: "user", text, timestamp: now, row_id: ++rowIds });
   // Stored tool rows: the shape session.history returns (no args here, so `context` names the target).
   if (/\btool\b/.test(text)) messages.push({ role: "tool", name: "read", tool_call_id: "t1", content: "file.txt", context: "README.md", timestamp: now });
   messages.push({ role: "assistant", text: body, reasoning: "hmm", timestamp: now });
@@ -187,10 +188,20 @@ rl.on("line", (line) => {
     case "command.dispatch":
       if (params.name === "review") return ok(id, { type: "skill", name: "review", message: `Review: ${params.arg || "everything"}` });
       return fail(id, 4018, `not a quick/plugin/bundle/skill command: ${params.name}`);
-    case "prompt.submit":
+    case "prompt.submit": {
+      // Hermes Desktop's edit: cut before a stored user row, only when confirmed.
+      const cutRow = params.truncate_before_row_id;
+      if (cutRow !== undefined || params.truncate_before_user_ordinal !== undefined) {
+        if (params.confirm_truncate !== true) return fail(id, 4029, "truncation parameters require confirm_truncate=true");
+        const at = messages.findIndex((m) => m.role === "user" && m.row_id === cutRow);
+        if (at < 0) return fail(id, 4018, "target row_id not found");
+        if (at === 0 && params.confirm_empty_truncate !== true) return fail(id, 4028, "truncation would erase the entire session transcript");
+        messages.splice(at);
+      }
       ok(id, { status: "streaming" });
       void runPrompt(String(params.text ?? ""));
       return;
+    }
     case "image.attach_bytes":
       return ok(id, { attached: true, count: 1, name: params.filename ?? "pasted.png" });
     case "config.set":
