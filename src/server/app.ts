@@ -20,6 +20,7 @@ import {
   settingsPatchSchema,
   resumeChatSchema,
   rewindSchema,
+  runCommandSchema,
   sessionMarkSchema,
   pushSubscriptionSchema,
   pushTestSchema,
@@ -49,6 +50,7 @@ import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
+import { runCommand } from "./run-command.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -511,6 +513,13 @@ export function createApp(deps: AppDeps) {
     if (chat.status !== "idle") throw new ChatError(409, "busy", "Compact only while idle");
     chat.compact(instructions).catch((error: unknown) => log(`compact failed: ${errorMessage(error)}`));
     res.status(202).json({ accepted: true });
+  });
+
+  app.post("/api/chats/:id/run", async (req, res) => {
+    const chat = manager.get(req.params.id);
+    const { command, shell } = body(runCommandSchema, req);
+    log(`run: a ${shell} command in ${chat.workspace.name}`);
+    res.json(await runCommand(command, shell, chat.workspace.path));
   });
 
   // The project's git status (the composer's git row) and a listed file's diff.

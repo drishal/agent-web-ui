@@ -587,6 +587,29 @@ export const putBackSchema = z.object({
   paths: z.array(z.string().min(1).max(4096)).min(1).max(5000).optional(),
 });
 
+export const RUN_SHELLS = ["bash", "sh", "zsh", "fish"] as const;
+export type RunShell = (typeof RUN_SHELLS)[number];
+/** Run one command line from a shell code block, in the chat's project folder. */
+export const runCommandSchema = z.object({
+  command: z
+    .string()
+    .trim()
+    .min(1)
+    .max(4000)
+    .refine((c) => !c.includes("\n"), "One line only"),
+  shell: z.enum(RUN_SHELLS).default("bash"),
+});
+
+export interface RunResult {
+  /** Null when the shell could not start or a signal ended it. */
+  exitCode: number | null;
+  /** Standard output and error, interleaved as they came. */
+  output: string;
+  truncated: boolean;
+  timedOut: boolean;
+  durationMs: number;
+}
+
 /** Pin or archive a session; pinning unarchives it and archiving unpins it. */
 export const sessionMarkSchema = z
   .object({
