@@ -67,6 +67,15 @@ describe("resume from the session file", () => {
     expect(seen).toEqual(["running", "idle"]);
   });
 
+  it("replaces a past message in a resumed chat, once the harness is up", async () => {
+    const { manager, adapter, nativeId } = await storedSession(50);
+    const chat = await manager.resume(adapter, ws, nativeId);
+    await until(() => chat.status === "idle");
+    await chat.rewind(1, "remember this instead");
+    await until(() => chat.status === "idle" && chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.includes("Echo: remember this instead")));
+    expect(chat.snapshot().items.flatMap((i) => (i.kind === "user" ? [i.text] : []))).toEqual(["remember this instead"]);
+  });
+
   it("applies a model change made while starting", async () => {
     const { manager, adapter, nativeId } = await storedSession(150);
     const chat = await manager.resume(adapter, ws, nativeId);
