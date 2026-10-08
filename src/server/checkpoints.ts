@@ -6,36 +6,16 @@
 // before its prompt, whoever changed them since (the agent's edits or its
 // commands), after a preview naming each file.
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { CheckpointChange, CheckpointFile } from "../shared/protocol.js";
+import { git } from "./git.js";
 import { isObj, readJson, writeJson } from "./state-file.js";
 
 /** Past this, the prompt goes without a checkpoint; the snapshot still finishes and warms the next one. */
 const SNAPSHOT_WAIT_MS = 10_000;
 const MAX_TURNS_KEPT = 200;
 const TREE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
-
-/** The child's environment, without any GIT_* that would point git elsewhere. */
-function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_")) env[k] = v;
-  env.GIT_TERMINAL_PROMPT = "0";
-  return env;
-}
-
-function git(args: string[], opts: { cwd?: string; input?: string } = {}): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      "git",
-      ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "gc.auto=0", ...args],
-      { cwd: opts.cwd, env: gitEnv(), maxBuffer: 64 * 1024 * 1024, timeout: 120_000 },
-      (error, stdout, stderr) => (error ? reject(new Error(stderr.trim() || error.message)) : resolve(stdout)),
-    );
-    if (opts.input !== undefined) child.stdin?.end(opts.input);
-  });
-}
 
 export interface Snapshot {
   /** The repository's top level: the work tree that was captured. */

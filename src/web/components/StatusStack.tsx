@@ -41,11 +41,14 @@ export function StatusStack({
   queue,
   todos,
   extensionStatus,
+  base,
 }: {
   chatId: string;
   queue: QueueState;
   todos: TodoItem[];
   extensionStatus: Record<string, string>;
+  /** Always shown under the rest, even when it is hidden (the git row). */
+  base?: React.ReactNode;
 }) {
   const key = `stack.${chatId}`;
   const [hidden, setHidden] = useState(() => load<boolean>(key, false));
@@ -53,7 +56,7 @@ export function StatusStack({
   const statuses = Object.entries(extensionStatus).filter(([, v]) => v.trim());
   const queued = [...queue.steering.map((t) => ({ t, k: "Steering" })), ...queue.followUp.map((t) => ({ t, k: "Follow-up" }))];
   const count = queued.length + (todos.length > 0 ? 1 : 0) + (statuses.length > 0 ? 1 : 0);
-  if (count === 0) return null;
+  if (count === 0) return base ? <div className="status-stack is-base-only">{base}</div> : null;
   const done = todos.filter((t) => /done|complete/.test(t.status)).length;
 
   return (
@@ -113,6 +116,7 @@ export function StatusStack({
           ) : null}
         </div>
       ) : null}
+      {base}
     </div>
   );
 }

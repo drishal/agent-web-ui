@@ -13,6 +13,8 @@ import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
+import { GitPanel, GitRow } from "./GitStatusView.js";
+import { useGitStatus } from "../git.js";
 
 const coarsePointer = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
@@ -45,6 +47,8 @@ export function Composer({
   const [text, setText] = useState(() => load<string>(draftKey, ""));
   const [sending, setSending] = useState(false);
   const [answering, setAnswering] = useState(false);
+  const { git, at: gitAt, refresh: refreshGit } = useGitStatus(chat.chatId, chat.status);
+  const [gitOpen, setGitOpen] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -202,7 +206,14 @@ export function Composer({
 
   return (
     <div className={`composer${hero ? " is-hero" : ""}`}>
-      <StatusStack chatId={chat.chatId} queue={chat.queue} todos={chat.todos} extensionStatus={chat.extensionStatus} />
+      <StatusStack
+        chatId={chat.chatId}
+        queue={chat.queue}
+        todos={chat.todos}
+        extensionStatus={chat.extensionStatus}
+        base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
+      />
+      {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
       {pending.length > 0 ? (
         <ApprovalStack
           pending={pending}

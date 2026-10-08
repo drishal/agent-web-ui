@@ -139,6 +139,14 @@ export const IconUndo = (p: IconProps) => (
     <path d="M2.75 6h6.5a4 4 0 0 1 0 8h-2.5" />
   </Svg>
 );
+export const IconBranch = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="4.5" cy="3.5" r="1.5" />
+    <circle cx="4.5" cy="12.5" r="1.5" />
+    <circle cx="11.5" cy="5" r="1.5" />
+    <path d="M4.5 5v6M11.5 6.5c0 3-7 2-7 4.5" />
+  </Svg>
+);
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
