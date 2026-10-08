@@ -89,13 +89,35 @@ function gatewayRuntime(cliCommand: string): Promise<GatewayRuntime> {
   return cached;
 }
 
+/**
+ * The interpreter a Python console script runs with (Hermes's own installer,
+ * pip, pipx, and uv install `hermes` this way): its shebang, or the line pip
+ * writes instead when that path is too long for one (`'''exec' "/…/python"`).
+ * Null for anything else (a shell wrapper, a binary).
+ */
+export function scriptPython(text: string): string | null {
+  const lines = text.split("\n", 3);
+  const shebang = /^#!\s*(\S+)(?:\s+(\S+))?/.exec(lines[0] ?? "");
+  if (!shebang) return null;
+  const [, program = "", arg] = shebang;
+  const isPython = (p: string) => /(^|\/)python[\d.]*$/.test(p);
+  if (isPython(program)) return program;
+  if (/(^|\/)env$/.test(program) && arg && isPython(arg)) return arg;
+  const pipLong = /^'''exec' "([^"]+)" "\$0"/.exec(lines[1] ?? "");
+  if (/(^|\/)sh$/.test(program) && pipLong?.[1] && isPython(pipLong[1])) return pipLong[1];
+  return null;
+}
+
 async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
   const fallback: GatewayRuntime = { python: process.platform === "win32" ? "python" : "python3", env: { ...process.env }, source: "PATH" };
   try {
     const { stdout } = await run("sh", ["-c", `command -v -- "$1"`, "sh", cliCommand], { timeout: 5_000 });
     const bin = stdout.trim().split("\n")[0];
     if (!bin) return fallback;
-    const lines = (await fs.readFile(bin, "utf8")).trimEnd().split("\n");
+    const text = await fs.readFile(bin, "utf8");
+    const python = scriptPython(text);
+    if (python) return { python, env: { ...process.env }, source: "launcher" };
+    const lines = text.trimEnd().split("\n");
     const shell = /^#!\s*(\S+)/.exec(lines[0] ?? "")?.[1];
     const last = lines[lines.length - 1] ?? "";
     if (!shell || !/^exec\s/.test(last.trim())) return fallback;
@@ -106,8 +128,8 @@ async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
       const eq = entry.indexOf("=");
       if (eq > 0) env[entry.slice(0, eq)] = entry.slice(eq + 1);
     }
-    const python = env.HERMES_PYTHON?.trim();
-    return python ? { python, env, source: "launcher" } : fallback;
+    const exported = env.HERMES_PYTHON?.trim();
+    return exported ? { python: exported, env, source: "launcher" } : fallback;
   } catch {
     return fallback;
   }
@@ -937,7 +959,15 @@ export class HermesAdapter implements HarnessAdapter {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000 });
       const label = versionLabel(stdout.trim().split("\n")[0]?.replace(/^Hermes Agent\s*/i, "") || "unknown");
       const runtime = await gatewayRuntime(this.cliCommand);
-      if (runtime.source === "PATH") warnings.push("HERMES_PYTHON is not set and the hermes launcher does not export it; using python3 on PATH");
+      // What matters is that the gateway module imports, wherever the interpreter came from.
+      const imports = await run(runtime.python, ["-c", "import tui_gateway.entry"], { env: runtime.env, timeout: 15_000 }).then(
+        () => true,
+        () => false,
+      );
+      if (!imports) {
+        const from = runtime.source === "PATH" ? "on PATH (the hermes launcher names no Python)" : runtime.source === "HERMES_PYTHON" ? "from HERMES_PYTHON" : "from the hermes launcher";
+        warnings.push(`${runtime.python} ${from} cannot import Hermes's tui_gateway; set HERMES_PYTHON to the Python of the Hermes install`);
+      }
       return { available: true, ...label, warnings, overrides: { HERMES_HOME: process.env.HERMES_HOME ? "set" : "unset" } };
     } catch (error) {
       return {
