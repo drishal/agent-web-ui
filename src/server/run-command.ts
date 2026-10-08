@@ -3,6 +3,7 @@
 // limit and a cap on what is kept of the output. Any signed-in device may do
 // this, as it may already ask the agent to.
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import type { RunShell, RunResult } from "../shared/protocol.js";
 
 const TIMEOUT_MS = 60_000;
@@ -16,12 +17,14 @@ export function runCommand(command: string, shell: RunShell, cwd: string): Promi
     let output = "";
     let truncated = false;
     let timedOut = false;
-    const take = (chunk: Buffer) => {
+    // One decoder per stream: a character split across chunks stays whole.
+    const decoders = { out: new StringDecoder("utf8"), err: new StringDecoder("utf8") };
+    const take = (decoder: StringDecoder) => (chunk: Buffer) => {
       if (output.length >= MAX_OUTPUT) {
         truncated = true;
         return;
       }
-      output += chunk.toString("utf8");
+      output += decoder.write(chunk);
       if (output.length > MAX_OUTPUT) {
         output = output.slice(0, MAX_OUTPUT);
         truncated = true;
@@ -40,8 +43,8 @@ export function runCommand(command: string, shell: RunShell, cwd: string): Promi
       kill("SIGTERM");
       setTimeout(() => kill("SIGKILL"), 2000).unref();
     }, TIMEOUT_MS);
-    child.stdout.on("data", take);
-    child.stderr.on("data", take);
+    child.stdout.on("data", take(decoders.out));
+    child.stderr.on("data", take(decoders.err));
     child.on("error", (error) => {
       clearTimeout(timer);
       resolve({ exitCode: null, output: `${shell}: ${error.message}`, truncated: false, timedOut: false, durationMs: Date.now() - started });

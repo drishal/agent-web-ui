@@ -25,6 +25,9 @@ describe("running a shell code block", () => {
     const long = await runCommand("head -c 200000 /dev/zero | tr '\\0' a", "sh", dir);
     expect(long.truncated).toBe(true);
     expect(long.output.length).toBe(100_000);
+    // A character split across two writes comes out whole.
+    const split = await runCommand("printf '\\342\\202'; sleep 0.05; printf '\\254 ok'", "sh", dir);
+    expect(split.output).toBe("€ ok");
   });
 
   it("runs over HTTP in the chat's project, one line only", async () => {
