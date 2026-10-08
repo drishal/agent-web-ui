@@ -386,6 +386,55 @@ export interface CheckpointRestored {
   undo: string;
 }
 
+/** One side of a file's git status: what was done to it in the index (staged) or the work tree. */
+export type GitFileState = "modified" | "added" | "deleted" | "renamed" | "copied" | "typechange" | "untracked" | "conflict";
+
+export interface GitFile {
+  /** Relative to the repository's top level. */
+  path: string;
+  /** A rename's or copy's source. */
+  from?: string;
+  staged: GitFileState | null;
+  unstaged: GitFileState | null;
+  /** Lines against HEAD; null for binary files and untracked ones. */
+  added: number | null;
+  removed: number | null;
+  /** The staged side's lines (index against HEAD) and the unstaged side's (work tree against the index). */
+  stagedLines?: { added: number | null; removed: number | null };
+  unstagedLines?: { added: number | null; removed: number | null };
+}
+
+/** Which side of a file a diff shows: what is staged, what is not yet, or a whole untracked file. */
+export type GitDiffSide = "staged" | "unstaged" | "untracked";
+
+export interface GitFileDiff {
+  diff: ToolDiff | null;
+  /** Why there is no diff: a binary file, one too large, … */
+  note?: string;
+}
+
+/** The project's git repository as `git status` sees it (the composer's git row). */
+export interface GitStatus {
+  root: string;
+  /** Null when HEAD is detached. */
+  branch: string | null;
+  /** Short hash; null before the first commit. */
+  head: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  /** A merge, rebase, … that is under way. */
+  operation: "merge" | "rebase" | "cherry-pick" | "revert" | "bisect" | null;
+  lastCommit: { hash: string; subject: string; author: string; at: number } | null;
+  stashes: number;
+  files: GitFile[];
+  /** Files left out past the list's cap. */
+  more: number;
+  counts: { staged: number; changed: number; untracked: number; conflicts: number };
+  added: number;
+  removed: number;
+}
+
 export interface ChatSnapshot {
   chatId: string;
   harnessId: HarnessId;

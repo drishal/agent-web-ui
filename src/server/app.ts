@@ -47,6 +47,7 @@ import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { Checkpoints } from "./checkpoints.js";
+import { gitFileDiff, gitStatus } from "./git-status.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -499,6 +500,23 @@ export function createApp(deps: AppDeps) {
     if (chat.status !== "idle") throw new ChatError(409, "busy", "Compact only while idle");
     chat.compact(instructions).catch((error: unknown) => log(`compact failed: ${errorMessage(error)}`));
     res.status(202).json({ accepted: true });
+  });
+
+  // The project's git status (the composer's git row) and a listed file's diff.
+  app.get("/api/chats/:id/git", async (req, res) => {
+    const chat = manager.get(req.params.id);
+    res.json({ status: await gitStatus(chat.workspace.path).catch(() => null) });
+  });
+  app.get("/api/chats/:id/git/diff", async (req, res) => {
+    const chat = manager.get(req.params.id);
+    const file = typeof req.query.path === "string" ? req.query.path : "";
+    if (!file || file.length > 4096) throw new ChatError(400, "bad_path", "Name a changed file");
+    const side = req.query.side === "staged" || req.query.side === "untracked" ? req.query.side : "unstaged";
+    const diff = await gitFileDiff(chat.workspace.path, file, side).catch((error: unknown) => {
+      throw new ChatError(422, "git_failed", errorMessage(error));
+    });
+    if (!diff) throw new ChatError(404, "not_changed", "That file has no changes now");
+    res.json(diff);
   });
 
   // File checkpoints: what restoring a turn would do, doing it, and putting the files back again.
