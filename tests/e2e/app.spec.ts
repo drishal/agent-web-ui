@@ -300,6 +300,28 @@ test("a chip offers to compact a full context before the next message", async ({
   await expect(chip).toHaveCount(0);
 });
 
+test("selecting text in an answer offers to quote it into the message", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "something to quote");
+  await page.getByTestId("answer").last().locator("p").first().evaluate((p) => {
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  });
+  await page.getByTestId("quote-btn").click();
+  const box = page.getByRole("textbox", { name: "Message" });
+  await expect(box).toHaveValue("> Echo: something to quote\n\n");
+  await expect(box).toBeFocused();
+  await page.keyboard.type("Why?");
+  await page.keyboard.press("Enter");
+  const bubble = page.getByTestId("user-prompt").last();
+  await expect(bubble.locator(".bubble-quote")).toHaveText("Echo: something to quote");
+  await expect(bubble.locator(".bubble-text")).toHaveText("Why?");
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);
