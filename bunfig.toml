@@ -1,0 +1,3 @@
+# Bun runs atui (src/atui) and its render tests (tests/atui) with OpenTUI's Solid transform.
+[test]
+preload = ["@opentui/solid/preload"]
