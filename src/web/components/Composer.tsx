@@ -30,6 +30,7 @@ export function Composer({
   onConfig,
   onRefreshModels,
   onHandoff,
+  onNewChat,
 }: {
   chat: ChatState;
   harnesses: HarnessStatus[];
@@ -42,6 +43,8 @@ export function Composer({
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
   onRefreshModels: () => Promise<void>;
   onHandoff: (harnessId: string, draft: string) => Promise<void>;
+  /** Ctrl+Alt+Enter: once the message is sent, open a new chat. */
+  onNewChat?: () => void;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -78,7 +81,7 @@ export function Composer({
   const submit = useCallback(
     async (mode: SendMode) => {
       const value = text.trim();
-      if (!value || sending || tooLong) return;
+      if (!value || sending || tooLong) return false;
       // Clear immediately so text typed while the request is in flight survives;
       // restore only if the send failed and nothing new was typed or attached.
       const attached = images;
@@ -97,6 +100,7 @@ export function Composer({
         setImages((current) => (current.length > 0 ? current : attached));
       }
       area.current?.focus();
+      return ok;
     },
     [onSend, sending, text, images],
   );
@@ -195,6 +199,10 @@ export function Composer({
     }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || coarsePointer()) return;
     e.preventDefault();
+    if ((e.ctrlKey || e.metaKey) && e.altKey) {
+      if (!busy) void submit("normal").then((ok) => ok && onNewChat?.());
+      return;
+    }
     if (!busy) void submit("normal");
     else if (caps.supportsSteer && running) void submit("steer");
   };
