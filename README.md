@@ -132,6 +132,31 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 
 TUI-only slash commands are not emulated. New, Resume, Rename, Compact, model, thinking, and tools are the web actions.
 
+## In a terminal: atui
+
+`atui` is the same app in a terminal, in [OpenCode](https://github.com/anomalyco/opencode)'s TUI style, built on its renderer ([OpenTUI](https://github.com/anomalyco/opentui) with Solid). It is a client of the running server, like a browser tab: every harness, session, approval, setting, and theme is shared, a chat started in one shows in the other, and a run keeps going when atui quits (it prints the chat's `--chat` id and its web link).
+
+It needs [Bun](https://bun.sh) 1.3.14 or later (OpenTUI's native core loads through Bun's FFI). From this repository after `npm install`:
+
+```bash
+npm link                     # puts atui on PATH (or: ln -s "$PWD/bin/atui" ~/.local/bin/atui)
+cd ~/code/some-project && atui
+atui --harness omp           # the harness for new chats
+atui --resume                # this project's newest session (or --resume <id>)
+atui --chat <id>             # attach to a chat open on the server
+atui --url http://127.0.0.1:4790   # another server (or $AWUI_URL)
+```
+
+It starts in the current folder's project (one inside `WORKSPACE_ROOTS`), on an empty chat that is created when the first message goes.
+
+- **Layout.** Sessions on the left (*Needs you*, *Working*, *Pinned*, then the current project and the others), the conversation in the middle, and an info panel on the right with the context and what fills it, the session's tokens and cost, todos, git (branch, ahead/behind, counts, +/−), the files this chat changed, and usage limits. The sidebar shows from 110 columns and the panel from 150; both toggle.
+- **Turns** read as in the browser: the prompt with an accent bar, a "Worked for 12s · 3 reads, 1 edit" line folding the thinking and tool rows (open while running, with the live thought under it), the answer as Markdown, *Changed N files*, and a divider when the model changes. Click the fold to open it and a tool row for its diff (edits and writes) or its last output lines.
+- **Composer.** Enter sends; Shift+Enter or Ctrl+J adds a line. While a run is active, Enter steers (or queues a follow-up where the harness has no steer). `/` opens the harness's commands: ↑/↓, Tab completes, Esc closes. Under it: harness, model, thinking, context, and the compact-before-send chip once the context is half full.
+- **Approvals and questions** replace the composer: 1–9 pick, ↑/↓ and Enter, Esc cancels; free-text questions get a text box.
+- **Keys.** **Ctrl+K** (or Ctrl+P) is the palette: actions, every project's sessions, models, thinking levels, and harnesses. **Ctrl+X** then a letter does the rest: `b` sessions, `s` browse sessions with the keys (↑/↓ or j/k, Enter, Esc), `i` info panel, `n` new chat, `m` model, `t` thinking, `h` harness, `c` compact, `f` compact first / full history for the next message, `e` show the work of every turn, `q` quit; Ctrl+X alone lists them. **Esc Esc** stops the agent, **Ctrl+C** clears the composer, stops a run, or (twice) quits. Page Up/Down scroll, and the mouse scrolls and clicks.
+
+atui does not sign in yet, so it is for a server on this machine, which needs no sign-in. Not in it yet: Retry/Edit, Review, Undo file changes, images, Quote and Run, tabs, and notifications.
+
 ## Architecture
 
 ```
