@@ -22,7 +22,8 @@ const idle = (m: Mounted) => m.until(() => m.app.chat()?.status === "idle", 15_0
 
 describe("atui", () => {
   it("sends a message, streams the answer, and shows the work, files, and context", async () => {
-    ui = await mount(path.join(server.root, "alpha"));
+    // Tall enough for the whole opened turn: neat-render's rows take two lines and more.
+    ui = await mount(path.join(server.root, "alpha"), { height: 80 });
     expect(await ui.frame()).toContain("What should Fake do in alpha?");
     await ui.type("showcase tool edit please");
     ui.keys.pressEnter();
@@ -33,10 +34,15 @@ describe("atui", () => {
     expect(f).toMatch(/▸ Worked for \d+s · 2 reads, 1 search, 2 edits/);
     expect(f).toContain("Fake Echo · low");
     await ui.click("▸ Worked");
-    await ui.until("edit  src/app.ts");
-    await ui.click("edit  src/app.ts");
-    const diff = await ui.until("- a");
-    expect(diff).toContain("+ b");
+    // neat-render's rows: the edit as Update(path), its outcome on a └ line, its lines under it.
+    const rows = await ui.until("Update(src/app.ts)");
+    expect(rows).toContain("└ Added 1 line, removed 1 line");
+    expect(rows).toMatch(/- a\s*\n.*\+ b/s);
+    expect(rows).toContain("● Read README.md");
+    // Clicked, it is framed, its outcome in the bottom edge.
+    await ui.click("Update(src/app.ts)");
+    const framed = await ui.until("╰─ Added 1 line, removed 1 line");
+    expect(framed).toContain("╭");
   }, 30_000);
 
   it("answers an approval with a number and a question with the arrows", async () => {

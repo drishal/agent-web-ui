@@ -15,16 +15,4 @@ export function useTheme(): Accessor<Theme> {
   return useAtui().theme;
 }
 
-/** One glyph per tool category, OpenCode's way: a quiet mark before the tool's name. */
-export const TOOL_MARK: Record<string, string> = {
-  read: "→",
-  search: "⌕",
-  edit: "✎",
-  write: "✎",
-  command: "$",
-  web: "◍",
-  agent: "◆",
-  other: "•",
-};
-
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

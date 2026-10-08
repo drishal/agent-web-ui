@@ -1,12 +1,16 @@
 // The conversation, turn by turn as the web UI lays it out: the prompt, one
 // "Worked for …" line that opens to the work (thoughts, tool calls, notices),
-// the answer as Markdown, and the files it changed. Tool rows are OpenCode's
-// quiet one-liners; clicking one opens its diff or output.
+// the answer as Markdown, and the files it changed. The look is neat-render's
+// (the pi extension): the prompt in a rounded card with the harness's mark in
+// its top edge, each call a bulleted row with its outcome on a `└` line, an
+// edit's first changed lines under it, thinking as one titled line, and a
+// clicked call framed omp-style (command, Output, outcome in the bottom edge).
 import { createMemo, createSignal, For, Index, Match, Show, Switch, type Accessor } from "solid-js";
 import type { AssistantItem, ChatItem, NoticeItem, RequestItem, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../../web/turns.js";
-import { clip, foldLabel, toolTarget, unifiedDiff } from "../format.js";
-import { SPINNER, TOOL_MARK, useAtui, useTheme } from "./context.js";
+import { clip, foldLabel, unifiedDiff } from "../format.js";
+import { harnessGlyph, neatRow, thoughtTitle, thoughtTokens } from "../neat.js";
+import { SPINNER, useAtui, useTheme } from "./context.js";
 import { syntaxFor } from "./syntax.js";
 import { tick } from "./ticker.js";
 
@@ -17,10 +21,23 @@ function Spinner() {
   return <span style={{ fg: t().accent }}>{SPINNER[tick() % SPINNER.length]}</span>;
 }
 
+/** Half-period of a running row's pulse, in ticks of 100 ms (neat-render's 450 ms). */
+const PULSE_TICKS = 4.5;
+const pulseOn = () => Math.floor(tick() / PULSE_TICKS) % 2 === 0;
+
+/** The row's bullet: accent when done, red on failure, pulsing while it runs. */
+function Bullet(p: { status: "running" | "done" | "error" }) {
+  const t = useTheme();
+  const color = () => (p.status === "running" ? (pulseOn() ? t().warn : t().muted) : p.status === "error" ? t().danger : t().accent);
+  return <span style={{ fg: color() }}>● </span>;
+}
+
+/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. */
 function UserPrompt(p: { item: UserItem }) {
   const t = useTheme();
+  const app = useAtui();
   return (
-    <box border={["left"]} borderColor={t().accent} backgroundColor={t().surface} paddingLeft={1} paddingRight={1} marginTop={1}>
+    <box border borderStyle="rounded" borderColor={t().ok} title={harnessGlyph(app.chat()?.harnessId ?? "")} titleColor={t().danger} backgroundColor={t().surface} paddingLeft={1} paddingRight={1} marginTop={1}>
       <text fg={t().text} wrapMode="word">
         {p.item.text}
         <Show when={p.item.imageCount}>
@@ -31,19 +48,26 @@ function UserPrompt(p: { item: UserItem }) {
   );
 }
 
+/** One line per thought: "● Thinking: …" while it streams, "▸ Thought: … · ~340 tokens" after; a click opens it. */
 function Thought(p: { item: AssistantItem }) {
   const t = useTheme();
   const [open, setOpen] = createSignal(false);
+  const streaming = () => p.item.streaming && !p.item.text;
+  const title = () => thoughtTitle(p.item.thinking);
+  const detail = () => (streaming() ? (title() ? `: ${title()}` : "") : `: ${[title(), `~${thoughtTokens(p.item.thinking)} tokens`].filter(Boolean).join(" · ")}`);
   return (
     <box flexDirection="column" onMouseDown={() => setOpen(!open())}>
-      <text fg={t().thinking} wrapMode="word">
-        {"✻ "}
-        <span style={{ fg: t().muted }}>{open() ? "Thought" : `Thought · ${clip(p.item.thinking.split("\n").find((l) => l.trim()) ?? "", 96)}`}</span>
+      <text wrapMode="none" truncate>
+        <Show when={streaming()} fallback={<span style={{ fg: t().muted }}>{open() ? "▾ " : "▸ "}</span>}>
+          <span style={{ fg: pulseOn() ? t().warn : t().muted }}>● </span>
+        </Show>
+        <span style={{ fg: t().thinking }}>{streaming() ? "Thinking" : "Thought"}</span>
+        <span style={{ fg: t().muted }}>{detail()}</span>
       </text>
       <Show when={open()}>
         <box paddingLeft={2}>
           <text fg={t().muted} wrapMode="word">
-            {p.item.thinking.trim()}
+            <i>{p.item.thinking.trim()}</i>
           </text>
         </box>
       </Show>
@@ -51,24 +75,44 @@ function Thought(p: { item: AssistantItem }) {
   );
 }
 
+/**
+ * A clicked call, framed the way omp draws it: the call, an Output rule, what
+ * it printed (or an edit's diff), and the outcome set into the bottom edge.
+ * The frame is quiet when done, accent while running, red on failure.
+ */
 function ToolDetails(p: { item: ToolItem; workspace: string }) {
   const t = useTheme();
+  const row = createMemo(() => neatRow(p.item, p.workspace));
+  const tone = () => (p.item.status === "running" ? t().accent : p.item.status === "error" ? t().danger : t().border);
   const diff = createMemo(() => (p.item.diff && (p.item.category === "edit" || p.item.category === "write") ? unifiedDiff(relativePath(p.item.paths[0] ?? p.item.summary, p.workspace), p.item.diff) : null));
+  const command = () => (p.item.category === "command" && row().detail?.startsWith("$ ") ? (row().detail as string).slice(2) : null);
   const output = createMemo(() => {
     const lines = p.item.output.replace(/\n+$/, "").split("\n");
     const shown = lines.slice(-OUTPUT_LINES).join("\n");
     return lines.length > OUTPUT_LINES ? `… ${lines.length - OUTPUT_LINES} lines above\n${shown}` : shown;
   });
+  const status = () => (p.item.status === "running" ? "running…" : row().facts.join(" · "));
   return (
-    <box paddingLeft={2} marginBottom={1}>
+    <box border borderStyle="rounded" borderColor={tone()} bottomTitle={status() ? ` ${status()} ` : undefined} flexDirection="column" paddingLeft={1} paddingRight={1} marginTop={1} marginBottom={1}>
+      <Show when={command()}>
+        {(c) => (
+          <text wrapMode="word">
+            <span style={{ fg: t().muted }}>$ </span>
+            <span style={{ fg: t().link }}>{c()}</span>
+          </text>
+        )}
+      </Show>
       <Show
         when={diff()}
         fallback={
-          <box border={["left"]} borderColor={t().border} paddingLeft={1}>
+          <Show when={output()}>
+            <Show when={command()}>
+              <box border={["top"]} borderColor={tone()} title=" Output " titleColor={t().text2} />
+            </Show>
             <text fg={t().text2} wrapMode="char">
-              {output() || "(no output)"}
+              {output()}
             </text>
-          </box>
+          </Show>
         }
       >
         {(d) => <diff diff={d()} view="unified" showLineNumbers wrapMode="word" addedBg="#1f3a2a" removedBg="#3a1f22" fg={t().text} />}
@@ -77,29 +121,85 @@ function ToolDetails(p: { item: ToolItem; workspace: string }) {
   );
 }
 
+/**
+ * One call as neat-render draws it:
+ *
+ *   # the model's remark, when the command opened with one
+ *   ● Bash $ npm test                ● Bash · running…
+ *     └ exit 2 · 14 lines              └ $ npm test -- --run …
+ *
+ * An edit shows its first changed lines under the outcome. A click frames it.
+ */
 function ToolRow(p: { item: ToolItem; workspace: string }) {
   const t = useTheme();
   const [open, setOpen] = createSignal(false);
+  const row = createMemo(() => neatRow(p.item, p.workspace));
+  const running = () => p.item.status === "running";
   const failed = () => p.item.status === "error";
+  const factColor = (f: string) => (failed() || /^(failed|exit [1-9])/.test(f) ? t().danger : t().ok);
+  // A running command moves to its own wrapped `└ $` lines, so you can read what is executing.
+  const wraps = () => running() && p.item.category === "command" && Boolean(row().detail);
   return (
     <box flexDirection="column">
-      <box flexDirection="row" onMouseDown={() => setOpen(!open())}>
-        <text fg={failed() ? t().danger : t().muted} flexShrink={0}>
-          <Show when={p.item.status === "running"} fallback={failed() ? "✗ " : `${TOOL_MARK[p.item.category] ?? "•"} `}>
-            <Spinner />
-            {" "}
+      <Show when={row().note}>
+        {(note) => (
+          <text fg={t().muted} wrapMode="none" truncate>
+            <i>{`# ${note()}`}</i>
+          </text>
+        )}
+      </Show>
+      <box flexDirection="column" onMouseDown={() => setOpen(!open())}>
+        <text wrapMode="none" truncate>
+          <Bullet status={p.item.status} />
+          <b style={{ fg: t().text }}>{row().label}</b>
+          <Show when={!wraps()}>
+            <Show when={row().detail}>{(d) => <span style={{ fg: t().link }}>{`${row().glue}${d()}`}</span>}</Show>
           </Show>
-          <span style={{ fg: failed() ? t().danger : t().text2 }}>{p.item.name}</span>
+          <Show when={running()}>
+            <span style={{ fg: t().muted }}> · running…</span>
+          </Show>
         </text>
-        <text fg={t().muted} flexGrow={1} wrapMode="none" truncate>
-          {`  ${toolTarget(p.item, p.workspace)}${failed() ? " · failed" : ""}`}
-        </text>
-        <Show when={p.item.diffStat}>
-          {(s) => (
-            <text flexShrink={0}>
-              <span style={{ fg: t().ok }}>{s().added > 0 ? ` +${s().added}` : ""}</span>
-              <span style={{ fg: t().danger }}>{s().removed > 0 ? ` −${s().removed}` : ""}</span>
+        <Show when={wraps() && row().detail}>
+          {(d) => (
+            <box flexDirection="row" paddingLeft={2} maxHeight={3} overflow="hidden">
+              <text fg={t().muted} flexShrink={0}>
+                {"└ "}
+              </text>
+              <text fg={t().link} wrapMode="word">
+                {d()}
+              </text>
+            </box>
+          )}
+        </Show>
+        <Show when={!running() && row().facts.length > 0}>
+          <box paddingLeft={2}>
+            <text wrapMode="none" truncate>
+              <span style={{ fg: t().muted }}>└ </span>
+              <Index each={row().facts}>
+                {(f, i) => (
+                  <>
+                    <Show when={i > 0}>
+                      <span style={{ fg: t().muted }}> · </span>
+                    </Show>
+                    <span style={{ fg: factColor(f()) }}>{f()}</span>
+                  </>
+                )}
+              </Index>
             </text>
+          </box>
+        </Show>
+        <Show when={!open() && row().diff}>
+          {(lines) => (
+            <box flexDirection="column" paddingLeft={4}>
+              <Index each={lines()}>
+                {(l) => (
+                  <text wrapMode="none" truncate fg={l().marker === "+" ? t().ok : l().marker === "-" ? t().danger : t().muted}>
+                    {`${l().marker} ${l().text}`}
+                  </text>
+                )}
+              </Index>
+              <Show when={row().more}>{(n) => <text fg={t().muted}>{`… ${n()} more`}</text>}</Show>
+            </box>
           )}
         </Show>
       </box>
