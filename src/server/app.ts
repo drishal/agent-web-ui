@@ -454,11 +454,11 @@ export function createApp(deps: AppDeps) {
 
   app.post("/api/chats/:id/messages", async (req, res) => {
     const chat = manager.get(req.params.id);
-    const { text, images, mode } = body(sendMessageSchema, req);
+    const { text, images, mode, compactFirst } = body(sendMessageSchema, req);
     for (const image of images) {
       if (sniffImage(image.data) !== image.mimeType) throw new ChatError(400, "bad_image", "An attachment is not the image type it claims to be");
     }
-    await chat.send(text, mode, images);
+    await chat.send(text, mode, images, compactFirst ? { compactFirst } : {});
     res.status(202).json({ accepted: true, mode });
   });
 

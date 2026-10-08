@@ -1338,6 +1338,25 @@ body.is-resizing {
   -webkit-line-clamp: 4;
 }
 
+/* Compact before send: amber when the next message compacts first, muted when it goes in full. */
+.compact-chip {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.compact-chip.is-on {
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
 .turn-prompt {
   position: sticky;
   top: 0;

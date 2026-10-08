@@ -3,6 +3,7 @@
 //   "tool"  run a fake tool          "ask"   raise a confirm request first
 //   "fail"  end with an error        "slow"  stream many chunks
 //   "big"   produce oversized tool output    "edit"  edit a file (src/app.ts)
+//   "bloat" pad the session to about two thirds of the context window
 //   "quiz"  ask a multiple-choice question (omp's style; "quiz described": Claude Code's)
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -430,6 +431,7 @@ class FakeLiveChat implements LiveChat {
           return;
         }
       }
+      if (/\bbloat\b/i.test(text)) for (let i = 0; i < 70; i++) this.session.messages.push({ role: "custom", content: "filler" });
       if (/\bquiz\b/i.test(text)) {
         const chose = await this.question(signal, /\bdescribed\b/i.test(text));
         await this.reply(`Chose: ${chose}`, signal);

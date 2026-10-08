@@ -563,6 +563,8 @@ export const sendMessageSchema = z.object({
   text: z.string().min(1).max(MAX_MESSAGE_CHARS),
   images: z.array(imageAttachmentSchema).max(MAX_IMAGES).default([]),
   mode: z.enum(["normal", "steer", "followUp", "stopAndSend"]).default("normal"),
+  /** Compact the context first, then send (a normal send while idle). */
+  compactFirst: z.boolean().optional(),
 });
 export const patchConfigSchema = z
   .object({
