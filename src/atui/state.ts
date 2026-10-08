@@ -294,15 +294,6 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     }
   };
 
-  /** The next thinking level, round the chat's list. */
-  const cycleThinking = () => {
-    const c = chat();
-    if (!c || !c.capabilities.supportsThinkingLevel || c.config.thinkingLevels.length === 0) return;
-    const levels = c.config.thinkingLevels;
-    const next = levels[(levels.indexOf(c.config.thinkingLevel ?? "") + 1) % levels.length];
-    if (next) void configure({ thinkingLevel: next });
-  };
-
   const compact = async () => {
     const c = chat();
     if (!c) return;
@@ -316,6 +307,23 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   const chooseHarness = (id: string) => {
     setHarnessId(id);
     if (chat()) newChat();
+  };
+
+  /** Move the open chat to another harness: a copy of the conversation, or a summary its first prompt carries. */
+  const handoff = async (id: string) => {
+    const c = chat();
+    if (!c) return chooseHarness(id);
+    setOpening(true);
+    try {
+      const moved = await server.call<ChatSnapshot>(`/api/chats/${c.chatId}/handoff`, { body: { harness: id } });
+      setHarnessId(id);
+      show(moved);
+      void refreshSessions();
+    } catch (error) {
+      fail(error);
+    } finally {
+      setOpening(false);
+    }
   };
 
   const dispose = () => {
@@ -351,9 +359,9 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     stop,
     answer,
     configure,
-    cycleThinking,
     compact,
     chooseHarness,
+    handoff,
     dispose,
   };
 }
