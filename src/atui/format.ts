@@ -81,3 +81,15 @@ export function clip(text: string, width: number): string {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > width ? `${line.slice(0, Math.max(0, width - 1))}…` : line;
 }
+
+/** "now", "12m", "3h", "5d", or the date: how long ago a session was active. */
+export function ago(iso: string | null, now = Date.now()): string {
+  if (!iso) return "";
+  const min = Math.round((now - new Date(iso).getTime()) / 60_000);
+  if (min < 1) return "now";
+  if (min < 60) return `${min}m`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.round(h / 24);
+  return d < 30 ? `${d}d` : new Date(iso).toLocaleDateString();
+}

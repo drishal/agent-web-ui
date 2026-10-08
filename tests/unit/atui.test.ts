@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem, InteractionRequest, LimitAccount, ToolItem } from "../../src/shared/protocol.js";
 import { parseArgs } from "../../src/atui/args.js";
-import { clip, foldLabel, limitLine, tokens, toolTarget, unifiedDiff } from "../../src/atui/format.js";
+import { ago, clip, foldLabel, limitLine, tokens, toolTarget, unifiedDiff } from "../../src/atui/format.js";
 import { isApproval, optionsOf } from "../../src/atui/requests.js";
 import { DARK, themeFrom } from "../../src/atui/theme.js";
 import { buildTurns } from "../../src/web/turns.js";
@@ -52,6 +52,15 @@ describe("atui formatting", () => {
     expect(done && foldLabel(done)).toBe("Worked for 13s · 1 edit");
     const [live] = buildTurns(items.slice(0, 2), "running");
     expect(live && foldLabel(live, 4000)).toBe("Working · 3s · 1 edit");
+  });
+
+  it("says how long ago a session was active", () => {
+    const now = Date.parse("2026-10-08T12:00:00Z");
+    expect(ago("2026-10-08T11:59:40Z", now)).toBe("now");
+    expect(ago("2026-10-08T11:48:00Z", now)).toBe("12m");
+    expect(ago("2026-10-08T09:00:00Z", now)).toBe("3h");
+    expect(ago("2026-10-03T12:00:00Z", now)).toBe("5d");
+    expect(ago(null, now)).toBe("");
   });
 
   it("shortens counts, limits, and long lines", () => {

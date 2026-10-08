@@ -8,7 +8,8 @@ import { useTheme } from "./context.js";
 
 const PAGE = 8;
 
-export function Picker(p: { title: string; placeholder: string; items: PaletteItem[]; onClose: () => void }) {
+/** `firstHeading`: name the first section too (the palette's "Actions" goes without saying; a project or "Hand off" does not). */
+export function Picker(p: { title: string; placeholder: string; items: PaletteItem[]; onClose: () => void; firstHeading?: boolean }) {
   const t = useTheme();
   const size = useTerminalDimensions();
   const [query, setQuery] = createSignal("");
@@ -88,7 +89,7 @@ export function Picker(p: { title: string; placeholder: string; items: PaletteIt
             const head = () => at() === 0 || shown()[at() - 1]?.section !== item.section;
             return (
               <box flexDirection="column">
-                <Show when={head() && i() > 0}>
+                <Show when={head() && (i() > 0 || p.firstHeading)}>
                   <text fg={t().muted}>{item.section}</text>
                 </Show>
                 <box flexDirection="row" backgroundColor={at() === active() ? t().selection : undefined} onMouseDown={() => run(item)}>

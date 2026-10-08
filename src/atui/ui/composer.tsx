@@ -20,6 +20,8 @@ export function Composer(p: {
   focused: boolean;
   compactChoice: boolean | null;
   onCompactChoice: (on: boolean | null) => void;
+  /** A click on the footer's harness, model, or thinking level opens its picker. */
+  onPick: (picker: "harness" | "models" | "thinking") => void;
   ref: (el: TextareaRenderable) => void;
 }) {
   const app = useAtui();
@@ -164,15 +166,21 @@ export function Composer(p: {
         />
       </box>
       <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-        <text flexGrow={1} wrapMode="none" truncate>
-          <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{app.harness()?.displayName ?? "—"}</span>
+        <box flexDirection="row" flexGrow={1} overflow="hidden">
+          <text flexShrink={0} wrapMode="none" fg={accentOf(t(), app.harness()?.accent)} onMouseDown={() => p.onPick("harness")}>
+            {`${app.harness()?.displayName ?? "—"} ▾`}
+          </text>
           <Show when={model()}>
-            <span style={{ fg: t().text2 }}>{`  ${model()}`}</span>
+            <text flexShrink={1} wrapMode="none" truncate fg={t().text2} onMouseDown={() => p.onPick("models")}>
+              {`  ${model()} ▾`}
+            </text>
           </Show>
           <Show when={app.chat()?.config.thinkingLevel}>
-            <span style={{ fg: t().muted }}>{` · ${app.chat()?.config.thinkingLevel}`}</span>
+            <text flexShrink={0} wrapMode="none" fg={t().muted} onMouseDown={() => p.onPick("thinking")}>
+              {`  ${app.chat()?.config.thinkingLevel} ▾`}
+            </text>
           </Show>
-        </text>
+        </box>
         <text flexShrink={0}>
           <Show when={offer()}>
             <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (^X f)  `}</span>

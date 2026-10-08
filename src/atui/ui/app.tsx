@@ -1,14 +1,16 @@
 // atui's screen: sessions on the left, the conversation and composer in the
 // middle, the info panel on the right, a status line at the bottom; dialogs
-// over it all. Global keys: Ctrl+K commands, Ctrl+X then a letter for the
-// rest (OpenCode's leader key), PageUp/PageDown scroll, Esc Esc stops the
-// agent, Ctrl+C clears, stops, or (twice) quits.
+// over it all. Global keys: Ctrl+K commands, Ctrl+R history, Alt+H/M/T the
+// harness, model, and thinking pickers (the composer's footer opens them on a
+// click too), Ctrl+X then a letter for the rest (OpenCode's leader key),
+// PageUp/PageDown scroll, Esc Esc stops the agent, Ctrl+C clears, stops, or
+// (twice) quits.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { PaletteItem } from "../../web/palette.js";
 import { isBusy } from "../../web/session-groups.js";
-import { STATUS_LABEL } from "../format.js";
+import { ago, STATUS_LABEL } from "../format.js";
 import type { Atui } from "../state.js";
 import { accentOf } from "../theme.js";
 import { Composer } from "./composer.js";
@@ -19,12 +21,15 @@ import { RequestCard } from "./request.js";
 import { Sidebar } from "./sidebar.js";
 import { Transcript } from "./transcript.js";
 
-type Dialog = "palette" | "models" | "harness" | null;
+type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
 
 const LEADER_MS = 2000;
 const TWICE_MS = 1200;
 
-export const LEADER_HELP = "b sessions · s browse · i info · n new · m model · t thinking · h harness · c compact · f full/compact · e work · q quit";
+export const LEADER_HELP = "b sessions · s browse · r history · i info · n new · m model · t thinking · h harness · c compact · f full/compact · e work · q quit";
+
+/** The status line's reminder of the direct keys. */
+export const KEYS_HELP = "^K commands · ^R history · M-h harness · M-m model · M-t thinking · ^X more · Esc Esc stop · ^C ^C quit";
 
 export function App(p: { app: Atui; onExit: () => void }) {
   const app = p.app;
@@ -69,6 +74,13 @@ export function App(p: { app: Atui; onExit: () => void }) {
     ),
   );
 
+  // History is read fresh when it opens: chats started since the last poll belong in it.
+  createEffect(
+    on(dialog, (d) => {
+      if (d === "history") void app.refreshSessions();
+    }),
+  );
+
   const leave = () => {
     setFocus("composer");
     composer?.focus();
@@ -90,12 +102,14 @@ export function App(p: { app: Atui; onExit: () => void }) {
       case "n":
         app.newChat();
         return leave();
+      case "r":
+        return setDialog("history");
       case "m":
         return setDialog("models");
       case "h":
         return setDialog("harness");
       case "t":
-        return app.cycleThinking();
+        return setDialog("thinking");
       case "c":
         return void app.compact();
       case "f":
@@ -126,6 +140,19 @@ export function App(p: { app: Atui; onExit: () => void }) {
     if (key.ctrl && (key.name === "k" || key.name === "p")) {
       key.preventDefault();
       return setDialog("palette");
+    }
+    // The pickers directly, without the leader: Ctrl+R as a shell's history search, Alt+letter for the rest.
+    if (key.ctrl && key.name === "r") {
+      key.preventDefault();
+      return setDialog("history");
+    }
+    if (key.meta && !key.ctrl) {
+      const direct: Record<string, Dialog> = { h: "harness", m: "models", t: "thinking", r: "history" };
+      const target = direct[key.name];
+      if (target) {
+        key.preventDefault();
+        return setDialog(target);
+      }
     }
     if (key.name === "pageup" || key.name === "pagedown") {
       key.preventDefault();
@@ -161,13 +188,15 @@ export function App(p: { app: Atui; onExit: () => void }) {
     const add = (item: Omit<PaletteItem, "section"> & { section?: string }) => items.push({ section: "Actions", ...item });
     add({ id: "new", label: "New chat", hint: "^X N", run: () => runLeader("n") });
     if (c && app.busy()) add({ id: "stop", label: "Stop the agent", hint: "Esc Esc", run: app.stop });
+    add({ id: "history", label: "History: every session, by project…", hint: "^R", run: () => setDialog("history") });
     add({ id: "sessions", label: "Browse sessions", hint: "^X S", run: () => runLeader("s") });
     add({ id: "sidebar", label: sidebar() ? "Hide sessions" : "Show sessions", hint: "^X B", run: () => runLeader("b") });
     add({ id: "panel", label: panel() ? "Hide info panel" : "Show info panel", hint: "^X I", run: () => runLeader("i") });
     add({ id: "work", label: showWork() ? "Fold the work" : "Show the work of every turn", hint: "^X E", run: () => runLeader("e") });
     if (c?.capabilities.supportsCompact) add({ id: "compact", label: "Compact context", hint: "^X C", disabled: idle ? undefined : "Wait until the agent is idle", run: () => runLeader("c") });
-    add({ id: "model", label: "Choose model…", hint: "^X M", disabled: c?.capabilities.supportsModelSelection ? undefined : "Start a chat first", run: () => setDialog("models") });
-    add({ id: "harness", label: "Choose harness…", hint: "^X H", run: () => setDialog("harness") });
+    add({ id: "model", label: "Choose model…", hint: "M-m", disabled: c?.capabilities.supportsModelSelection ? undefined : "Start a chat first", run: () => setDialog("models") });
+    if (c?.capabilities.supportsThinkingLevel) add({ id: "thinking", label: "Choose thinking level…", hint: "M-t", run: () => setDialog("thinking") });
+    add({ id: "harness", label: hasPrompt() ? "Choose harness, or hand this chat off…" : "Choose harness…", hint: "M-h", run: () => setDialog("harness") });
     add({ id: "quit", label: "Quit atui", hint: "^X Q", searchOnly: true, run: p.onExit });
     const sessions = app.overview().sessions;
     sessions.forEach((s, i) => {
@@ -206,8 +235,25 @@ export function App(p: { app: Atui; onExit: () => void }) {
     }));
   };
 
-  const harnessItems = (): PaletteItem[] =>
-    (app.boot()?.harnesses ?? []).map((h) => ({
+  /** With a conversation open, first the harnesses it can move to (the web UI's handoff), then the one for new chats. */
+  const harnessItems = (): PaletteItem[] => {
+    const harnesses = app.boot()?.harnesses ?? [];
+    const c = app.chat();
+    const moves: PaletteItem[] =
+      c && hasPrompt()
+        ? harnesses
+            .filter((h) => h.id !== c.harnessId)
+            .map((h) => ({
+              id: `move:${h.id}`,
+              section: "Hand off this chat to",
+              label: h.displayName,
+              // The picker's hint column is short: a copy of the turns, or a fresh chat briefed with a summary.
+              hint: h.capabilities.supportsHandoff ? "keeps the turns" : "from a summary",
+              disabled: h.available ? undefined : (h.reason ?? "Not available"),
+              run: () => void app.handoff(h.id),
+            }))
+        : [];
+    const fresh = harnesses.map((h) => ({
       id: h.id,
       section: "Harness for new chats",
       label: h.displayName,
@@ -216,6 +262,43 @@ export function App(p: { app: Atui; onExit: () => void }) {
       disabled: h.available ? undefined : (h.reason ?? "Not available"),
       run: () => app.chooseHarness(h.id),
     }));
+    return [...moves, ...fresh];
+  };
+
+  const thinkingItems = (): PaletteItem[] => {
+    const c = app.chat();
+    if (!c?.capabilities.supportsThinkingLevel) return [];
+    const idle = c.status === "idle" || c.status === "error";
+    return c.config.thinkingLevels.map((level) => ({
+      id: level,
+      section: "Thinking",
+      label: level,
+      current: level === c.config.thinkingLevel,
+      disabled: idle ? undefined : "Wait until the agent is idle",
+      run: () => void app.configure({ thinkingLevel: level }),
+    }));
+  };
+
+  /** Every session the server knows, newest first, under its project: the current project's first. */
+  const historyItems = (): PaletteItem[] => {
+    const { sessions, workspaces } = app.overview();
+    const here = app.workspace()?.id;
+    const c = app.chat();
+    const name = (id: string) => app.boot()?.harnesses.find((h) => h.id === id)?.displayName ?? id;
+    const project = (id: string | undefined) => workspaces.find((w) => w.id === id)?.name ?? "Other";
+    const order = (id: string | undefined) => (id === here ? 0 : 1);
+    return [...sessions]
+      .sort((a, b) => order(a.workspaceId) - order(b.workspaceId) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+      .map((s) => ({
+        id: `h:${s.id}`,
+        section: project(s.workspaceId),
+        label: s.title || "New chat",
+        hint: [isBusy(s.status ?? "idle") ? "working" : ago(s.updatedAt), name(s.harnessId)].filter(Boolean).join(" · "),
+        keywords: `${name(s.harnessId)} ${project(s.workspaceId)}`,
+        current: c !== null && (c.sessionId === s.id || s.liveChatId === c.chatId),
+        run: () => void app.openSession(s),
+      }));
+  };
 
   const title = () => {
     const c = app.chat();
@@ -282,6 +365,7 @@ export function App(p: { app: Atui; onExit: () => void }) {
                   focused={focus() === "composer" && !dialog()}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
+                  onPick={setDialog}
                   ref={(el) => (composer = el)}
                 />
               }
@@ -298,7 +382,7 @@ export function App(p: { app: Atui; onExit: () => void }) {
             {app.conn() === "connected" ? "● " : app.conn() === "idle" ? "○ " : "◌ "}
           </text>
           <text flexGrow={1} fg={t().muted} wrapMode="none" truncate>
-            {hint() ?? "^K commands · ^X B sessions · ^X I info · ^X M model · PgUp/PgDn scroll · Esc Esc stop · ^C ^C quit"}
+            {hint() ?? KEYS_HELP}
           </text>
           <text flexShrink={0} fg={t().muted}>{` atui ${app.boot()?.version ?? ""}`}</text>
         </box>
@@ -309,7 +393,13 @@ export function App(p: { app: Atui; onExit: () => void }) {
           <Picker title="Model" placeholder="Search models…" items={modelItems()} onClose={() => setDialog(null)} />
         </Show>
         <Show when={dialog() === "harness"}>
-          <Picker title="Harness" placeholder="Search harnesses…" items={harnessItems()} onClose={() => setDialog(null)} />
+          <Picker title="Harness" placeholder="Search harnesses…" items={harnessItems()} onClose={() => setDialog(null)} firstHeading={hasPrompt()} />
+        </Show>
+        <Show when={dialog() === "thinking"}>
+          <Picker title="Thinking" placeholder="Search levels…" items={thinkingItems()} onClose={() => setDialog(null)} />
+        </Show>
+        <Show when={dialog() === "history"}>
+          <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading />
         </Show>
       </box>
     </AtuiContext.Provider>

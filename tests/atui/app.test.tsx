@@ -32,7 +32,7 @@ describe("atui", () => {
     const f = await ui.until("Changed 3 files");
     expect(f).toContain("│ showcase tool edit please");
     expect(f).toMatch(/▸ Worked for \d+s · 2 reads, 1 search, 2 edits/);
-    expect(f).toContain("Fake Echo · low");
+    expect(f).toContain("Fake Echo ▾  low ▾");
     await ui.click("▸ Worked");
     // neat-render's rows: the edit as Update(path), its outcome on a └ line, its lines under it.
     const rows = await ui.until("Update(src/app.ts)");
@@ -44,6 +44,40 @@ describe("atui", () => {
     const framed = await ui.until("╰─ Added 1 line, removed 1 line");
     expect(framed).toContain("╭");
   }, 30_000);
+
+  it("changes thinking, model, and harness directly, hands the chat off, and opens history", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { height: 50 });
+    await ui.type("remember the harness");
+    ui.keys.pressEnter();
+    await ui.until("Echo: remember the harness");
+    await idle(ui);
+    // Alt+T: the thinking levels, picked by typing.
+    ui.keys.pressKey("t", { meta: true });
+    await ui.until("Search levels…");
+    await ui.type("high");
+    ui.keys.pressEnter();
+    await ui.until(() => ui?.app.chat()?.config.thinkingLevel === "high");
+    expect(await ui.until("high ▾")).toContain("Fake Echo ▾");
+    // Alt+M: the models.
+    ui.keys.pressKey("m", { meta: true });
+    await ui.until("Search models…");
+    await ui.type("slow");
+    ui.keys.pressEnter();
+    await ui.until("Fake Slow ▾");
+    // A click on the footer's harness: with a conversation open, it can move to another harness.
+    await ui.click("Fake ▾");
+    const picker = await ui.until("Hand off this chat to");
+    expect(picker).toContain("Harness for new chats");
+    await ui.type("fake b");
+    ui.keys.pressEnter();
+    await ui.until(() => ui?.app.chat()?.harnessId === "fake-b", 15_000);
+    expect(await ui.until("Fake B ▾")).toContain("remember the harness");
+    // Ctrl+R: every session, under its project.
+    ui.keys.pressKey("r", { ctrl: true });
+    const history = await ui.until("Search sessions, projects, harnesses…");
+    expect(history).toContain("remember the harness");
+    expect(history).toContain("alpha");
+  }, 40_000);
 
   it("answers an approval with a number and a question with the arrows", async () => {
     ui = await mount(path.join(server.root, "beta"));
