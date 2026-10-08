@@ -95,3 +95,29 @@ test("tabs come back after a reload, and the keyboard moves between them", async
   await expect(tabs(page)).toHaveCount(1);
   await expect(prompts(page)).toHaveText(["kept two"]);
 });
+
+test("Ctrl+[ and Ctrl+] step through the chats shown, Alt+Shift+T reopens a closed tab, Ctrl+Alt+Enter sends and starts a new chat", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "alpha chat");
+  await newTab(page);
+  await sendAndWait(page, "beta chat");
+
+  await page.keyboard.press("Control+BracketLeft");
+  await expect(prompts(page)).toHaveText(["alpha chat"]);
+  await page.keyboard.press("Control+BracketRight");
+  await expect(prompts(page)).toHaveText(["beta chat"]);
+
+  await tab(page, "beta chat").getByRole("button", { name: /^Close / }).click();
+  await expect(tabs(page)).toHaveCount(1);
+  await page.keyboard.press("Alt+Shift+KeyT");
+  await expect(tabs(page)).toHaveCount(2);
+  await expect(prompts(page)).toHaveText(["beta chat"]);
+
+  await page.getByRole("textbox", { name: "Message" }).fill("send then new");
+  await page.keyboard.press("Control+Alt+Enter");
+  await expect(tabs(page)).toHaveCount(3);
+  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
+  await tab(page, "beta chat").click();
+  await expect(prompts(page)).toHaveText(["beta chat", "send then new"]);
+});

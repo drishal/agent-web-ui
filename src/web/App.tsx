@@ -90,15 +90,27 @@ export function App() {
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** What the window-wide shortcuts call, kept current (the listener is added once). */
+  const keysRef = useRef({ step: (_step: -1 | 1) => {}, reopen: () => {} });
   const [reviewOpen, setReviewOpen] = useState(false);
   /** The turn whose checkpoint the restore dialog shows. */
   const [restoreTurn, setRestoreTurn] = useState<number | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!isPaletteKey(e)) return;
-      e.preventDefault();
-      setPaletteOpen((open) => !open);
+      if (isPaletteKey(e)) {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
+      if (mod && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+        e.preventDefault();
+        keysRef.current.step(e.code === "BracketLeft" ? -1 : 1);
+      } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {
+        e.preventDefault();
+        keysRef.current.reopen();
+      }
     };
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
@@ -278,10 +290,29 @@ export function App() {
     void loadTab(tab);
   };
 
+  /** Closed tabs, newest last, for Alt+Shift+T (the browser keeps Ctrl+Shift+T). */
+  const closedTabs = useRef<Tab[]>([]);
+  const reopenClosedTab = () => {
+    const tab = closedTabs.current.pop();
+    if (!tab) return;
+    const open = findTab(tabsRef.current, tab);
+    if (open >= 0) {
+      activateTab(open);
+      return;
+    }
+    rememberShown();
+    const at = tabsRef.current.active + 1;
+    const next = { tabs: [...tabsRef.current.tabs.slice(0, at), tab, ...tabsRef.current.tabs.slice(at)], active: at };
+    tabsRef.current = next;
+    setTabState(next);
+    void loadTab(tab);
+  };
+
   const closeTabAt = (index: number) => {
     const before = tabsRef.current;
     const closing = before.tabs[index];
     if (!closing) return;
+    if (closing.chatId || closing.sessionId) closedTabs.current = [...closedTabs.current.filter((t) => t.key !== closing.key), closing].slice(-10);
     tabCache.current.delete(closing.key);
     const after = closeTab(before, index);
     // Updated now, not at the next render: activateTab below reads it.
@@ -293,6 +324,37 @@ export function App() {
     else {
       setChat(null);
       setHash(null);
+    }
+  };
+
+  // Back and forward through the chats shown (Ctrl+[ and Ctrl+], as in an editor).
+  const visits = useRef<{ list: Tab[]; at: number; moving: boolean }>({ list: [], at: -1, moving: false });
+  useEffect(() => {
+    if (!chat) return;
+    const v = visits.current;
+    const here = v.list[v.at];
+    if (here && (here.chatId === chat.chatId || (chat.sessionId !== null && here.sessionId === chat.sessionId))) return;
+    if (v.moving) {
+      v.moving = false;
+      return;
+    }
+    const tab = tabsRef.current.tabs[tabsRef.current.active];
+    const entry: Tab = tab && tab.chatId === chat.chatId ? tab : { key: `v${Date.now()}`, chatId: chat.chatId, sessionId: chat.sessionId, harnessId: chat.harnessId, workspacePath: chat.workspace.path, title: chat.title };
+    v.list = [...v.list.slice(0, v.at + 1), entry].slice(-50);
+    v.at = v.list.length - 1;
+  }, [chat?.chatId]);
+  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab() };
+  const stepVisits = (step: -1 | 1) => {
+    const v = visits.current;
+    const target = v.list[v.at + step];
+    if (!target) return;
+    v.at += step;
+    v.moving = true;
+    const open = findTab(tabsRef.current, target);
+    if (open >= 0) activateTab(open);
+    else {
+      const shown = tabsRef.current.tabs[tabsRef.current.active];
+      void loadTab({ ...target, key: shown?.key ?? target.key });
     }
   };
 
@@ -592,6 +654,9 @@ export function App() {
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
     items.push({ id: "folder", section: "Actions", label: "Choose project folder…", run: () => setPickerOpen(true) });
+    items.push({ id: "reopen", section: "Actions", label: "Reopen closed tab", hint: "Alt+Shift+T", disabled: closedTabs.current.length ? undefined : "No tab closed yet", searchOnly: true, run: reopenClosedTab });
+    items.push({ id: "back", section: "Actions", label: "Back to the previous chat", hint: "Ctrl+[", searchOnly: true, disabled: visits.current.at > 0 ? undefined : "Nothing before this", run: () => stepVisits(-1) });
+    items.push({ id: "forward", section: "Actions", label: "Forward to the next chat", hint: "Ctrl+]", searchOnly: true, disabled: visits.current.at < visits.current.list.length - 1 ? undefined : "Nothing after this", run: () => stepVisits(1) });
     items.push({ id: "sidebar", section: "Actions", label: collapsed ? "Show sidebar" : "Hide sidebar", searchOnly: true, run: () => collapseSidebar(!collapsed) });
     items.push({ id: "settings", section: "Actions", label: "Settings", run: () => setSettingsOpen(true) });
     items.push({ id: "pair", section: "Actions", label: "Pair a phone", searchOnly: true, run: () => setPairOpen(true) });
@@ -912,6 +977,7 @@ export function App() {
                 onAnswer={answer}
                 onConfig={configure}
                 onHandoff={(id, draft) => handoffChat(id, draft)}
+                onNewChat={() => void newChat(chat.workspace, { newTab: true })}
               />
             </div>
           </div>
@@ -945,6 +1011,7 @@ export function App() {
               onAnswer={answer}
               onConfig={configure}
               onHandoff={(id, draft) => handoffChat(id, draft)}
+              onNewChat={() => void newChat(chat.workspace, { newTab: true })}
             />
           </>
         ) : (
