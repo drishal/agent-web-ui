@@ -2,7 +2,7 @@
 // sequence ref drops stale replies), a debounce when the open chat settles,
 // and a poll while some *other* chat is working off-screen.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Bootstrap, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
+import type { Bootstrap, SessionMarkState, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
 import { api, errorText } from "./api.js";
 import type { ChatState } from "./chat-state.js";
 import { isBusy } from "./session-groups.js";
@@ -60,12 +60,12 @@ export function useSessions({ boot, workspace, chat }: { boot: Bootstrap | null;
   }, [backgroundBusy, refreshSessions]);
 
   /** Show a pin or archive at once; the server's answer replaces it (a later refresh agrees). */
-  const markSession = useCallback((sessionId: string, mark: { pinned?: true; archived?: true }) => {
+  const markSession = useCallback((sessionId: string, mark: SessionMarkState) => {
     setOverview((o) => ({
       ...o,
       sessions: o.sessions.map((s) => {
         if (s.id !== sessionId) return s;
-        const { pinned: _p, archived: _a, ...rest } = s;
+        const { pinned: _p, archived: _a, settled: _s, snoozedUntil: _z, ...rest } = s;
         return { ...rest, ...mark };
       }),
     }));

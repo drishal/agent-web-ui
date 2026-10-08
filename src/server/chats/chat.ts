@@ -606,6 +606,8 @@ export class Chat implements CheckpointHost {
   onLimits?: (account: LimitAccount) => void;
   /** A run finished or failed, or the agent asks for an answer: news for devices that want it. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
+  /** A run started. */
+  onRunStart?: (chat: Chat) => void;
   /** Set while a status change is not news (a prompt the harness refused). */
   private quiet = false;
   /** File checkpoints before each prompt, where the project is in a git repository. */
@@ -683,6 +685,11 @@ export class Chat implements CheckpointHost {
 
   get title(): string {
     return this.reducer.title;
+  }
+
+  /** Requests waiting on an answer. */
+  get pendingCount(): number {
+    return this.reducer.pendingIds().length;
   }
 
   get subscriberCount(): number {
@@ -781,6 +788,7 @@ export class Chat implements CheckpointHost {
     const before = this.status;
     this.status = status;
     this.reducer.emit({ type: "status", status });
+    if (status === "running") this.onRunStart?.(this);
     // A run that ends on its own is news; one stopped from here is not.
     if (!this.quiet && before === "running" && status === "idle") this.onNews?.(this, "done", this.lastLine("assistant") ?? "Finished");
     else if (!this.quiet && status === "error" && before !== "starting") this.onNews?.(this, "error", this.lastLine("notice") ?? "Failed");

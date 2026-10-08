@@ -24,6 +24,8 @@ export class ChatManager {
   onLimits?: (account: LimitAccount) => void;
   /** File checkpoints before prompts, and where each session's list of them is kept. */
   checkpoints?: { service: Checkpoints; sessionsDir: string };
+  /** A run started in any chat. */
+  onRunStart?: (chat: Chat) => void;
   /** Any chat finished a run, failed, or asks for an answer. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
 
@@ -53,6 +55,7 @@ export class ChatManager {
     chat.onDisposed = (c) => this.forget(c);
     chat.onLimits = (account) => this.onLimits?.(account);
     chat.onNews = (c, kind, body) => this.onNews?.(c, kind, body);
+    chat.onRunStart = (c) => this.onRunStart?.(c);
     if (this.checkpoints) {
       chat.checkpoints = new ChatCheckpoints(this.checkpoints.service, chat, this.checkpoints.sessionsDir);
       void chat.checkpoints.start();

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  SessionMarkState,
   ChatSnapshot,
   CheckpointPreview,
   CheckpointRestored,
@@ -42,7 +43,7 @@ import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveT
 import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
-import { isBusy } from "./session-groups.js";
+import { isBusy, wakeLabel } from "./session-groups.js";
 import { sentAttachments } from "./images.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
@@ -91,7 +92,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** What the window-wide shortcuts call, kept current (the listener is added once). */
-  const keysRef = useRef({ step: (_step: -1 | 1) => {}, reopen: () => {} });
+  const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null }>({ step: () => {}, reopen: () => {}, undo: null });
   const [reviewOpen, setReviewOpen] = useState(false);
   /** The turn whose checkpoint the restore dialog shows. */
   const [restoreTurn, setRestoreTurn] = useState<number | null>(null);
@@ -110,6 +111,11 @@ export function App() {
       } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {
         e.preventDefault();
         keysRef.current.reopen();
+      } else if (mod && e.code === "KeyZ" && keysRef.current.undo) {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest("input, textarea, [contenteditable='true']")) return;
+        e.preventDefault();
+        keysRef.current.undo();
       }
     };
     window.addEventListener("keydown", onKey, { capture: true });
@@ -343,7 +349,6 @@ export function App() {
     v.list = [...v.list.slice(0, v.at + 1), entry].slice(-50);
     v.at = v.list.length - 1;
   }, [chat?.chatId]);
-  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab() };
   const stepVisits = (step: -1 | 1) => {
     const v = visits.current;
     const target = v.list[v.at + step];
@@ -604,9 +609,33 @@ export function App() {
     }
   };
 
+  /** The last mark change, for its toast's Undo (and Ctrl+Z) while the toast shows. */
+  const [toast, setToast] = useState<{ text: string; undo: () => void } | null>(null);
+  const toastTimer = useRef(0);
+  const showToast = (text: string, undo: () => void) => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ text, undo });
+    toastTimer.current = window.setTimeout(() => setToast(null), 8000);
+  };
+
+  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab(), undo: toast ? toast.undo : null };
+
   const markSessionAs = async (s: ProjectSession, change: MarkChange) => {
+    const before: SessionMarkState = {
+      ...(s.pinned ? { pinned: true } : {}),
+      ...(s.archived ? { archived: true } : {}),
+      ...(s.settled ? { settled: true } : {}),
+      ...(s.snoozedUntil ? { snoozedUntil: s.snoozedUntil } : {}),
+    };
     try {
-      markSession(s.id, await api<{ pinned?: true; archived?: true }>("/api/sessions/marks", { body: { sessionId: s.id, ...change } }));
+      markSession(s.id, await api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, ...change } }));
+      showToast(markToast(change, s.title), () => {
+        setToast(null);
+        void api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, ...before, replace: true } }).then(
+          (mark) => markSession(s.id, mark),
+          (e: unknown) => fail(e),
+        );
+      });
     } catch (e) {
       fail(e);
     }
@@ -1045,6 +1074,14 @@ export function App() {
           </div>
         )}
       </main>
+      {toast ? (
+        <div className="toast" role="status" data-testid="toast">
+          <span>{toast.text}</span>
+          <button type="button" className="btn btn-small btn-ghost" onClick={toast.undo}>
+            Undo <kbd>Ctrl+Z</kbd>
+          </button>
+        </div>
+      ) : null}
       <StatusBar conn={conn} chat={chat} harnessName={chatHarness?.displayName ?? null} version={boot.version} />
 
       {pickerOpen ? <WorkspacePicker recent={recent} onOpen={(p) => void openWorkspace(p)} onClose={() => setPickerOpen(false)} error={pickerError} /> : null}
@@ -1095,3 +1132,14 @@ export function App() {
     </div>
   );
 }
+
+/** What a mark change did, for its toast. */
+function markToast(change: MarkChange, title: string): string {
+  const name = `“${title.length > 40 ? `${title.slice(0, 39)}…` : title}”`;
+  if (change.pinned !== undefined) return `${change.pinned ? "Pinned" : "Unpinned"} ${name}`;
+  if (change.archived !== undefined) return `${change.archived ? "Archived" : "Unarchived"} ${name}`;
+  if (change.settled !== undefined) return `${change.settled ? "Settled" : "Unsettled"} ${name}`;
+  if (change.snoozedUntil) return `Snoozed ${name} until ${wakeLabel(change.snoozedUntil)}`;
+  return `Woke ${name}`;
+}
+

@@ -435,6 +435,31 @@ describe("sessions across projects", () => {
   });
 });
 
+describe("inbox marks", () => {
+  it("wakes a settled session when a run starts in it, and flags a chat waiting on an answer", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "hello" }).expect(202);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle" && t.manager.get(chat.chatId).sessionId !== null);
+    const sessionId = t.manager.get(chat.chatId).sessionId as string;
+    const mine = async () => ((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.find((x) => x.id === sessionId);
+    await agent.post("/api/sessions/marks").send({ sessionId, settled: true }).expect(200);
+    expect(await mine()).toMatchObject({ settled: true });
+    await agent.post("/api/sessions/marks").send({ sessionId, snoozedUntil: Date.now() - 1000 }).expect(400);
+
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "please ask first" }).expect(202);
+    await sse.waitFor(() => t.manager.get(chat.chatId).snapshot().pending.length > 0);
+    const asking = await mine();
+    expect(asking?.settled).toBeUndefined();
+    expect(asking?.asking).toBe(true);
+    await agent.post(`/api/chats/${chat.chatId}/abort`);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    expect((await mine())?.asking).toBeUndefined();
+    sse.close();
+  });
+});
+
 describe("compact before send", () => {
   it("compacts first, then runs the message", async () => {
     const { agent, ws, t } = await setup();

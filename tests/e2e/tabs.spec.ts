@@ -121,3 +121,41 @@ test("Ctrl+[ and Ctrl+] step through the chats shown, Alt+Shift+T reopens a clos
   await tab(page, "beta chat").click();
   await expect(prompts(page)).toHaveText(["beta chat", "send then new"]);
 });
+
+test("the sidebar lifts what needs you and what is working, and settling can be undone", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "settle me later");
+  await newTab(page);
+  await send(page, "please ask first");
+  await expect(page.getByTestId("approval-card")).toBeVisible();
+  await tab(page, "settle me later").click();
+  await showSidebar(page);
+  const needs = page.getByTestId("needs-group");
+  await expect(needs).toContainText("please ask first", { timeout: 10_000 });
+  await expect(needs).toContainText("needs you");
+
+  await tab(page, "please ask first").click();
+  await page.getByTestId("approval-card").getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  await send(page, "slow stream in the background");
+  await expect(page.getByTestId("chat-status")).toHaveText("Working");
+  await tab(page, "settle me later").click();
+  const working = page.getByTestId("working-group");
+  await expect(working).toBeVisible({ timeout: 10_000 });
+  await expect(working.getByRole("button", { name: /Working/ })).toHaveAttribute("aria-expanded", "false");
+  await working.getByRole("button", { name: /Working/ }).click();
+  await expect(working).toContainText("please ask first");
+  await expect(working).toHaveCount(0, { timeout: 20_000 });
+
+  const row = page.locator(".session-item", { hasText: "settle me later" }).first();
+  await row.locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Settle" }).click();
+  await expect(page.getByTestId("toast")).toContainText("Settled “settle me later”");
+  await expect(page.locator(".session-item", { hasText: "settle me later" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "1 settled" })).toBeVisible();
+  await page.locator(".chat-header h1").click();
+  await page.keyboard.press("Control+KeyZ");
+  await expect(page.locator(".session-item", { hasText: "settle me later" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "1 settled" })).toHaveCount(0);
+});

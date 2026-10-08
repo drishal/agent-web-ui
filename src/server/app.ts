@@ -111,7 +111,7 @@ function toSession(
     title: s.title,
     updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
     ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
-    ...(live ? { liveChatId: live.chatId, status: live.status } : {}),
+    ...(live ? { liveChatId: live.chatId, status: live.status, ...(live.pendingCount > 0 ? { asking: true as const } : {}) } : {}),
   };
   return ws ? { ...summary, workspaceId: ws.id } : summary;
 }
@@ -125,6 +125,10 @@ export function createApp(deps: AppDeps) {
   if (deps.checkpointsDir) manager.checkpoints = { service: new Checkpoints(deps.checkpointsDir), sessionsDir: path.join(deps.checkpointsDir, "sessions") };
   manager.onNews = (chat, kind, text) => {
     notifier.notify({ kind, chatId: chat.chatId, sessionId: chat.sessionId, title: chat.title || "New chat", body: text });
+    if ((kind === "ask" || kind === "error") && chat.sessionId) marks.wake(chat.sessionId);
+  };
+  manager.onRunStart = (chat) => {
+    if (chat.sessionId) marks.wake(chat.sessionId);
   };
   const log = deps.log ?? ((m: string) => console.error(m));
   const app = express();
@@ -339,6 +343,7 @@ export function createApp(deps: AppDeps) {
         liveChatId: chat.chatId,
         status: chat.status,
         workspaceId: chat.workspace.id,
+        ...(chat.pendingCount > 0 ? { asking: true as const } : {}),
       });
     }
     for (const [id, s] of sessions) {
@@ -385,6 +390,7 @@ export function createApp(deps: AppDeps) {
 
   app.post("/api/sessions/marks", async (req, res) => {
     const { sessionId, ...change } = body(sessionMarkSchema, req);
+    if (change.snoozedUntil !== undefined && change.snoozedUntil !== null && change.snoozedUntil <= Date.now()) throw new ChatError(400, "bad_snooze", "Snooze until a time to come");
     res.json(await marks.set(sessionId, change));
   });
 
