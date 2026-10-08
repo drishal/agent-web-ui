@@ -423,12 +423,12 @@ export function App() {
   openNoteRef.current = openNote;
   const { notify, toggleNotify, testNotify } = useNotifications(Boolean(boot), (note) => void openNoteRef.current(note));
 
-  const send = async (text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<boolean> => {
+  const send = async (text: string, mode: SendMode, images: ImageAttachment[] = [], options: { compactFirst?: boolean } = {}): Promise<boolean> => {
     if (!chat) return false;
     const command = mode === "normal" && images.length === 0 ? appCommand(text) : null;
     if (command) return runAppCommand(command.name, command.arg);
     try {
-      await api(`/api/chats/${chat.chatId}/messages`, { body: { text, mode, ...(images.length > 0 ? { images } : {}) } });
+      await api(`/api/chats/${chat.chatId}/messages`, { body: { text, mode, ...(images.length > 0 ? { images } : {}), ...(options.compactFirst ? { compactFirst: true } : {}) } });
       setBanner(null);
       return true;
     } catch (e) {

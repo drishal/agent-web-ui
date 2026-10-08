@@ -435,6 +435,22 @@ describe("sessions across projects", () => {
   });
 });
 
+describe("compact before send", () => {
+  it("compacts first, then runs the message", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "bloat the context" }).expect(202);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle" && (t.manager.get(chat.chatId).snapshot().context?.percent ?? 0) > 60);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "after compaction", compactFirst: true }).expect(202);
+    await sse.waitFor(() => t.manager.get(chat.chatId).snapshot().items.some((i) => i.kind === "assistant" && i.text.includes("Echo: after compaction")));
+    const statuses = sse.chatEvents().flatMap((e) => (e.type === "status" ? [e.status] : []));
+    expect(statuses).toContain("compacting");
+    expect(statuses.lastIndexOf("compacting")).toBeLessThan(statuses.lastIndexOf("running"));
+    sse.close();
+  });
+});
+
 describe("rewind", () => {
   it("replaces a past prompt and what followed in the same session, and refuses where the harness cannot", async () => {
     const { agent, ws, t } = await setup();

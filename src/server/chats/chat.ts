@@ -866,8 +866,12 @@ export class Chat implements CheckpointHost {
 
   // ---- commands -------------------------------------------------------------
 
-  async send(text: string, mode: SendMode, images: ImageAttachment[] = []): Promise<void> {
+  async send(text: string, mode: SendMode, images: ImageAttachment[] = [], options: { compactFirst?: boolean } = {}): Promise<void> {
     this.assertOpen();
+    if (options.compactFirst && mode === "normal" && this.adapter.capabilities.supportsCompact && this.status === "idle") {
+      // Compaction reports its own failure as a notice; the message goes either way.
+      await this.compact();
+    }
     if (images.length > 0) {
       const refs = images.map((i) => rememberImage(i.mimeType, i.data)).filter((r): r is ImageRef => r !== null);
       // A handful at most: a prompt the harness never echoes must not pin images forever.

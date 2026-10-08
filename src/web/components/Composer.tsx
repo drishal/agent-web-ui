@@ -16,6 +16,12 @@ import { StatusStack } from "./StatusStack.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
 
+/** Context share (%) from which the chip is offered, and from which it starts on. */
+const COMPACT_OFFER = 50;
+const COMPACT_DEFAULT = 80;
+
+const formatTokens = (n: number): string => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 const coarsePointer = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
 export function Composer({
@@ -37,7 +43,7 @@ export function Composer({
   maxChars: number;
   hero?: boolean;
   placeholder?: string;
-  onSend: (text: string, mode: SendMode, images: ImageAttachment[]) => Promise<boolean>;
+  onSend: (text: string, mode: SendMode, images: ImageAttachment[], options?: { compactFirst?: boolean }) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
@@ -78,6 +84,13 @@ export function Composer({
 
   const tooLong = text.length > maxChars;
 
+  // Compact before send (T3 Code's chip): offered once the context is half full, on by
+  // default from COMPACT_DEFAULT; the choice lasts until a message goes.
+  const percent = chat.context?.percent ?? null;
+  const offerCompact = caps.supportsCompact && chat.context?.tokens != null && percent !== null && percent >= COMPACT_OFFER;
+  const [compactChoice, setCompactChoice] = useState<boolean | null>(null);
+  const compactFirst = offerCompact && (compactChoice ?? (percent ?? 0) >= COMPACT_DEFAULT);
+
   const submit = useCallback(
     async (mode: SendMode) => {
       const value = text.trim();
@@ -93,8 +106,10 @@ export function Composer({
         value,
         mode,
         attached.map(({ mimeType, data }) => ({ mimeType, data })),
+        mode === "normal" && compactFirst ? { compactFirst: true } : {},
       );
       setSending(false);
+      if (ok) setCompactChoice(null);
       if (!ok) {
         setText((current) => current || value);
         setImages((current) => (current.length > 0 ? current : attached));
@@ -102,7 +117,7 @@ export function Composer({
       area.current?.focus();
       return ok;
     },
-    [onSend, sending, text, images],
+    [onSend, sending, text, images, compactFirst],
   );
 
   const addImages = async (files: File[]) => {
@@ -379,6 +394,22 @@ export function Composer({
                 <span className="composer-error">
                   {text.length.toLocaleString()} / {maxChars.toLocaleString()}
                 </span>
+              ) : null}
+              {offerCompact && !busy ? (
+                <button
+                  type="button"
+                  className={`compact-chip${compactFirst ? " is-on" : ""}`}
+                  aria-pressed={compactFirst}
+                  title={
+                    compactFirst
+                      ? "On: Enter compacts the context first, then sends. Click to send with the full history."
+                      : "Off: the next message goes with the full history. Click to compact first."
+                  }
+                  onClick={() => setCompactChoice(!compactFirst)}
+                  data-testid="compact-chip"
+                >
+                  {compactFirst ? "Compact" : "Full"} {formatTokens(chat.context?.tokens ?? 0)}
+                </button>
               ) : null}
               <ContextRing context={chat.context} usage={chat.usage} />
               {busy ? (

@@ -283,6 +283,23 @@ test("a folded live turn keeps its latest thought in view", async ({ page }) => 
   await expect(page.getByTestId("live-thought")).toHaveCount(0);
 });
 
+test("a chip offers to compact a full context before the next message", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "a small start");
+  await expect(page.getByTestId("compact-chip")).toHaveCount(0);
+  await sendAndWait(page, "bloat it");
+  const chip = page.getByTestId("compact-chip");
+  await expect(chip).toHaveText(/^Full \d+k$/);
+  await chip.click();
+  await expect(chip).toHaveText(/^Compact \d+k$/);
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
+  await send(page, "now compact first");
+  await expect(page.getByTestId("chat-status")).toHaveText("Compacting");
+  await expect(page.getByTestId("answer").last()).toContainText("Echo: now compact first", { timeout: 20_000 });
+  await expect(chip).toHaveCount(0);
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);
