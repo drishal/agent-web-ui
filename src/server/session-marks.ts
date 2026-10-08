@@ -1,12 +1,32 @@
-// Pinned and archived sessions: marks this server keeps for every device, in
-// its own state file. The harness's session files are never touched.
+// Pinned, archived, settled, and snoozed sessions: marks this server keeps for
+// every device, in its own state file. The harness's session files are never
+// touched. A session is in one place in the list: setting one of the four
+// clears the others (snoozing keeps nothing either).
 import path from "node:path";
+import type { SessionMarkState } from "../shared/protocol.js";
 import { isObj, readJson, writeJson } from "./state-file.js";
 
-export interface SessionMark {
-  pinned?: true;
-  archived?: true;
+export type SessionMark = SessionMarkState;
+
+export interface MarkChange {
+  pinned?: boolean;
+  archived?: boolean;
+  settled?: boolean;
+  snoozedUntil?: number | null;
+  /** Set exactly the given marks and clear the rest. */
+  replace?: boolean;
 }
+
+function clean(raw: Record<string, unknown>): SessionMark {
+  return {
+    ...(raw.pinned === true ? { pinned: true } : {}),
+    ...(raw.archived === true ? { archived: true } : {}),
+    ...(raw.settled === true ? { settled: true } : {}),
+    ...(typeof raw.snoozedUntil === "number" && raw.snoozedUntil > 0 ? { snoozedUntil: raw.snoozedUntil } : {}),
+  };
+}
+
+const empty = (m: SessionMark) => !m.pinned && !m.archived && !m.settled && !m.snoozedUntil;
 
 export class SessionMarks {
   private readonly marks = new Map<string, SessionMark>();
@@ -23,8 +43,8 @@ export class SessionMarks {
     if (isObj(raw)) {
       for (const [id, m] of Object.entries(raw)) {
         if (!isObj(m)) continue;
-        const mark: SessionMark = { ...(m.pinned === true ? { pinned: true } : {}), ...(m.archived === true ? { archived: true } : {}) };
-        if (mark.pinned || mark.archived) store.marks.set(id, mark);
+        const mark = clean(m);
+        if (!empty(mark)) store.marks.set(id, mark);
       }
     }
     return store;
@@ -34,23 +54,46 @@ export class SessionMarks {
     return this.marks.get(sessionId);
   }
 
-  /** Pinning unarchives and archiving unpins: a session is in one place in the list. */
-  set(sessionId: string, change: { pinned?: boolean; archived?: boolean }): Promise<SessionMark> {
-    const next: SessionMark = { ...this.marks.get(sessionId) };
-    if (change.pinned !== undefined) {
-      if (change.pinned) {
+  set(sessionId: string, change: MarkChange): Promise<SessionMark> {
+    let next: SessionMark;
+    if (change.replace) {
+      next = clean(change as Record<string, unknown>);
+    } else {
+      next = { ...this.marks.get(sessionId) };
+      const only = (keep: keyof SessionMark) => {
+        for (const key of ["pinned", "archived", "settled", "snoozedUntil"] as const) if (key !== keep) delete next[key];
+      };
+      if (change.pinned === true) {
+        only("pinned");
         next.pinned = true;
-        delete next.archived;
-      } else delete next.pinned;
-    }
-    if (change.archived !== undefined) {
-      if (change.archived) {
+      } else if (change.pinned === false) delete next.pinned;
+      if (change.archived === true) {
+        only("archived");
         next.archived = true;
-        delete next.pinned;
-      } else delete next.archived;
+      } else if (change.archived === false) delete next.archived;
+      if (change.settled === true) {
+        only("settled");
+        next.settled = true;
+      } else if (change.settled === false) delete next.settled;
+      if (typeof change.snoozedUntil === "number") {
+        only("snoozedUntil");
+        next.snoozedUntil = change.snoozedUntil;
+      } else if (change.snoozedUntil === null) delete next.snoozedUntil;
     }
-    if (next.pinned || next.archived) this.marks.set(sessionId, next);
-    else this.marks.delete(sessionId);
-    return writeJson(this.file, Object.fromEntries(this.marks)).then(() => next);
+    return this.store(sessionId, next);
+  }
+
+  /** Activity in the session (a run starts, it fails or asks): it is no longer settled or snoozed. */
+  wake(sessionId: string): void {
+    const mark = this.marks.get(sessionId);
+    if (!mark || (!mark.settled && !mark.snoozedUntil)) return;
+    const { settled: _s, snoozedUntil: _z, ...rest } = mark;
+    void this.store(sessionId, rest);
+  }
+
+  private store(sessionId: string, mark: SessionMark): Promise<SessionMark> {
+    if (empty(mark)) this.marks.delete(sessionId);
+    else this.marks.set(sessionId, mark);
+    return writeJson(this.file, Object.fromEntries(this.marks)).then(() => mark);
   }
 }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
-import { useDismiss } from "../hooks.js";
-import { IconArchive, IconChevronDown, IconFolder, IconMore, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar } from "../icons.js";
-import { archivedCount, dateBucket, groupByProject, isBusy, pinnedSessions, type ProjectGroup } from "../session-groups.js";
+import { useDismiss, useNow } from "../hooks.js";
+import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
+import { dateBucket, groupByProject, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
+import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
@@ -32,11 +33,11 @@ function relativeTime(iso: string | null): string {
 }
 
 
-export type MarkChange = { pinned?: boolean; archived?: boolean };
+export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boolean; snoozedUntil?: number | null };
 
 /** Pin and archive, from the row's ⋯ button or a right-click (a long press on phones). */
 function RowMenu({ s, anchor, onMark, onClose }: { s: ProjectSession; anchor: DOMRect; onMark: (change: MarkChange) => void; onClose: () => void }) {
-  const below = anchor.bottom + 120 < window.innerHeight;
+  const below = anchor.bottom + 260 < window.innerHeight;
   const style = {
     position: "fixed" as const,
     right: Math.max(8, window.innerWidth - anchor.right),
@@ -55,6 +56,26 @@ function RowMenu({ s, anchor, onMark, onClose }: { s: ProjectSession; anchor: DO
             <IconPin size={14} /> {s.pinned ? "Unpin" : "Pin"}
           </button>
         </li>
+        <li role="none">
+          <button type="button" role="menuitem" onClick={() => pick({ settled: !s.settled })}>
+            <IconCheck size={14} /> {s.settled ? "Unsettle" : "Settle"}
+          </button>
+        </li>
+        {s.snoozedUntil && s.snoozedUntil > Date.now() ? (
+          <li role="none">
+            <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: null })}>
+              <IconClock size={14} /> Wake now
+            </button>
+          </li>
+        ) : (
+          snoozeOptions().map((o) => (
+            <li role="none" key={o.label}>
+              <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: o.until })}>
+                <IconClock size={14} /> Snooze {o.label.toLowerCase()}
+              </button>
+            </li>
+          ))
+        )}
         <li role="none">
           <button type="button" role="menuitem" onClick={() => pick({ archived: !s.archived })}>
             <IconArchive size={14} /> {s.archived ? "Unarchive" : "Archive"}
@@ -92,7 +113,7 @@ function SessionRow({
     <li className={`session-item${menuAt ? " is-menu-open" : ""}`}>
       <button
         type="button"
-        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}${s.archived ? " is-archived" : ""}`}
+        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}${s.archived || s.settled || (s.snoozedUntil ?? 0) > Date.now() ? " is-archived" : ""}`}
         onClick={(e) => onOpen(e.ctrlKey || e.metaKey)}
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault();
@@ -119,7 +140,14 @@ function SessionRow({
         <span className="session-meta">
           {project ? <span className="session-project">{project}</span> : null}
           {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
-          <span className="session-time">{relativeTime(s.updatedAt)}</span>
+          {s.asking ? <span className="session-asking">needs you</span> : null}
+          {(s.snoozedUntil ?? 0) > Date.now() ? (
+            <span className="session-wake" title="Snoozed until then">
+              <IconClock size={11} /> {wakeLabel(s.snoozedUntil as number)}
+            </span>
+          ) : (
+            <span className="session-time">{relativeTime(s.updatedAt)}</span>
+          )}
         </span>
       </button>
       {markable ? (
@@ -136,6 +164,50 @@ function SessionRow({
         </button>
       ) : null}
       {menuAt ? <RowMenu s={s} anchor={menuAt} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
+    </li>
+  );
+}
+
+/** A list above the projects (Needs you, Working, Pinned): a header, and its rows unless folded. */
+function SectionList({
+  className,
+  testId,
+  icon,
+  title,
+  sessions,
+  open = true,
+  onToggle,
+  row,
+}: {
+  className: string;
+  testId: string;
+  icon: React.ReactNode;
+  title: string;
+  sessions: ProjectSession[];
+  open?: boolean;
+  /** Foldable when given. */
+  onToggle?: () => void;
+  row: (s: ProjectSession) => React.ReactNode;
+}) {
+  return (
+    <li className={`project-group section-group ${className}${open ? " is-open" : ""}`} data-testid={testId}>
+      <div className="project-head">
+        {onToggle ? (
+          <button type="button" className="project-toggle" aria-expanded={open} onClick={onToggle}>
+            <IconChevronDown size={12} className="group-chevron" />
+            {icon}
+            <span className="project-name">{title}</span>
+            <span className="group-count">{sessions.length}</span>
+          </button>
+        ) : (
+          <span className="project-toggle is-static">
+            {icon}
+            <span className="project-name">{title}</span>
+            <span className="group-count">{sessions.length}</span>
+          </span>
+        )}
+      </div>
+      {open ? <ul className="session-sublist">{sessions.map(row)}</ul> : null}
     </li>
   );
 }
@@ -271,10 +343,32 @@ export function Sidebar(props: {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
   const names = useMemo(() => new Map(props.harnesses.map((h) => [h.id as string, h.displayName])), [props.harnesses]);
   const [showArchived, setShowArchived] = useState(false);
-  const groupOptions = { currentId: props.workspace?.id ?? null, query: props.query, harnessId: props.harnessId, showArchived };
-  const groups = useMemo(() => groupByProject(props.overview, groupOptions), [props.overview, props.workspace, props.query, props.harnessId, showArchived]);
-  const pinned = useMemo(() => pinnedSessions(props.overview, groupOptions), [props.overview, props.query, props.harnessId]);
-  const archived = archivedCount(props.overview, props.harnessId);
+  const [showSettled, setShowSettled] = useState(false);
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  const [workingOpen, setWorkingOpen] = useState(() => load<boolean>("workingOpen", false));
+  // Snoozes end on the minute.
+  const now = useNow(true, 60_000);
+  const isActiveSession = (s: ProjectSession) =>
+    (props.activeSessionId !== null && s.id === props.activeSessionId) || (s.liveChatId !== undefined && s.liveChatId === props.activeChatId);
+  const groupOptions = {
+    currentId: props.workspace?.id ?? null,
+    query: props.query,
+    harnessId: props.harnessId,
+    showArchived,
+    showSettled,
+    showSnoozed,
+    isActive: isActiveSession,
+    now,
+  };
+  const groups = useMemo(
+    () => groupByProject(props.overview, groupOptions),
+    [props.overview, props.workspace, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now],
+  );
+  const sections = useMemo(
+    () => sidebarSections(props.overview, groupOptions),
+    [props.overview, props.query, props.harnessId, props.activeSessionId, props.activeChatId, now],
+  );
+  const { pinned, needs, working } = sections;
   const projectName = (s: ProjectSession) => props.overview.workspaces.find((w) => w.id === s.workspaceId)?.name ?? "";
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
@@ -287,10 +381,21 @@ export function Sidebar(props: {
     asideRef.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
   }, [open]);
 
-  const isActive = (s: ProjectSession) =>
-    (props.activeSessionId !== null && s.id === props.activeSessionId) || (s.liveChatId !== undefined && s.liveChatId === props.activeChatId);
+  const isActive = isActiveSession;
   const isWorking = (s: ProjectSession) => (isActive(s) ? isBusy(props.activeStatus) : isBusy(s.status));
   const searching = props.query.trim() !== "";
+  const sectionRow = (s: ProjectSession) => (
+    <SessionRow
+      key={s.id}
+      s={s}
+      active={isActive(s)}
+      working={isWorking(s)}
+      harnessName={names.get(s.harnessId) ?? s.harnessId}
+      project={projectName(s)}
+      onOpen={(newTab) => props.onOpenSession(s, newTab)}
+      onMark={(change) => props.onMarkSession(s, change)}
+    />
+  );
 
   return (
     <>
@@ -361,30 +466,33 @@ export function Sidebar(props: {
                 <span className="skeleton-row" />
               </li>
             ) : null}
+            {needs.length > 0 ? (
+              <SectionList
+                className="needs-group"
+                testId="needs-group"
+                icon={<IconWarning size={14} />}
+                title="Needs you"
+                sessions={needs}
+                row={(s) => sectionRow(s)}
+              />
+            ) : null}
+            {working.length > 0 ? (
+              <SectionList
+                className="working-group"
+                testId="working-group"
+                icon={<WorkingRing colored={false} />}
+                title="Working"
+                sessions={working}
+                open={workingOpen}
+                onToggle={() => {
+                  setWorkingOpen(!workingOpen);
+                  save("workingOpen", !workingOpen);
+                }}
+                row={(s) => sectionRow(s)}
+              />
+            ) : null}
             {pinned.length > 0 ? (
-              <li className="project-group is-open pinned-group" data-testid="pinned-group">
-                <div className="project-head">
-                  <span className="project-toggle is-static">
-                    <IconPin size={14} />
-                    <span className="project-name">Pinned</span>
-                    <span className="group-count">{pinned.length}</span>
-                  </span>
-                </div>
-                <ul className="session-sublist">
-                  {pinned.map((s) => (
-                    <SessionRow
-                      key={s.id}
-                      s={s}
-                      active={isActive(s)}
-                      working={isWorking(s)}
-                      harnessName={names.get(s.harnessId) ?? s.harnessId}
-                      project={projectName(s)}
-                      onOpen={(newTab) => props.onOpenSession(s, newTab)}
-                      onMark={(change) => props.onMarkSession(s, change)}
-                    />
-                  ))}
-                </ul>
-              </li>
+              <SectionList className="pinned-group" testId="pinned-group" icon={<IconPin size={14} />} title="Pinned" sessions={pinned} row={(s) => sectionRow(s)} />
             ) : null}
             {groups.map((g) => (
               <ProjectGroupView
@@ -400,14 +508,26 @@ export function Sidebar(props: {
                 onNewChat={props.onNewChatIn}
               />
             ))}
-            {archived > 0 && !searching ? (
-              <li>
-                <button type="button" className="show-more archived-toggle" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
-                  <IconArchive size={13} /> {showArchived ? "Hide archived" : `Show ${archived} archived`}
-                </button>
+            {!searching && (sections.counts.snoozed > 0 || sections.counts.settled > 0 || sections.counts.archived > 0) ? (
+              <li className="list-toggles">
+                {sections.counts.snoozed > 0 ? (
+                  <button type="button" className="show-more" aria-pressed={showSnoozed} onClick={() => setShowSnoozed((v) => !v)}>
+                    <IconClock size={13} /> {showSnoozed ? "Hide snoozed" : `${sections.counts.snoozed} snoozed`}
+                  </button>
+                ) : null}
+                {sections.counts.settled > 0 ? (
+                  <button type="button" className="show-more" aria-pressed={showSettled} onClick={() => setShowSettled((v) => !v)}>
+                    <IconCheck size={13} /> {showSettled ? "Hide settled" : `${sections.counts.settled} settled`}
+                  </button>
+                ) : null}
+                {sections.counts.archived > 0 ? (
+                  <button type="button" className="show-more archived-toggle" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
+                    <IconArchive size={13} /> {showArchived ? "Hide archived" : `${sections.counts.archived} archived`}
+                  </button>
+                ) : null}
               </li>
             ) : null}
-            {!props.sessionsLoading && groups.length === 0 && pinned.length === 0 && !props.sessionsError ? (
+            {!props.sessionsLoading && groups.length === 0 && pinned.length === 0 && needs.length === 0 && working.length === 0 && !props.sessionsError ? (
               <li className="sidebar-note">{searching ? "No matching sessions" : "No sessions yet. Choose a folder and start a chat."}</li>
             ) : null}
           </ul>

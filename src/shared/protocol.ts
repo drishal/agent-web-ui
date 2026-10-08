@@ -77,6 +77,12 @@ export interface SessionSummary {
   pinned?: true;
   /** Hidden from the list unless archived sessions are shown. */
   archived?: true;
+  /** Done for now: out of the projects until a run starts in it again. */
+  settled?: true;
+  /** Epoch ms: out of the projects until then (or until it needs you). */
+  snoozedUntil?: number;
+  /** A live chat waiting on an answer or an approval. */
+  asking?: true;
 }
 
 /** A session together with the project it belongs to. */
@@ -616,8 +622,22 @@ export const sessionMarkSchema = z
     sessionId: z.string().min(1).max(512),
     pinned: z.boolean().optional(),
     archived: z.boolean().optional(),
+    settled: z.boolean().optional(),
+    snoozedUntil: z.number().int().positive().max(8_640_000_000_000_000).nullable().optional(),
+    /** Set exactly these marks, clearing the rest (an undo). */
+    replace: z.boolean().optional(),
   })
-  .refine((v) => v.pinned !== undefined || v.archived !== undefined, { message: "empty mark" });
+  .refine((v) => v.replace || v.pinned !== undefined || v.archived !== undefined || v.settled !== undefined || v.snoozedUntil !== undefined, {
+    message: "empty mark",
+  });
+
+/** The marks a session can carry, as the server keeps them. */
+export interface SessionMarkState {
+  pinned?: true;
+  archived?: true;
+  settled?: true;
+  snoozedUntil?: number;
+}
 export const compactSchema = z.object({ instructions: z.string().max(10_000).optional() });
 export const answerSchema = z.object({ answer: interactionAnswerSchema });
 

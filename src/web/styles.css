@@ -1499,6 +1499,73 @@ body.is-resizing {
   white-space: pre-wrap;
 }
 
+/* Inbox sections in the sidebar, and the undo toast for mark changes. */
+.needs-group .project-toggle {
+  color: var(--warn);
+}
+
+.section-group .session-sublist {
+  border-left-color: transparent;
+}
+
+.session-asking {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.session-wake {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.list-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  margin-top: 6px;
+}
+
+.list-toggles .show-more {
+  width: auto;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: calc(64px + env(safe-area-inset-top));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: pop-down 0.16s var(--ease-out);
+}
+
+.toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast kbd {
+  margin-left: 4px;
+  color: var(--muted);
+  font: 10.5px var(--font-mono);
+}
+
+@media (hover: none) {
+  .toast kbd {
+    display: none;
+  }
+}
+
 .turn-prompt {
   position: sticky;
   top: 0;

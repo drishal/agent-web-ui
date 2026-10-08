@@ -147,6 +147,12 @@ export const IconBranch = (p: IconProps) => (
     <path d="M4.5 5v6M11.5 6.5c0 3-7 2-7 4.5" />
   </Svg>
 );
+export const IconClock = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="5.75" />
+    <path d="M8 4.75V8l2.25 1.5" />
+  </Svg>
+);
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />

@@ -20,8 +20,27 @@ export interface GroupOptions {
   currentId: string | null;
   query: string;
   harnessId: string | null;
-  /** Archived sessions stay in their projects instead of being left out. */
+  /** Archived, settled, and snoozed sessions stay in their projects instead of being left out. */
   showArchived?: boolean;
+  showSettled?: boolean;
+  showSnoozed?: boolean;
+  /** The session on screen: it stays in its project whatever it is doing. */
+  isActive?: (s: ProjectSession) => boolean;
+  now?: number;
+}
+
+/** Where a session goes in the list (T3 Code's inbox): what needs you and what works first, then pins and projects. */
+export type Place = "needs" | "working" | "pinned" | "project" | "snoozed" | "settled" | "archived";
+
+export function placeOf(s: ProjectSession, opts: GroupOptions): Place {
+  if (s.archived) return "archived";
+  const onScreen = opts.isActive?.(s) ?? false;
+  if (!onScreen && s.asking) return "needs";
+  if (!onScreen && isBusy(s.status)) return "working";
+  if (s.snoozedUntil && s.snoozedUntil > (opts.now ?? Date.now())) return "snoozed";
+  if (s.settled) return "settled";
+  if (s.pinned) return "pinned";
+  return "project";
 }
 
 /** The selected harness's sessions that match the search. */
@@ -32,17 +51,24 @@ function visible(overview: SessionsOverview, opts: GroupOptions): ProjectSession
 }
 
 /**
- * Sessions by project. Pinned ones sit in their own list above (see
- * pinnedSessions) and archived ones are left out, except while searching:
- * a search finds every session where it lives.
+ * Sessions by project. What needs you, what is working, and pinned sessions
+ * sit in their own lists above (see sidebarSections); archived, settled, and
+ * snoozed ones are left out unless shown. A search finds every session where
+ * it lives.
  */
 export function groupByProject(overview: SessionsOverview, opts: GroupOptions): ProjectGroup[] {
   const searching = opts.query.trim() !== "";
   const groups = new Map<string, ProjectGroup>();
   for (const ws of overview.workspaces) groups.set(ws.id, { workspace: ws, sessions: [], current: ws.id === opts.currentId });
   for (const s of visible(overview, opts)) {
-    if (!searching && (s.pinned || (s.archived && !opts.showArchived))) continue;
-    groups.get(s.workspaceId)?.sessions.push(s);
+    const place = placeOf(s, opts);
+    const shown =
+      searching ||
+      place === "project" ||
+      (place === "archived" && opts.showArchived) ||
+      (place === "settled" && opts.showSettled) ||
+      (place === "snoozed" && opts.showSnoozed);
+    if (shown) groups.get(s.workspaceId)?.sessions.push(s);
   }
   const newest = (g: ProjectGroup) => g.sessions[0]?.updatedAt ?? "";
   return [...groups.values()]
@@ -50,14 +76,61 @@ export function groupByProject(overview: SessionsOverview, opts: GroupOptions): 
     .sort((a, b) => Number(b.current) - Number(a.current) || newest(b).localeCompare(newest(a)));
 }
 
+export interface SidebarSections {
+  needs: ProjectSession[];
+  working: ProjectSession[];
+  pinned: ProjectSession[];
+  counts: { snoozed: number; settled: number; archived: number };
+}
+
+/** The lists above the projects, and how many sessions each toggle below them would bring back; empty while searching. */
+export function sidebarSections(overview: SessionsOverview, opts: GroupOptions): SidebarSections {
+  const out: SidebarSections = { needs: [], working: [], pinned: [], counts: { snoozed: 0, settled: 0, archived: 0 } };
+  if (opts.query.trim()) return out;
+  for (const s of visible(overview, opts)) {
+    const place = placeOf(s, opts);
+    if (place === "needs" || place === "working" || place === "pinned") out[place].push(s);
+    else if (place !== "project") out.counts[place] += 1;
+  }
+  return out;
+}
+
 /** The pinned list above the projects, newest first; empty while searching. */
 export function pinnedSessions(overview: SessionsOverview, opts: GroupOptions): ProjectSession[] {
-  if (opts.query.trim()) return [];
-  return visible(overview, opts).filter((s) => s.pinned);
+  return sidebarSections(overview, opts).pinned;
 }
 
 export function archivedCount(overview: SessionsOverview, harnessId: string | null): number {
   return overview.sessions.filter((s) => s.harnessId === harnessId && s.archived).length;
+}
+
+/** When a snooze ends, said briefly: "4:30 PM", "Tomorrow 9:00 AM", "Mon 9:00 AM". */
+export function wakeLabel(at: number, now = Date.now()): string {
+  const when = new Date(at);
+  const time = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const day = new Date(now);
+  day.setHours(0, 0, 0, 0);
+  const dayMs = 86_400_000;
+  if (at < day.getTime() + dayMs) return time;
+  if (at < day.getTime() + 2 * dayMs) return `Tomorrow ${time}`;
+  return `${when.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
+/** Snooze presets: an hour from now, tomorrow at 9:00, next Monday at 9:00. */
+export function snoozeOptions(now = Date.now()): Array<{ label: string; until: number }> {
+  const at9 = (days: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(9, 0, 0, 0);
+    return d.getTime();
+  };
+  const today = new Date(now).getDay();
+  const toMonday = ((8 - today) % 7) || 7;
+  return [
+    { label: "For an hour", until: now + 3_600_000 },
+    { label: "Until tomorrow", until: at9(1) },
+    { label: "Until next week", until: at9(toMonday) },
+  ];
 }
 
 /** Hermes-style divider: Today, Yesterday, Earlier this week, then the month. */
