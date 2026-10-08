@@ -271,6 +271,18 @@ test("a divider marks the turn where the model changed", async ({ page }) => {
   await expect(page.locator(".turn").nth(2).locator("xpath=preceding-sibling::*[1]")).toHaveAttribute("data-testid", "model-switch");
 });
 
+test("a folded live turn keeps its latest thought in view", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "slow stream please");
+  await expect(page.getByTestId("process-toggle")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("live-thought")).toHaveCount(0);
+  await page.getByTestId("process-toggle").click();
+  await expect(page.getByTestId("live-thought")).toContainText("Considering: Echo: slow stream please");
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  await expect(page.getByTestId("live-thought")).toHaveCount(0);
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);

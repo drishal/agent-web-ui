@@ -6,7 +6,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
-import { ago, buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -533,6 +533,7 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
   const label = turn.live ? "Working" : duration ? `Worked for ${duration}` : "Worked";
   const answerThinking = turn.answer?.thinking ? turn.answer : null;
+  const thought = turn.live && !open ? latestThought(turn) : null;
   return (
     <div className={`process${open ? " is-open" : ""}${turn.live ? " is-live" : ""}`}>
       <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(turn.id)} data-testid="process-toggle">
@@ -544,6 +545,12 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
         </span>
         <IconChevronDown size={14} className="process-chevron" />
       </button>
+      {thought ? (
+        <div className="process-thought" data-testid="live-thought">
+          <IconSpark size={13} />
+          <span>{thought}</span>
+        </div>
+      ) : null}
       {open ? (
         <div className="process-body">
           {turn.process.map((item) => (

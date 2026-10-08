@@ -173,3 +173,17 @@ export function modelName(model: string, models: ReadonlyArray<{ key: string; id
 /** Text worth a row in the fold: some letter or digit, not a stray "." or blank lines a model sent between tool calls. */
 export const saysSomething = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
 
+/** A live turn's latest thought as one line: the first sentence of the newest thinking (T3 Code's live row). */
+export function latestThought(turn: Turn): string | null {
+  const steps = [...turn.process, ...(turn.answer ? [turn.answer] : [])];
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const item = steps[i];
+    if (item?.kind !== "assistant") continue;
+    const thinking = item.thinking.replace(/\s+/g, " ").trim();
+    if (!thinking) continue;
+    const sentence = /^.*?[.!?](?=\s|$)/.exec(thinking)?.[0] ?? thinking;
+    return sentence.length > 240 ? `${sentence.slice(0, 239)}…` : sentence;
+  }
+  return null;
+}
+
