@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -129,6 +129,25 @@ describe("stray text between tool calls", () => {
       { kind: "assistant", id: "a2", text: "\n\n\n", thinking: "", streaming: false },
     ];
     expect(buildTurns(items, "idle")[0]?.answer?.id).toBe("a1");
+  });
+});
+
+describe("the live turn's latest thought", () => {
+  const think = (id: string, thinking: string): ChatItem => ({ kind: "assistant", id, text: "", thinking, streaming: true });
+  it("is the first sentence of the newest thinking, on one line", () => {
+    const items: ChatItem[] = [
+      { kind: "user", id: "u", text: "fix it" },
+      think("a1", "Old idea. Not this."),
+      { kind: "tool", id: "t", name: "read", args: "", status: "done", output: "", truncated: false, category: "read", summary: "a.ts", paths: [] },
+      think("a2", "Found the cause:\nthe retry   path never resets. Then I will patch it."),
+      think("a3", "   "),
+    ];
+    const [turn] = buildTurns(items, "running");
+    expect(turn && latestThought(turn)).toBe("Found the cause: the retry path never resets.");
+  });
+  it("is nothing before any thinking", () => {
+    const [turn] = buildTurns([{ kind: "user", id: "u", text: "q" }], "running");
+    expect(turn && latestThought(turn)).toBeNull();
   });
 });
 

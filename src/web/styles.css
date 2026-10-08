@@ -1315,6 +1315,29 @@ body.is-resizing {
   text-overflow: ellipsis;
 }
 
+/* A folded live turn keeps its latest thought in view under "Working". */
+.process-thought {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0 6px 2px;
+  color: var(--muted);
+  font-size: calc(13px * var(--chat-scale));
+  line-height: 1.5;
+}
+
+.process-thought .icon {
+  flex: none;
+  margin-top: 3px;
+}
+
+.process-thought span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
 .turn-prompt {
   position: sticky;
   top: 0;
