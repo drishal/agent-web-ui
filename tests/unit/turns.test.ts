@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, relativePath } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -96,3 +96,25 @@ describe("notices that arrive while idle", () => {
     expect(formatDuration((turn?.endedAt ?? 0) - (turn?.startedAt ?? 0))).toBe("9s");
   });
 });
+
+describe("model switches", () => {
+  const turn = (n: number, model?: string): ChatItem[] => [
+    { kind: "user", id: `u${n}`, text: `q${n}` },
+    { kind: "assistant", id: `a${n}`, text: `a${n}`, thinking: "", streaming: false, ...(model ? { model } : {}) },
+  ];
+  it("marks the turns whose model differs from the last turn that named one", () => {
+    const turns = buildTurns([...turn(1, "opus"), ...turn(2, "opus"), ...turn(3), ...turn(4, "haiku"), ...turn(5, "opus")], "idle");
+    expect(turns.map((t) => t.model)).toEqual(["opus", "opus", undefined, "haiku", "opus"]);
+    expect([...modelSwitches(turns)]).toEqual([
+      ["u4", "haiku"],
+      ["u5", "opus"],
+    ]);
+  });
+  it("names a model by key or id, else as the harness wrote it", () => {
+    const models = [{ key: "anthropic/claude-opus-5-5", id: "claude-opus-5-5", name: "Opus 5.5" }];
+    expect(modelName("claude-opus-5-5", models)).toBe("Opus 5.5");
+    expect(modelName("anthropic/claude-opus-5-5", models)).toBe("Opus 5.5");
+    expect(modelName("gpt-x", models)).toBe("gpt-x");
+  });
+});
+

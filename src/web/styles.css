@@ -1291,6 +1291,30 @@ body.is-resizing {
 }
 
 /* Pinned prompt: stays visible while its turn scrolls (Hermes Desktop). */
+/* Where the model changes between turns: a hairline with the new model's name. */
+.model-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.model-switch::before,
+.model-switch::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.model-switch span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .turn-prompt {
   position: sticky;
   top: 0;

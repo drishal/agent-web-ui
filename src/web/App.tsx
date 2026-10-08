@@ -924,6 +924,7 @@ export function App() {
               workspace={chat.workspace.path}
               canFork={chat.capabilities.supportsFork}
               onFork={forkChat}
+              models={chat.config.models}
               checkpoints={chat.checkpoints ?? []}
               onRestore={setRestoreTurn}
               promptActions={{
