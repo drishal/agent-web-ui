@@ -33,6 +33,7 @@ import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 import type { ChatCheckpoints, CheckpointHost } from "../checkpoints.js";
+import { REWIND_COMMAND } from "../harness/rewind-extension.js";
 
 export class ChatError extends Error {
   constructor(
@@ -990,7 +991,8 @@ export class Chat implements CheckpointHost {
   /** The harness's "/" commands; an empty list when it cannot say (the menu then offers the app's own). */
   async commands(): Promise<SlashCommand[]> {
     this.assertOpen();
-    return this.live.listCommands().catch(() => []);
+    // /rewind-to is Edit's and Retry's: run by hand it would move the session without this chat knowing.
+    return (await this.live.listCommands().catch(() => [])).filter((c) => c.name !== REWIND_COMMAND);
   }
 
   async refreshModels(): Promise<void> {

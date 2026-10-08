@@ -34,6 +34,7 @@ import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type O
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { ompLimits } from "./limits.js";
+import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
 import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
@@ -567,7 +568,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsModelSelection: true,
     supportsFork: true,
     supportsHandoff: true,
-    supportsRewind: false,
+    supportsRewind: rewindExtension() !== null,
   };
   private lister: AcpLister;
   private sessionFiles = new SessionFiles(() => this.resolveSessionDir());
@@ -722,7 +723,7 @@ export class OmpAdapter implements HarnessAdapter {
    * writes nothing before a first prompt, so the file is ours to create.
    */
   async seedChat(req: { cwd: string; seed: HandoffSeed }): Promise<LiveChat> {
-    const fresh = new OmpRpc(this.cliCommand, ["--mode", "rpc-ui", "--cwd", req.cwd], this.env(), req.cwd, () => undefined, () => undefined);
+    const fresh = new OmpRpc(this.cliCommand, ["--mode", "rpc-ui", ...rewindExtensionArgs(), "--cwd", req.cwd], this.env(), req.cwd, () => undefined, () => undefined);
     let state: Obj | null;
     try {
       await fresh.ready;
@@ -829,7 +830,7 @@ class OmpLiveChat implements LiveChat {
   /** Spawn the omp child with its normal tool set (no --tools); stale-child events are ignored. */
   async start(resumeId: string | null): Promise<void> {
     const generation = ++this.generation;
-    const args = ["--mode", "rpc-ui", "--cwd", this.cwd];
+    const args = ["--mode", "rpc-ui", ...rewindExtensionArgs(), "--cwd", this.cwd];
     if (resumeId) args.push("--resume", resumeId);
     const rpc = new OmpRpc(
       this.command,
@@ -1114,6 +1115,20 @@ class OmpLiveChat implements LiveChat {
         this.hub.emit({ type: "settled" });
       } else for (const output of outputs) this.hub.emit({ type: "notice", level: "info", text: output });
     }
+  }
+
+  /** In place, through the /rewind-to extension this child was started with. */
+  async rewind(turn: number, text: string, images?: ImageAttachment[]): Promise<void> {
+    await rewindWithExtension("omp", turn, {
+      commandNames: async () => (await this.listCommands()).map((c) => c.name),
+      runCommand: async (command) => {
+        // An extension command answers with a bare success; the history check below says whether it worked.
+        const result = await this.live.command<Obj>("prompt", { message: command });
+        return !(isObj(result) && result.agentInvoked === true);
+      },
+      history: () => this.history(),
+    });
+    await this.prompt(text, images);
   }
 
   async steer(text: string, images?: ImageAttachment[]): Promise<void> {

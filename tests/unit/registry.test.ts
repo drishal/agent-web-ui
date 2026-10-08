@@ -18,3 +18,28 @@ describe("harness accents", () => {
     expect(accents.slice(HARNESS_ACCENTS.length)).toEqual(["link", "thinking"]);
   });
 });
+
+describe("the rewind-to extension", async () => {
+  const { rewindExtension, rewindWithExtension } = await import("../../src/server/harness/rewind-extension.js");
+  it("is found next to the server, for Pi and omp to load with -e", () => {
+    expect(rewindExtension()).toMatch(/extensions\/rewind-to\.ts$/);
+  });
+  it("refuses when the harness has not loaded it, and checks the session really went back", async () => {
+    const user = (text: string) => ({ kind: "user" as const, id: text, text });
+    const ran: string[] = [];
+    const live = (commands: string[], after: number) => {
+      let calls = 0;
+      return {
+        commandNames: async () => commands,
+        runCommand: async (c: string) => (ran.push(c), true),
+        history: async () => (calls++ === 0 ? [user("a"), user("b"), user("c")] : [user("a"), user("b"), user("c")].slice(0, after)),
+      };
+    };
+    await expect(rewindWithExtension("Pi", 2, live([], 1))).rejects.toThrow(/has not loaded the rewind-to extension/);
+    expect(ran).toEqual([]);
+    await expect(rewindWithExtension("Pi", 9, live(["rewind-to"], 1))).rejects.toThrow(/no longer in the session/);
+    await rewindWithExtension("Pi", 2, live(["rewind-to"], 1));
+    expect(ran).toEqual(["/rewind-to 2"]);
+    await expect(rewindWithExtension("Pi", 2, live(["rewind-to"], 3))).rejects.toThrow(/did not go back/);
+  }, 10_000);
+});

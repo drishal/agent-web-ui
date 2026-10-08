@@ -93,6 +93,21 @@ describe("omp adapter (scripted omp)", () => {
     await until(() => chat.snapshot().extensionStatus.plan === "ready");
   });
 
+  it("replaces a past prompt in place through the rewind-to extension it starts omp with", async () => {
+    const { chat, live } = await openChat();
+    expect(readState().spawns[0]?.args.some((a: string) => a.endsWith("extensions/rewind-to.ts"))).toBe(true);
+    expect(chat.snapshot().capabilities.supportsRewind).toBe(true);
+    for (const text of ["one", "two", "three"]) {
+      await chat.send(text, "normal");
+      await until(() => chat.status === "idle");
+    }
+    await chat.rewind(2, "two, again");
+    await until(() => chat.status === "idle");
+    const users = (items: Awaited<ReturnType<typeof live.history>>) => items.flatMap((i) => (i.kind === "user" ? [i.text] : []));
+    expect(users(chat.snapshot().items)).toEqual(["one", "two, again"]);
+    expect(users(await live.history())).toEqual(["one", "two, again"]);
+  });
+
   it("carries omp's per-model thinking efforts into the model list", async () => {
     const models = await adapter.listModels(project);
     expect(models.find((m) => m.key === "fakeomp/m1")?.levels).toEqual(["low", "high", "max"]);
@@ -305,12 +320,14 @@ describe("omp adapter (scripted omp)", () => {
     expect(items.find((i) => i.kind === "assistant")).toMatchObject({ text: expect.stringContaining("Context window: 200000 tokens") });
   });
 
-  it("lists the commands omp runs over RPC", async () => {
-    const { live } = await openChat();
+  it("lists the commands omp runs over RPC, keeping rewind-to out of the composer's menu", async () => {
+    const { chat, live } = await openChat();
     expect((await live.listCommands()).map((c) => [c.name, c.source])).toEqual([
       ["context", "builtin"],
       ["usage", "builtin"],
+      ["rewind-to", "extension"],
     ]);
+    expect((await chat.commands()).map((c) => c.name)).toEqual(["context", "usage"]);
   });
 
   it("splits provider/model keys at the first slash only", async () => {
