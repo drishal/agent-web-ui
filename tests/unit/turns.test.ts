@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -115,6 +115,20 @@ describe("model switches", () => {
     expect(modelName("claude-opus-5-5", models)).toBe("Opus 5.5");
     expect(modelName("anthropic/claude-opus-5-5", models)).toBe("Opus 5.5");
     expect(modelName("gpt-x", models)).toBe("gpt-x");
+  });
+});
+
+describe("stray text between tool calls", () => {
+  it("counts only text with a letter or digit as something said", () => {
+    expect([".", "\n\n\n", "", " - ", "…", "ok", "4", "Готово"].map(saysSomething)).toEqual([false, false, false, false, false, true, true, true]);
+  });
+  it("never picks blank text as the answer", () => {
+    const items: ChatItem[] = [
+      { kind: "user", id: "u", text: "q" },
+      { kind: "assistant", id: "a1", text: "The fix is in.", thinking: "", streaming: false },
+      { kind: "assistant", id: "a2", text: "\n\n\n", thinking: "", streaming: false },
+    ];
+    expect(buildTurns(items, "idle")[0]?.answer?.id).toBe("a1");
   });
 });
 
