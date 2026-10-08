@@ -126,7 +126,8 @@ export class Checkpoints {
     const shadow = await this.shadow(repo);
     await this.serial(repo, async () => {
       const back = chosen.filter((f) => f.change !== "delete").map((f) => f.path);
-      if (back.length > 0) await this.run(repo, shadow, ["checkout", then, "--pathspec-from-file=-", "--pathspec-file-nul"], `${back.join("\0")}\0`);
+      // Literal: a file named like pathspec magic (":(glob)*") is that file, not a pattern.
+      if (back.length > 0) await this.run(repo, shadow, ["--literal-pathspecs", "checkout", then, "--pathspec-from-file=-", "--pathspec-file-nul"], `${back.join("\0")}\0`);
       for (const f of chosen.filter((x) => x.change === "delete")) {
         const file = path.resolve(repo, f.path);
         if (!file.startsWith(`${repo}${path.sep}`)) continue;
