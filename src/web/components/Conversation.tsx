@@ -3,10 +3,10 @@
 //    fold, 24px disclosure rows, the I/O card, the turn rail;
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
-import { ago, buildTurns, countSummary, formatDuration, relativePath, type Turn } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, type Turn } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -568,6 +568,7 @@ function turnUnchanged(a: Turn, b: Turn): boolean {
     a.live === b.live &&
     a.startedAt === b.startedAt &&
     a.endedAt === b.endedAt &&
+    a.model === b.model &&
     a.prompt === b.prompt &&
     a.answer === b.answer &&
     sameArray(a.process, b.process) &&
@@ -655,6 +656,7 @@ export function Conversation({
   checkpoints,
   onRestore,
   promptActions,
+  models,
 }: {
   chatId: string;
   items: ChatItem[];
@@ -666,6 +668,8 @@ export function Conversation({
   checkpoints: number[];
   onRestore: (through: number) => void;
   promptActions: PromptActions;
+  /** The chat's models, to name the one a turn switched to. */
+  models: ReadonlyArray<{ key: string; id: string; name: string }>;
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -687,6 +691,7 @@ export function Conversation({
     cache.current = next;
     return stable;
   }, [items, status]);
+  const switches = useMemo(() => modelSwitches(turns), [turns]);
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
 
@@ -831,20 +836,26 @@ export function Conversation({
           <ArrivalsContext.Provider value={arrivals}>
             <div className="thread">
               {turns.map((turn) => (
-                <TurnView
-                  key={turn.id}
-                  turn={turn}
-                  open={overrides[turn.id] ?? turn.live}
-                  onToggle={onToggle}
-                  workspace={workspace}
-                  canFork={canFork}
-                  onFork={fork}
-                  canRestore={idle && turn.through > 0 && checkpoints.includes(turn.through)}
-                  onRestore={restore}
-                  canBranch={idle && turn.through > 0 && (inPlace || turn.through === 1 || canFork)}
-                  hasCheckpoint={turn.through > 0 && checkpoints.includes(turn.through)}
-                  promptActions={actions}
-                />
+                <Fragment key={turn.id}>
+                  {switches.has(turn.id) ? (
+                    <div className="model-switch" role="separator" data-testid="model-switch">
+                      <span>Switched to {modelName(switches.get(turn.id) as string, models)}</span>
+                    </div>
+                  ) : null}
+                  <TurnView
+                    turn={turn}
+                    open={overrides[turn.id] ?? turn.live}
+                    onToggle={onToggle}
+                    workspace={workspace}
+                    canFork={canFork}
+                    onFork={fork}
+                    canRestore={idle && turn.through > 0 && checkpoints.includes(turn.through)}
+                    onRestore={restore}
+                    canBranch={idle && turn.through > 0 && (inPlace || turn.through === 1 || canFork)}
+                    hasCheckpoint={turn.through > 0 && checkpoints.includes(turn.through)}
+                    promptActions={actions}
+                  />
+                </Fragment>
               ))}
             </div>
           </ArrivalsContext.Provider>

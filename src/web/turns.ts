@@ -21,6 +21,8 @@ export interface Turn {
   endedAt?: number;
   counts: Partial<Record<ToolCategory, number>>;
   changedFiles: string[];
+  /** The model that answered (its last model call), when the harness says. */
+  model?: string;
 }
 
 export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
@@ -64,6 +66,8 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       else process.push(item);
     });
 
+    let model: string | undefined;
+    for (const item of rest) if (item.kind === "assistant" && item.model) model = item.model;
     const counts: Partial<Record<ToolCategory, number>> = {};
     const changed = new Set<string>();
     let startedAt = prompt?.at;
@@ -96,6 +100,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       ...(endedAt !== undefined ? { endedAt } : {}),
       counts,
       changedFiles: [...changed],
+      ...(model ? { model } : {}),
     };
   });
 }
@@ -146,4 +151,21 @@ export function ago(at: number, now = Date.now()): string {
   const d = Math.round(h / 24);
   if (d < 30) return `${d}d ago`;
   return new Date(at).toLocaleDateString();
+}
+
+/** Where the model changes between turns: turn id → the model it switched to. Turns that name no model are skipped over. */
+export function modelSwitches(turns: Turn[]): Map<string, string> {
+  const switches = new Map<string, string>();
+  let last: string | undefined;
+  for (const turn of turns) {
+    if (!turn.model) continue;
+    if (last !== undefined && turn.model !== last) switches.set(turn.id, turn.model);
+    last = turn.model;
+  }
+  return switches;
+}
+
+/** A model's display name from the chat's list (by key or id), else what the harness called it. */
+export function modelName(model: string, models: ReadonlyArray<{ key: string; id: string; name: string }>): string {
+  return models.find((m) => m.key === model || m.id === model)?.name ?? model;
 }

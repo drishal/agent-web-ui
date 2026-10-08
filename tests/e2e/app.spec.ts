@@ -255,6 +255,22 @@ test("a prompt's actions show on hover: edit replaces it in place, retry branche
   await expect(page.getByTestId("answer").last()).toContainText("Echo: only question", { timeout: 15_000 });
 });
 
+test("a divider marks the turn where the model changed", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "on the first model");
+  await sendAndWait(page, "still the first");
+  await expect(page.getByTestId("model-switch")).toHaveCount(0);
+  await page.getByTestId("model-picker").click();
+  await page.getByRole("combobox", { name: "Search models" }).fill("slow");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: Fake Slow");
+  await sendAndWait(page, "now on another");
+  await expect(page.getByTestId("model-switch")).toHaveCount(1);
+  await expect(page.getByTestId("model-switch")).toHaveText("Switched to Fake Slow");
+  await expect(page.locator(".turn").nth(2).locator("xpath=preceding-sibling::*[1]")).toHaveAttribute("data-testid", "model-switch");
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);
