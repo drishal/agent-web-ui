@@ -1,16 +1,16 @@
-# agent-web-ui as a systemd user service.
+# awui as a systemd user service.
 #
 # `npm run service -- install` fills in the @...@ values for this checkout and
 # enables it. By hand: replace them, save as
-# ~/.config/systemd/user/agent-web-ui.service, then
-#   systemctl --user daemon-reload && systemctl --user enable --now agent-web-ui
+# ~/.config/systemd/user/awui.service, then
+#   systemctl --user daemon-reload && systemctl --user enable --now awui
 #
-#   Status:  systemctl --user status agent-web-ui
-#   Logs:    journalctl --user -u agent-web-ui -n 20   (the Local:/LAN:/Serve: addresses)
-#   Update:  git pull && npm ci && npm run build && systemctl --user restart agent-web-ui
+#   Status:  systemctl --user status awui
+#   Logs:    journalctl --user -u awui -n 20   (the Local:/LAN:/Serve: addresses)
+#   Update:  git pull && npm ci && npm run build && systemctl --user restart awui
 
 [Unit]
-Description=Agent Web UI for Pi, omp, Hermes, and Claude Code
+Description=awui: the web UI for Pi, omp, Hermes, and Claude Code
 # No build yet: skip instead of restart-looping.
 ConditionPathExists=@APP_DIR@/dist/server/server/index.js
 

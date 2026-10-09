@@ -20,7 +20,7 @@ try {
   config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });
 } catch (error) {
   // Same message and exit code the server gives a bad config.yml.
-  console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(78);
 }
 const port = String(config.port);

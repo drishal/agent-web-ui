@@ -880,7 +880,7 @@ export function App() {
             </button>
           ) : null}
           <div className="chat-title">
-            <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "Agent Web UI"}</h1>
+            <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "awui"}</h1>
             {chat ? (
               <div className="chat-sub">
                 <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>

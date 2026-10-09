@@ -1,14 +1,15 @@
 {
-  "name": "agent-web-ui",
+  "name": "awui",
   "version": "0.1.0",
   "private": true,
-  "description": "Local, private web UI for Pi, omp, and Hermes coding-agent harnesses",
+  "description": "awui: a local, private web UI (and atui, its terminal client) for the Pi, omp, Hermes, and Claude Code coding-agent harnesses",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.19.0"
   },
   "bin": {
+    "awui": "bin/awui",
     "atui": "bin/atui"
   },
   "scripts": {

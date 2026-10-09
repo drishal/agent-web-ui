@@ -1,4 +1,4 @@
-// The Agent Web UI server as atui reaches it: the same JSON API and event
+// The awui server as atui reaches it: the same JSON API and event
 // stream the browser uses (src/web/api.ts, src/web/stream.ts), read from a
 // fetch body since a terminal app has no EventSource.
 import type { ChatEvent } from "../shared/protocol.js";
@@ -25,7 +25,7 @@ export class Server {
         body: init.body === undefined ? null : JSON.stringify(init.body),
       });
     } catch {
-      throw new ServerError(0, "network", `Cannot reach the Agent Web UI server at ${this.base}`);
+      throw new ServerError(0, "network", `Cannot reach the awui server at ${this.base}`);
     }
     if (!res.ok) {
       let data: { error?: string; code?: string } = {};

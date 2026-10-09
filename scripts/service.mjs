@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Install agent-web-ui as a systemd user service from this checkout:
+// Install awui as a systemd user service from this checkout:
 //   npm run service -- install     write the unit, enable it, start it
 //   npm run service -- uninstall   stop it, disable it, remove the unit
 //   npm run service -- print       show the unit it would write
-// The unit (contrib/systemd/agent-web-ui.service) gets this checkout's path,
+// The unit (contrib/systemd/awui.service) gets this checkout's path,
 // this node, and the current shell's PATH, so the harness CLIs resolve as they
 // do in a terminal. A unit managed by home-manager (a link into /nix/store) is
 // left alone: change it in the Nix config instead.
@@ -13,7 +13,9 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const NAME = "agent-web-ui";
+const NAME = "awui";
+/** The unit this script installed before the rename; install replaces it. */
+const OLD_NAME = "agent-web-ui";
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE = path.join(APP_DIR, "contrib", "systemd", `${NAME}.service`);
 
@@ -82,6 +84,17 @@ function main() {
     console.error("Build first: npm run build (the unit runs dist/, and skips itself until it exists).");
     process.exitCode = 1;
     return;
+  }
+  // The unit this script wrote under the old name would hold the same port: replace it.
+  const oldFile = path.join(unitDir(), `${OLD_NAME}.service`);
+  if (existsSync(oldFile) && !managedElsewhere(oldFile) && readFileSync(oldFile, "utf8").startsWith("# agent-web-ui as a systemd user service.")) {
+    try {
+      systemctl("disable", "--now", OLD_NAME);
+    } catch {
+      // Not running: the file still goes.
+    }
+    rmSync(oldFile);
+    console.log(`Removed the old ${oldFile}.`);
   }
   mkdirSync(unitDir(), { recursive: true });
   writeFileSync(file, unit());

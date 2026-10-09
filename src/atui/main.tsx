@@ -1,4 +1,4 @@
-// atui: Agent Web UI in the terminal, in OpenCode's TUI style (OpenTUI and
+// atui: awui in the terminal, in OpenCode's TUI style (OpenTUI and
 // Solid, run by Bun). A client of the same server as the browser, so every
 // harness, session, approval, and setting is shared with the web UI.
 import { createRoot } from "solid-js";

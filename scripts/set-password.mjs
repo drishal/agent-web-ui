@@ -6,7 +6,7 @@
 // PARAMS and USERNAME_PATTERN are exported for tests/unit/credential-parity.test.ts,
 // which pins them to auth.ts DEFAULTS and config.ts USERNAME_PATTERN.
 import { randomBytes, scrypt as scryptCb } from "node:crypto";
-import { promises as fs, realpathSync } from "node:fs";
+import { existsSync, promises as fs, realpathSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,7 +65,10 @@ async function main() {
   const fromStdin = args.includes("--stdin");
   let username = args.find((a) => !a.startsWith("--"));
 
-  const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state"), "agent-web-ui");
+  // awui's state folder; the server moves an old agent-web-ui one on its next start, and so does this.
+  const stateBase = process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state");
+  const stateDir = path.join(stateBase, "awui");
+  if (!existsSync(stateDir) && existsSync(path.join(stateBase, "agent-web-ui"))) renameSync(path.join(stateBase, "agent-web-ui"), stateDir);
   const file = process.env.AUTH_CREDENTIALS_FILE ? path.resolve(process.env.AUTH_CREDENTIALS_FILE) : path.join(stateDir, "credentials.json");
 
   try {

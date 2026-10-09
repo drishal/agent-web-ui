@@ -37,7 +37,7 @@ export function rawPublicKey(key: KeyObject): string {
 /** RFC 8292: `vapid t=<ES256 JWT for the push service's origin>, k=<public key>`. */
 export function vapidAuthorization(endpoint: string, privateKey: KeyObject, publicKey: KeyObject, now = Date.now()): string {
   const header = b64url(JSON.stringify({ typ: "JWT", alg: "ES256" }));
-  const claims = b64url(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: "mailto:agent-web-ui@localhost" }));
+  const claims = b64url(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: "mailto:awui@localhost" }));
   const signature = sign("sha256", Buffer.from(`${header}.${claims}`), { key: privateKey, dsaEncoding: "ieee-p1363" });
   return `vapid t=${header}.${claims}.${b64url(signature)}, k=${rawPublicKey(publicKey)}`;
 }

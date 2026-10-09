@@ -530,7 +530,7 @@ class ClaudeLiveChat implements LiveChat {
     if (!id) return;
     if (request.subtype !== "can_use_tool") {
       // Hook callbacks, MCP messages, elicitations: nothing here registered for them.
-      this.rpc?.respond(id, null, `${str(request.subtype) || "this request"} is not supported by agent-web-ui`);
+      this.rpc?.respond(id, null, `${str(request.subtype) || "this request"} is not supported by awui`);
       return;
     }
     if (request.tool_name === "AskUserQuestion" && isObj(request.input) && Array.isArray(request.input.questions)) {
@@ -561,7 +561,7 @@ class ClaudeLiveChat implements LiveChat {
           ...(value === ALLOW_SESSION ? { updatedPermissions: sessionRules.map((s) => ({ ...s, destination: "session" })) } : {}),
         });
       } else {
-        this.rpc?.respond(id, { behavior: "deny", message: answer ? "Denied in agent-web-ui" : "Cancelled in agent-web-ui", ...(answer ? {} : { interrupt: true }) });
+        this.rpc?.respond(id, { behavior: "deny", message: answer ? "Denied in awui" : "Cancelled in awui", ...(answer ? {} : { interrupt: true }) });
       }
     });
   }

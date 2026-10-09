@@ -1,7 +1,29 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "../../src/server/config.js";
+import { ConfigError, loadConfig, migrateStateDir } from "../../src/server/config.js";
 import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
+
+describe("the state folder", () => {
+  it("moves from its old name (agent-web-ui) to awui once, and never over an existing awui", () => {
+    const base = mkdtempSync(path.join(tmpdir(), "awui-migrate-"));
+    const old = path.join(base, "agent-web-ui");
+    mkdirSync(old);
+    writeFileSync(path.join(old, "cookie-secret"), "kept");
+    const dir = path.join(base, "awui");
+    expect(migrateStateDir(dir)).toBe("moved");
+    expect(readFileSync(path.join(dir, "cookie-secret"), "utf8")).toBe("kept");
+    expect(existsSync(old)).toBe(false);
+    // Once there is an awui folder, an old one is left alone.
+    mkdirSync(old);
+    expect(migrateStateDir(dir)).toBeNull();
+    expect(existsSync(old)).toBe(true);
+    // Only the default name moves: an explicit other folder is never touched.
+    expect(migrateStateDir(path.join(base, "custom"))).toBeNull();
+  });
+});
 
 describe("loadConfig", () => {
   it("defaults to 127.0.0.1:4783 and the home directory", () => {
@@ -15,7 +37,7 @@ describe("loadConfig", () => {
     expect(loadConfig({}).host).toBe("127.0.0.1");
     expect(loadConfig({ HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
     for (const bad of ["192.168.1.5", "::", "localhost"]) expect(() => loadConfig({ HOST: bad })).toThrow(ConfigError);
-    expect(loadConfig({ XDG_STATE_HOME: "/st" }).credentialsFile).toBe("/st/agent-web-ui/credentials.json");
+    expect(loadConfig({ XDG_STATE_HOME: "/st" }).credentialsFile).toBe("/st/awui/credentials.json");
     expect(loadConfig({ AUTH_CREDENTIALS_FILE: "/run/secrets/awui" }).credentialsFile).toBe("/run/secrets/awui");
   });
 
@@ -52,7 +74,7 @@ describe("loadConfig", () => {
     const c = loadConfig({ XDG_CONFIG_HOME: "/cfg", XDG_STATE_HOME: "/st" });
     expect(c.themeFile).toBe("/cfg/agentwebui/theme.yml");
     expect(c.themeFileExplicit).toBe(false);
-    expect(c.stateDir).toBe("/st/agent-web-ui");
+    expect(c.stateDir).toBe("/st/awui");
   });
 });
 

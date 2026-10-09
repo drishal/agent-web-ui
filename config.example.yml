@@ -1,6 +1,6 @@
-# agent-web-ui settings: copy to ~/.config/agentwebui/config.yml.
+# awui settings: copy to ~/.config/agentwebui/config.yml.
 # Every key is optional. Restart the server after changing port, host, auth,
-# or the lists (systemctl --user restart agent-web-ui); theme, text_scale,
+# or the lists (systemctl --user restart awui); theme, text_scale,
 # and autocollapse_sidebar apply on the next page load. Environment variables
 # (PORT, HOST, AUTH_USERNAME, ...) win over this file.
 
