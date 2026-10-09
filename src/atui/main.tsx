@@ -5,6 +5,7 @@ import { createRoot } from "solid-js";
 import { render } from "@opentui/solid";
 import { Server } from "./client.js";
 import { parseArgs, USAGE } from "./args.js";
+import { readPrefs, writePrefs } from "./prefs.js";
 import { createAtui, message } from "./state.js";
 import { App } from "./ui/app.js";
 import { startTicker, stopTicker } from "./ui/ticker.js";
@@ -45,7 +46,9 @@ async function main(): Promise<void> {
     const { createCliRenderer } = await import("@opentui/core");
     return createCliRenderer({ exitOnCtrlC: false, useMouse: true, targetFps: 30 });
   })();
-  await render(() => <App app={app} onExit={exit} />, renderer);
+  // The command line, else $ATUI_VIM, else what Ctrl+X V last chose.
+  const vim = parsed.vim ?? (process.env.ATUI_VIM ? process.env.ATUI_VIM === "1" : (readPrefs().vim ?? false));
+  await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} />, renderer);
 }
 
 if (import.meta.main) void main();

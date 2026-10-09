@@ -5,7 +5,7 @@
 // its top edge, each call a bulleted row with its outcome on a `└` line, an
 // edit's first changed lines under it, thinking as one titled line, and a
 // clicked call framed omp-style (command, Output, outcome in the bottom edge).
-import { createMemo, createSignal, For, Index, Match, Show, Switch, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, Match, on, Show, Switch, type Accessor } from "solid-js";
 import type { AssistantItem, ChatItem, NoticeItem, RequestItem, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../../web/turns.js";
 import { clip, foldLabel, unifiedDiff } from "../format.js";
@@ -356,6 +356,8 @@ export function Transcript(p: { ref?: (el: unknown) => void; showWork: boolean }
   });
   const switches = createMemo(() => modelSwitches(turns()));
   const [overrides, setOverrides] = createSignal<Record<string, boolean>>({});
+  // Opening or folding every turn (^X E, vim's zR/zM) wins over turns opened or folded one by one.
+  createEffect(on(() => p.showWork, () => setOverrides({}), { defer: true }));
   const isOpen = (turn: Turn) => overrides()[turn.id] ?? (p.showWork || turn.live);
   const workspace = () => app.chat()?.workspace.path ?? "";
   const models = () => app.chat()?.config.models ?? [];
