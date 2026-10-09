@@ -4,7 +4,8 @@
 // harness, model, and thinking pickers (the composer's footer opens them on a
 // click too), Ctrl+X then a letter for the rest (OpenCode's leader key),
 // PageUp/PageDown scroll, Esc Esc stops the agent, Ctrl+C clears, stops, or
-// (twice) quits.
+// (twice) quits. In vim mode (--vim, or Ctrl+X V) Esc leaves the composer for
+// NORMAL, where src/atui/vim.ts's keys move around; i goes back to typing.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
@@ -20,18 +21,19 @@ import { Picker } from "./picker.js";
 import { RequestCard } from "./request.js";
 import { Sidebar } from "./sidebar.js";
 import { Transcript } from "./transcript.js";
+import { turnOffset, vimKey } from "../vim.js";
 
 type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
 
 const LEADER_MS = 2000;
 const TWICE_MS = 1200;
 
-export const LEADER_HELP = "b sessions · s browse · r history · i info · n new · m model · t thinking · h harness · c compact · f full/compact · e work · q quit";
+export const LEADER_HELP = "b sessions · s browse · r history · i info · n new · m model · t thinking · h harness · c compact · f full/compact · e work · v vim · q quit";
 
 /** The status line's reminder of the direct keys. */
 export const KEYS_HELP = "^K commands · ^R history · M-h harness · M-m model · M-t thinking · ^X more · Esc Esc stop · ^C ^C quit";
 
-export function App(p: { app: Atui; onExit: () => void }) {
+export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (on: boolean) => void }) {
   const app = p.app;
   const t = app.theme;
   const size = useTerminalDimensions();
@@ -42,6 +44,11 @@ export function App(p: { app: Atui; onExit: () => void }) {
   const [showWork, setShowWork] = createSignal(false);
   const [compactChoice, setCompactChoice] = createSignal<boolean | null>(null);
   const [hint, setHint] = createSignal<string | null>(null);
+  const [vim, setVim] = createSignal(p.vim ?? false);
+  const [mode, setMode] = createSignal<"insert" | "normal">("insert");
+  const normal = () => vim() && mode() === "normal";
+  /** Keys typed toward a NORMAL command so far: a count, a `g` or `z`. */
+  let vimPending = "";
   let leaderUntil = 0;
   let lastCtrlC = 0;
   let lastEsc = 0;
@@ -82,8 +89,51 @@ export function App(p: { app: Atui; onExit: () => void }) {
   );
 
   const leave = () => {
+    setMode("insert");
     setFocus("composer");
     composer?.focus();
+  };
+
+  /** NORMAL mode: Esc's way out of the composer, keys for moving instead of typing. */
+  const toNormal = () => {
+    setMode("normal");
+    vimPending = "";
+    composer?.blur();
+  };
+
+  const half = () => Math.max(3, Math.floor(size().height / 2));
+  const runVim = (action: NonNullable<ReturnType<typeof vimKey>["action"]>) => {
+    switch (action.kind) {
+      case "scroll":
+        return scroller?.scrollBy(action.lines);
+      case "half":
+        return scroller?.scrollBy(action.dir * half());
+      case "page":
+        return scroller?.scrollBy(action.dir * Math.max(3, size().height - 6));
+      case "top":
+        return scroller?.scrollTo(0);
+      case "bottom":
+        return scroller?.scrollTo(scroller.scrollHeight);
+      case "turn": {
+        if (!scroller) return;
+        const tops = scroller.content.getChildren().map((c) => (c as { y: number }).y);
+        const by = turnOffset(tops, scroller.viewport.y, action.count);
+        if (by !== null) scroller.scrollBy(by);
+        return;
+      }
+      case "folds":
+        return setShowWork(action.open);
+      case "insert":
+        return leave();
+      case "sidebar":
+        setSidebar(true);
+        setFocus("sidebar");
+        return;
+      case "palette":
+        return setDialog("palette");
+      case "history":
+        return setDialog("history");
+    }
   };
 
   const runLeader = (name: string) => {
@@ -117,6 +167,13 @@ export function App(p: { app: Atui; onExit: () => void }) {
         return;
       case "e":
         return setShowWork(!showWork());
+      case "v": {
+        const on = !vim();
+        setVim(on);
+        p.onVim?.(on);
+        leave();
+        return flash(on ? "Vim navigation on: Esc for NORMAL (j/k, gg/G, {/}, zR/zM, :), i to type" : "Vim navigation off");
+      }
       case "q":
         return p.onExit();
       default:
@@ -152,6 +209,34 @@ export function App(p: { app: Atui; onExit: () => void }) {
       if (target) {
         key.preventDefault();
         return setDialog(target);
+      }
+    }
+    // Vim: Esc leaves the composer for NORMAL (a second one still stops a run);
+    // in NORMAL the keys move around, and anything else falls through.
+    if (vim() && focus() === "composer" && !pending()) {
+      // A bare "/command" being typed has the command menu open: its Esc closes that first.
+      const menuOpen = /^\/\S*$/.test(composer?.plainText ?? "");
+      if (mode() === "insert" && key.name === "escape" && !key.ctrl && !key.meta && !menuOpen) {
+        key.preventDefault();
+        toNormal();
+        if (app.busy()) {
+          lastEsc = Date.now();
+          flash("NORMAL · Esc again to stop the agent");
+        }
+        return;
+      }
+      if (mode() === "normal" && key.name !== "escape") {
+        const { action, pending: next } = vimKey(key, vimPending);
+        vimPending = next;
+        if (action) {
+          key.preventDefault();
+          return runVim(action);
+        }
+        // A count or a `g`/`z` waiting for its second key; a stray letter types nothing either.
+        if (next || (!key.ctrl && key.sequence.length === 1)) {
+          key.preventDefault();
+          return;
+        }
       }
     }
     if (key.name === "pageup" || key.name === "pagedown") {
@@ -362,7 +447,7 @@ export function App(p: { app: Atui; onExit: () => void }) {
               keyed
               fallback={
                 <Composer
-                  focused={focus() === "composer" && !dialog()}
+                  focused={focus() === "composer" && !dialog() && !normal()}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
                   onPick={setDialog}
@@ -381,8 +466,13 @@ export function App(p: { app: Atui; onExit: () => void }) {
           <text flexShrink={0} fg={app.conn() === "connected" ? t().ok : app.conn() === "idle" ? t().muted : t().warn}>
             {app.conn() === "connected" ? "● " : app.conn() === "idle" ? "○ " : "◌ "}
           </text>
+          <Show when={vim()}>
+            <text flexShrink={0} fg={normal() ? t().accent : t().muted}>
+              <b>{normal() ? "-- NORMAL -- " : "-- INSERT -- "}</b>
+            </text>
+          </Show>
           <text flexGrow={1} fg={t().muted} wrapMode="none" truncate>
-            {hint() ?? KEYS_HELP}
+            {hint() ?? (normal() ? "j/k scroll · ^D/^U half page · gg/G top/bottom · {/} turns · zR/zM folds · h sessions · : commands · / history · i type" : KEYS_HELP)}
           </text>
           <text flexShrink={0} fg={t().muted}>{` atui ${app.boot()?.version ?? ""}`}</text>
         </box>

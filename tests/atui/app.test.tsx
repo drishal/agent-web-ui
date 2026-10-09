@@ -79,6 +79,39 @@ describe("atui", () => {
     expect(history).toContain("alpha");
   }, 40_000);
 
+  it("moves around in vim mode: Esc for NORMAL, j/k and gg/G, : for commands, i to type again", async () => {
+    ui = await mount(path.join(server.root, "beta"), { vim: true, height: 30 });
+    expect(await ui.frame()).toContain("-- INSERT --");
+    await ui.type("slow stream for scrolling");
+    ui.keys.pressEnter();
+    await ui.until("Echo: slow stream for scrolling");
+    await idle(ui);
+    await ui.escape();
+    expect(await ui.until("-- NORMAL --")).toContain("gg/G top/bottom");
+    // In NORMAL, letters move instead of typing: nothing reaches the composer.
+    const before = await ui.frame();
+    ui.keys.pressKey("g");
+    ui.keys.pressKey("g");
+    await wait(60);
+    expect(await ui.frame()).not.toBe(before);
+    ui.keys.pressKey("g", { shift: true });
+    await wait(60);
+    ui.keys.pressKey("k");
+    ui.keys.pressKey("x");
+    await wait(60);
+    expect(ui.app.chat()?.items.filter((i) => i.kind === "user")).toHaveLength(1);
+    // ":" is the palette; Esc closes it and stays in NORMAL.
+    ui.keys.pressKey(":");
+    await ui.until("Search commands, sessions, thinking…");
+    await ui.escape();
+    expect(await ui.frame()).toContain("-- NORMAL --");
+    // i: back to typing.
+    ui.keys.pressKey("i");
+    await ui.until("-- INSERT --");
+    await ui.type("typed again");
+    expect(await ui.until("typed again")).toContain("-- INSERT --");
+  }, 40_000);
+
   it("answers an approval with a number and a question with the arrows", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("please ask first");

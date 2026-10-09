@@ -74,12 +74,12 @@ export interface Mounted {
   unmount: () => void;
 }
 
-export async function mount(cwd: string, opts: { harness?: string; width?: number; height?: number } = {}): Promise<Mounted> {
+export async function mount(cwd: string, opts: { harness?: string; width?: number; height?: number; vim?: boolean } = {}): Promise<Mounted> {
   const app = createRoot(() => createAtui(new Server(BASE), { cwd, harness: opts.harness ?? "fake" }));
   await app.init();
   startTicker();
   let exited = false;
-  const setup = await testRender(() => <App app={app} onExit={() => (exited = true)} />, { width: opts.width ?? 140, height: opts.height ?? 36 });
+  const setup = await testRender(() => <App app={app} onExit={() => (exited = true)} vim={opts.vim ?? false} />, { width: opts.width ?? 140, height: opts.height ?? 36 });
   const frame = async () => {
     await setup.renderOnce();
     return setup.captureCharFrame();

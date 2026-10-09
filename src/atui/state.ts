@@ -28,6 +28,8 @@ export interface AtuiOptions {
   chatId?: string;
   /** Resume a session: its id, or true for the project's newest one in the harness. */
   resume?: string | true;
+  /** Vim navigation, when the command line says (else the remembered choice). */
+  vim?: boolean;
 }
 
 export type Banner = { level: "info" | "warning" | "error"; text: string } | null;
