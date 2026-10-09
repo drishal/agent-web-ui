@@ -296,7 +296,7 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 - **LAN access is plain HTTP.** On your home network the password and chats are not encrypted; use Tailscale (HTTPS through Serve, or the encrypted tailnet) when you are away. NixOS's firewall also has to allow the port on the LAN interface (see below).
 - If `ALLOWED_TAILSCALE_USERS` is set, Serve requests must also carry an allowed `Tailscale-User-Login` (trustworthy only because the backend is behind Serve).
 - Harness credentials are never read, returned, or logged. Each harness uses its own local auth.
-- No shell endpoint. Strict CSP (`'self'` only, no inline script or style, no CDNs), `Referrer-Policy: no-referrer`, and `frame-ancestors 'none'`.
+- **Run** (`POST /api/chats/:id/run`) executes a one-line shell command from an answer's code block in the chat's project folder, for any signed-in device (the same reach those devices already have through the agent): one line, at most 4000 characters, a 60 s limit after which its whole process group is killed, and 100 KB of output kept. Nothing else runs a shell. Strict CSP (`'self'` only, no inline script or style, no CDNs), `Referrer-Policy: no-referrer`, and `frame-ancestors 'none'`.
 - Markdown: raw HTML is dropped. Links are limited to `http`/`https`/`mailto`, and remote images are not loaded.
 - Attached images are checked by their magic bytes against the type they claim (PNG, JPEG, GIF, WebP only); only `POST …/messages` accepts a large body (8 × 5 MB), every other route keeps a small limit.
 - **Neither Pi nor omp sandboxes itself.** They run as you with their full tool set, and **Tailscale is network access, not a sandbox.** Anyone who can use this UI can make the agent run commands as you.
