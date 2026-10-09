@@ -402,7 +402,7 @@ export function Sidebar(props: {
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">
-          <span className="brand">Agent Web UI</span>
+          <span className="brand">awui</span>
           <button type="button" className="icon-btn sidebar-settings" aria-label="Settings" title="Settings" onClick={props.onSettings}>
             <IconSettings size={16} />
           </button>

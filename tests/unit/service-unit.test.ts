@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error: a plain .mjs script with no type declarations.
 import { renderUnit } from "../../scripts/service.mjs";
 
-const template = readFileSync(new URL("../../contrib/systemd/agent-web-ui.service", import.meta.url), "utf8");
+const template = readFileSync(new URL("../../contrib/systemd/awui.service", import.meta.url), "utf8");
 
 describe("systemd user unit", () => {
   it("runs this checkout's build with this node and the shell's PATH", () => {

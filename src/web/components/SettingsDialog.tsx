@@ -188,7 +188,7 @@ export function SettingsDialog({
       await new Promise((r) => setTimeout(r, 700));
     }
     setRestarting(false);
-    setError("The server has not come back yet; check its log (journalctl --user -u agent-web-ui).");
+    setError("The server has not come back yet; check its log (journalctl --user -u awui).");
   };
 
   const [notifyBusy, setNotifyBusy] = useState(false);
@@ -437,7 +437,7 @@ export function SettingsDialog({
           </p>
         ) : null}
       </section>
-      <p className="settings-version">Agent Web UI v{version}</p>
+      <p className="settings-version">awui v{version}</p>
     </Dialog>
   );
 }

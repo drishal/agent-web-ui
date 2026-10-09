@@ -168,7 +168,7 @@ describe("credentials and secrets", () => {
   });
 
   it("the cookie secret is created once with mode 0600 and reused", async () => {
-    const dir = path.join(mkdtempSync(path.join(tmpdir(), "awui-state-")), "agent-web-ui");
+    const dir = path.join(mkdtempSync(path.join(tmpdir(), "awui-state-")), "awui");
     const a = await loadOrCreateSecret(dir);
     const b = await loadOrCreateSecret(dir);
     expect(a.equals(b)).toBe(true);

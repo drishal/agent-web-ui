@@ -28,7 +28,7 @@ export function LoginForm() {
         }}
       >
         <h1>Sign in</h1>
-        <p className="muted">Agent Web UI on another device needs your username and password.</p>
+        <p className="muted">awui on another device needs your username and password.</p>
         <label className="login-field">
           <span>Username</span>
           <input className="input" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />

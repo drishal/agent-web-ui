@@ -1,3 +1,4 @@
+import { existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
@@ -78,6 +79,27 @@ export function normalizeAuthority(entry: string): string {
   return auth.authority;
 }
 
+/** The state folder's name under $XDG_STATE_HOME; it was agent-web-ui before the rename to awui. */
+export const STATE_DIR_NAME = "awui";
+const OLD_STATE_DIR_NAME = "agent-web-ui";
+
+/**
+ * Move the state folder from its old name (agent-web-ui) the first time this
+ * version starts, so the sign-in, cookie secret, checkpoints, pins, and push
+ * keys carry over. Nothing happens once the new folder exists.
+ */
+export function migrateStateDir(stateDir: string): "moved" | null {
+  if (path.basename(stateDir) !== STATE_DIR_NAME || existsSync(stateDir)) return null;
+  const old = path.join(path.dirname(stateDir), OLD_STATE_DIR_NAME);
+  if (!existsSync(old)) return null;
+  try {
+    renameSync(old, stateDir);
+    return "moved";
+  } catch {
+    return null;
+  }
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const home = homedir();
   let port = DEFAULT_PORT;
@@ -94,7 +116,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (host !== "127.0.0.1" && host !== "0.0.0.0") {
     throw new ConfigError("host (HOST) must be 127.0.0.1 (default) or 0.0.0.0 (LAN, username/password sign-in)");
   }
-  const stateDir = path.join(xdgState, "agent-web-ui");
+  const stateDir = path.join(xdgState, STATE_DIR_NAME);
   let login: ServerConfig["login"] = null;
   if (env.AUTH_PASSWORD) {
     const username = (env.AUTH_USERNAME ?? "").trim();

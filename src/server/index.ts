@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp, RECENT_SESSIONS_PER_HARNESS } from "./app.js";
 import { ChatManager } from "./chats/manager.js";
-import { ConfigError, loadConfig } from "./config.js";
+import { ConfigError, loadConfig, migrateStateDir } from "./config.js";
 import { liveOmpChildren } from "./harness/omp.js";
 import { HarnessRegistry } from "./harness/registry.js";
 import { hashPassword, loadCredentials, PasswordAuth } from "./auth.js";
@@ -28,13 +28,13 @@ async function findRoot(): Promise<string> {
   for (let i = 0; i < 5; i++) {
     try {
       const pkg = JSON.parse(await fs.readFile(path.join(dir, "package.json"), "utf8")) as { name?: string };
-      if (pkg.name === "agent-web-ui") return dir;
+      if (pkg.name === "awui") return dir;
     } catch {
       // keep walking up
     }
     dir = path.dirname(dir);
   }
-  throw new Error("Cannot locate agent-web-ui package root");
+  throw new Error("Cannot locate the awui package root");
 }
 
 async function main(): Promise<void> {
@@ -47,11 +47,12 @@ async function main(): Promise<void> {
     config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });
   } catch (error) {
     if (error instanceof ConfigError || error instanceof UserConfigError) {
-      console.error(`agent-web-ui: ${error.message}`);
+      console.error(`awui: ${error.message}`);
       process.exit(EXIT_CONFIG);
     }
     throw error;
   }
+  if (migrateStateDir(config.stateDir) === "moved") console.log(`  state: moved from agent-web-ui to ${config.stateDir}`);
   // Which settings the environment overrides (they beat config.yml), noted before the password leaves it.
   const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS"].filter((n) => process.env[n] !== undefined));
   // The agents' shells inherit process.env; the password must not reach them.
@@ -74,9 +75,9 @@ async function main(): Promise<void> {
       password = new PasswordAuth(await loadCredentials(config.credentialsFile));
     } catch (error) {
       if (remote) {
-        console.error(`agent-web-ui: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
         console.error(
-          "agent-web-ui: host 0.0.0.0 and allowed_hosts need a login for other devices (auth.username and auth.password in config.yml, or `npm run set-password`); refusing to start.",
+          "awui: host 0.0.0.0 and allowed_hosts need a login for other devices (auth.username and auth.password in config.yml, or `npm run set-password`); refusing to start.",
         );
         process.exit(EXIT_CONFIG);
       }
@@ -89,12 +90,12 @@ async function main(): Promise<void> {
     secret,
     ...(password ? { password } : {}),
     ...(config.host === "0.0.0.0" ? { lanHosts: cachedLanHosts() } : {}),
-    log: (m) => console.error(`agent-web-ui: ${m}`),
+    log: (m) => console.error(`awui: ${m}`),
   });
   const { workspaces, warnings } = await Workspaces.create(config.workspaceRoots, config.home);
-  for (const w of warnings) console.error(`agent-web-ui: ${w}`);
+  for (const w of warnings) console.error(`awui: ${w}`);
   if (workspaces.rootList.length === 0) {
-    console.error("agent-web-ui: no usable WORKSPACE_ROOTS");
+    console.error("awui: no usable WORKSPACE_ROOTS");
     process.exit(EXIT_CONFIG);
   }
   const registry = HarnessRegistry.fromConfig(config);
@@ -109,13 +110,13 @@ async function main(): Promise<void> {
   for (const adapter of registry.list()) {
     if (registry.isAvailable(adapter.id)) void adapter.listRecentSessions(RECENT_SESSIONS_PER_HARNESS).catch(() => undefined);
   }
-  const theme = new ThemeStore(config.themeFile, config.themeFileExplicit, (m) => console.error(`agent-web-ui: ${m}`));
+  const theme = new ThemeStore(config.themeFile, config.themeFileExplicit, (m) => console.error(`awui: ${m}`));
   const active = await theme.get();
   console.log(`  theme: ${active.name ?? "built-in light/dark"}`);
   const manager = new ChatManager();
   const marks = await SessionMarks.open(config.stateDir);
   const limits = await Limits.open(registry, config.stateDir);
-  const notifier = await Notifier.open(config.stateDir, (m) => console.error(`agent-web-ui: ${m}`));
+  const notifier = await Notifier.open(config.stateDir, (m) => console.error(`awui: ${m}`));
   const lanUrls = config.host === "0.0.0.0" ? sampleLanHosts().ipv4.map((ip) => `http://${ip}:${config.port}/`) : [];
   const pairingUrls = [...lanUrls, ...config.allowedHosts.map((h) => `https://${h}/`)];
   const webDir = process.env.AWUI_WEB_DIR ?? path.join(root, "dist", "web");
@@ -162,14 +163,14 @@ async function main(): Promise<void> {
   });
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
-      console.error(`agent-web-ui: port ${config.port} on 127.0.0.1 is already in use. Stop the other process or set PORT.`);
+      console.error(`awui: port ${config.port} on 127.0.0.1 is already in use. Stop the other process or set PORT.`);
     } else {
-      console.error(`agent-web-ui: cannot listen: ${error.message}`);
+      console.error(`awui: cannot listen: ${error.message}`);
     }
     process.exit(1);
   });
   server.listen(config.port, config.host, () => {
-    console.log(`agent-web-ui ${pkg.version} listening on http://${config.host}:${config.port}`);
+    console.log(`awui ${pkg.version} listening on http://${config.host}:${config.port}`);
     console.log(`Local: http://127.0.0.1:${config.port}/ (no sign-in on this machine)`);
     for (const url of lanUrls) console.log(`LAN:   ${url}`);
     for (const h of config.allowedHosts) console.log(`Serve: https://${h}/`);
@@ -188,13 +189,13 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
-    console.log(`agent-web-ui: ${signal}, shutting down`);
+    console.log(`awui: ${signal}, shutting down`);
     server.close();
     for (const socket of sockets) socket.destroy();
     await manager.shutdown();
     await registry.shutdown();
     const left = liveOmpChildren();
-    console.log(`agent-web-ui: stopped (omp children left: ${left})`);
+    console.log(`awui: stopped (omp children left: ${left})`);
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
@@ -203,6 +204,6 @@ async function main(): Promise<void> {
 
 
 main().catch((error: unknown) => {
-  console.error(`agent-web-ui: fatal: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`awui: fatal: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

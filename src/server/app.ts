@@ -375,7 +375,7 @@ export function createApp(deps: AppDeps) {
   });
   app.post("/api/push/test", (req, res) => {
     const { endpoint } = body(pushTestSchema, req);
-    res.json(notifier.notify({ kind: "done", chatId: "", sessionId: null, title: "Agent Web UI", body: "Notifications work on this device" }, endpoint));
+    res.json(notifier.notify({ kind: "done", chatId: "", sessionId: null, title: "awui", body: "Notifications work on this device" }, endpoint));
   });
   /** Notes after `since` (epoch ms, as `now` last said); without it, the last two minutes. */
   app.get("/api/notifications", (req, res) => {

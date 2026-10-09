@@ -6,7 +6,7 @@
 //   /rewind-to        pick the prompt from a list (the prompt lands in the editor)
 //   /rewind-to <n>    the nth prompt of the current branch, 1 being the first
 //
-// Agent Web UI's Edit and Retry send `/rewind-to <n>` over RPC, then the new
+// awui's Edit and Retry send `/rewind-to <n>` over RPC, then the new
 // prompt. Works in Pi and in oh-my-pi (omp): it uses only the extension API
 // both share, and imports nothing.
 

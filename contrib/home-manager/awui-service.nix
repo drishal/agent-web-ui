@@ -1,11 +1,11 @@
 { config, lib, pkgs, ... }:
 
-# Optional autostart for agent-web-ui as a systemd user service, managed
+# Optional autostart for awui as a systemd user service, managed
 # declaratively by home-manager. Build the app first (`npm ci && npm run build`
 # in appDir); after pulling, rebuild and restart the unit.
-#            Status:     systemctl --user status agent-web-ui
-#            Logs:       journalctl --user -u agent-web-ui -n 20
-#            Restart:    systemctl --user restart agent-web-ui
+#            Status:     systemctl --user status awui
+#            Logs:       journalctl --user -u awui -n 20
+#            Restart:    systemctl --user restart awui
 #            Uninstall:  remove this import and run home-manager switch.
 
 let
@@ -13,9 +13,9 @@ let
   appDir = "%h/.../webui";
 in
 {
-  systemd.user.services.agent-web-ui = {
+  systemd.user.services.awui = {
     Unit = {
-      Description = "Agent Web UI for Pi, omp, Hermes, and Claude Code";
+      Description = "awui: the web UI for Pi, omp, Hermes, and Claude Code";
       # No build yet (or no checkout on this machine): skip instead of restart-looping.
       ConditionPathExists = "${appDir}/dist/server/server/index.js";
     };

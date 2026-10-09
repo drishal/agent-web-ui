@@ -1,11 +1,11 @@
 // atui's command line.
 import type { AtuiOptions } from "./state.js";
 
-export const USAGE = `atui: Agent Web UI in the terminal
+export const USAGE = `atui: awui in the terminal
 
 Usage: atui [options]
 
-  --url <url>         the Agent Web UI server (default $AWUI_URL or http://127.0.0.1:4783)
+  --url <url>         the awui server (default $AWUI_URL or http://127.0.0.1:4783)
   --harness <id>      the harness for new chats (pi, omp, hermes, claude, …)
   --resume [id]       resume a session: the given one, or this project's newest
   --chat <id>         attach to a chat that is open on the server
