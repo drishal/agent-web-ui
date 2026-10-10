@@ -15,6 +15,7 @@ import { loadOrCreateSecret, Security } from "./security.js";
 import { embeddedVersion, extractEmbeddedExtensions, isEmbedded } from "./embedded.js";
 import "./assets.gen.js";
 import { installTui } from "./install-tui.js";
+import { installService } from "./install-service.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier } from "./notify.js";
@@ -234,6 +235,8 @@ const HELP = `awui ${embeddedVersion ?? ""} — local web UI for coding agents
 Usage:
   awui [flags]           Run the web UI + API (default)
   awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui)
+  awui install service   Install the binary to ~/.local/bin and enable the systemd user service
+                          [--link symlinks it instead of copying, for a dev checkout]
 
 Flags:
   --port <n>             Listen port (default 4783; env PORT)
@@ -244,8 +247,8 @@ Flags:
 `;
 
 /** Parse the small flag set into env overrides; unknown flags fail loudly instead of silently serving. */
-function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: string; help?: boolean; version?: boolean } | string {
-  const out: { port?: string; host?: string; stateDir?: string; help?: boolean; version?: boolean } = {};
+function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: string; link?: boolean; help?: boolean; version?: boolean } | string {
+  const out: { port?: string; host?: string; stateDir?: string; link?: boolean; help?: boolean; version?: boolean } = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const take = (k: "port" | "host" | "stateDir") => {
@@ -257,6 +260,7 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
       if (a === "--port" || a === "-p") take("port");
       else if (a === "--host") take("host");
       else if (a === "--state-dir") take("stateDir");
+      else if (a === "--link") out.link = true;
       else if (a === "--help" || a === "-h") out.help = true;
       else if (a === "--version" || a === "-v") out.version = true;
       else if (a.startsWith("-")) throw new Error(`unknown flag: ${a}`);
@@ -269,18 +273,27 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
 
 /** `awui install tui` — fetch and install the terminal client; flags and everything else run the web server. */
 const args = process.argv.slice(2);
-if (args[0] === "install" && args[1] === "tui") {
+if (args[0] === "install" && (args[1] === "tui" || args[1] === "service")) {
+  const what = args[1] as string;
   const rest = args.slice(2);
   const flags = parseFlags(rest);
   if (typeof flags === "string") {
-    console.error(`awui install tui: ${flags}`);
+    console.error(`awui install ${what}: ${flags}`);
     process.exit(64);
   }
+  const link = flags.link === true;
   const config = loadConfig({ ...(flags.stateDir ? { AWUI_STATE_DIR: flags.stateDir } : {}) });
-  installTui(config.stateDir).catch((error: unknown) => {
-    console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
-  });
+  if (what === "service") {
+    installService({ link }).catch((error: unknown) => {
+      console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    });
+  } else {
+    installTui(config.stateDir).catch((error: unknown) => {
+      console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    });
+  }
 } else {
   const flags = parseFlags(args);
   if (typeof flags === "string") {
