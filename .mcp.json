@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "devenv": {
+      "type": "stdio",
+      "command": "devenv",
+      "args": ["mcp"],
+      "env": { "DEVENV_ROOT": "/home/drishal/Desktop/git-stuff/webui" }
+    }
+  }
+}

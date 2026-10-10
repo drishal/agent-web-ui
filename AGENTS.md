@@ -50,8 +50,11 @@ Server changes that the browser sees need e2e too.
 src/shared/protocol.ts        Wire types and Zod request schemas: the only contract between server and clients.
 src/shared/html-render.ts     Agent-rendered pages: bootstrap markup, theme payload, frame-height math (no harness types).
 src/server/
-  index.ts                    Startup: config, state-folder migration, registry, routes, listen, shutdown.
+  index.ts                    Startup: config, state-folder migration, registry, routes, listen, shutdown. Subcommand: `install tui`.
   app.ts                      Every route (Express 5), SSE, error mapping. All /api routes but health/login/logout need auth.
+  embedded.ts                 The binary's baked-in assets: embedded web bundle, extension sources, version; materializes extensions into state dir for `-e`.
+  install-tui.ts              `awui install tui`: fetch the atui source and drop a `~/.local/bin/atui` wrapper.
+  assets.gen.ts               Checked-in stub replaced by the generated embed map at binary-build time.
   config.ts, user-config.ts   Environment + ~/.config/agentwebui/config.yml → ServerConfig. settings.ts edits config.yml for the Settings dialog.
   security.ts, auth.ts        Host/Origin/Tailscale checks, local vs remote, scrypt logins, signed cookies, lockout.
   workspaces.ts               WORKSPACE_ROOTS confinement (realpath), folder browsing.

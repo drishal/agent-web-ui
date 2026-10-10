@@ -3,6 +3,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { ZodError, type ZodType } from "zod";
+import { embeddedWeb } from "./embedded.js";
 import {
   answerSchema,
   type Bootstrap,
@@ -694,7 +695,21 @@ export function createApp(deps: AppDeps) {
     res.status(404).json({ error: "Not found", code: "not_found" });
   });
 
-  if (deps.webDir && existsSync(path.join(deps.webDir, "index.html"))) {
+  const embedded = embeddedWeb();
+  if (embedded) {
+    // The binary carries the web bundle: serve it from memory, same caching rules as on disk.
+    app.get(/^\/(?!api\/).*/, (req, res) => {
+      const urlPath = req.path === "/" ? "/index.html" : req.path;
+      const file = embedded.get(urlPath) ?? embedded.get("/index.html");
+      if (!file) {
+        res.status(404).end();
+        return;
+      }
+      res.setHeader("Cache-Control", urlPath.endsWith(".html") || urlPath === "/index.html" ? "no-store" : "public, max-age=3600");
+      res.setHeader("Content-Type", file.contentType);
+      res.send(file.text);
+    });
+  } else if (deps.webDir && existsSync(path.join(deps.webDir, "index.html"))) {
     const webDir = deps.webDir;
     app.use(express.static(webDir, { index: "index.html", maxAge: "1h", setHeaders: noStoreHtml }));
     app.get(/^\/(?!api\/).*/, (_req, res) => {

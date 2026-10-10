@@ -9,14 +9,17 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractedExtensionPath } from "../embedded.js";
 
 export const RENDER_TOOL_NAME = "render_html";
 
 let found: string | null | undefined;
 
-/** The extension file, found by walking up from here (src/ in development, dist/ when built). */
+/** The render_html extension file: the materialized embedded copy in the binary, else the repo path found by walking up. */
 export function renderHtmlExtension(): string | null {
   if (found !== undefined) return found;
+  const embedded = extractedExtensionPath("render-html.ts");
+  if (embedded !== null) return (found = embedded);
   found = null;
   for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
     const file = path.join(dir, "extensions", "render-html.ts");
@@ -33,9 +36,11 @@ export function renderHtmlExtensionArgs(): string[] {
 
 let foundEval: string | null | undefined;
 
-/** The eval_python extension file (scratch-dir Python for the awui chat surface). */
+/** The eval_python extension file (scratch-dir Python for the awui chat surface): embedded copy in the binary, else the repo path. */
 export function evalPythonExtension(): string | null {
   if (foundEval !== undefined) return foundEval;
+  const embedded = extractedExtensionPath("eval-python.ts");
+  if (embedded !== null) return (foundEval = embedded);
   foundEval = null;
   for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
     const file = path.join(dir, "extensions", "eval-python.ts");

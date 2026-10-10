@@ -7,14 +7,17 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ChatItem } from "../../shared/protocol.js";
+import { extractedExtensionPath } from "../embedded.js";
 
 export const REWIND_COMMAND = "rewind-to";
 
 let found: string | null | undefined;
 
-/** The extension file, found by walking up from here (src/ in development, dist/ when built). */
+/** The extension file: the materialized embedded copy in the binary, else the repo path found by walking up. */
 export function rewindExtension(): string | null {
   if (found !== undefined) return found;
+  const embedded = extractedExtensionPath("rewind-to.ts");
+  if (embedded !== null) return (found = embedded);
   found = null;
   for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
     const file = path.join(dir, "extensions", "rewind-to.ts");
