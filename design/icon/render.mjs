@@ -27,7 +27,7 @@ if (args[0] === "--png") {
     await p2.screenshot({ path: path.join(outDir, name), omitBackground: true });
   }
 } else {
-  const files = ["a-bubble.svg", "b-hub.svg", "c-prompt.svg"];
+  const files = ["a-bubble.svg", "b-hub.svg", "c-prompt.svg", "d-bubble.svg"];
   const row = (bg, fg) =>
     files
       .map((f) => {
