@@ -117,7 +117,7 @@
   --r-lg: 16px;
   --r-xl: 20px;
   --r-panel: 24px;
-  --col: 760px;
+  --col: 960px;
   --sidebar-w: 272px;
   --chat-scale: 1;
   --chat-font: calc(14.5px * var(--chat-scale));
@@ -3276,11 +3276,11 @@ body.is-resizing {
 .stack-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   max-height: 32vh;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 0 4px 4px;
+  padding: 0 6px 6px;
 }
 
 .stack-queue,
@@ -3368,11 +3368,25 @@ body.is-resizing {
   transition: transform 0.12s ease;
 }
 
+/* Each section is its own bubble inside the stack card. */
+.stack-body > .stack-queue,
+.stack-body > .stack-list,
+.stack-body > .stack-group {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.stack-body > .stack-queue,
+.stack-body > .stack-list {
+  padding: 2px;
+}
+
 .stack-group:not(.is-open) .stack-chevron {
   transform: rotate(-90deg);
 }
 
-/* Git row: the base of the status stack (Hermes Desktop's coding row). */
+/* Git row: its own bubble, detached from the card above it. */
 .status-stack.is-base-only {
   padding-top: 2px;
 }
@@ -3385,9 +3399,9 @@ body.is-resizing {
   min-height: 30px;
   margin: 0 4px 4px;
   padding: 0 8px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
   color: var(--text-2);
   font-size: 12.5px;
   text-align: left;
@@ -3395,12 +3409,7 @@ body.is-resizing {
 
 .status-stack:not(.is-hidden) > .stack-body + .git-row,
 .status-stack.is-hidden > .git-row {
-  margin-top: 2px;
-}
-
-.status-stack > .stack-body + .git-row {
-  border-top: 1px solid var(--hairline);
-  border-radius: 0 0 var(--r-sm) var(--r-sm);
+  margin-top: 4px;
 }
 
 .git-row:hover {
@@ -4114,7 +4123,7 @@ body.is-resizing {
   margin: 0 0 0 auto;
   padding: 0;
   border: 0;
-  width: min(760px, 100vw);
+  width: min(var(--col), 100vw);
   max-width: 100vw;
   height: 100dvh;
   max-height: 100dvh;
@@ -6352,7 +6361,7 @@ button.harness-chip:disabled {
   bottom: 0;
   display: flex;
   flex-direction: column;
-  width: min(760px, 100vw);
+  width: min(var(--col), 100vw);
   border-left: 1px solid var(--hairline-strong);
   background: var(--bg);
   box-shadow: var(--shadow-float);
