@@ -48,6 +48,7 @@ Server changes that the browser sees need e2e too.
 
 ```
 src/shared/protocol.ts        Wire types and Zod request schemas: the only contract between server and clients.
+src/shared/html-render.ts     Agent-rendered pages: bootstrap markup, theme payload, frame-height math (no harness types).
 src/server/
   index.ts                    Startup: config, state-folder migration, registry, routes, listen, shutdown.
   app.ts                      Every route (Express 5), SSE, error mapping. All /api routes but health/login/logout need auth.
@@ -59,11 +60,16 @@ src/server/
   harness/types.ts            HarnessAdapter / LiveChat contract and the normalized HarnessEvent union.
   harness/registry.ts         One factory per harness; AWUI_HARNESSES selects them.
   harness/{pi,omp,hermes,claude}.ts   The four adapters. fake.ts is the deterministic test adapter.
+  harness/awui.ts              The Awui chat harness: a read-only `pi` child (subclass), own agent dir, write/exec tools denied. Web-only.
+  awui-settings.ts             The Awui harness's provider settings: edit its isolated agent dir's models.json (keys never echoed).
   harness/agent-events.ts     Pi-family event and transcript normalization (Pi and omp share it); historyToItems.
   harness/session-files.ts    Pi/omp session JSONL: active branch by parentId, fork and seed writers.
   harness/claude-sessions.ts  Claude Code's session files.
   harness/tool-diff.ts        Every harness's edit result → one DiffLine[] shape.
   harness/subagents.ts        Delegation calls (omp task, pi-subagents, Claude Task) → SubagentRun[].
+  harness/render-extension.ts The render_html extension's file and the -e args that load it (Pi/omp).
+  harness/render-token.ts     render tool names; a result's details.htmlRender → HtmlRenderRef, spoof-guarded.
+  html-render.ts              Agent-rendered pages under the state folder, addressed by id, one owner chat each.
   harness/handoff.ts          Cross-harness handoff: portable seed transcript and the briefing prompt.
   harness/deferred.ts         Resume-without-waiting: show the file's transcript while the harness starts.
   checkpoints.ts              Per-prompt work-tree snapshots in a shadow git repo; turn undo.
@@ -75,6 +81,8 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
 extensions/rewind-to.ts       A Pi/omp extension the server loads into its children (-e) for in-place Edit/Retry.
+extensions/render-html.ts     A Pi/omp extension registering render_html, which publishes an HTML page into the chat.
+extensions/eval-python.ts     An awui-harness extension registering eval_python: runs a snippet in a scratch tmp dir (no workspace).
 contrib/                      systemd unit and home-manager modules (templates; users copy them).
 tests/unit                    Vitest. tests/helpers/app.ts builds a real app with fake adapters (makeTestApp).
 tests/fixtures                Scripted stand-ins: fake-omp.mjs, fake-hermes.mjs, fake-claude.mjs, themes/.

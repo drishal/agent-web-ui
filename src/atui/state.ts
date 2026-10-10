@@ -129,6 +129,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
 
   const init = async () => {
     const b = await server.call<Bootstrap>("/api/bootstrap");
+    // The awui harness is the web UI's chat surface; a terminal omits it.
+    b.harnesses = b.harnesses.filter((h) => h.id !== "awui");
     const t = await server.call<ThemeInfo>("/api/theme").catch(() => null);
     batch(() => {
       setBoot(b);

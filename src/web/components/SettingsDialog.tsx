@@ -36,6 +36,36 @@ const lines = (text: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
+/** A provider row as the awui dialog edits it (apiKey stays blank to keep the stored one). */
+interface AwuiProviderRow {
+  name: string;
+  baseUrl: string;
+  api: string;
+  apiKey: string;
+  /** The stored key, redacted server-side to a flag; blank in the form means "keep it". */
+  hadKey: boolean;
+}
+
+interface AwuiSettingsState {
+  rows: AwuiProviderRow[];
+  busy: boolean;
+  error: string | null;
+  saved: boolean;
+}
+
+interface AwuiSettingsResponse {
+  providers: Record<string, { baseUrl: string; api: string; hasApiKey: boolean; modelOverrides?: Record<string, unknown> }>;
+}
+
+function draftAwui(c: AwuiSettingsResponse): AwuiSettingsState {
+  return {
+    rows: Object.entries(c.providers).map(([name, p]) => ({ name, baseUrl: p.baseUrl, api: p.api, apiKey: "", hadKey: p.hasApiKey })),
+    busy: false,
+    error: null,
+    saved: false,
+  };
+}
+
 const SCALE_MIN = TEXT_SCALES[0]?.[1] ?? 0.85;
 const SCALE_MAX = TEXT_SCALES[TEXT_SCALES.length - 1]?.[1] ?? 1.35;
 
@@ -120,6 +150,8 @@ export function SettingsDialog({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  // The awui harness's own providers; null until loaded, false when the harness is off.
+  const [awui, setAwui] = useState<AwuiSettingsState | null>(null);
 
   useEffect(() => {
     void api<ServerSettings>("/api/settings")
@@ -128,6 +160,9 @@ export function SettingsDialog({
         setDraft(draftOf(s.values));
       })
       .catch((e: unknown) => setError(errorText(e)));
+    void api<AwuiSettingsResponse>("/api/awui/settings")
+      .then((c) => setAwui(draftAwui(c)))
+      .catch(() => setAwui(null)); // harness not registered: no section
   }, []);
 
   const editable = Boolean(server?.editable && server.writable);
@@ -156,6 +191,23 @@ export function SettingsDialog({
       setError(errorText(e));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveAwui = async () => {
+    if (!awui || awui.busy) return;
+    setAwui({ ...awui, busy: true, error: null, saved: false });
+    try {
+      const providers: Record<string, { baseUrl: string; api: string; apiKey?: string }> = {};
+      for (const r of awui.rows) {
+        if (!r.name.trim() || !r.baseUrl.trim()) continue;
+        // Blank key keeps the stored one (omitted); "-" is the form's clear sentinel, sent as "".
+        providers[r.name.trim()] = { baseUrl: r.baseUrl.trim(), api: r.api.trim() || "openai-completions", ...(r.apiKey === "" ? {} : { apiKey: r.apiKey === "-" ? "" : r.apiKey }) };
+      }
+      const next = await api<AwuiSettingsResponse>("/api/awui/settings", { method: "PUT", body: { providers } });
+      setAwui({ ...draftAwui(next), saved: true });
+    } catch (e) {
+      setAwui({ ...awui, busy: false, error: errorText(e) });
     }
   };
 
@@ -437,6 +489,42 @@ export function SettingsDialog({
           </p>
         ) : null}
       </section>
+      {awui ? (
+        <section className="settings-section" aria-labelledby="settings-awui">
+          <h2 id="settings-awui">Awui harness</h2>
+          <p className="settings-note">Providers the read-only Awui chat can call, from its own agent dir (never your ~‑pi config). Blank API key keeps the stored one; type `-` to clear it.</p>
+          <div className="awui-providers">
+            {awui.rows.map((r, i) => (
+              <div className="awui-provider" key={i}>
+                <input className="input" aria-label="Provider name" placeholder="name (e.g. litellm)" value={r.name} onChange={(e) => setAwui({ ...awui, saved: false, rows: awui.rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                <input className="input" aria-label="Base URL" placeholder="http://host:8085/v1" value={r.baseUrl} onChange={(e) => setAwui({ ...awui, saved: false, rows: awui.rows.map((x, j) => (j === i ? { ...x, baseUrl: e.target.value } : x)) })} />
+                <input className="input" aria-label="API kind" placeholder="openai-completions" value={r.api} onChange={(e) => setAwui({ ...awui, saved: false, rows: awui.rows.map((x, j) => (j === i ? { ...x, api: e.target.value } : x)) })} />
+                <input className="input" type="password" aria-label="API key" autoComplete="new-password" placeholder={r.hadKey ? "Set (type to change)" : "None"} value={r.apiKey} onChange={(e) => setAwui({ ...awui, saved: false, rows: awui.rows.map((x, j) => (j === i ? { ...x, apiKey: e.target.value } : x)) })} />
+                <button type="button" className="ghost-icon" aria-label={`Remove ${r.name || "provider"}`} title="Remove provider" onClick={() => setAwui({ ...awui, saved: false, rows: awui.rows.filter((_, j) => j !== i) })}>
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="settings-actions">
+            <button type="button" className="btn btn-small btn-ghost" onClick={() => setAwui({ ...awui, saved: false, rows: [...awui.rows, { name: "", baseUrl: "", api: "openai-completions", apiKey: "", hadKey: false }] })}>
+              Add provider
+            </button>
+            <button type="button" className="btn btn-small btn-primary" disabled={awui.busy} onClick={() => void saveAwui()}>
+              {awui.busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {awui.error ? (
+            <p className="notice notice-error" role="alert">
+              {awui.error}
+            </p>
+          ) : awui.saved ? (
+            <p className="settings-note" role="status">
+              Saved.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       <p className="settings-version">awui v{version}</p>
     </Dialog>
   );

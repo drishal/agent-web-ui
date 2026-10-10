@@ -196,6 +196,11 @@ export function App() {
   const chooseHarness = (id: string) => {
     setHarnessId(id);
     save("harness", id);
+    // The Awui harness has no projects; putting it on the home workspace keeps its
+    // flat history from filtering to nothing under whatever coding workspace was last.
+    if (id === "awui" && workspace?.path !== boot?.home) {
+      void api<WorkspaceInfo>("/api/workspaces/open", { body: { path: boot?.home ?? "/" } }).then(setWorkspace).catch(() => undefined);
+    }
   };
 
   const openWorkspace = async (path: string) => {
@@ -230,6 +235,10 @@ export function App() {
   };
 
   const newChat = async (target: WorkspaceInfo | null = workspace, { newTab = false }: { newTab?: boolean } = {}) => {
+    // The Awui harness's history is global; a new chat belongs on the home workspace, not wherever a coding chat left the picker.
+    if (harnessId === "awui" && boot && target?.path !== boot.home) {
+      target = boot.home ? ({ id: "__home", path: boot.home, name: "home" } as WorkspaceInfo) : target;
+    }
     if (!target || !harnessId) return;
     setOpening(true);
     setBanner(null);
@@ -880,7 +889,7 @@ export function App() {
             </button>
           ) : null}
           <div className="chat-title">
-            <h1>{chat ? chat.title || "New chat" : workspace ? workspace.name : "awui"}</h1>
+            <h1>{chat ? chat.title || "New chat" : harnessId === "awui" ? "awui" : workspace ? workspace.name : "awui"}</h1>
             {chat ? (
               <div className="chat-sub">
                 <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>
@@ -889,9 +898,11 @@ export function App() {
                 <span className={`status status-${chat.status}`} data-testid="chat-status">
                   {STATUS_LABEL[chat.status] ?? chat.status}
                 </span>
-                <span className="chat-path" title={chat.workspace.path}>
-                  {chat.workspace.name}
-                </span>
+                {chat.harnessId !== "awui" ? (
+                  <span className="chat-path" title={chat.workspace.path}>
+                    {chat.workspace.name}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -989,9 +1000,15 @@ export function App() {
                 </div>
               ) : null}
               <h2 className="hero-title">
-                What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
+                {chat.harnessId === "awui" ? (
+                  <>Ask anything</>
+                ) : (
+                  <>
+                    What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
+                  </>
+                )}
               </h2>
-              <p className="hero-sub muted">It runs with its normal tools, as you, in this folder.</p>
+              <p className="hero-sub muted">{chat.harnessId === "awui" ? "It reads, searches, and computes — it never edits your files." : "It runs with its normal tools, as you, in this folder."}</p>
               {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
               <Composer
                 key={chat.chatId}
@@ -1045,7 +1062,7 @@ export function App() {
           </>
         ) : (
           <div className="empty empty-main">
-            {!workspace ? (
+            {!workspace && harnessId !== "awui" ? (
               <>
                 <h2>Choose a project</h2>
                 <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
@@ -1060,7 +1077,7 @@ export function App() {
               </>
             ) : (
               <>
-                <h2>{workspace.name}</h2>
+                <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
                 <p className="muted">Start a new chat or resume one from the list.</p>
                 <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
                   New {currentHarness?.displayName ?? ""} chat
