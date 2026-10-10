@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="d-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#31353f"/>
+      <stop offset="1" stop-color="#17181d"/>
+    </linearGradient>
+    <linearGradient id="d-fg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a9c6ff"/>
+      <stop offset="1" stop-color="#4176e6"/>
+    </linearGradient>
+  </defs>
+  <rect class="tile" width="512" height="512" rx="112" fill="url(#d-bg)"/>
+  <!-- The bubble: tail centered lower, corners matched to the tile's squircle math. -->
+  <path d="M168 128 H344 A60 60 0 0 1 404 188 V292 A60 60 0 0 1 344 352 H246 L166 410 L176 352 H168 A60 60 0 0 1 108 292 V188 A60 60 0 0 1 168 128 Z" fill="url(#d-fg)"/>
+  <!-- The agent's prompt glyph, a touch bolder so it survives 16px. -->
+  <path d="M188 198 L240 238 L188 278" fill="none" stroke="#17181d" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="262" y="262" width="86" height="30" rx="15" fill="#17181d"/>
+</svg>
