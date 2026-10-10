@@ -35,6 +35,7 @@ import { PendingRequests, terminateChild } from "./child-process.js";
 import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { ompLimits } from "./limits.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
+import { renderHtmlExtension, renderHtmlExtensionArgs } from "./render-extension.js";
 import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
@@ -569,6 +570,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsFork: true,
     supportsHandoff: true,
     supportsRewind: rewindExtension() !== null,
+    supportsHtmlRender: renderHtmlExtension() !== null,
   };
   private lister: AcpLister;
   private sessionFiles = new SessionFiles(() => this.resolveSessionDir());
@@ -579,8 +581,8 @@ export class OmpAdapter implements HarnessAdapter {
     this.lister = new AcpLister(this.cliCommand, () => this.env(), options.home);
   }
 
-  env(): NodeJS.ProcessEnv {
-    return buildOmpEnv(this.options.env ?? process.env, this.options.agentDir, this.options.sessionDir);
+  env(renderEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    return { ...buildOmpEnv(this.options.env ?? process.env, this.options.agentDir, this.options.sessionDir), ...renderEnv };
   }
 
   /** Every signed-in account's limits; omp asks each provider, which takes a few seconds. */
@@ -777,7 +779,7 @@ export class OmpAdapter implements HarnessAdapter {
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     const problem = this.workspaceProblem(req.cwd);
     if (problem) throw new Error(problem);
-    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd);
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.renderEnv);
     await chat.start(req.resumeNativeId ?? null);
     return chat;
   }
@@ -812,6 +814,7 @@ class OmpLiveChat implements LiveChat {
     private readonly command: string,
     private readonly env: () => NodeJS.ProcessEnv,
     private readonly cwd: string,
+    private readonly renderEnv?: NodeJS.ProcessEnv,
   ) {}
 
   get nativeId(): string | null {
@@ -830,12 +833,12 @@ class OmpLiveChat implements LiveChat {
   /** Spawn the omp child with its normal tool set (no --tools); stale-child events are ignored. */
   async start(resumeId: string | null): Promise<void> {
     const generation = ++this.generation;
-    const args = ["--mode", "rpc-ui", ...rewindExtensionArgs(), "--cwd", this.cwd];
+    const args = ["--mode", "rpc-ui", ...rewindExtensionArgs(), ...renderHtmlExtensionArgs(), "--cwd", this.cwd];
     if (resumeId) args.push("--resume", resumeId);
     const rpc = new OmpRpc(
       this.command,
       args,
-      this.env(),
+      { ...this.env(), ...this.renderEnv },
       this.cwd,
       (frame) => {
         if (generation === this.generation) this.onFrame(frame);

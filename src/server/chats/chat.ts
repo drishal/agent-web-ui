@@ -29,6 +29,7 @@ import { promises as fs } from "node:fs";
 import { boundText, editShape, historyToItems, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
 import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords, type AgentReport } from "../harness/subagents.js";
+import { htmlRenderFromDetails } from "../harness/render-token.js";
 import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
@@ -376,6 +377,8 @@ class EventReducer {
           const runs = runsFromDetails(event.toolCallId, event.details, settled.subagents ?? null);
           if (runs) settled.subagents = settleRuns(runs, event.output, event.isError);
         }
+        // A render_html/MCP render call publishes a page; its result's details carry the reference.
+        const page = base.name !== undefined ? htmlRenderFromDetails(base.name, event.details) : undefined;
         // A failed edit keeps the diff it tried, but changed nothing to count.
         const { diffStat: _attempted, ...uncounted } = settled;
         this.put({
@@ -384,6 +387,7 @@ class EventReducer {
           truncated: bounded.truncated,
           status: event.isError ? "error" : "done",
           endedAt: Date.now(),
+          ...(page ? { htmlRender: page } : {}),
         });
         if (base.name.toLowerCase().includes("todo")) this.fx.refreshTodos();
         // A wait or a proc read reports on background runs another call started.
@@ -613,6 +617,12 @@ export class Chat implements CheckpointHost {
   /** File checkpoints before each prompt, where the project is in a git repository. */
   checkpoints?: ChatCheckpoints;
   private checkpointTurns: number[] = [];
+  /**
+   * Where this chat's render_html/MCP tool publishes pages. Set by the manager once,
+   * before the harness child is spawned; carries the random token this chat's child
+   * posts back as `renderToken`, minted here so the child env and the lookup agree.
+   */
+  render?: { token: string; baseUrl: string };
 
   private readonly log = new EventLog();
   private readonly timing = new Timing();

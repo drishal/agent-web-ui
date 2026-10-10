@@ -73,6 +73,7 @@ export async function makeTestApp(options: {
     ...(lan ? { lanHosts: () => lan } : {}),
   });
   const manager = new ChatManager();
+  const stateDir = path.join(root, ".state");
   const app = createApp({
     version: "test",
     home: root,
@@ -84,6 +85,7 @@ export async function makeTestApp(options: {
     pairingUrls: [],
     webDir: null,
     heartbeatMs: options.heartbeatMs ?? 20_000,
+    stateDir,
     ...(options.withCheckpoints ? { checkpointsDir: path.join(root, ".state", "checkpoints") } : {}),
     ...(options.withSettings
       ? {
@@ -102,6 +104,7 @@ export async function makeTestApp(options: {
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
+  manager.render = { baseUrl: `http://127.0.0.1:${port}` };
   const close = async () => {
     await manager.shutdown();
     server.closeAllConnections();

@@ -3,7 +3,7 @@
 //    fold, 24px disclosure rows, the I/O card, the turn rail;
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../turns.js";
@@ -13,6 +13,7 @@ import { Markdown } from "./Markdown.js";
 import { QuoteButton } from "./QuoteButton.js";
 import { quoteParts } from "../draft-bus.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
+import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
@@ -637,10 +638,18 @@ const TurnView = memo(function TurnView({
     );
   }
   const hasProcess = turn.process.length > 0 || Boolean(turn.answer?.thinking);
+  const chatId = useContext(ChatIdContext);
   return (
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} through={turn.through} canBranch={canBranch} hasCheckpoint={hasCheckpoint} actions={promptActions} />
       {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
+      {turn.renders.length > 0 && chatId !== null ? (
+        <div className="turn-renders">
+          {turn.renders.map((render) => (
+            <HtmlRenderFrame key={render.id} chatId={chatId} render={render} />
+          ))}
+        </div>
+      ) : null}
       {turn.answer ? (
         <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
       ) : null}

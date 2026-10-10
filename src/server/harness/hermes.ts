@@ -927,6 +927,7 @@ export class HermesAdapter implements HarnessAdapter {
     supportsFork: false,
     supportsHandoff: false,
     supportsRewind: true,
+    supportsHtmlRender: false,
   };
   private probes = new Map<string, { at: number; models: ModelInfo[] }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;

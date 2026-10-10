@@ -16,6 +16,7 @@ import {
   type ContextCategory,
   type ContextUsage,
   type HarnessCapabilities,
+  type HarnessId,
   type ImageAttachment,
   type InteractionAnswer,
   type ModelInfo,
@@ -29,6 +30,7 @@ import { PendingRequests, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import { branchMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
+import { renderHtmlExtension, renderHtmlExtensionArgs } from "./render-extension.js";
 import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
@@ -403,11 +405,15 @@ function activeBranch(entries: Obj[]): Obj[] {
 }
 
 export class PiAdapter implements HarnessAdapter {
-  readonly id = asHarnessId("pi");
-  readonly displayName = "Pi";
+  readonly id: HarnessId = asHarnessId("pi");
+  readonly displayName: string = "Pi";
   readonly cliCommand = "pi";
-  readonly accent = "link";
-  readonly capabilities: HarnessCapabilities = {
+  /** Its colour in the theme (HARNESS_ACCENTS); subclasses re-pick so a variant does not wear pi's. */
+  protected accentToken = "link";
+  get accent(): string {
+    return this.accentToken;
+  }
+  protected capabilitySet: HarnessCapabilities = {
     supportsSteer: true,
     supportsFollowUp: true,
     supportsThinkingLevel: true,
@@ -419,7 +425,11 @@ export class PiAdapter implements HarnessAdapter {
     supportsFork: true,
     supportsHandoff: true,
     supportsRewind: rewindExtension() !== null,
+    supportsHtmlRender: renderHtmlExtension() !== null,
   };
+  get capabilities(): HarnessCapabilities {
+    return this.capabilitySet;
+  }
   private modelCache = new Map<string, { at: number; models: ModelInfo[] }>();
 
   async discover(): Promise<HarnessDiscovery> {
@@ -453,7 +463,7 @@ export class PiAdapter implements HarnessAdapter {
     return process.env[AGENT_DIR_ENV] ?? defaultAgentDir();
   }
 
-  private sessionDirFor(cwd: string, agentDir: string): string {
+  protected sessionDirFor(cwd: string, agentDir: string): string {
     const env = process.env[SESSION_DIR_ENV];
     if (env) return env === "~" || env.startsWith("~/") ? path.join(process.env.HOME ?? "", env.slice(1)) : env;
     return defaultSessionDir(cwd, agentDir);
@@ -579,8 +589,8 @@ export class PiAdapter implements HarnessAdapter {
     return text === null ? null : { items: historyToItems(branchMessages(text)), title: meta.name || null };
   }
 
-  private spawnEnv(cwd: string): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
+  protected spawnEnv(cwd: string, renderEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env, ...renderEnv };
     env[SESSION_DIR_ENV] ??= defaultSessionDir(cwd, process.env[AGENT_DIR_ENV] ?? defaultAgentDir());
     return env;
   }
@@ -592,7 +602,7 @@ export class PiAdapter implements HarnessAdapter {
     const rpc = new PiRpc(
       this.cliCommand,
       ["--mode", "rpc", "--no-session", "--session-dir", this.sessionDirFor(cwd, await this.resolveAgentDir())],
-      this.spawnEnv(cwd),
+      this.spawnEnv(cwd, {}),
       cwd,
       () => undefined,
     );
@@ -622,11 +632,21 @@ export class PiAdapter implements HarnessAdapter {
       const found = (await listSessionFiles(dir)).some((m) => m.id === req.resumeNativeId);
       if (!found) throw new Error("Session not found in Pi's session list");
     }
-    const args = ["--mode", "rpc", ...rewindExtensionArgs(), "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
+    const args = ["--mode", "rpc", ...this.toolArgs(), ...this.extensionArgs(), "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
     if (req.resumeNativeId) args.push("--session", req.resumeNativeId);
-    const chat = new PiLiveChat(this.cliCommand, args, this.spawnEnv(req.cwd), req.cwd);
+    const chat = new PiLiveChat(this.cliCommand, args, this.spawnEnv(req.cwd, req.renderEnv), req.cwd);
     await chat.start();
     return chat;
+  }
+
+  /** The extensions a chat child loads: Edit/Retry's rewind, and render_html. Subclasses cut this back. */
+  protected extensionArgs(): string[] {
+    return [...rewindExtensionArgs(), ...renderHtmlExtensionArgs()];
+  }
+
+  /** Tool allow/deny flags; full pi allows everything. The awui variant denies the writers here. */
+  protected toolArgs(): string[] {
+    return [];
   }
 
   async shutdown(): Promise<void> {}

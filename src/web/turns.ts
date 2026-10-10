@@ -1,7 +1,7 @@
 // Groups the flat item list into turns: the user's prompt, the work the agent
 // did (folded into one "Worked for …" line), and the final answer. Pattern
 // from DeepSeek Harness (process fold) with OpenCode-style tool counts.
-import type { AssistantItem, ChatItem, ChatStatus, NoticeItem, ToolCategory, UserItem } from "../shared/protocol.js";
+import type { AssistantItem, ChatItem, ChatStatus, HtmlRenderRef, NoticeItem, ToolCategory, UserItem } from "../shared/protocol.js";
 
 export interface Turn {
   id: string;
@@ -21,6 +21,8 @@ export interface Turn {
   endedAt?: number;
   counts: Partial<Record<ToolCategory, number>>;
   changedFiles: string[];
+  /** HTML pages this turn's render calls published, shown full-width above the answer. */
+  renders: HtmlRenderRef[];
   /** The model that answered (its last model call), when the harness says. */
   model?: string;
 }
@@ -70,6 +72,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     for (const item of rest) if (item.kind === "assistant" && item.model) model = item.model;
     const counts: Partial<Record<ToolCategory, number>> = {};
     const changed = new Set<string>();
+    const renders: HtmlRenderRef[] = [];
     let startedAt = prompt?.at;
     let endedAt: number | undefined;
     for (const item of rest) {
@@ -78,6 +81,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
         if ((item.category === "edit" || item.category === "write") && item.status !== "error") {
           for (const p of item.paths) changed.add(p);
         }
+        if (item.htmlRender) renders.push(item.htmlRender);
       }
       // Timing comes from the agent's own work, never from notices.
       if (item.kind === "notice") continue;
@@ -100,6 +104,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       ...(endedAt !== undefined ? { endedAt } : {}),
       counts,
       changedFiles: [...changed],
+      renders,
       ...(model ? { model } : {}),
     };
   });

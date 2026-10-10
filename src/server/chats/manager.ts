@@ -1,7 +1,7 @@
 // Owns every live chat in this process and guarantees one live writer per
 // native session: `harnessId + nativeId -> chatId`. Another terminal or
 // process running the same harness is NOT locked out (documented in README).
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { LimitAccount, PushNote, WorkspaceInfo } from "../../shared/protocol.js";
 import { DeferredLiveChat } from "../harness/deferred.js";
 import type { HarnessAdapter, LiveChat } from "../harness/types.js";
@@ -26,6 +26,12 @@ export class ChatManager {
   checkpoints?: { service: Checkpoints; sessionsDir: string };
   /** A run started in any chat. */
   onRunStart?: (chat: Chat) => void;
+  /**
+   * The origin a chat's child POSTs its HTML page to (loopback). When set,
+   * `renderFor` mints each chat a token in `AWUI_RENDER_URL`/`AWUI_RENDER_TOKEN`
+   * and stamps it on the chat, so a render POST can be matched back to its chat.
+   */
+  render?: { baseUrl: string };
   /** Any chat finished a run, failed, or asks for an answer. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
 
@@ -38,6 +44,26 @@ export class ChatManager {
     const chat = this.chats.get(chatId);
     if (!chat) throw new ChatError(404, "chat_not_found", "No such chat; it may have been closed");
     return chat;
+  }
+
+  /** The chat whose child was spawned with this render token, when one is live. */
+  chatForRenderToken(token: string): Chat | undefined {
+    for (const chat of this.chats.values()) {
+      if (chat.render?.token === token) return chat;
+    }
+    return undefined;
+  }
+
+  /**
+   * The env a chat's child needs for its render tool, and the token that
+   * stamps it: one random token per chat, in `AWUI_RENDER_URL`/`AWUI_RENDER_TOKEN`,
+   * so a render POST can be matched back to the chat that spawned the caller.
+   * `null` when render is not wired (no origin) or the capability is off.
+   */
+  private renderFor(adapter: HarnessAdapter): { token: string; env: NodeJS.ProcessEnv } | null {
+    if (!this.render || !adapter.capabilities.supportsHtmlRender) return null;
+    const token = randomBytes(16).toString("hex");
+    return { token, env: { AWUI_RENDER_TOKEN: token, AWUI_RENDER_URL: `${this.render.baseUrl}/api/render` } };
   }
 
   list(): Chat[] {
@@ -83,13 +109,15 @@ export class ChatManager {
   async create(adapter: HarnessAdapter, workspace: WorkspaceInfo): Promise<Chat> {
     const problem = adapter.workspaceProblem(workspace.path);
     if (problem) throw new ChatError(422, "workspace_unsupported", problem);
+    const render = this.renderFor(adapter);
     let live;
     try {
-      live = await adapter.openChat({ cwd: workspace.path });
+      live = await adapter.openChat({ cwd: workspace.path, renderEnv: render?.env });
     } catch (error) {
       throw new ChatError(502, "harness_init_failed", `${adapter.displayName} failed to start: ${errorMessage(error)}`);
     }
     const chat = await this.load(adapter, workspace, live);
+    if (render && this.render) chat.render = { token: render.token, baseUrl: this.render.baseUrl };
     this.register(chat);
     return chat;
   }
@@ -129,7 +157,8 @@ export class ChatManager {
     const problem = adapter.workspaceProblem(workspace.path);
     if (problem) throw new ChatError(422, "workspace_unsupported", problem);
     const open = (async () => {
-      const req = { cwd: workspace.path, resumeNativeId: nativeId };
+      const render = this.renderFor(adapter);
+      const req = { cwd: workspace.path, resumeNativeId: nativeId, renderEnv: render?.env };
       // From the file when the adapter can read it: the chat shows now and the
       // harness starts behind it; the file read also proves the session is this project's.
       const transcript = adapter.readTranscript ? await adapter.readTranscript({ cwd: workspace.path, nativeId }).catch(() => null) : null;
@@ -148,6 +177,7 @@ export class ChatManager {
         }
       }
       const chat = await this.load(adapter, workspace, live);
+      if (render && this.render) chat.render = { token: render.token, baseUrl: this.render.baseUrl };
       this.register(chat);
       return chat;
     })();
