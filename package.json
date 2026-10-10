@@ -1,6 +1,6 @@
 {
   "name": "awui",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "awui: a local, private web UI (and atui, its terminal client) for the Pi, omp, Hermes, and Claude Code coding-agent harnesses",
   "license": "MIT",
