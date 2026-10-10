@@ -236,7 +236,7 @@ Usage:
   awui [flags]           Run the web UI + API (default)
   awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui)
   awui install service   Install the binary to ~/.local/bin and enable the systemd user service
-                          [--link symlinks it instead of copying, for a dev checkout]
+                         [--link symlinks it instead of copying, for a dev checkout]
 
 Flags:
   --port <n>             Listen port (default 4783; env PORT)
