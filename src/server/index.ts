@@ -228,15 +228,77 @@ async function main(): Promise<void> {
 }
 
 
-/** `awui install tui` — fetch and install the terminal client. Everything else runs the web server. */
-const subcommand = process.argv[2];
-if (subcommand === "install" && process.argv[3] === "tui") {
-  const config = loadConfig({});
+/** awui's CLI surface. Beyond `install tui`, a few flags; everything else is env or config.yml. */
+const HELP = `awui ${embeddedVersion ?? ""} — local web UI for coding agents
+
+Usage:
+  awui [flags]           Run the web UI + API (default)
+  awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui)
+
+Flags:
+  --port <n>             Listen port (default 4783; env PORT)
+  --host <addr>          127.0.0.1 (this machine) or 0.0.0.0 (LAN, sign-in) (env HOST)
+  --state-dir <path>     State folder (default $XDG_STATE_HOME/awui; env AWUI_STATE_DIR)
+  --version              Print version and exit
+  --help                 This help
+`;
+
+/** Parse the small flag set into env overrides; unknown flags fail loudly instead of silently serving. */
+function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: string; help?: boolean; version?: boolean } | string {
+  const out: { port?: string; host?: string; stateDir?: string; help?: boolean; version?: boolean } = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    const take = (k: "port" | "host" | "stateDir") => {
+      const v = argv[++i];
+      if (v === undefined) throw new Error(`${a} needs a value`);
+      out[k] = v;
+    };
+    try {
+      if (a === "--port" || a === "-p") take("port");
+      else if (a === "--host") take("host");
+      else if (a === "--state-dir") take("stateDir");
+      else if (a === "--help" || a === "-h") out.help = true;
+      else if (a === "--version" || a === "-v") out.version = true;
+      else if (a.startsWith("-")) throw new Error(`unknown flag: ${a}`);
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  }
+  return out;
+}
+
+/** `awui install tui` — fetch and install the terminal client; flags and everything else run the web server. */
+const args = process.argv.slice(2);
+if (args[0] === "install" && args[1] === "tui") {
+  const rest = args.slice(2);
+  const flags = parseFlags(rest);
+  if (typeof flags === "string") {
+    console.error(`awui install tui: ${flags}`);
+    process.exit(64);
+  }
+  const config = loadConfig({ ...(flags.stateDir ? { AWUI_STATE_DIR: flags.stateDir } : {}) });
   installTui(config.stateDir).catch((error: unknown) => {
     console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   });
 } else {
+  const flags = parseFlags(args);
+  if (typeof flags === "string") {
+    console.error(`awui: ${flags}\n\n${HELP}`);
+    process.exit(64);
+  }
+  if (flags.help) {
+    console.log(HELP);
+    process.exit(0);
+  }
+  if (flags.version) {
+    console.log(embeddedVersion ?? "dev");
+    process.exit(0);
+  }
+  // Flags become env so a flag matches its documented precedence (it beats config.yml, loses to a real env var).
+  if (flags.port && process.env.PORT === undefined) process.env.PORT = flags.port;
+  if (flags.host && process.env.HOST === undefined) process.env.HOST = flags.host;
+  if (flags.stateDir && process.env.AWUI_STATE_DIR === undefined) process.env.AWUI_STATE_DIR = flags.stateDir;
   main().catch((error: unknown) => {
     console.error(`awui: fatal: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
