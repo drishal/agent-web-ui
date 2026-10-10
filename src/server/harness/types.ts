@@ -66,6 +66,12 @@ export interface OpenChatRequest {
   cwd: string;
   /** Native id from this adapter's own listSessions(). */
   resumeNativeId?: string;
+  /**
+   * Extra environment for the spawned child: AWUI_RENDER_URL/AWUI_RENDER_TOKEN
+   * arm awui's render tool (extension for Pi/omp, MCP server for Claude).
+   * Absent or empty means the tool is not wired for this chat.
+   */
+  renderEnv?: NodeJS.ProcessEnv;
 }
 
 /** Normalized events every adapter emits. */

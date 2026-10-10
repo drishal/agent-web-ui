@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
 import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
-import { dateBucket, groupByProject, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
+import { dateBucket, groupByProject, historySections, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
@@ -396,6 +396,10 @@ export function Sidebar(props: {
       onMark={(change) => props.onMarkSession(s, change)}
     />
   );
+  // History rows carry no project label: a chat has no folder.
+  const historyRow = (s: ProjectSession) => (
+    <SessionRow key={s.id} s={s} active={isActive(s)} working={isWorking(s)} harnessName={names.get(s.harnessId) ?? s.harnessId} onOpen={(newTab) => props.onOpenSession(s, newTab)} onMark={(change) => props.onMarkSession(s, change)} />
+  );
 
   return (
     <>
@@ -439,13 +443,15 @@ export function Sidebar(props: {
           </p>
         ))}
 
-        <button type="button" className="workspace-btn" onClick={props.onPickWorkspace} title={props.workspace?.path}>
-          <IconFolder size={15} />
-          <span className="workspace-text">
-            <span className="workspace-name">{props.workspace?.name ?? "Choose a folder…"}</span>
-            {props.workspace ? <span className="workspace-path">{`‎${props.workspace.path}‎`}</span> : null}
-          </span>
-        </button>
+        {props.harnessId !== "awui" ? (
+          <button type="button" className="workspace-btn" onClick={props.onPickWorkspace} title={props.workspace?.path}>
+            <IconFolder size={15} />
+            <span className="workspace-text">
+              <span className="workspace-name">{props.workspace?.name ?? "Choose a folder…"}</span>
+              {props.workspace ? <span className="workspace-path">{`‎${props.workspace.path}‎`}</span> : null}
+            </span>
+          </button>
+        ) : null}
 
         <div className="sessions">
           <div className="sessions-head">
@@ -494,20 +500,38 @@ export function Sidebar(props: {
             {pinned.length > 0 ? (
               <SectionList className="pinned-group" testId="pinned-group" icon={<IconPin size={14} />} title="Pinned" sessions={pinned} row={(s) => sectionRow(s)} />
             ) : null}
-            {groups.map((g) => (
-              <ProjectGroupView
-                key={g.workspace.id}
-                group={g}
-                searching={searching}
-                isActive={isActive}
-                isWorking={isWorking}
-                harnessName={(id) => names.get(id) ?? id}
-                canStartChat={props.canStartChat}
-                onOpen={props.onOpenSession}
-                onMark={props.onMarkSession}
-                onNewChat={props.onNewChatIn}
-              />
-            ))}
+            {props.harnessId === "awui" ? (
+              // The chat surface has no projects: a Claude.ai-style history, newest first by day.
+              historySections(props.overview, groupOptions)
+                .filter((sec) => sec.label !== "Pinned")
+                .map((sec) => (
+                  <li className="project-group is-open history-group" key={sec.label} data-testid="history-group">
+                    <div className="project-head">
+                      <span className="project-toggle is-static">
+                        <span className="project-name">{sec.label}</span>
+                      </span>
+                    </div>
+                    <ul className="session-sublist">
+                      {sec.sessions.map((s) => historyRow(s))}
+                    </ul>
+                  </li>
+                ))
+            ) : (
+              groups.map((g) => (
+                <ProjectGroupView
+                  key={g.workspace.id}
+                  group={g}
+                  searching={searching}
+                  isActive={isActive}
+                  isWorking={isWorking}
+                  harnessName={(id) => names.get(id) ?? id}
+                  canStartChat={props.canStartChat}
+                  onOpen={props.onOpenSession}
+                  onMark={props.onMarkSession}
+                  onNewChat={props.onNewChatIn}
+                />
+              ))
+            )}
             {!searching && (sections.counts.snoozed > 0 || sections.counts.settled > 0 || sections.counts.archived > 0) ? (
               <li className="list-toggles">
                 {sections.counts.snoozed > 0 ? (

@@ -1,6 +1,6 @@
 # awui
 
-**awui** (agent web UI) is a local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), **Hermes** (hermes-agent), and **Claude Code** coding-agent harnesses. Use it from your desktop browser, through Tailscale Serve from your phone, or in a terminal with **atui**, its terminal client.
+**awui** (agent web UI) is a local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), **Hermes** (hermes-agent), and **Claude Code** coding-agent harnesses — plus one read-only chat harness of its own, **Awui** (below). Use it from your desktop browser, through Tailscale Serve from your phone, or in a terminal with **atui**, its terminal client.
 
 The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits an existing session file and keeps no second transcript database; forks and handoffs only add new sessions in the harness's own store.
 
@@ -10,8 +10,11 @@ browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAd
                                                         ├─ omp    (child process: `omp --mode rpc-ui`, one per live chat)
                                                         ├─ Hermes (child process: `python -m tui_gateway.entry`, one per live chat)
                                                         ├─ Claude Code (child process: `claude -p` in stream-json mode, one per live chat)
+                                                        ├─ Awui   (`pi --mode rpc`, read-only: the writing/executing tools denied)
                                                         └─ fake   (tests only)
 ```
+
+**The Awui harness** is a chat surface in the harness dropdown, web UI only (atui omits it). For reading, asking, and computing, never editing the project: it is a `pi` child with pi's four writing/executing tools denied (`--exclude-tools bash,edit,write,powershell`), so a chat there can read, search the web, and use read-only MCP servers, but cannot edit files or run shell commands. Two awui extensions give it the chat-surface extras: `render_html` publishes a page (a chart, table, or mockup) into the thread — it writes only to awui's own render store, never the workspace — and [`eval_python`](extensions/eval-python.ts) runs a short snippet in a throwaway tmp dir (stateless, timeout-capped, output-bounded), so it can compute without touching the project. It keeps its own agent directory and per-project sessions under awui's state folder — never the user's `~/.pi/agent` — and declares no fork/rewind capability. Its sidebar shows a flat, dated chat history (Pinned, Today, Yesterday, each day this week, Older), Claude.ai-style, instead of projects; the project tree belongs to the coding harnesses. `Settings → Awui harness` edits the providers it can call (name, base URL, API kind, key — stored only in its own `models.json`, the key never shown back); the `litellm` provider is seeded from `~/.pi/agent/models.json` the first time and never overwritten after that.
 
 ## Install and run
 
@@ -106,6 +109,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 - **Model switches.** A thin divider ("Switched to GPT-5.5") sits before the turn whose answer came from a different model than the turn before, read from the model each answer records, so it shows on reopened sessions too (Hermes's stored transcripts name no model, so older Hermes turns have none).
 - **Inside the fold.** Each step is a single quiet line (`read · src/app.ts`); click it for the input/output panel. Red appears only for real failures.
 - **Subagents.** A delegation — omp's `task`, [pi-subagents](https://github.com/nicobailon/pi-subagents)' `subagent`, Claude Code's `Task` — lists its agents, one row each: status, agent type, brief, and tool, token, time and cost counts. Seen working it opens by itself and shows what each agent is doing; a row opens to the brief and the agent's answer, and **Open transcript** slides in that agent's own conversation (read from the file its harness wrote, refreshed while it runs). omp's background agents turn done when their results come back, whether delivered, waited for, or killed.
+- **Agent-rendered pages.** In a Pi or omp chat the agent has a `render_html` tool (registered by [`extensions/render-html.ts`](extensions/render-html.ts), which the server loads with `-e` as it does the rewind extension): it hands one self-contained HTML document — a chart, table, diagram, mockup — with inline `<style>` and `<script>`, and the page appears full-width above that turn's answer. It shows in a sandboxed iframe with an opaque origin (`sandbox="allow-scripts allow-forms"`, never `allow-same-origin`), so its scripts cannot reach the app's session or storage. The server stores the document in `$XDG_STATE_HOME/awui/html-render/` with a small bootstrap in its head that hands it the active theme as CSS custom properties (`--bg`, `--text`, `--accent`, …) before its own scripts run, reports its content height so the frame fits without an inner scroll, and opens its links in a new tab. Pages load only for the chat that produced them (`/api/chats/<id>/html-render/<renderId>`). atui cannot render a page in a terminal, so a render call's row names the page instead ("Render · Fake report · 160px, page in web UI"). Claude Code and Hermes declare no `render_html` tool yet (they need an MCP server bridge, a later addition), so their chats do not offer it.
 - **Composer card.**
   - Model and thinking sit inside the card. The **model picker** is a searchable popover (a bottom sheet on phones):
     - matching ignores punctuation and spacing, across provider, name, and id, so `gpt55` finds GPT-5.5;
@@ -166,6 +170,7 @@ atui does not sign in yet, so it is for a server on this machine, which needs no
 
 ```
 src/shared/protocol.ts      wire types + Zod request schemas (no SDK types)
+src/shared/html-render.ts   agent-rendered pages: bootstrap inject, theme payload, frame-height math
 src/server/
   harness/types.ts          HarnessAdapter / LiveChat contract, normalized HarnessEvent
   harness/registry.ts       adapter registry (one entry per harness)
@@ -175,7 +180,10 @@ src/server/
   harness/hermes.ts         Hermes adapter (tui_gateway JSON-RPC child process)
   harness/claude.ts         Claude Code adapter (`claude -p` stream-json child process)
   harness/claude-sessions.ts  Claude Code session files: listing, transcript, usage, fork
+  harness/render-extension.ts  the render_html extension's file + the -e args that load it
+  harness/render-token.ts   render tool names + a result's reference, with its spoof guard
   harness/fake.ts           deterministic adapter for tests
+  html-render.ts            the page store under the state folder, addressed by id, per-chat
   chats/chat.ts             one live chat: state fold, event log, SSE fan-out, commands
   chats/manager.ts          chat registry, one live writer per native session
   security.ts               Host/Origin/Tailscale checks, local-vs-remote, password sessions
@@ -201,7 +209,7 @@ src/web/                    React + Vite client
 A third harness is a new file plus a registry entry:
 
 1. Implement `HarnessAdapter` and `LiveChat` from `src/server/harness/types.ts` in `src/server/harness/<name>.ts`. Normalize everything into `HarnessEvent`. Never pass SDK or wire types further out.
-2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared (steer, follow-up, thinking, compact, rename, model selection, interactive requests).
+2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared (steer, follow-up, thinking, compact, rename, model selection, interactive requests, and `supportsHtmlRender` for the `render_html` tool only when the child has awui's render endpoint — Pi and omp through [`extensions/render-html.ts`](extensions/render-html.ts)).
 3. Add one line to `factories` in `src/server/harness/registry.ts`, and its name to `AWUI_HARNESSES` if it should not be on by default.
 4. Run the contract tests against it. `tests/unit/api.test.ts` exercises the same chat flows the fake adapter supports.
 

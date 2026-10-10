@@ -6,6 +6,7 @@ import { FakeAdapter } from "./fake.js";
 import { HermesAdapter } from "./hermes.js";
 import { OmpAdapter } from "./omp.js";
 import { PiAdapter } from "./pi.js";
+import { AwuiAdapter } from "./awui.js";
 import type { HarnessAdapter } from "./types.js";
 
 const fakeDelay = () => Number(process.env.AWUI_FAKE_DELAY_MS ?? 15);
@@ -16,6 +17,8 @@ const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
   omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home }),
   hermes: () => new HermesAdapter(),
   claude: (config) => new ClaudeAdapter({ home: config.home }),
+  // A locked-down pi child: chat-style, read-only (web search + read tools + read-only MCP), its own agent dir.
+  awui: (config) => new AwuiAdapter(config.stateDir),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
   fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay(), resumeDelayMs: fakeResumeDelay() }),
   "fake-b": () =>
