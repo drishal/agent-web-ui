@@ -7,10 +7,41 @@ import { execFileSync } from "node:child_process";
 import { promises as fs, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ChatError } from "./chats/chat.js";
+import { isEmbedded } from "./embedded.js";
 
 const UNIT_NAME = "awui.service";
 const BIN_NAME = "awui";
+
+/**
+ * Which file `install service` puts on the PATH. The compiled binary is itself, so
+ * process.execPath is the answer there. A source run is node — `bin/awui` execs node
+ * on dist/server/server/index.js — and node is not awui: a unit running it starts a
+ * REPL, takes EOF on /dev/null stdin, and restarts every RestartSec. So a source run
+ * installs the binary the build wrote instead. `builtPath` is a thunk because only a
+ * source run has a checkout to look in: the binary's own module URL is a bunfs path
+ * with nothing above it.
+ */
+export function selfToInstall(execPath: string, embedded: boolean, builtPath: () => string): string {
+  if (embedded) return execPath;
+  const file = builtPath();
+  if (existsSync(file)) return file;
+  throw new ChatError(500, "no_binary", `cannot install: no compiled awui at ${file}; build it with \`bun run scripts/build-binary.ts\``);
+}
+
+/** Where scripts/build-binary.ts writes the binary for a platform and arch (awui.exe on Windows). */
+export function builtBinaryPath(root: string, platform: string = process.platform, arch: string = process.arch): string {
+  return path.join(root, "dist", "bin", `${platform}-${arch}`, platform === "win32" ? `${BIN_NAME}.exe` : BIN_NAME);
+}
+
+/** The checkout root, found by walking up to the package.json the way the extension finders do. */
+function repoRoot(): string {
+  for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
+    if (existsSync(path.join(dir, "package.json"))) return dir;
+    if (path.dirname(dir) === dir) throw new ChatError(500, "no_root", "cannot locate the awui package root");
+  }
+}
 
 /** Where awui installs itself: the user's bin and the user systemd dir. */
 function installPaths(): { bin: string; binPath: string; unitDir: string; unitPath: string } {
@@ -50,11 +81,11 @@ WantedBy=default.target
 const OLD_UNIT_NAME = "agent-web-ui.service";
 
 /**
- * Install the binary at binPath (copy, or symlink when link=true), write the
- * unit, daemon-reload, and enable+start it. Self-path: `process.execPath` in the
- * binary; from source, the built dist/bin binary when present. A leftover
- * agent-web-ui.service from the old name is disabled first, so the two do not
- * fight over the port.
+ * Install awui at binPath (copy, or symlink when link=true), write the unit,
+ * daemon-reload, and enable+start it. Which file gets installed is selfToInstall's
+ * decision, so `bin/awui install service` from a checkout installs the built binary
+ * rather than node. A leftover agent-web-ui.service from the old name is disabled
+ * first, so the two do not fight over the port.
  */
 export async function installService(opts: { link: boolean }): Promise<void> {
   const { bin, binPath, unitDir, unitPath } = installPaths();
@@ -68,8 +99,7 @@ export async function installService(opts: { link: boolean }): Promise<void> {
     await fs.rm(oldUnitPath, { force: true });
     console.log(`retired legacy ${OLD_UNIT_NAME}`);
   }
-  const self = process.execPath;
-  if (!existsSync(self)) throw new ChatError(500, "no_self", "cannot find the running awui binary to install");
+  const self = selfToInstall(process.execPath, isEmbedded, () => builtBinaryPath(repoRoot()));
   await fs.mkdir(bin, { recursive: true, mode: 0o700 });
   if (opts.link) {
     await fs.rm(binPath, { force: true });

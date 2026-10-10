@@ -33,6 +33,8 @@ State goes to `$XDG_STATE_HOME/awui` as usual, so a binary and a source run shar
 
 Build it yourself from a clone (inside `devenv shell`; see below): `bun run scripts/build-binary.ts` writes `dist/bin/<platform>/awui`. `scripts/build-binary.ts --all` cross-compiles every target.
 
+`awui install service` puts the binary at `~/.local/bin/awui` and writes a systemd user unit, `~/.config/systemd/user/awui.service`, that runs it and starts with your session; a leftover `agent-web-ui.service` from before the rename is retired first, so the two never share the port. Add `--link` to symlink the binary instead of copying it — what a dev checkout wants, so a rebuild is live after `systemctl --user restart awui`. Running `bin/awui install service --link` from a checkout installs the binary the build wrote, not the node running the script.
+
 ### From source
 
 Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, and/or `claude` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
