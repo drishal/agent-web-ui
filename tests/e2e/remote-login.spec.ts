@@ -116,7 +116,7 @@ test.describe("settings and login from config.yml", () => {
 
   test("port, host and the login come from config.yml, and a restart keeps devices signed in", async ({ page }) => {
     const { dir, env } = sandbox();
-    const configDir = path.join(dir, "agentwebui");
+    const configDir = path.join(dir, "awui");
     mkdirSync(configDir);
     const configFile = path.join(configDir, "config.yml");
     const settings = (password: string) =>

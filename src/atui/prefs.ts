@@ -1,7 +1,7 @@
 // What atui remembers between runs on this machine (vim mode), in
-// $XDG_CONFIG_HOME/agentwebui/atui.json beside the server's config.yml.
+// $XDG_CONFIG_HOME/awui/atui.json beside the server's config.yml.
 // Read leniently and written whole; a failure to write only means it is not
-// remembered.
+// remembered. Renamed from agentwebui with the server; see user-config.ts.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -12,7 +12,7 @@ export interface AtuiPrefs {
 
 export function prefsFile(env: Record<string, string | undefined> = process.env): string {
   const base = env.XDG_CONFIG_HOME || path.join(env.HOME || homedir(), ".config");
-  return path.join(base, "agentwebui", "atui.json");
+  return path.join(base, "awui", "atui.json");
 }
 
 export function readPrefs(file = prefsFile()): AtuiPrefs {

@@ -1,8 +1,8 @@
-// The user's settings: ~/.config/agentwebui/config.yml (YAML, so it can carry
+// The user's settings: ~/.config/awui/config.yml (YAML, so it can carry
 // comments), with the base16/base24 theme.yml beside it. Real environment
 // variables win over the file; AWUI_CONFIG_DIR moves the folder ("" ignores
 // it, as the tests do).
-import { chmodSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
@@ -43,7 +43,22 @@ export type UserConfig = z.infer<typeof schema>;
 /** The settings folder, or null when AWUI_CONFIG_DIR is set to "". */
 export function configDir(env: NodeJS.ProcessEnv = process.env): string | null {
   if (env.AWUI_CONFIG_DIR !== undefined) return env.AWUI_CONFIG_DIR ? path.resolve(env.AWUI_CONFIG_DIR) : null;
-  return path.join(env.XDG_CONFIG_HOME || path.join(homedir(), ".config"), "agentwebui");
+  return path.join(env.XDG_CONFIG_HOME || path.join(homedir(), ".config"), "awui");
+}
+
+/** One-time rename of the pre-rename settings folder; returns "moved" when it happened. */
+export function migrateConfigDir(env: NodeJS.ProcessEnv = process.env): "moved" | null {
+  if (env.AWUI_CONFIG_DIR !== undefined) return null; // an explicit dir is authoritative; nothing to move
+  const base = env.XDG_CONFIG_HOME || path.join(homedir(), ".config");
+  const old = path.join(base, "agentwebui");
+  const target = path.join(base, "awui");
+  if (!existsSync(old) || existsSync(target)) return null;
+  try {
+    renameSync(old, target);
+    return "moved";
+  } catch {
+    return null;
+  }
 }
 
 /** config.yml parsed and checked, or null when there is none. A file holding a password is made 0600. */

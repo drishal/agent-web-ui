@@ -12,7 +12,7 @@ async function startServer(): Promise<{ server: ChildProcess; configFile: string
   const dir = mkdtempSync(path.join(tmpdir(), "awui-settings-"));
   const root = path.join(dir, "workspaces");
   mkdirSync(path.join(root, "proj"), { recursive: true });
-  const configDir = path.join(dir, "agentwebui");
+  const configDir = path.join(dir, "awui");
   mkdirSync(configDir, { recursive: true });
   const configFile = path.join(configDir, "config.yml");
   const env: NodeJS.ProcessEnv = { ...process.env, AWUI_CONFIG_DIR: configDir, AWUI_HARNESSES: "fake", WORKSPACE_ROOTS: root };

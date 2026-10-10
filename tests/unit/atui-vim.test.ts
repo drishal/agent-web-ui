@@ -62,8 +62,8 @@ describe("atui vim mode", () => {
 describe("atui prefs", () => {
   it("remembers vim mode beside the server's config, and survives a bad file", () => {
     const home = tempDir("awui-atui-prefs-");
-    expect(prefsFile({ HOME: home })).toBe(path.join(home, ".config", "agentwebui", "atui.json"));
-    expect(prefsFile({ XDG_CONFIG_HOME: "/x", HOME: home })).toBe("/x/agentwebui/atui.json");
+    expect(prefsFile({ HOME: home })).toBe(path.join(home, ".config", "awui", "atui.json"));
+    expect(prefsFile({ XDG_CONFIG_HOME: "/x", HOME: home })).toBe("/x/awui/atui.json");
     const file = prefsFile({ HOME: home });
     expect(readPrefs(file)).toEqual({});
     writePrefs({ vim: true }, file);

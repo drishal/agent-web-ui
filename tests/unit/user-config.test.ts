@@ -1,23 +1,35 @@
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { configDir, configEnv, readUserConfig, uiSettings, UserConfigError } from "../../src/server/user-config.js";
+import { configDir, configEnv, migrateConfigDir, readUserConfig, uiSettings, UserConfigError } from "../../src/server/user-config.js";
 import { tempDir } from "../helpers/app.js";
 
 function folder(yaml?: string, mode = 0o644): string {
-  const dir = path.join(tempDir("awui-config-"), "agentwebui");
+  const dir = path.join(tempDir("awui-config-"), "awui");
   mkdirSync(dir);
   if (yaml !== undefined) writeFileSync(path.join(dir, "config.yml"), yaml, { mode });
   return dir;
 }
 
 describe("config.yml", () => {
-  it("lives in $XDG_CONFIG_HOME/agentwebui; AWUI_CONFIG_DIR moves it and an empty one ignores it", () => {
-    expect(configDir({ XDG_CONFIG_HOME: "/cfg" })).toBe("/cfg/agentwebui");
+  it("lives in $XDG_CONFIG_HOME/awui; AWUI_CONFIG_DIR moves it and an empty one ignores it", () => {
+    expect(configDir({ XDG_CONFIG_HOME: "/cfg" })).toBe("/cfg/awui");
     expect(configDir({ AWUI_CONFIG_DIR: "/elsewhere" })).toBe("/elsewhere");
     expect(configDir({ AWUI_CONFIG_DIR: "" })).toBeNull();
     expect(readUserConfig(null)).toBeNull();
     expect(readUserConfig(folder())).toBeNull();
+  });
+
+  it("moves a leftover agentwebui folder to the new name, once", () => {
+    const base = tempDir("awui-config-");
+    const old = path.join(base, "agentwebui");
+    mkdirSync(old, { recursive: true });
+    writeFileSync(path.join(old, "config.yml"), "port: 4801\n");
+    const env = { XDG_CONFIG_HOME: base };
+    expect(migrateConfigDir(env)).toBe("moved");
+    expect(readFileSync(path.join(base, "awui", "config.yml"), "utf8")).toContain("4801");
+    // Idempotent: a fresh call leaves the moved folder alone.
+    expect(migrateConfigDir(env)).toBeNull();
   });
 
   it("maps its settings onto the server's variables", () => {

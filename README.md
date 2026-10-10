@@ -49,7 +49,7 @@ npm start            # serves UI + API on http://127.0.0.1:4783 (or: bin/awui)
 
 Open http://127.0.0.1:4783/ on this machine. No token and no sign-in: local use is open.
 
-Settings live in `~/.config/agentwebui/`: `config.yml` (start from [`config.example.yml`](config.example.yml)) and, optionally, a base16 `theme.yml`. To use it from other devices (LAN and/or Tailscale Serve), set:
+Settings live in `~/.config/awui/`: `config.yml` (start from [`config.example.yml`](config.example.yml)) and, optionally, a base16 `theme.yml`. To use it from other devices (LAN and/or Tailscale Serve), set:
 
 ```yaml
 host: 0.0.0.0          # prints LAN: http://<ip>:4783/ for each address
@@ -75,7 +75,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 
 `devenv` gives the pinned toolchain (Node 22, the nixpkgs `bun` the binary build needs, the e2e browsers): `devenv shell` enters it, `devenv tasks run awui:binary` builds the binary, `devenv up` runs `npm run dev` as a process. The nixpkgs-built bun inside the shell is what makes the compiled binary run on this machine (the upstream bun binary segfaults here); build binaries only inside the shell.
 
-### Configuration (`~/.config/agentwebui`)
+### Configuration (`~/.config/awui`)
 
 **`config.yml`** (YAML, so it can carry comments; every key optional). It is read at startup; `theme`, `text_scale`, and `autocollapse_sidebar` are re-read on every page load. An unknown key or a wrong type stops the server with the key named (exit 78, which the autostart unit does not retry), rather than being guessed at.
 
@@ -185,7 +185,7 @@ It starts in the current folder's project (one inside `WORKSPACE_ROOTS`), on an 
 - **Composer.** Enter sends; Shift+Enter or Ctrl+J adds a line. While a run is active, Enter steers (or queues a follow-up where the harness has no steer). `/` opens the harness's commands: ↑/↓, Tab completes, Esc closes. Under it: harness, model, thinking, context, and the compact-before-send chip once the context is half full.
 - **Approvals and questions** replace the composer: 1–9 pick, ↑/↓ and Enter, Esc cancels; free-text questions get a text box.
 - **Harness, model, thinking, history.** The line under the composer names the harness, model, and thinking level; a click on one opens its picker, as do **Alt+H**, **Alt+M**, and **Alt+T**. With a conversation open, the harness picker also hands it off to another harness (a copy of its turns, or a fresh chat briefed with a summary, as in the browser). **Ctrl+R**, as in a shell, is the history: every session the server knows, newest first under its project (this one first), searchable by title, project, or harness.
-- **Vim mode** (`atui --vim`, or **Ctrl+X v**, remembered in `~/.config/agentwebui/atui.json`; `ATUI_VIM=1` works too). **Esc** leaves the composer for NORMAL, shown in the status line; **i**, **a**, **o**, or Enter go back to typing. In NORMAL, **j**/**k** scroll a line (with a count, `5j`), **Ctrl+D**/**Ctrl+U** half a page, **Ctrl+F**/**Ctrl+B** a page, **gg**/**G** go to the top and bottom, **{**/**}** (or **[**/**]**) jump to the previous and next turn, **zR**/**zM** open and fold every turn's work, **h** moves to the sessions, **:** opens the palette, and **/** the history. A second Esc still stops a run. It is navigation only: the composer stays a plain editor.
+- **Vim mode** (`atui --vim`, or **Ctrl+X v**, remembered in `~/.config/awui/atui.json`; `ATUI_VIM=1` works too). **Esc** leaves the composer for NORMAL, shown in the status line; **i**, **a**, **o**, or Enter go back to typing. In NORMAL, **j**/**k** scroll a line (with a count, `5j`), **Ctrl+D**/**Ctrl+U** half a page, **Ctrl+F**/**Ctrl+B** a page, **gg**/**G** go to the top and bottom, **{**/**}** (or **[**/**]**) jump to the previous and next turn, **zR**/**zM** open and fold every turn's work, **h** moves to the sessions, **:** opens the palette, and **/** the history. A second Esc still stops a run. It is navigation only: the composer stays a plain editor.
 - **Keys.** **Ctrl+K** (or Ctrl+P) is the palette: actions, every project's sessions, models, thinking levels, and harnesses. **Ctrl+X** then a letter does the rest: `b` sessions, `s` browse sessions with the keys (↑/↓ or j/k, Enter, Esc), `r` history, `i` info panel, `n` new chat, `m` model, `t` thinking, `h` harness, `c` compact, `f` compact first / full history for the next message, `e` show the work of every turn, `v` vim mode, `q` quit; Ctrl+X alone lists them. **Esc Esc** stops the agent, **Ctrl+C** clears the composer, stops a run, or (twice) quits. Page Up/Down scroll, and the mouse scrolls and clicks.
 
 atui does not sign in yet, so it is for a server on this machine, which needs no sign-in. Not in it yet: Retry/Edit, Review, Undo file changes, images, Quote and Run, tabs, and notifications.
@@ -352,7 +352,7 @@ With `host: 0.0.0.0` in `config.yml`, startup prints `LAN: http://<ip>:4783/` fo
 
 ## Theme
 
-The built-in light and dark themes follow your system. A base16 or base24 scheme in `~/.config/agentwebui/theme.yml` is listed in the Settings theme menu as **base16** (its own name shows on hover); `theme: base16` in `config.yml` makes it the default everywhere.
+The built-in light and dark themes follow your system. A base16 or base24 scheme in `~/.config/awui/theme.yml` is listed in the Settings theme menu as **base16** (its own name shows on hover); `theme: base16` in `config.yml` makes it the default everywhere.
 
 - **Accepted formats:** tinted-theming (`system`, `name`, `variant`, nested `palette:`), the stylix-generated shape (`name` + `palette:`, hex without `#`), and legacy flat base16 (`scheme:` + top-level `base00`…).
 - **Validation:** only exact 6-digit hex is accepted, because colors become CSS custom properties applied through the CSSOM.
@@ -362,7 +362,7 @@ The built-in light and dark themes follow your system. A base16 or base24 scheme
 
 ### Wiring it to stylix (NixOS / home-manager)
 
-[`contrib/home-manager/awui-theme.nix`](contrib/home-manager/awui-theme.nix) mirrors `home/common/core/pi-theme.nix`. It writes `xdg.configFile."agentwebui/theme.yml"` from:
+[`contrib/home-manager/awui-theme.nix`](contrib/home-manager/awui-theme.nix) mirrors `home/common/core/pi-theme.nix`. It writes `xdg.configFile."awui/theme.yml"` from:
 
 - `config.lib.stylix.colors.scheme`
 - `config.stylix.polarity`
@@ -388,7 +388,7 @@ npm run service -- print        # show the unit without installing
 npm run service -- uninstall    # stop, disable, remove
 ```
 
-The installed unit holds this checkout's path, the `node` that ran the install, and your shell's `PATH`, so `pi`, `omp`, `hermes`, `claude`, and the agents' own tools are found as in a terminal; after moving either, install again. It sets no app settings, so port, host, and the login come from `~/.config/agentwebui/config.yml`. It is skipped (not restart-looped) until `dist/` is built, a stray kill brings it back (`Restart=always`), and bad settings (such as `HOST=0.0.0.0` without a login) stop it with exit code 78 and the reason in the journal instead of restarting it every 5 seconds. Under systemd the Settings dialog can restart the server. To keep it running while you are logged out: `loginctl enable-linger "$USER"`.
+The installed unit holds this checkout's path, the `node` that ran the install, and your shell's `PATH`, so `pi`, `omp`, `hermes`, `claude`, and the agents' own tools are found as in a terminal; after moving either, install again. It sets no app settings, so port, host, and the login come from `~/.config/awui/config.yml`. It is skipped (not restart-looped) until `dist/` is built, a stray kill brings it back (`Restart=always`), and bad settings (such as `HOST=0.0.0.0` without a login) stop it with exit code 78 and the reason in the journal instead of restarting it every 5 seconds. Under systemd the Settings dialog can restart the server. To keep it running while you are logged out: `loginctl enable-linger "$USER"`.
 
 ```bash
 systemctl --user status awui
@@ -398,7 +398,7 @@ git pull && npm ci && npm run build && systemctl --user restart awui   # update
 
 **home-manager:** [`contrib/home-manager/awui-service.nix`](contrib/home-manager/awui-service.nix) declares the same unit (absolute `${pkgs.nodejs}`, no secrets); add it next to the theme module and rebuild. `npm run service` leaves a unit that home-manager manages alone.
 
-**Coming from agent-web-ui** (the old name): the state folder moves itself to `$XDG_STATE_HOME/awui` on the first start, so the sign-in, devices, pins, and checkpoints carry over; `~/.config/agentwebui/` stays where it is. `npm run service -- install` replaces the old `agent-web-ui` unit it installed with `awui`. A home-manager setup renames `systemd.user.services.agent-web-ui` to `awui` itself (stop the old unit first, or both will want the port).
+**Coming from agent-web-ui** (the old name): the state folder moves itself to `$XDG_STATE_HOME/awui` and the settings folder to `~/.config/awui/` on the first start, so the sign-in, devices, pins, checkpoints, config.yml, and theme.yml carry over. `npm run service -- install` replaces the old `agent-web-ui` unit it installed with `awui`. A home-manager setup renames `systemd.user.services.agent-web-ui` to `awui` itself (stop the old unit first, or both will want the port).
 
 `npm start` keeps working either way.
 
