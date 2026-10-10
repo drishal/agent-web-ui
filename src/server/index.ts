@@ -114,6 +114,9 @@ async function main(): Promise<void> {
   const active = await theme.get();
   console.log(`  theme: ${active.name ?? "built-in light/dark"}`);
   const manager = new ChatManager();
+  // Chats' render tools always post back over loopback, even when the server
+  // also serves the LAN: the page stays on the machine the project is on.
+  manager.render = { baseUrl: `http://127.0.0.1:${config.port}` };
   const marks = await SessionMarks.open(config.stateDir);
   const limits = await Limits.open(registry, config.stateDir);
   const notifier = await Notifier.open(config.stateDir, (m) => console.error(`awui: ${m}`));
@@ -135,6 +138,7 @@ async function main(): Promise<void> {
     limits,
     notifier,
     checkpointsDir: path.join(config.stateDir, "checkpoints"),
+    stateDir: config.stateDir,
     settings: {
       configDir: config.configDir,
       running: {
@@ -190,10 +194,23 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     console.log(`awui: ${signal}, shutting down`);
+    // A stuck harness child (one that ignores SIGTERM, or whose exit never
+    // surfaces) must not hold the process: this is systemd's Restart=always
+    // unit, and a wedged stop leaves it deactivated until the stop timeout.
+    // Bound the whole teardown; whatever is left is reaped with the process.
+    // Not unref'd — the exit below would race a detached timer.
+    const force = setTimeout(() => {
+      console.log(`awui: shutdown hit its deadline; forcing exit`);
+      process.exit(0);
+    }, 5_000);
     server.close();
     for (const socket of sockets) socket.destroy();
-    await manager.shutdown();
-    await registry.shutdown();
+    try {
+      await manager.shutdown();
+      await registry.shutdown();
+    } finally {
+      clearTimeout(force);
+    }
     const left = liveOmpChildren();
     console.log(`awui: stopped (omp children left: ${left})`);
     process.exit(0);

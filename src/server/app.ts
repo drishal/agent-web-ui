@@ -36,6 +36,7 @@ import {
 } from "../shared/protocol.js";
 import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import { storedImage } from "./image-store.js";
+import { readHtmlRenderForChat, saveHtmlRender } from "./html-render.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
@@ -44,6 +45,7 @@ import { sniffImage } from "./images.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
+import { readAwuiConfig, writeAwuiConfig } from "./awui-settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
@@ -77,8 +79,10 @@ export interface AppDeps {
   limits?: Limits;
   /** Notes and Web Push for devices that turned notifications on; in memory when absent. */
   notifier?: Notifier;
-  /** Where file checkpoints live (shadow repositories, and each session's list); none when absent. */
+  /** Where file checkpoints live (shadow repositories, and each session's list of them); none when absent. */
   checkpointsDir?: string | null;
+  /** The server state folder, where agent-rendered HTML pages are stored. */
+  stateDir?: string | null;
   log?: (message: string) => void;
 }
 
@@ -167,6 +171,23 @@ export function createApp(deps: AppDeps) {
   app.post("/api/login", express.json({ limit: "8kb" }), security.login);
   app.post("/api/logout", security.logout);
 
+  // The render tool in a chat's harness child posts its page here. It is not a
+  // browser session, so it authenticates with the random token the child was
+  // spawned with (`AWUI_RENDER_TOKEN`) instead of a cookie; the token names the
+  // one live chat the page belongs to. Mounted before requireAuth, and only
+  // ever from loopback (the bind is authenticated by the token, not the host).
+  app.post("/api/render", express.json({ limit: "600kb" }), async (req, res) => {
+    const stateDir = deps.stateDir;
+    if (!stateDir) throw new ChatError(404, "render_off", "HTML render is not wired on this server");
+    const token = req.get("x-awui-render-token") ?? "";
+    const chat = token !== "" ? manager.chatForRenderToken(token) : undefined;
+    if (!chat) throw new ChatError(403, "bad_render_token", "Not a live chat's render token");
+    const html = typeof req.body?.html === "string" ? req.body.html : "";
+    const saved = await saveHtmlRender(stateDir, chat.chatId, { html, title: req.body?.title, height: req.body?.height });
+    if (!saved) throw new ChatError(400, "bad_render", "Empty or oversized HTML document");
+    res.json({ id: saved.id, url: `/api/chats/${chat.chatId}/html-render/${saved.id}` });
+  });
+
   app.use("/api", security.requireAuth, (_req, res, next) => {
     // Session-bearing JSON must never be cached by a browser or proxy.
     res.setHeader("Cache-Control", "no-store");
@@ -230,6 +251,15 @@ export function createApp(deps: AppDeps) {
   app.put("/api/settings", (req, res) => {
     const ctx = settingsCtx();
     res.json(writeSettings(ctx, body(settingsPatchSchema, req), requester(req, res)));
+  });
+
+  // The awui harness's own providers (its isolated agent dir's models.json).
+  // Server-side only edits; an apiKey is never returned (redacted to a flag).
+  app.get("/api/awui/settings", async (_req, res) => {
+    res.json(await readAwuiConfig(registry));
+  });
+  app.put("/api/awui/settings", async (req, res) => {
+    res.json(await writeAwuiConfig(registry, req.body));
   });
   app.post("/api/settings/restart", (_req, res) => {
     const ctx = settingsCtx();
@@ -420,6 +450,23 @@ export function createApp(deps: AppDeps) {
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.send(image.bytes);
+  });
+
+  // An agent-rendered HTML page, shown in a sandboxed frame. The id addresses
+  // the bytes the chat's render tool stored; the chat in the path must be the
+  // one that owns it, so one chat cannot read another's page. Served as HTML,
+  // but to an opaque-origin frame (never allow-same-origin), so its scripts
+  // cannot reach the app's session.
+  app.get("/api/chats/:id/html-render/:renderId", async (req, res) => {
+    const stateDir = deps.stateDir;
+    if (!stateDir) throw new ChatError(404, "render_off", "HTML render is not wired on this server");
+    const chat = manager.get(req.params.id);
+    const html = /^[0-9a-f]{32}$/.test(req.params.renderId) ? await readHtmlRenderForChat(stateDir, chat.chatId, req.params.renderId) : null;
+    if (html === null) throw new ChatError(404, "no_render", "That page is no longer held; reload the chat");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(html);
   });
 
   app.get("/api/chats/:id", (req, res) => {

@@ -6437,3 +6437,31 @@ button.harness-chip:disabled {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* An agent-published HTML page above the turn's answer: the frame fills its box, themed by its own bootstrap. */
+.turn-renders {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.html-render {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.html-render-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.scheme-light {
+  color-scheme: light;
+}
+
+/* Settings: the awui harness providers editor. */
+.awui-providers { display: grid; gap: 8px; }
+.awui-provider { display: grid; grid-template-columns: minmax(90px,0.8fr) 1.6fr minmax(90px,1fr) minmax(90px,1fr) auto; gap: 6px; align-items: center; }
+.awui-provider .input { min-width: 0; }

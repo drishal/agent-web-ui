@@ -101,6 +101,12 @@ export function neatRow(item: ToolItem, workspace: string): NeatRow {
     return { label: item.name, glue: " ", detail: plural(runs.length, "agent"), facts: outcome(running ? [] : [`${done}/${runs.length} done`]) };
   }
 
+  // A render_html call published an HTML page; a terminal cannot show the page itself, so the row names it.
+  if (item.htmlRender) {
+    const page = item.htmlRender;
+    return { label: "Render", glue: " ", detail: page.title, facts: outcome([`${page.height}px, page in web UI`]) };
+  }
+
   switch (item.category) {
     case "read": {
       let where = path ? shortPath(path, workspace) : item.summary;

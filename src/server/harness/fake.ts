@@ -96,6 +96,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsFork: true,
       supportsHandoff: true,
       supportsRewind: true,
+      supportsHtmlRender: true,
       ...options.capabilities,
     };
   }
@@ -199,7 +200,7 @@ export class FakeAdapter implements HarnessAdapter {
       session = { nativeId: randomUUID(), cwd: req.cwd, title: "", messages: [], updatedAt: new Date() };
       this.sessions.set(session.nativeId, session);
     }
-    return new FakeLiveChat(session, this.chunkDelayMs);
+    return new FakeLiveChat(session, this.chunkDelayMs, req.renderEnv);
   }
 
   async shutdown(): Promise<void> {}
@@ -219,6 +220,7 @@ class FakeLiveChat implements LiveChat {
   constructor(
     private readonly session: FakeSession,
     private readonly delayMs: number,
+    private readonly renderEnv?: NodeJS.ProcessEnv,
   ) {}
 
   get nativeId(): string {
@@ -446,6 +448,7 @@ class FakeLiveChat implements LiveChat {
       if (/\bedit\b/i.test(text)) await this.tool("edit", signal);
       if (/\bshowcase\b/i.test(text)) for (const call of this.showcase()) await this.call(call, signal);
       if (/\bsubagents\b/i.test(text)) await this.subagents(signal);
+      if (/\brender\b|\bhtmlrender\b/i.test(text)) await this.render(signal);
       if (/\bfail\b/i.test(text)) {
         this.emit({ type: "assistant_start", model: this.model });
         await this.pause(signal);
@@ -622,6 +625,41 @@ class FakeLiveChat implements LiveChat {
     const details = call.details ? { details: call.details } : {};
     this.record({ role: "toolResult", toolCallId, toolName: call.name, content: [{ type: "text", text: call.output }], isError: false, ...details });
     this.emit({ type: "tool_end", toolCallId, output: call.output, isError: false, ...details });
+  }
+
+  /**
+   * A render_html call that goes through the real endpoint when the chat was
+   * given one (AWUI_RENDER_URL/TOKEN): the page is stored and the reference
+   * comes back in the result's details, exactly as the pi/omp extension does.
+   * Without an endpoint the call still completes, with a noting output.
+   */
+  private async render(signal: AbortSignal): Promise<void> {
+    const title = "Fake report";
+    const html = `<!doctype html><html><head><style>body{font-family:var(--font-sans)}h1{color:var(--accent)}</style></head><body><h1>${title}</h1><p>Rendered by the fake harness.</p></body></html>`;
+    const height = 160;
+    let output = "Rendered (no endpoint; page not stored)";
+    let details: Record<string, unknown> | undefined;
+    const url = this.renderEnv?.AWUI_RENDER_URL;
+    const token = this.renderEnv?.AWUI_RENDER_TOKEN;
+    if (url && token) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Awui-Render-Token": token },
+          body: JSON.stringify({ html, title, height }),
+        });
+        if (response.ok) {
+          const page = (await response.json()) as { id: string; url: string };
+          output = `Rendered "${title}" into the chat.`;
+          details = { htmlRender: { id: page.id, title, height }, url: page.url };
+        } else {
+          output = `Render refused (HTTP ${response.status})`;
+        }
+      } catch (error) {
+        output = `Render failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    await this.call({ name: "render_html", args: { html, title, height }, output, ...(details ? { details } : {}) }, signal);
   }
 
   private ask(signal: AbortSignal, tool = "read"): Promise<boolean> {

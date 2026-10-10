@@ -20,6 +20,8 @@ export interface HarnessCapabilities {
   supportsHandoff: boolean;
   /** A past prompt can be replaced in place: the session drops it and what followed, then runs the new one (Hermes). */
   supportsRewind: boolean;
+  /** The harness was given awui's render tool, so its calls can publish an HTML page into the chat. */
+  supportsHtmlRender: boolean;
 }
 
 export interface HarnessStatus {
@@ -200,6 +202,26 @@ export interface ToolDiff {
   removed: number;
 }
 
+/** Bounds for an agent-published HTML page (the harness's render tool). */
+export const HTML_RENDER_MIN_HEIGHT = 80;
+export const HTML_RENDER_MAX_HEIGHT = 2000;
+export const HTML_RENDER_MAX_TITLE = 200;
+/** Largest HTML document the server keeps. */
+export const HTML_RENDER_MAX_BYTES = 512 * 1024;
+
+/**
+ * A self-contained HTML page an agent published into the chat, stored
+ * server-side and fetched at /api/chats/:id/html-render/:renderId. `heights`
+ * holds `[width, contentHeight]` pairs the server measured, ascending by width.
+ */
+export interface HtmlRenderRef {
+  id: string;
+  title: string;
+  /** The frame height the agent asked for, and the cap on any measured height. */
+  height: number;
+  heights?: Array<readonly [width: number, height: number]>;
+}
+
 export interface ToolItem {
   kind: "tool";
   id: string;
@@ -219,6 +241,8 @@ export interface ToolItem {
   diff?: ToolDiff;
   /** A delegation call's subagents, with their live progress and results. */
   subagents?: SubagentsInfo;
+  /** An HTML page the call published, shown in a sandboxed frame. */
+  htmlRender?: HtmlRenderRef;
   at?: number;
   endedAt?: number;
 }

@@ -5,6 +5,7 @@ import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/pr
 import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
 import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
+import { htmlRenderFromDetails } from "./render-token.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -491,6 +492,9 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             const runs = runsFromDetails(String(raw.toolCallId), raw.details, tool.subagents ?? null);
             if (runs) tool.subagents = settleRuns(runs, bounded.text, tool.status === "error");
           }
+          // A render call's page reference survives in its result's details, so a reload re-arms the frame.
+          const page = htmlRenderFromDetails(tool.name, raw.details);
+          if (page) tool.htmlRender = page;
         }
         // A wait or a proc read reports on background runs another call started.
         const reports = detailReports(raw.details);
