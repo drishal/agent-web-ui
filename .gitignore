@@ -10,3 +10,4 @@ coverage/
 .devenv/
 .npm-cache/
 dist-bin/
+screenshots/
