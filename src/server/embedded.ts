@@ -21,9 +21,10 @@ export const isEmbedded = typeof AWUI_EMBEDDED !== "undefined" && AWUI_EMBEDDED 
 /** The package version, baked into a binary; the caller reads package.json otherwise. */
 export const embeddedVersion: string | undefined = typeof AWUI_VERSION !== "undefined" ? AWUI_VERSION : undefined;
 
-/** One embedded web-bundle file: text bytes plus its content type. */
+/** One embedded web-bundle file: text or bytes, plus its content type. */
 export interface EmbeddedWebFile {
-  text: string;
+  /** The body: a string for text assets, a Buffer for binary (icons, fonts). */
+  text: string | Buffer;
   contentType: string;
 }
 

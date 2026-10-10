@@ -61,10 +61,16 @@ async function assetModule(): Promise<string> {
   const webEntries: string[] = [];
   for (const abs of files) {
     const ext = path.extname(abs);
-    const text = await readFile(path.join(root, "dist", "web", abs.slice(1)), "utf8").catch(() => null);
     // Source maps are huge and the binary has no debugger to read them; skip.
-    if (ext === ".map" || text === null) continue;
-    webEntries.push(`  m.set(${JSON.stringify(abs)}, { text: ${JSON.stringify(text)}, contentType: ${JSON.stringify(CONTENT_TYPES[ext] ?? "application/octet-stream")} });`);
+    if (ext === ".map") continue;
+    const bytes = await readFile(path.join(root, "dist", "web", abs.slice(1)));
+    const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
+    // Text assets go as a string; binary (icons, fonts) ride as base64 so bytes survive intact.
+    if (contentType.startsWith("text/") || ext === ".json" || ext === ".webmanifest" || ext === ".svg") {
+      webEntries.push(`  m.set(${JSON.stringify(abs)}, { text: ${JSON.stringify(bytes.toString("utf8"))}, contentType: ${JSON.stringify(contentType)} });`);
+    } else {
+      webEntries.push(`  m.set(${JSON.stringify(abs)}, { text: Buffer.from(${JSON.stringify(bytes.toString("base64"))}, "base64"), contentType: ${JSON.stringify(contentType)} });`);
+    }
   }
   const extEntries: string[] = [];
   for (const name of EXTENSIONS) {
