@@ -18,6 +18,23 @@ browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAd
 
 ## Install and run
 
+### The binary (easiest)
+
+A self-contained `awui` binary runs the whole thing with no Node on the machine — the server, the web bundle, and the harness extensions are all embedded:
+
+```bash
+curl -fsSL https://github.com/drishal/agent-web-ui/releases/latest/download/awui-linux-x64 -o ~/.local/bin/awui
+chmod +x ~/.local/bin/awui
+awui                 # web UI + API on http://127.0.0.1:4783
+awui install tui     # also drop the atui terminal client on your PATH (~/.local/bin/atui)
+```
+
+State goes to `$XDG_STATE_HOME/awui` as usual, so a binary and a source run share one config and one set of sessions.
+
+Build it yourself from a clone (inside `devenv shell`; see below): `bun run scripts/build-binary.ts` writes `dist/bin/<platform>/awui`. `scripts/build-binary.ts --all` cross-compiles every target.
+
+### From source
+
 Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, and/or `claude` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
 
 ```bash
@@ -50,6 +67,11 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `npm run test:e2e` | Builds, then runs Playwright (Chromium) against the fake harnesses |
 | `npm run smoke` | Opt-in checks against the real installed Pi, omp, Hermes, and Claude Code (see [Testing](#testing)) |
 | `npm run build` / `npm start` | Production build, then a single process serving UI and API |
+| `bun run scripts/build-binary.ts` | Compile the self-contained binary into `dist/bin/<platform>` (`--all` for every target). Run inside `devenv shell`. |
+
+### Developer environment
+
+`devenv` gives the pinned toolchain (Node 22, the nixpkgs `bun` the binary build needs, the e2e browsers): `devenv shell` enters it, `devenv tasks run awui:binary` builds the binary, `devenv up` runs `npm run dev` as a process. The nixpkgs-built bun inside the shell is what makes the compiled binary run on this machine (the upstream bun binary segfaults here); build binaries only inside the shell.
 
 ### Configuration (`~/.config/agentwebui`)
 

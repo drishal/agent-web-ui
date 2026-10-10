@@ -25,7 +25,7 @@ const s = (id: string, updatedAt: string, opts: Partial<ProjectSession> = {}): P
 });
 
 const overview = (sessions: ProjectSession[]): SessionsOverview => ({ workspaces: [], sessions, errors: [] });
-const opts = { currentId: null, query: "", harnessId: "awui" as const };
+const opts = { currentId: null, query: "", harnessId: "awui" as const, now: NOW.getTime() };
 
 describe("conversationBucket", () => {
   it("labels Today, Yesterday, this week's days, Older", () => {
@@ -40,9 +40,19 @@ describe("conversationBucket", () => {
 });
 
 describe("historySections", () => {
+  const s = (id: string, updatedAt: string, opts: Partial<ProjectSession> = {}): ProjectSession => ({
+    id,
+    harnessId: asHarnessId("awui"),
+    title: id,
+    updatedAt,
+    workspaceId: "ws",
+    ...opts,
+  });
+
+  // "now" is Friday 15:00; hist ids sit clearly inside each bucket, not on a boundary.
   const hist = overview([
     s("old", daysAgo(30)),
-    s("today", daysAgo(0, 9)),
+    s("today", iso(new Date(NOW.getTime() - 60_000))),
     s("yesterday", daysAgo(1)),
     s("thisweek", daysAgo(3)),
     s("pinned", daysAgo(40), { pinned: true }),

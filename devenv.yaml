@@ -1,0 +1,7 @@
+# devenv inputs, pinned by devenv.lock. nixpkgs-unstable matches the machine's
+# system flake (~/dotfiles), so the toolchain's glibc lines up with the runtime
+# the binary is compiled against.
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-unstable
+allowUnfree: true

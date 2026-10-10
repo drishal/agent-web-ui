@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 .env
 .todo/
+.devenv/
+.npm-cache/
+dist-bin/

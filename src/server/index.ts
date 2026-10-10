@@ -12,6 +12,9 @@ import { HarnessRegistry } from "./harness/registry.js";
 import { hashPassword, loadCredentials, PasswordAuth } from "./auth.js";
 import { cachedLanHosts, sampleLanHosts } from "./network.js";
 import { loadOrCreateSecret, Security } from "./security.js";
+import { embeddedVersion, extractEmbeddedExtensions, isEmbedded } from "./embedded.js";
+import "./assets.gen.js";
+import { installTui } from "./install-tui.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier } from "./notify.js";
@@ -38,7 +41,10 @@ async function findRoot(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const root = await findRoot();
+  // In the binary there is no package root or dist tree on disk: the version is
+  // baked in and the web bundle is embedded, so root/webDir only matter to the
+  // source layout.
+  const root = isEmbedded ? null : await findRoot();
   let settings: ReturnType<typeof readUserConfig> = null;
   let config;
   try {
@@ -53,13 +59,15 @@ async function main(): Promise<void> {
     throw error;
   }
   if (migrateStateDir(config.stateDir) === "moved") console.log(`  state: moved from agent-web-ui to ${config.stateDir}`);
+  // The binary's extension sources need to be real files for pi/omp's -e; write them before the adapters resolve them.
+  await extractEmbeddedExtensions(config.stateDir);
   // Which settings the environment overrides (they beat config.yml), noted before the password leaves it.
   const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS"].filter((n) => process.env[n] !== undefined));
   // The agents' shells inherit process.env; the password must not reach them.
   delete process.env.AUTH_PASSWORD;
   if (settings) console.log(`  settings: ${settings.file}`);
   if (settings?.tightened) console.log(`  ${settings.file} holds a password; its mode is now 0600`);
-  const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")) as { version: string };
+  const pkg = { version: embeddedVersion ?? JSON.parse(await fs.readFile(path.join(root as string, "package.json"), "utf8")).version };
   const secret = await loadOrCreateSecret(config.stateDir);
   // Other devices (LAN via HOST=0.0.0.0, or Tailscale Serve) sign in with a
   // password; this machine never needs to.
@@ -122,7 +130,7 @@ async function main(): Promise<void> {
   const notifier = await Notifier.open(config.stateDir, (m) => console.error(`awui: ${m}`));
   const lanUrls = config.host === "0.0.0.0" ? sampleLanHosts().ipv4.map((ip) => `http://${ip}:${config.port}/`) : [];
   const pairingUrls = [...lanUrls, ...config.allowedHosts.map((h) => `https://${h}/`)];
-  const webDir = process.env.AWUI_WEB_DIR ?? path.join(root, "dist", "web");
+  const webDir = process.env.AWUI_WEB_DIR ?? (root === null ? null : path.join(root, "dist", "web"));
   const app = createApp({
     version: pkg.version,
     home: config.home,
@@ -184,7 +192,7 @@ async function main(): Promise<void> {
     if (lanUrls.length > 0) {
       console.log("  warning: LAN access is plain HTTP; the password and chats are not encrypted on the network. Prefer Tailscale.");
     }
-    if (!existsSync(path.join(webDir, "index.html"))) {
+    if (webDir !== null && !existsSync(path.join(webDir, "index.html"))) {
       console.log("  (no built UI found; run `npm run build`, or use `npm run dev`)");
     }
   });
@@ -220,7 +228,17 @@ async function main(): Promise<void> {
 }
 
 
-main().catch((error: unknown) => {
-  console.error(`awui: fatal: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-});
+/** `awui install tui` — fetch and install the terminal client. Everything else runs the web server. */
+const subcommand = process.argv[2];
+if (subcommand === "install" && process.argv[3] === "tui") {
+  const config = loadConfig({});
+  installTui(config.stateDir).catch((error: unknown) => {
+    console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+} else {
+  main().catch((error: unknown) => {
+    console.error(`awui: fatal: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+}
