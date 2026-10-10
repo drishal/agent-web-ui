@@ -6,7 +6,7 @@ import { tempDir } from "../helpers/app.js";
 
 function setup(yaml: string, overrides: Partial<SettingsContext> = {}) {
   const home = tempDir("awui-settings-");
-  const dir = path.join(home, ".config", "agentwebui");
+  const dir = path.join(home, ".config", "awui");
   mkdirSync(dir, { recursive: true });
   mkdirSync(path.join(home, "code"));
   const file = path.join(dir, "config.yml");

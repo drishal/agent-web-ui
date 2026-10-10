@@ -20,7 +20,7 @@ import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier } from "./notify.js";
 import { ThemeStore } from "./theme.js";
-import { configDir, configEnv, readUserConfig, UserConfigError } from "./user-config.js";
+import { configDir, configEnv, migrateConfigDir, readUserConfig, UserConfigError } from "./user-config.js";
 import { Workspaces } from "./workspaces.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   let settings: ReturnType<typeof readUserConfig> = null;
   let config;
   try {
+    if (migrateConfigDir(process.env) === "moved") console.log(`  config: moved from agentwebui to ${configDir()}`);
     settings = readUserConfig(configDir());
     // Real environment variables win over config.yml; the password never enters process.env.
     config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });

@@ -55,7 +55,7 @@ src/server/
   embedded.ts                 The binary's baked-in assets: embedded web bundle, extension sources, version; materializes extensions into state dir for `-e`.
   install-tui.ts              `awui install tui`: fetch the atui source and drop a `~/.local/bin/atui` wrapper.
   assets.gen.ts               Checked-in stub replaced by the generated embed map at binary-build time.
-  config.ts, user-config.ts   Environment + ~/.config/agentwebui/config.yml → ServerConfig. settings.ts edits config.yml for the Settings dialog.
+  config.ts, user-config.ts   Environment + ~/.config/awui/config.yml → ServerConfig. settings.ts edits config.yml for the Settings dialog.
   security.ts, auth.ts        Host/Origin/Tailscale checks, local vs remote, scrypt logins, signed cookies, lockout.
   workspaces.ts               WORKSPACE_ROOTS confinement (realpath), folder browsing.
   chats/chat.ts               One live chat: the EventReducer folds HarnessEvents into ChatItems, the event log, SSE fan-out, commands.
@@ -134,7 +134,7 @@ if every test passes.
    no fsmonitor, no gc); pass `--literal-pathspecs` when paths come from files.
 8. **State lives in the state folder** (`$XDG_STATE_HOME/awui`, mode 0700),
    written through `state-file.ts` (`writeJson`: temp file + rename, mode 0600).
-   User settings live in `~/.config/agentwebui/` and are edited only through
+   User settings live in `~/.config/awui/` and are edited only through
    `settings.ts`, which checks a save the way startup checks the file.
 9. **Runs outlive clients.** Closing a browser or quitting atui never stops a
    run; only an idle chat with no viewers is reaped (its session file stays).

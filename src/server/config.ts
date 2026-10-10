@@ -17,7 +17,7 @@ export interface ServerConfig {
   workspaceRoots: string[];
   allowedHosts: string[];
   allowedTailscaleUsers: string[];
-  /** ~/.config/agentwebui (config.yml, theme.yml), or null when ignored. */
+  /** ~/.config/awui (config.yml, theme.yml), or null when ignored. */
   configDir: string | null;
   themeFile: string | null;
   themeFileExplicit: boolean;
@@ -134,7 +134,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     allowedHosts: list(env.ALLOWED_HOSTS).map(normalizeAuthority),
     allowedTailscaleUsers: list(env.ALLOWED_TAILSCALE_USERS).map((u) => u.toLowerCase()),
     configDir: configDir(env),
-    themeFile: themeFile ?? path.join(configDir(env) ?? path.join(xdgConfig, "agentwebui"), THEME_FILE),
+    themeFile: themeFile ?? path.join(configDir(env) ?? path.join(xdgConfig, "awui"), THEME_FILE),
     themeFileExplicit: themeFile !== null,
     stateDir,
     ompAgentDir: env.OMP_AGENT_DIR ? path.resolve(expandHome(env.OMP_AGENT_DIR, home)) : null,
