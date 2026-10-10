@@ -13,6 +13,9 @@ const REQUEST_TIMEOUT_MS = 60_000;
  * Ask a child to exit: end stdin, SIGTERM, then SIGKILL after `timeoutMs`.
  * Settles on `exit`, `close`, or `error`, and a child that never spawned
  * (spawn failed, so no exit event will ever fire) counts as already gone.
+ * A wedged child can leave even the SIGKILL timer's `exitCode`/`signalCode`
+ * unset and its event hooks quiet, so settle on the timer too: the kill is
+ * issued, and by then nothing more is ours to wait on.
  */
 export function terminateChild(child: ChildProcessWithoutNullStreams, timeoutMs = KILL_TIMEOUT_MS): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
@@ -33,9 +36,21 @@ export function terminateChild(child: ChildProcessWithoutNullStreams, timeoutMs 
   } catch {
     // The pipe is already gone; SIGTERM below still settles this.
   }
-  child.kill("SIGTERM");
+  const kill = (signal: NodeJS.Signals) => {
+    try {
+      child.kill(signal);
+    } catch {
+      // Already gone.
+    }
+  };
+  kill("SIGTERM");
   timer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    if (child.exitCode === null && child.signalCode === null) {
+      kill("SIGKILL");
+      // Settle regardless: if it is still alive past SIGKILL the process is
+      // being torn down anyway (systemd reaps the cgroup on stop).
+      done();
+    }
   }, timeoutMs);
   return promise;
 }
