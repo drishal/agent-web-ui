@@ -248,10 +248,29 @@ export function toolSummary(args: unknown): string {
     if (typeof args[key] === "string") return (args[key] as string).replace(/\s+/g, " ").trim().slice(0, 160);
   }
   try {
-    return JSON.stringify(args).slice(0, 160);
+    return formatArgObject(args).slice(0, 160);
   } catch {
     return "";
   }
+}
+
+/** A call's args as `a: 1, b: [x, y] · c: …` — readable in the one-line summary, full form in the card. */
+function formatArgObject(obj: Obj): string {
+  return Object.entries(obj)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([key, value]) => {
+      const text =
+        typeof value === "string"
+          ? value.replace(/\s+/g, " ").trim()
+          : Array.isArray(value)
+            ? `[${value.map((x) => (typeof x === "string" ? x : JSON.stringify(x) ?? "")).join(", ")}]`
+            : isObj(value)
+              ? `{${formatArgObject(value)}}`
+              : String(value);
+      return `${key}: ${text}`;
+    })
+    .filter((v) => v !== "")
+    .join(", ");
 }
 export function toolResultText(result: unknown): string {
   if (result === undefined || result === null) return "";
