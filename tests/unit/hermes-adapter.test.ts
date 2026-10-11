@@ -150,6 +150,21 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(models[0]).toMatchObject({ reasoning: true });
   });
 
+  it("handles a multi-provider gateway: qualified model key matches the catalog without double prefixing", async () => {
+    const { chat } = await openChat();
+    await chat.send("multimodel check", "normal");
+    await until(() => chat.status === "idle");
+    const config = chat.snapshot().config;
+    // model arrived as local/opencode-go-v4-flash with provider=custom; no custom/… doubling
+    expect(config.model).toBe("local/opencode-go-v4-flash");
+    await chat.refreshModels();
+    const refreshed = chat.snapshot().config;
+    const keys = refreshed.models.map((m) => m.key);
+    expect(keys).toContain("local/opencode-go-v4-flash");
+    expect(keys).toEqual([...new Set(keys)]); // same model id listed under two slugs stays separate; no duplicate keys
+    expect(refreshed.models.find((m) => m.key === refreshed.model)).toBeDefined();
+  });
+
   it("serves expired session rows at once and refreshes them behind the list", async () => {
     expect((await adapter.listSessions(project)).map((s) => s.title)).toEqual(["Fake Hermes session"]);
     const stored = JSON.parse(readFileSync(state, "utf8"));
