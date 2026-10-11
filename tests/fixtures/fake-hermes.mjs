@@ -23,6 +23,7 @@ const event = (type, payload, sessionId = runtimeId) =>
 const storedId = "20261002_120000_fake1";
 let runtimeId = "4242";
 let title = "Fake Hermes session";
+let multimodel = false;
 let model = "fake-model";
 let effort = "medium";
 let aborted = false;
@@ -103,6 +104,16 @@ async function runPrompt(text) {
   if (/\bvanish\b/.test(text)) {
     // A reclaimed turn: only session.info says it stopped (and on which model).
     event("session.info", { model: "fake-fallback", provider: "fake", reasoning_effort: effort, running: false, title, stored_session_id: storedId });
+    return;
+  }
+  if (/\bmultimodel\b/.test(text)) {
+    // A gateway configured with several providers: model arrives already qualified
+    // and the catalog lists two providers under the same slug (local + remote custom).
+    multimodel = true;
+    event("session.info", { model: "local/opencode-go-v4-flash", provider: "custom", reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
+    const now = Date.now() / 1000;
+    messages.push({ role: "user", text, timestamp: now, row_id: ++rowIds });
+    messages.push({ role: "assistant", text: body, reasoning: "hmm", timestamp: now });
     return;
   }
   turns += 1;
@@ -217,13 +228,21 @@ rl.on("line", (line) => {
       }
       return fail(id, 4002, `unknown config key: ${params.key}`);
     case "model.options":
-      return ok(id, {
-        providers: [
-          { slug: "fake", name: "Fake", models: ["fake-model", "fake-mini"], capabilities: { "fake-model": { reasoning: true, fast: false }, "fake-mini": { reasoning: false, fast: true } }, authenticated: true, is_current: true },
-        ],
-        model: "fake-model",
-        provider: "fake",
-      });
+      return ok(id, multimodel
+        ? {
+            providers: [
+              { slug: "local", name: "Local", models: ["opencode-go-v4-flash", "glm-local"], capabilities: { "opencode-go-v4-flash": { reasoning: true } }, authenticated: true },
+              { slug: "remote", name: "Remote", models: ["opencode-go-v4-flash", "opus-4-1"], capabilities: {}, authenticated: true },
+            ],
+            model: "local/opencode-go-v4-flash",
+          }
+        : {
+            providers: [
+              { slug: "fake", name: "Fake", models: ["fake-model", "fake-mini"], capabilities: { "fake-model": { reasoning: true, fast: false }, "fake-mini": { reasoning: false, fast: true } }, authenticated: true, is_current: true },
+            ],
+            model: "fake-model",
+            provider: "fake",
+          });
     case "projects.tree":
       return ok(id, {
         projects: [

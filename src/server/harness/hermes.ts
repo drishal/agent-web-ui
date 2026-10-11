@@ -446,10 +446,13 @@ class HermesLiveChat implements LiveChat {
     const model = str(info.model);
     const provider = str(info.provider);
     if (model || provider) {
+      // model may already arrive fully qualified ("provider/model") for multi-provider
+      // gateways; adding info.provider on top would double it (custom/local/x).
+      const qualified = model && model.includes("/") ? model : provider && model ? `${provider}/${model}` : model;
       this.emit({
         type: "config",
         config: {
-          ...(model ? { model: provider ? `${provider}/${model}` : model } : {}),
+          ...(qualified ? { model: qualified } : {}),
           ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort) } : {}),
         },
       });
@@ -705,8 +708,9 @@ class HermesLiveChat implements LiveChat {
   async getConfig(): Promise<ChatConfig> {
     const model = str(this.info.model);
     const provider = str(this.info.provider);
+    const qualified = model && model.includes("/") ? model : provider && model ? `${provider}/${model}` : model;
     return {
-      model: model ? (provider ? `${provider}/${model}` : model) : null,
+      model: qualified || null,
       thinkingLevel: str(this.info.reasoning_effort) || null,
       models: await this.modelList(),
       thinkingLevels: REASONING_LEVELS,
@@ -1016,6 +1020,7 @@ export class HermesAdapter implements HarnessAdapter {
     const params = refresh ? { refresh: true } : {};
     const result = ask ? await ask(params) : await this.withProbe(cwd, (rpc) => rpc.request<Obj>("model.options", params));
     const models: ModelInfo[] = [];
+    const seen = new Set<string>();
     for (const provider of Array.isArray(result?.providers) ? result.providers : []) {
       if (!isObj(provider)) continue;
       const slug = str(provider.slug);
@@ -1023,7 +1028,10 @@ export class HermesAdapter implements HarnessAdapter {
       for (const model of Array.isArray(provider.models) ? provider.models : []) {
         const id = String(model);
         const capability = capabilities[id];
-        models.push({ key: `${slug}/${id}`, provider: slug, id, name: id, ...(isObj(capability) && capability.reasoning === true ? { reasoning: true } : {}) });
+        const key = `${slug}/${id}`;
+        if (seen.has(key)) continue; // several endpoints can expose the same provider/model id
+        seen.add(key);
+        models.push({ key, provider: slug, id, name: id, ...(isObj(capability) && capability.reasoning === true ? { reasoning: true } : {}) });
       }
     }
     this.probes.set(cwd, { at: Date.now(), models });
