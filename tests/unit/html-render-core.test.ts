@@ -76,20 +76,30 @@ describe("htmlRenderFromDetails", () => {
   const details = { htmlRender: { id: "b".repeat(32), title: "Report", height: 240 } };
 
   it("attaches the reference for the render tool itself", () => {
-    expect(htmlRenderFromDetails("render_html", details)).toMatchObject({ id: "b".repeat(32), title: "Report", height: 240 });
-    expect(htmlRenderFromDetails(HTML_RENDER_MCP_TOOL, details)?.height).toBe(240);
+    expect(htmlRenderFromDetails("render_html", {}, details)).toMatchObject({ id: "b".repeat(32), title: "Report", height: 240 });
+    expect(htmlRenderFromDetails(HTML_RENDER_MCP_TOOL, {}, details)?.height).toBe(240);
+  });
+
+  it("attaches the reference when the write tool calls the xd://render_html device", () => {
+    // What the agent sees as `write xd://render_html {html, title, height}` comes over
+    // the harness wire as toolName "write" with that path in its args — same page, same ref.
+    expect(htmlRenderFromDetails("write", { path: "xd://render_html", content: "x" }, details)).toMatchObject({ id: "b".repeat(32), height: 240 });
   });
 
   it("ignores the same shape on any other tool (spoof guard)", () => {
-    expect(htmlRenderFromDetails("read", details)).toBeUndefined();
-    expect(htmlRenderFromDetails("awui.render_html_evil", details)).toBeUndefined();
+    expect(htmlRenderFromDetails("read", {}, details)).toBeUndefined();
+    expect(htmlRenderFromDetails("awui.render_html_evil", {}, details)).toBeUndefined();
+    // A write to some other path with a forged detail does NOT get framed.
+    expect(htmlRenderFromDetails("write", { path: "src/foo.ts", content: "x" }, details)).toBeUndefined();
+    // A write with the right path but a stringified-arg body does NOT parse either.
+    expect(htmlRenderFromDetails("write", '{"path":"xd://render_html"}', details)).toBeUndefined();
   });
 
   it("rejects a malformed reference", () => {
-    expect(htmlRenderFromDetails("render_html", { htmlRender: { id: "nope", title: "x", height: 100 } })).toBeUndefined();
-    expect(htmlRenderFromDetails("render_html", { htmlRender: { id: "b".repeat(32), title: "x" } })).toBeUndefined();
-    expect(htmlRenderFromDetails("render_html", null)).toBeUndefined();
-    expect(htmlRenderFromDetails("render_html", {})).toBeUndefined();
+    expect(htmlRenderFromDetails("render_html", {}, { htmlRender: { id: "nope", title: "x", height: 100 } })).toBeUndefined();
+    expect(htmlRenderFromDetails("render_html", {}, { htmlRender: { id: "b".repeat(32), title: "x" } })).toBeUndefined();
+    expect(htmlRenderFromDetails("render_html", {}, null)).toBeUndefined();
+    expect(htmlRenderFromDetails("render_html", {}, {})).toBeUndefined();
   });
 });
 

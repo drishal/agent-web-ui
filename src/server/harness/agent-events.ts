@@ -489,6 +489,9 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             ...(category === "agent" ? withRuns(runsFromArgs(block.arguments)) : {}),
             ...stamp,
           };
+          // The xd://render_html device's result must be matched on its args, which are
+          // stringified above; keep the raw around just for that one name lookup.
+          if (name === "write") (tool as ToolItem & { __rawArgs?: unknown }).__rawArgs = block.arguments;
           tools.set(id, tool);
           items.push(tool);
         }
@@ -512,8 +515,9 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             if (runs) tool.subagents = settleRuns(runs, bounded.text, tool.status === "error");
           }
           // A render call's page reference survives in its result's details, so a reload re-arms the frame.
-          const page = htmlRenderFromDetails(tool.name, raw.details);
+          const page = htmlRenderFromDetails(tool.name, (tool as { __rawArgs?: unknown }).__rawArgs, raw.details);
           if (page) tool.htmlRender = page;
+          delete (tool as { __rawArgs?: unknown }).__rawArgs;
         }
         // A wait or a proc read reports on background runs another call started.
         const reports = detailReports(raw.details);

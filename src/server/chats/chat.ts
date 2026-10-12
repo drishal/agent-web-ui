@@ -334,6 +334,8 @@ class EventReducer {
           ...(runs ? { subagents: runs } : {}),
           at: Date.now(),
         };
+        // The xd://render_html device submits as `write` with the device path; matcher reads it off raw args.
+        if (event.name === "write") (tool as ToolItem & { __rawArgs?: unknown }).__rawArgs = event.args;
         this.put(tool);
         break;
       }
@@ -378,7 +380,8 @@ class EventReducer {
           if (runs) settled.subagents = settleRuns(runs, event.output, event.isError);
         }
         // A render_html/MCP render call publishes a page; its result's details carry the reference.
-        const page = base.name !== undefined ? htmlRenderFromDetails(base.name, event.details) : undefined;
+        const page = base.name !== undefined ? htmlRenderFromDetails(base.name, (base as { __rawArgs?: unknown }).__rawArgs, event.details) : undefined;
+        delete (base as { __rawArgs?: unknown }).__rawArgs;
         // A failed edit keeps the diff it tried, but changed nothing to count.
         const { diffStat: _attempted, ...uncounted } = settled;
         this.put({
