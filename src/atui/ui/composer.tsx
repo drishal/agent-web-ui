@@ -1,20 +1,32 @@
 // The composer (OpenCode's prompt box, with the web UI's chips): Enter sends,
-// Shift+Enter or Ctrl+J adds a line; while the agent works Enter steers. The
-// line under it names the harness, model and thinking level, the context
-// used, and whether the next message compacts first.
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
-import type { TextareaRenderable } from "@opentui/core";
-import { useKeyboard } from "@opentui/solid";
-import type { SlashCommand } from "../../shared/protocol.js";
+// Shift+Enter or Ctrl+J adds a line; while the agent works Enter steers. A
+// "/" opens the command menu, with the best match's rest shown dim after the
+// cursor; an "@" opens the project's files. C-v attaches an image from
+// the clipboard, and image files dropped on the terminal (pasted as their
+// paths) attach too: numbered thumbnails above the box, Backspace in an
+// empty box takes the last one off. The line under it names the
+// harness, model and thinking level, the context used (with its recent
+// history as a sparkline), and whether the next message compacts first.
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createHostClipboard, decodePasteBytes, type HostClipboardService, type TextareaRenderable } from "@opentui/core";
+import { useKeyboard, usePaste } from "@opentui/solid";
+import { IMAGE_MIME_TYPES, MAX_IMAGES, type SlashCommand } from "../../shared/protocol.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../../web/commands.js";
 import { modelName } from "../../web/turns.js";
+import { applyMention, ghostCompletion, mentionAt } from "../assist.js";
 import { tokens } from "../format.js";
+import { sparkline } from "../fx.js";
+import { attachmentFrom, attachmentFromFile, byteSize, clipboardImageByTool, imagePathsFromPaste, type PendingImage } from "../images.js";
+import { harnessGlyph } from "../neat.js";
 import { accentOf } from "../theme.js";
 import { useAtui, useTheme } from "./context.js";
 
 /** From this share of the context the composer offers to compact first, and from this one it starts on. */
 export const COMPACT_OFFER = 50;
 export const COMPACT_DEFAULT = 80;
+
+/** The host clipboard (Wayland, X11, macOS), opened on the first C-v. */
+let clipboard: HostClipboardService | null = null;
 
 export function Composer(p: {
   focused: boolean;
@@ -27,6 +39,41 @@ export function Composer(p: {
   const app = useAtui();
   const t = useTheme();
   let area: TextareaRenderable | undefined;
+
+  // Images waiting to go with the next message.
+  const [images, setImages] = createSignal<PendingImage[]>([]);
+  const warn = (text: string) => app.setBanner({ level: "warning", text });
+  const addImages = (found: Array<PendingImage | string>) => {
+    const ok = found.filter((f): f is PendingImage => typeof f !== "string");
+    const why = found.find((f): f is string => typeof f === "string");
+    if (why) warn(why);
+    if (ok.length === 0) return;
+    if (images().length + ok.length > MAX_IMAGES) warn(`At most ${MAX_IMAGES} images go with one message`);
+    setImages((list) => [...list, ...ok].slice(0, MAX_IMAGES));
+  };
+  // A paste that is image files (a drop) or image bytes attaches them; anything else is text, as usual.
+  usePaste((event) => {
+    if (!p.focused) return;
+    if (event.metadata?.kind === "binary" && event.metadata.mimeType?.startsWith("image/")) {
+      event.preventDefault();
+      addImages([attachmentFrom(event.bytes)]);
+      return;
+    }
+    const files = imagePathsFromPaste(decodePasteBytes(event.bytes), app.workspace()?.path ?? process.cwd());
+    if (!files) return;
+    event.preventDefault();
+    void Promise.all(files.map(attachmentFromFile)).then(addImages);
+  });
+  const pasteClipboardImage = async () => {
+    clipboard ??= createHostClipboard();
+    const read = await clipboard.read({ preferredTypes: [...IMAGE_MIME_TYPES] as [string, ...string[]] }).catch(() => null);
+    if (read?.status === "read" && read.representation.mimeType.startsWith("image/")) return addImages([attachmentFrom(read.representation.bytes)]);
+    // OpenTUI's reader is not in every build: wl-paste or xclip then.
+    const byTool = read?.status === "empty" || read?.status === "read" ? "empty" : await clipboardImageByTool(process.env);
+    if (byTool instanceof Uint8Array) addImages([attachmentFrom(byTool)]);
+    else if (byTool === "empty") warn("No image on the clipboard (paste text with C-S-v)");
+    else warn("Cannot read the clipboard: install wl-clipboard (Wayland) or xclip (X11)");
+  };
 
   // The "/" menu: open while the first word is typed; ↑/↓ move, Tab completes, Esc closes.
   const [text, setText] = createSignal("");
@@ -58,6 +105,65 @@ export function Composer(p: {
     area?.setText(`/${c.name} `);
     area?.gotoLineTextEnd();
   };
+  const ghost = () => (menu().length > 0 && !text().includes("\n") ? ghostCompletion(text(), menu()[menuIndex()]) : "");
+
+  // The "@" menu: the project's files matching what follows the @, asked for as you type.
+  const mention = () => (p.focused ? mentionAt(text()) : null);
+  const [files, setFiles] = createSignal<string[]>([]);
+  const [fileIndex, setFileIndex] = createSignal(0);
+  const [filesDismissed, setFilesDismissed] = createSignal(false);
+  let fileTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(
+    on(
+      () => mention()?.query,
+      (q) => {
+        clearTimeout(fileTimer);
+        setFileIndex(0);
+        if (q === undefined) {
+          setFiles([]);
+          setFilesDismissed(false);
+          return;
+        }
+        fileTimer = setTimeout(() => {
+          void app.searchFiles(q).then((list) => {
+            if (mention()?.query === q) setFiles(list.slice(0, 8));
+          });
+        }, 80);
+      },
+    ),
+  );
+  onCleanup(() => clearTimeout(fileTimer));
+  const fileMenu = () => (mention() && !filesDismissed() ? files() : []);
+  const pickFile = (file: string) => {
+    area?.setText(applyMention(text(), file));
+    area?.gotoBufferEnd();
+  };
+
+  useKeyboard((key) => {
+    if (!p.focused || key.defaultPrevented) return;
+    if (key.ctrl && !key.meta && key.name === "v") {
+      key.preventDefault();
+      void pasteClipboardImage();
+    } else if (key.name === "backspace" && images().length > 0 && !(area?.plainText ?? "")) {
+      key.preventDefault();
+      setImages((list) => list.slice(0, -1));
+    }
+  });
+  useKeyboard((key) => {
+    if (fileMenu().length === 0 || key.defaultPrevented) return;
+    const list = fileMenu();
+    if (key.name === "escape") {
+      key.preventDefault();
+      setFilesDismissed(true);
+    } else if (key.name === "up" || key.name === "down") {
+      key.preventDefault();
+      setFileIndex((i) => (i + (key.name === "down" ? 1 : -1) + list.length) % list.length);
+    } else if (key.name === "tab" || (key.name === "return" && !key.shift)) {
+      key.preventDefault();
+      const file = list[fileIndex()];
+      if (file) pickFile(file);
+    }
+  });
   useKeyboard((key) => {
     if (!menuOpen() || key.defaultPrevented || menu().length === 0) return;
     if (key.name === "escape") {
@@ -89,11 +195,16 @@ export function Composer(p: {
 
   const submit = async () => {
     const text = area?.plainText ?? "";
-    if (!text.trim()) return;
+    const attached = images();
+    if (!text.trim() && attached.length === 0) return;
     area?.clear();
-    const ok = await app.send(text, compactFirst() ? { compactFirst: true } : {});
+    setImages([]);
+    const ok = await app.send(text, { ...(compactFirst() ? { compactFirst: true } : {}), ...(attached.length > 0 ? { images: attached } : {}) });
     if (ok) p.onCompactChoice(null);
-    else if (area && !area.plainText) area.setText(text);
+    else {
+      if (area && !area.plainText) area.setText(text);
+      if (images().length === 0) setImages(attached);
+    }
   };
 
   const placeholder = () => {
@@ -102,6 +213,8 @@ export function Composer(p: {
     if (c.status === "running") return c.capabilities.supportsSteer ? "Steer the agent (Enter) · Esc Esc stops" : "Queue a follow-up (Enter) · Esc Esc stops";
     return "Message the agent…";
   };
+
+  const mixTone = () => ((percent() ?? 0) >= 80 ? t().warn : accentOf(t(), app.harness()?.accent));
 
   const model = () => {
     const c = app.chat();
@@ -130,11 +243,50 @@ export function Composer(p: {
           <text fg={t().muted}>↑↓ move · Tab completes · Esc closes</text>
         </box>
       </Show>
+      <Show when={images().length > 0}>
+        <box flexDirection="row" flexWrap="wrap" paddingLeft={1}>
+          <For each={images()}>
+            {(image, i) => (
+              <box flexDirection="column" marginRight={2}>
+                <Show when={app.imageMode}>{(protocol) => <image source={image.bytes} fit="fit" protocol={protocol()} width={10} height={4} />}</Show>
+                <box flexDirection="row">
+                  <text fg={t().muted}>
+                    <span style={{ fg: t().text2, bg: t().surface2 }}>{` ▣ #${i() + 1} `}</span>
+                    {` ${image.mimeType.replace("image/", "")} ${byteSize(image.bytes.byteLength)} `}
+                  </text>
+                  <text fg={t().danger} onMouseDown={() => setImages((list) => list.filter((x) => x !== image))}>
+                    ×
+                  </text>
+                </box>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
+      <Show when={fileMenu().length > 0}>
+        <box flexDirection="column" border borderStyle="rounded" borderColor={t().border} backgroundColor={t().surface} paddingLeft={1} paddingRight={1}>
+          <For each={fileMenu()}>
+            {(file, i) => {
+              const cut = file.lastIndexOf("/") + 1;
+              return (
+                <box flexDirection="row" backgroundColor={i() === fileIndex() ? t().selection : undefined} onMouseDown={() => pickFile(file)}>
+                  <text wrapMode="none" truncate fg={t().muted}>
+                    {"@"}
+                    {file.slice(0, cut)}
+                    <span style={{ fg: i() === fileIndex() ? t().text : t().text2 }}>{file.slice(cut)}</span>
+                  </text>
+                </box>
+              );
+            }}
+          </For>
+          <text fg={t().muted}>↑↓ move · Tab or Enter inserts · Esc closes</text>
+        </box>
+      </Show>
       <box
         border
         borderStyle="rounded"
         borderColor={p.focused ? accentOf(t(), app.harness()?.accent) : t().border}
-        backgroundColor={t().surface}
+        backgroundColor={app.glass() ? undefined : t().surface}
         paddingLeft={1}
         paddingRight={1}
       >
@@ -148,8 +300,8 @@ export function Composer(p: {
           placeholderColor={t().muted}
           textColor={t().text}
           focusedTextColor={t().text}
-          backgroundColor={t().surface}
-          focusedBackgroundColor={t().surface}
+          backgroundColor={app.glass() ? undefined : t().surface}
+          focusedBackgroundColor={app.glass() ? undefined : t().surface}
           cursorColor={t().accent}
           wrapMode="word"
           minHeight={1}
@@ -164,11 +316,18 @@ export function Composer(p: {
           onSubmit={() => void submit()}
           onContentChange={() => setText(area?.plainText ?? "")}
         />
+        <Show when={ghost()}>
+          {(rest) => (
+            <box position="absolute" top={0} left={1 + text().length}>
+              <text fg={t().muted}>{rest()}</text>
+            </box>
+          )}
+        </Show>
       </box>
       <box flexDirection="row" paddingLeft={1} paddingRight={1}>
         <box flexDirection="row" flexGrow={1} overflow="hidden">
           <text flexShrink={0} wrapMode="none" fg={accentOf(t(), app.harness()?.accent)} onMouseDown={() => p.onPick("harness")}>
-            {`${app.harness()?.displayName ?? "—"} ▾`}
+            {`${harnessGlyph(app.harness()?.id ?? "")} ${app.harness()?.displayName ?? "—"} ▾`}
           </text>
           <Show when={model()}>
             <text flexShrink={1} wrapMode="none" truncate fg={t().text2} onMouseDown={() => p.onPick("models")}>
@@ -183,7 +342,10 @@ export function Composer(p: {
         </box>
         <text flexShrink={0}>
           <Show when={offer()}>
-            <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (^X f)  `}</span>
+            <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (C-x f)  `}</span>
+          </Show>
+          <Show when={app.contextHistory().length > 1}>
+            <span style={{ fg: mixTone() }}>{`${sparkline(app.contextHistory(), 100)} `}</span>
           </Show>
           <Show when={percent() !== null}>
             <span style={{ fg: (percent() ?? 0) >= 80 ? t().warn : t().muted }}>{`ctx ${Math.round(percent() ?? 0)}%`}</span>

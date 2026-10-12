@@ -1,4 +1,4 @@
-// What atui remembers between runs on this machine (vim mode), in
+// What atui remembers between runs on this machine (vim mode, glass), in
 // $XDG_CONFIG_HOME/awui/atui.json beside the server's config.yml.
 // Read leniently and written whole; a failure to write only means it is not
 // remembered. Renamed from agentwebui with the server; see user-config.ts.
@@ -8,6 +8,8 @@ import path from "node:path";
 
 export interface AtuiPrefs {
   vim?: boolean;
+  /** No fills behind the transcript, composer, and status line: the terminal's own background shows through. */
+  glass?: boolean;
 }
 
 export function prefsFile(env: Record<string, string | undefined> = process.env): string {
@@ -20,7 +22,10 @@ export function readPrefs(file = prefsFile()): AtuiPrefs {
     const raw: unknown = JSON.parse(readFileSync(file, "utf8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const r = raw as Record<string, unknown>;
-    return typeof r.vim === "boolean" ? { vim: r.vim } : {};
+    return {
+      ...(typeof r.vim === "boolean" ? { vim: r.vim } : {}),
+      ...(typeof r.glass === "boolean" ? { glass: r.glass } : {}),
+    };
   } catch {
     return {};
   }

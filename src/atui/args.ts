@@ -1,4 +1,5 @@
 // atui's command line.
+import { imageModeFrom } from "./images.js";
 import type { AtuiOptions } from "./state.js";
 
 export const USAGE = `atui: awui in the terminal
@@ -10,12 +11,15 @@ Usage: atui [options]
   --resume [id]       resume a session: the given one, or this project's newest
   --chat <id>         attach to a chat that is open on the server
   --vim, --no-vim     vim navigation: Esc for NORMAL (j/k, gg/G, {/}, :), i to type
-                      (default: as last set with Ctrl+X V, or $ATUI_VIM=1)
+                      (default: as last set with C-x v, or $ATUI_VIM=1)
+  --images <mode>     how prompt images are drawn: auto (ask the terminal), kitty
+                      (kitty, Ghostty), sixel, blocks, or off (default $ATUI_IMAGES, auto)
   -h, --help          this help
 
-Starts in the current folder's project. Keys: Ctrl+K commands, Ctrl+X then a
-letter for the rest (Ctrl+X alone lists them), Enter sends, Shift+Enter or
-Ctrl+J adds a line, Esc Esc stops the agent, Ctrl+C twice quits.`;
+Starts in the current folder's project. Keys, in Emacs notation (C- is Ctrl,
+M- is Alt): C-k commands, C-x then a letter for the rest (C-x lists them),
+Enter sends, S-Enter or C-j adds a line, C-v pastes an image (or drop image
+files on the terminal), Esc Esc stops the agent, C-c C-c quits.`;
 
 export function parseArgs(argv: string[], env: Record<string, string | undefined>): (AtuiOptions & { url: string }) | { help: true } | { error: string } {
   const out: AtuiOptions & { url: string } = { cwd: process.cwd(), url: env.AWUI_URL || "http://127.0.0.1:4783" };
@@ -41,7 +45,11 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
       if (!v) return { error: "--chat needs a value" };
       out.chatId = v;
     } else if (arg === "--resume") out.resume = value() ?? true;
-    else if (arg === "--vim") out.vim = true;
+    else if (arg === "--images") {
+      const mode = imageModeFrom(value() ?? "", {});
+      if (!mode) return { error: "--images takes auto, kitty, sixel, blocks, or off" };
+      out.images = mode;
+    } else if (arg === "--vim") out.vim = true;
     else if (arg === "--no-vim") out.vim = false;
     else return { error: `Unknown option ${arg}` };
   }

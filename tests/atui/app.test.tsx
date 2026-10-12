@@ -1,6 +1,7 @@
 // atui end to end: the built server with fake harnesses, atui in OpenTUI's
 // test renderer, driven by keys and clicks as a person would.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { mount, startServer, wait, type Mounted } from "./helpers.js";
 
@@ -145,7 +146,11 @@ describe("atui", () => {
     ui.keys.pressEnter();
     await ui.until("fake status: all good");
 
+    // C-x: the which-key panel lists every key until one is pressed.
     ui.keys.pressKey("x", { ctrl: true });
+    const panel = await ui.until("C-x-");
+    expect(panel).toContain("n → new chat");
+    expect(panel).toContain("m → +model");
     await ui.type("m");
     await ui.until("Search models");
     await ui.type("slow");
@@ -176,9 +181,61 @@ describe("atui", () => {
     await ui.until("■ Stopped", 15_000);
     await idle(ui);
     ui.keys.pressKey("c", { ctrl: true });
-    await ui.until("Ctrl+C again to quit");
+    await ui.until("C-c again to quit");
     ui.keys.pressKey("c", { ctrl: true });
     await ui.until(() => ui?.exited() === true);
+  }, 30_000);
+
+  it("tips on the empty screen, ghosts a command, mentions a file, previews history, and toasts a background run", async () => {
+    mkdirSync(path.join(server.root, "beta", "src"), { recursive: true });
+    writeFileSync(path.join(server.root, "beta", "src", "server.ts"), "x");
+    ui = await mount(path.join(server.root, "beta"), { width: 150, height: 44 });
+    expect(await ui.frame()).toContain("Tip ");
+    // "/comp": the menu lists /compact, and the rest of it shows after what was typed.
+    await ui.type("/comp");
+    const ghost = await ui.until("Summarize the conversation");
+    expect(ghost.split("/compact").length - 1).toBeGreaterThanOrEqual(2);
+    await ui.escape();
+    for (let i = 0; i < 5; i++) ui.keys.pressBackspace();
+    // "@": the project's files; Tab puts the path in.
+    await ui.type("look at @serv");
+    await ui.until("Tab or Enter inserts");
+    ui.keys.pressTab();
+    await ui.until("look at @src/server.ts");
+    ui.keys.pressEnter();
+    await ui.until("Echo: look at @src/server.ts");
+    await idle(ui);
+    // Ctrl+R on a wide screen: the highlighted session's last exchange beside the list.
+    ui.keys.pressKey("r", { ctrl: true });
+    await ui.until("1 turn");
+    expect(await ui.frame()).toContain("› look at @src/server.ts");
+    await ui.escape();
+    // A run that finishes while another chat is shown: a toast in the corner.
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("n");
+    await ui.type("slow stream in the background");
+    ui.keys.pressEnter();
+    await ui.until(() => ui?.app.chat()?.status === "running");
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("n");
+    expect(await ui.until("✓ Done", 30_000)).toContain("slow stream in the");
+  }, 60_000);
+
+  it("attaches an image file dropped on the terminal and sends it under the prompt", async () => {
+    const shot = path.join(server.root, "alpha", "shot.png");
+    writeFileSync(shot, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64"));
+    ui = await mount(path.join(server.root, "alpha"), { height: 44 });
+    // A drop pastes the file's path: it becomes a thumbnail, not text.
+    await ui.keys.pasteBracketedText(shot);
+    await ui.until("▣ #1  png 1 KB");
+    expect(await ui.frame()).not.toContain("shot.png");
+    await ui.type("what is in this picture");
+    ui.keys.pressEnter();
+    await ui.until("Echo: what is in this picture");
+    await idle(ui);
+    const prompt = ui.app.chat()?.items.find((i) => i.kind === "user");
+    expect(prompt && prompt.kind === "user" ? prompt.imageCount : 0).toBe(1);
+    expect(await ui.frame()).toContain("▣ #1");
   }, 30_000);
 
   it("browses sessions from the sidebar and opens one", async () => {

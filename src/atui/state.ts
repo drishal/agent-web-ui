@@ -7,9 +7,11 @@ import type {
   ChatEvent,
   ChatSnapshot,
   GitStatus,
+  ImageAttachment,
   InteractionAnswer,
   ProjectSession,
   SendMode,
+  SessionPreview,
   SessionsOverview,
   ThemeInfo,
   UsageLimits,
@@ -18,6 +20,8 @@ import type {
 import { applyEvents, type ChatState } from "../web/chat-state.js";
 import { appCommand } from "../web/commands.js";
 import { isBusy } from "../web/session-groups.js";
+import { newsBetween, type News } from "./assist.js";
+import { imageModeFrom, imageProtocol, type ImageMode } from "./images.js";
 import { followChat, Server, ServerError, type Connection } from "./client.js";
 import { themeFrom, type Theme } from "./theme.js";
 
@@ -30,7 +34,22 @@ export interface AtuiOptions {
   resume?: string | true;
   /** Vim navigation, when the command line says (else the remembered choice). */
   vim?: boolean;
+  /** How prompt images are drawn (--images); else $ATUI_IMAGES, else asked of the terminal. */
+  images?: ImageMode;
+  /** No fills behind the transcript, composer, and status line (the remembered choice, else off). */
+  glass?: boolean;
+  /** Tell the desktop (a terminal notification) that a background session finished or asks; none in tests. */
+  notify?: (title: string, body: string) => void;
 }
+
+/** A toast in the corner: a background session's news, for a few seconds. */
+export interface Toast extends News {
+  id: number;
+}
+
+const TOAST_MS = 6000;
+/** Context samples kept for the status line's sparkline. */
+const CONTEXT_SAMPLES = 24;
 
 export type Banner = { level: "info" | "warning" | "error"; text: string } | null;
 
@@ -54,6 +73,11 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   const [git, setGit] = createSignal<GitStatus | null>(null);
   const [banner, setBanner] = createSignal<Banner>(null);
   const [opening, setOpening] = createSignal(false);
+  const [toasts, setToasts] = createSignal<Toast[]>([]);
+  const [contextHistory, setContextHistory] = createSignal<number[]>([]);
+  const [glass, setGlass] = createSignal(opts.glass ?? false);
+  /** The protocol prompt images are drawn with, or null when they are off. */
+  const imageMode = imageProtocol(opts.images ?? imageModeFrom(undefined, process.env), process.env);
 
   const fail = (error: unknown) => setBanner({ level: "error", text: message(error) });
   const harness = createMemo(() => boot()?.harnesses.find((h) => h.id === (chat()?.harnessId ?? harnessId())) ?? null);
@@ -97,10 +121,32 @@ export function createAtui(server: Server, opts: AtuiOptions) {
 
   // ---- loading --------------------------------------------------------------------------
 
+  let lastSessions: ProjectSession[] | null = null;
+  let toastId = 0;
+  const toastTimers = new Set<ReturnType<typeof setTimeout>>();
+  const dismissToast = (id: number) => setToasts((list) => list.filter((x) => x.id !== id));
+
+  /** A background session finished, failed, or asks: a toast, and the desktop's own notification. */
+  const announce = (news: News[]) => {
+    for (const n of news) {
+      const toast = { ...n, id: ++toastId };
+      setToasts((list) => [...list.slice(-2), toast]);
+      const timer = setTimeout(() => {
+        toastTimers.delete(timer);
+        dismissToast(toast.id);
+      }, TOAST_MS);
+      toastTimers.add(timer);
+      opts.notify?.(n.kind === "asking" ? "Needs you" : n.kind === "failed" ? "Failed" : "Done", n.title);
+    }
+  };
+
   const refreshSessions = async () => {
     try {
       const ws = workspace();
-      setOverview(await server.call<SessionsOverview>(`/api/sessions${ws ? `?path=${encodeURIComponent(ws.path)}` : ""}`));
+      const next = await server.call<SessionsOverview>(`/api/sessions${ws ? `?path=${encodeURIComponent(ws.path)}` : ""}`);
+      announce(newsBetween(lastSessions, next.sessions, chat()?.sessionId ?? null));
+      lastSessions = next.sessions;
+      setOverview(next);
     } catch {
       // keep the last list
     }
@@ -182,6 +228,55 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     ),
   );
 
+  // The context share over this chat's life, for the status line's sparkline.
+  createEffect(on(() => chat()?.chatId, () => setContextHistory([])));
+  createEffect(
+    on(
+      () => chat()?.context?.percent ?? null,
+      (percent) => {
+        if (percent === null) return;
+        setContextHistory((h) => (h[h.length - 1] === percent ? h : [...h, percent].slice(-CONTEXT_SAMPLES)));
+      },
+    ),
+  );
+
+  // ---- lookups for the composer and pickers ---------------------------------------------
+
+  /** Files in the project for an @mention, best first. */
+  const searchFiles = async (query: string): Promise<string[]> => {
+    const ws = workspace();
+    if (!ws) return [];
+    try {
+      return (await server.call<{ files: string[] }>(`/api/workspaces/${encodeURIComponent(ws.id)}/files?q=${encodeURIComponent(query)}`)).files;
+    } catch {
+      return [];
+    }
+  };
+
+  const previews = new Map<string, Promise<SessionPreview | null>>();
+  /** A session's last exchange for the history picker; asked once per session while atui runs. */
+  const preview = (s: ProjectSession): Promise<SessionPreview | null> => {
+    const key = `${s.id}@${s.updatedAt ?? ""}`;
+    let hit = previews.get(key);
+    if (!hit) {
+      const q = new URLSearchParams({ harnessId: s.harnessId, workspaceId: s.workspaceId, sessionId: s.id });
+      hit = server.call<SessionPreview>(`/api/sessions/preview?${q}`).catch(() => null);
+      previews.set(key, hit);
+    }
+    return hit;
+  };
+
+  const images = new Map<string, Promise<Uint8Array | null>>();
+  /** A prompt's image bytes, fetched once. */
+  const image = (id: string): Promise<Uint8Array | null> => {
+    let hit = images.get(id);
+    if (!hit) {
+      hit = server.bytes(`/api/images/${encodeURIComponent(id)}`);
+      images.set(id, hit);
+    }
+    return hit;
+  };
+
   // ---- actions ----------------------------------------------------------------------------
 
   const enterWorkspace = async (ws: WorkspaceInfo): Promise<WorkspaceInfo> => {
@@ -243,11 +338,13 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   };
 
   /** Send what was typed: a normal message when idle, a steer (or follow-up) while the agent works. */
-  const send = async (text: string, options: { compactFirst?: boolean } = {}): Promise<boolean> => {
-    const value = text.trim();
+  const send = async (text: string, options: { compactFirst?: boolean; images?: ImageAttachment[] } = {}): Promise<boolean> => {
+    const images = options.images ?? [];
+    // Text stays required with images (some providers reject an empty text block).
+    const value = text.trim() || (images.length > 0 ? "See the attached image" : "");
     if (!value) return false;
     try {
-      const command = appCommand(value);
+      const command = images.length === 0 ? appCommand(value) : null;
       if (command) {
         await runAppCommand(chat(), command.name, command.arg);
         return true;
@@ -259,7 +356,14 @@ export function createAtui(server: Server, opts: AtuiOptions) {
         else if (c.status === "running" && c.capabilities.supportsFollowUp) mode = "followUp";
         else throw new Error("The agent is busy; wait, or stop it with Esc Esc");
       }
-      await server.call(`/api/chats/${c.chatId}/messages`, { body: { text: value, mode, ...(mode === "normal" && options.compactFirst ? { compactFirst: true } : {}) } });
+      await server.call(`/api/chats/${c.chatId}/messages`, {
+        body: {
+          text: value,
+          mode,
+          ...(images.length > 0 ? { images: images.map(({ mimeType, data }) => ({ mimeType, data })) } : {}),
+          ...(mode === "normal" && options.compactFirst ? { compactFirst: true } : {}),
+        },
+      });
       setBanner(null);
       return true;
     } catch (error) {
@@ -335,6 +439,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     for (const timer of timers.splice(0)) clearInterval(timer);
     clearTimeout(listTimer);
     if (flushTimer) clearTimeout(flushTimer);
+    for (const timer of toastTimers) clearTimeout(timer);
+    toastTimers.clear();
   };
 
   return {
@@ -353,6 +459,15 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     setBanner,
     opening,
     busy,
+    toasts,
+    dismissToast,
+    glass,
+    setGlass,
+    imageMode,
+    contextHistory,
+    searchFiles,
+    preview,
+    image,
     init,
     refreshSessions,
     refreshGit,

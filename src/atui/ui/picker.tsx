@@ -1,15 +1,34 @@
-// A search box over a list, centred over the screen: the Ctrl+K palette and
-// the model and harness pickers. Matching is the web palette's (rankItems).
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+// A search box over a list, centred over the screen: the C-k palette and
+// the model and harness pickers. Matching is the web palette's (rankItems);
+// the letters that matched are drawn brighter. A picker given `preview`
+// (history) shows the highlighted item beside the list on a wide terminal.
+import { createEffect, createMemo, createResource, createSignal, For, Index, on, Show } from "solid-js";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import { rankItems, type PaletteItem } from "../../web/palette.js";
+import { matchSpans } from "../assist.js";
 import { clip } from "../format.js";
 import { useTheme } from "./context.js";
+
+/** What a preview pane shows: a heading and the text under it. */
+export interface PreviewText {
+  head: string;
+  body: string;
+}
+
+/** From this terminal width a picker with a preview shows it. */
+const PREVIEW_WIDTH = 110;
 
 const PAGE = 8;
 
 /** `firstHeading`: name the first section too (the palette's "Actions" goes without saying; a project or "Hand off" does not). */
-export function Picker(p: { title: string; placeholder: string; items: PaletteItem[]; onClose: () => void; firstHeading?: boolean }) {
+export function Picker(p: {
+  title: string;
+  placeholder: string;
+  items: PaletteItem[];
+  onClose: () => void;
+  firstHeading?: boolean;
+  preview?: (item: PaletteItem) => Promise<PreviewText | null> | null;
+}) {
   const t = useTheme();
   const size = useTerminalDimensions();
   const [query, setQuery] = createSignal("");
@@ -21,7 +40,14 @@ export function Picker(p: { title: string; placeholder: string; items: PaletteIt
       setActive(first < 0 ? 0 : first);
     }),
   );
-  const width = () => Math.min(72, size().width - 4);
+  const previewing = () => Boolean(p.preview) && size().width >= PREVIEW_WIDTH;
+  const width = () => Math.min(previewing() ? 128 : 72, size().width - 4);
+  /** The list's own width: all of it, or about half beside a preview. */
+  const listWidth = () => (previewing() ? Math.min(64, Math.floor(width() * 0.52)) : width() - 2);
+  const [shownPreview] = createResource(
+    () => (previewing() ? shown()[active()] : undefined),
+    (item) => p.preview?.(item) ?? null,
+  );
   const height = () => Math.min(22, size().height - 4);
   const visible = () => height() - 4;
   const offset = () => Math.max(0, Math.min(active() - Math.floor(visible() / 2), shown().length - visible()));
@@ -82,30 +108,51 @@ export function Picker(p: { title: string; placeholder: string; items: PaletteIt
         <span style={{ fg: t().muted }}>{"   ↑↓ Enter · Esc"}</span>
       </text>
       <input focused placeholder={p.placeholder} textColor={t().text} backgroundColor={t().surface} focusedBackgroundColor={t().surface} onInput={(value: string) => setQuery(value)} />
-      <box flexDirection="column" flexGrow={1} marginTop={1}>
-        <For each={shown().slice(offset(), offset() + visible())}>
-          {(item, i) => {
-            const at = () => i() + offset();
-            const head = () => at() === 0 || shown()[at() - 1]?.section !== item.section;
-            return (
-              <box flexDirection="column">
-                <Show when={head() && (i() > 0 || p.firstHeading)}>
-                  <text fg={t().muted}>{item.section}</text>
-                </Show>
-                <box flexDirection="row" backgroundColor={at() === active() ? t().selection : undefined} onMouseDown={() => run(item)}>
-                  <text flexGrow={1} fg={item.disabled ? t().muted : at() === active() ? t().text : t().text2} wrapMode="none" truncate>
-                    {`${item.current ? "✓ " : "  "}${clip(item.label, width() - 20)}`}
-                  </text>
-                  <Show when={item.hint}>
-                    <text flexShrink={0} fg={t().muted}>{` ${clip(item.hint ?? "", 18)}`}</text>
+      <box flexDirection="row" flexGrow={1} marginTop={1}>
+        <box flexDirection="column" width={listWidth()} flexShrink={0}>
+          <For each={shown().slice(offset(), offset() + visible())}>
+            {(item, i) => {
+              const at = () => i() + offset();
+              const head = () => at() === 0 || shown()[at() - 1]?.section !== item.section;
+              return (
+                <box flexDirection="column">
+                  <Show when={head() && (i() > 0 || p.firstHeading)}>
+                    <text fg={t().muted}>{item.section}</text>
                   </Show>
+                  <box flexDirection="row" backgroundColor={at() === active() ? t().selection : undefined} onMouseDown={() => run(item)}>
+                    <text flexGrow={1} fg={item.disabled ? t().muted : at() === active() ? t().text : t().text2} wrapMode="none" truncate>
+                      {item.current ? "✓ " : "  "}
+                      <Index each={matchSpans(clip(item.label, listWidth() - 20), query())}>
+                        {(part) => <span style={part().hit && !item.disabled ? { fg: t().accent } : {}}>{part().text}</span>}
+                      </Index>
+                    </text>
+                    <Show when={item.hint}>
+                      <text flexShrink={0} fg={t().muted}>{` ${clip(item.hint ?? "", 18)}`}</text>
+                    </Show>
+                  </box>
                 </box>
-              </box>
-            );
-          }}
-        </For>
-        <Show when={shown().length === 0}>
-          <text fg={t().muted}>{`Nothing matches “${query().trim()}”`}</text>
+              );
+            }}
+          </For>
+          <Show when={shown().length === 0}>
+            <text fg={t().muted}>{`Nothing matches “${query().trim()}”`}</text>
+          </Show>
+        </box>
+        <Show when={previewing()}>
+          <box flexDirection="column" flexGrow={1} border={["left"]} borderColor={t().border} paddingLeft={1} overflow="hidden">
+            <Show when={shownPreview()} fallback={<text fg={t().muted}>{shownPreview.loading ? "…" : "No preview"}</text>}>
+              {(view) => (
+                <>
+                  <text fg={t().text2} wrapMode="word">
+                    <b>{view().head}</b>
+                  </text>
+                  <text fg={t().muted} wrapMode="word" marginTop={1}>
+                    {view().body}
+                  </text>
+                </>
+              )}
+            </Show>
+          </box>
         </Show>
       </box>
     </box>

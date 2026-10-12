@@ -1,39 +1,42 @@
 // atui's screen: sessions on the left, the conversation and composer in the
-// middle, the info panel on the right, a status line at the bottom; dialogs
-// over it all. Global keys: Ctrl+K commands, Ctrl+R history, Alt+H/M/T the
-// harness, model, and thinking pickers (the composer's footer opens them on a
-// click too), Ctrl+X then a letter for the rest (OpenCode's leader key),
-// PageUp/PageDown scroll, Esc Esc stops the agent, Ctrl+C clears, stops, or
-// (twice) quits. In vim mode (--vim, or Ctrl+X V) Esc leaves the composer for
-// NORMAL, where src/atui/vim.ts's keys move around; i goes back to typing.
+// middle, a status line at the bottom; dialogs over it all. Keys are written
+// the Emacs way (C- is Ctrl, M- is Alt). Global keys: C-k commands, C-r
+// history, M-h/M-m/M-t the harness, model, and thinking pickers (the
+// composer's footer opens them on a click too), C-x then a letter for the rest
+// (a which-key panel lists them until a key, Esc, or C-g), PageUp/PageDown
+// scroll, Esc Esc stops the agent, C-c clears, stops, or (twice) quits. In vim
+// mode (--vim, or C-x v) Esc leaves the composer for NORMAL, where
+// src/atui/vim.ts's keys move around; i goes back to typing. Jumps of more
+// than a line glide; C-x g is glass mode (no fills, the terminal's background
+// shows through); background sessions' news toasts in the corner.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { PaletteItem } from "../../web/palette.js";
 import { isBusy } from "../../web/session-groups.js";
 import { ago, STATUS_LABEL } from "../format.js";
+import { KEYS_HELP, leader, LEADER_KEYS, VIM_HELP } from "../keys.js";
+import { harnessGlyph } from "../neat.js";
 import type { Atui } from "../state.js";
 import { accentOf } from "../theme.js";
 import { Composer } from "./composer.js";
 import { AtuiContext } from "./context.js";
 import { InfoPanel } from "./panel.js";
-import { Picker } from "./picker.js";
+import { glideBy, glideTo, Shimmer } from "./fx.js";
+import { Picker, type PreviewText } from "./picker.js";
 import { RequestCard } from "./request.js";
 import { Sidebar } from "./sidebar.js";
+import { Splash } from "./splash.js";
+import { Toasts } from "./toasts.js";
 import { Transcript } from "./transcript.js";
+import { WhichKey } from "./whichkey.js";
 import { turnOffset, vimKey } from "../vim.js";
 
 type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
 
-const LEADER_MS = 2000;
 const TWICE_MS = 1200;
 
-export const LEADER_HELP = "b sessions · s browse · r history · i info · n new · m model · t thinking · h harness · c compact · f full/compact · e work · v vim · q quit";
-
-/** The status line's reminder of the direct keys. */
-export const KEYS_HELP = "^K commands · ^R history · M-h harness · M-m model · M-t thinking · ^X more · Esc Esc stop · ^C ^C quit";
-
-export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (on: boolean) => void }) {
+export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (on: boolean) => void; onGlass?: (on: boolean) => void }) {
   const app = p.app;
   const t = app.theme;
   const size = useTerminalDimensions();
@@ -44,12 +47,13 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
   const [showWork, setShowWork] = createSignal(false);
   const [compactChoice, setCompactChoice] = createSignal<boolean | null>(null);
   const [hint, setHint] = createSignal<string | null>(null);
+  /** C-x was pressed: the which-key panel is open and the next key is a command. */
+  const [leaderOn, setLeaderOn] = createSignal(false);
   const [vim, setVim] = createSignal(p.vim ?? false);
   const [mode, setMode] = createSignal<"insert" | "normal">("insert");
   const normal = () => vim() && mode() === "normal";
   /** Keys typed toward a NORMAL command so far: a count, a `g` or `z`. */
   let vimPending = "";
-  let leaderUntil = 0;
   let lastCtrlC = 0;
   let lastEsc = 0;
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -107,18 +111,18 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
       case "scroll":
         return scroller?.scrollBy(action.lines);
       case "half":
-        return scroller?.scrollBy(action.dir * half());
+        return glideBy(scroller, action.dir * half());
       case "page":
-        return scroller?.scrollBy(action.dir * Math.max(3, size().height - 6));
+        return glideBy(scroller, action.dir * Math.max(3, size().height - 6));
       case "top":
-        return scroller?.scrollTo(0);
+        return glideTo(scroller, 0);
       case "bottom":
-        return scroller?.scrollTo(scroller.scrollHeight);
+        return glideTo(scroller, scroller?.scrollHeight ?? 0);
       case "turn": {
         if (!scroller) return;
         const tops = scroller.content.getChildren().map((c) => (c as { y: number }).y);
         const by = turnOffset(tops, scroller.viewport.y, action.count);
-        if (by !== null) scroller.scrollBy(by);
+        if (by !== null) glideBy(scroller, by);
         return;
       }
       case "folds":
@@ -174,31 +178,39 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
         leave();
         return flash(on ? "Vim navigation on: Esc for NORMAL (j/k, gg/G, {/}, zR/zM, :), i to type" : "Vim navigation off");
       }
+      case "g": {
+        const on = !app.glass();
+        app.setGlass(on);
+        p.onGlass?.(on);
+        return flash(on ? "Glass on: the terminal's background shows through" : "Glass off");
+      }
       case "q":
         return p.onExit();
       default:
-        flash(`^X ${name}: not a command (${LEADER_HELP})`);
+        flash(`${leader(name)} is undefined`);
     }
   };
 
   useKeyboard((key) => {
     if (dialog()) return;
-    if (Date.now() < leaderUntil && !key.ctrl) {
+    // After C-x: the next key is a command; Esc or C-g (or C-x again) cancels, as in Emacs.
+    if (leaderOn()) {
       key.preventDefault();
-      leaderUntil = 0;
-      setHint(null);
+      setLeaderOn(false);
+      if (key.name === "escape" || (key.ctrl && (key.name === "g" || key.name === "x"))) return;
+      if (key.ctrl || key.meta) return flash(`${leader(`${key.ctrl ? "C-" : "M-"}${key.name}`)} is undefined`);
       return runLeader(key.name);
     }
     if (key.ctrl && key.name === "x") {
       key.preventDefault();
-      leaderUntil = Date.now() + LEADER_MS;
-      return flash(`^X  ${LEADER_HELP}`, LEADER_MS);
+      setHint(null);
+      return setLeaderOn(true);
     }
     if (key.ctrl && (key.name === "k" || key.name === "p")) {
       key.preventDefault();
       return setDialog("palette");
     }
-    // The pickers directly, without the leader: Ctrl+R as a shell's history search, Alt+letter for the rest.
+    // The pickers directly, without the leader: C-r as a shell's history search, M-letter for the rest.
     if (key.ctrl && key.name === "r") {
       key.preventDefault();
       return setDialog("history");
@@ -242,7 +254,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     if (key.name === "pageup" || key.name === "pagedown") {
       key.preventDefault();
       const step = Math.max(3, Math.floor(size().height / 2));
-      scroller?.scrollBy(key.name === "pageup" ? -step : step);
+      glideBy(scroller, key.name === "pageup" ? -step : step);
       return;
     }
     if (key.ctrl && key.name === "c") {
@@ -251,7 +263,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
       if (app.busy()) return app.stop();
       if (Date.now() - lastCtrlC < TWICE_MS) return p.onExit();
       lastCtrlC = Date.now();
-      return flash("Ctrl+C again to quit (the chats keep running on the server)");
+      return flash("C-c again to quit (the chats keep running on the server)");
     }
     if (key.name === "escape" && focus() === "composer" && !pending() && app.busy()) {
       key.preventDefault();
@@ -271,18 +283,19 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     const name = (id: string) => boot?.harnesses.find((h) => h.id === id)?.displayName ?? id;
     const idle = c ? c.status === "idle" || c.status === "error" : true;
     const add = (item: Omit<PaletteItem, "section"> & { section?: string }) => items.push({ section: "Actions", ...item });
-    add({ id: "new", label: "New chat", hint: "^X N", run: () => runLeader("n") });
+    add({ id: "new", label: "New chat", hint: leader("n"), run: () => runLeader("n") });
     if (c && app.busy()) add({ id: "stop", label: "Stop the agent", hint: "Esc Esc", run: app.stop });
-    add({ id: "history", label: "History: every session, by project…", hint: "^R", run: () => setDialog("history") });
-    add({ id: "sessions", label: "Browse sessions", hint: "^X S", run: () => runLeader("s") });
-    add({ id: "sidebar", label: sidebar() ? "Hide sessions" : "Show sessions", hint: "^X B", run: () => runLeader("b") });
-    add({ id: "panel", label: panel() ? "Hide info panel" : "Show info panel", hint: "^X I", run: () => runLeader("i") });
-    add({ id: "work", label: showWork() ? "Fold the work" : "Show the work of every turn", hint: "^X E", run: () => runLeader("e") });
-    if (c?.capabilities.supportsCompact) add({ id: "compact", label: "Compact context", hint: "^X C", disabled: idle ? undefined : "Wait until the agent is idle", run: () => runLeader("c") });
+    add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
+    add({ id: "sessions", label: "Browse sessions", hint: leader("s"), run: () => runLeader("s") });
+    add({ id: "sidebar", label: sidebar() ? "Hide sessions" : "Show sessions", hint: leader("b"), run: () => runLeader("b") });
+    add({ id: "panel", label: panel() ? "Hide info panel" : "Show info panel", hint: leader("i"), run: () => runLeader("i") });
+    add({ id: "work", label: showWork() ? "Fold the work" : "Show the work of every turn", hint: leader("e"), run: () => runLeader("e") });
+    add({ id: "glass", label: app.glass() ? "Glass off: solid panels" : "Glass on: see the terminal through", hint: leader("g"), run: () => runLeader("g") });
+    if (c?.capabilities.supportsCompact) add({ id: "compact", label: "Compact context", hint: leader("c"), disabled: idle ? undefined : "Wait until the agent is idle", run: () => runLeader("c") });
     add({ id: "model", label: "Choose model…", hint: "M-m", disabled: c?.capabilities.supportsModelSelection ? undefined : "Start a chat first", run: () => setDialog("models") });
     if (c?.capabilities.supportsThinkingLevel) add({ id: "thinking", label: "Choose thinking level…", hint: "M-t", run: () => setDialog("thinking") });
     add({ id: "harness", label: hasPrompt() ? "Choose harness, or hand this chat off…" : "Choose harness…", hint: "M-h", run: () => setDialog("harness") });
-    add({ id: "quit", label: "Quit atui", hint: "^X Q", searchOnly: true, run: p.onExit });
+    add({ id: "quit", label: "Quit atui", hint: leader("q"), searchOnly: true, run: p.onExit });
     const sessions = app.overview().sessions;
     sessions.forEach((s, i) => {
       items.push({
@@ -385,10 +398,26 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
       }));
   };
 
+  /** The history picker's preview: the session's last prompt and answer, from the server. */
+  const historyPreview = (item: PaletteItem): Promise<PreviewText | null> | null => {
+    const s = app.overview().sessions.find((x) => `h:${x.id}` === item.id);
+    if (!s) return null;
+    const name = app.boot()?.harnesses.find((h) => h.id === s.harnessId)?.displayName ?? s.harnessId;
+    return app.preview(s).then((view) =>
+      view
+        ? {
+            head: [name, `${view.turns} ${view.turns === 1 ? "turn" : "turns"}`, ago(s.updatedAt)].filter(Boolean).join(" · "),
+            body: [view.prompt ? `› ${view.prompt}` : "", view.answer ?? ""].filter(Boolean).join("\n\n"),
+          }
+        : null,
+    );
+  };
+
+  // One line: a chat is titled from its first prompt, which can run to several.
   const title = () => {
     const c = app.chat();
     if (!c) return app.workspace()?.name ?? "atui";
-    return c.title || "New chat";
+    return c.title.replace(/\s+/g, " ").trim() || "New chat";
   };
 
   return (
@@ -406,8 +435,11 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
               <Show when={app.chat()}>
                 {(c) => (
                   <text flexShrink={0}>
-                    <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{app.harness()?.displayName ?? c().harnessId}</span>
-                    <span style={{ fg: isBusy(c().status) ? t().accent : c().status === "error" ? t().danger : t().muted }}>{`  ${STATUS_LABEL[c().status]}`}</span>
+                    <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{`${harnessGlyph(c().harnessId)} ${app.harness()?.displayName ?? c().harnessId}`}</span>
+                    {"  "}
+                    <Show when={isBusy(c().status)} fallback={<span style={{ fg: c().status === "error" ? t().danger : t().muted }}>{STATUS_LABEL[c().status]}</span>}>
+                      <Shimmer text={STATUS_LABEL[c().status]} base={t().accent} glow={t().text} />
+                    </Show>
                     <span style={{ fg: t().muted }}>{`  ${c().workspace.name}`}</span>
                   </text>
                 )}
@@ -415,14 +447,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
             </box>
             <Show
               when={hasPrompt()}
-              fallback={
-                <box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center">
-                  <text fg={t().text}>
-                    <b>{`What should ${app.harness()?.displayName ?? "the agent"} do in ${app.workspace()?.name ?? "this project"}?`}</b>
-                  </text>
-                  <text fg={t().muted}>It runs with its normal tools, as you, in this folder.</text>
-                </box>
-              }
+              fallback={<Splash question={`What should ${app.harness()?.displayName ?? "the agent"} do in ${app.workspace()?.name ?? "this project"}?`} subtitle="It runs with its normal tools, as you, in this folder." />}
             >
               <Transcript ref={(el) => (scroller = el as ScrollBoxRenderable)} showWork={showWork()} />
             </Show>
@@ -438,7 +463,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
             <Show when={app.chat()?.gone}>
               {(gone) => (
                 <box flexShrink={0} paddingLeft={2}>
-                  <text fg={t().warn}>{`${gone()} · ^X N for a new chat`}</text>
+                  <text fg={t().warn}>{`${gone()} · ${leader("n")} for a new chat`}</text>
                 </box>
               )}
             </Show>
@@ -462,7 +487,16 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
             <InfoPanel width={panelWidth()} />
           </Show>
         </box>
-        <box flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={t().surface}>
+        <Show when={leaderOn() && !dialog()}>
+          <WhichKey
+            state={{ b: sidebar() ? "on" : "off", i: panel() ? "on" : "off", e: showWork() ? "on" : "off", v: vim() ? "on" : "off", g: app.glass() ? "on" : "off" }}
+            onPick={(k) => {
+              setLeaderOn(false);
+              runLeader(k);
+            }}
+          />
+        </Show>
+        <box flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={app.glass() ? undefined : t().surface}>
           <text flexShrink={0} fg={app.conn() === "connected" ? t().ok : app.conn() === "idle" ? t().muted : t().warn}>
             {app.conn() === "connected" ? "● " : app.conn() === "idle" ? "○ " : "◌ "}
           </text>
@@ -471,8 +505,13 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
               <b>{normal() ? "-- NORMAL -- " : "-- INSERT -- "}</b>
             </text>
           </Show>
+          <Show when={leaderOn()}>
+            <text flexShrink={0} fg={t().accent}>
+              <b>{"C-x- "}</b>
+            </text>
+          </Show>
           <text flexGrow={1} fg={t().muted} wrapMode="none" truncate>
-            {hint() ?? (normal() ? "j/k scroll · ^D/^U half page · gg/G top/bottom · {/} turns · zR/zM folds · h sessions · : commands · / history · i type" : KEYS_HELP)}
+            {leaderOn() ? "a key from the list · Esc or C-g cancels" : (hint() ?? (normal() ? VIM_HELP : KEYS_HELP))}
           </text>
           <text flexShrink={0} fg={t().muted}>{` atui ${app.boot()?.version ?? ""}`}</text>
         </box>
@@ -489,8 +528,9 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
           <Picker title="Thinking" placeholder="Search levels…" items={thinkingItems()} onClose={() => setDialog(null)} />
         </Show>
         <Show when={dialog() === "history"}>
-          <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading />
+          <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading preview={historyPreview} />
         </Show>
+        <Toasts />
       </box>
     </AtuiContext.Provider>
   );
