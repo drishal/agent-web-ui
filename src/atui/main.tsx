@@ -5,6 +5,7 @@ import { createRoot } from "solid-js";
 import { render } from "@opentui/solid";
 import { Server } from "./client.js";
 import { parseArgs, USAGE } from "./args.js";
+import { notifySequence } from "./assist.js";
 import { readPrefs, writePrefs } from "./prefs.js";
 import { createAtui, message } from "./state.js";
 import { App } from "./ui/app.js";
@@ -21,7 +22,10 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const server = new Server(parsed.url);
-  const app = createRoot(() => createAtui(server, parsed));
+  const prefs = readPrefs();
+  // A desktop notification through the terminal (OSC 9 / 777): it moves no cursor, so it can go between frames.
+  const notify = (title: string, body: string) => void process.stdout.write(notifySequence(process.env, title, body));
+  const app = createRoot(() => createAtui(server, { ...parsed, glass: prefs.glass ?? false, notify }));
   try {
     await app.init();
   } catch (error) {
@@ -46,9 +50,9 @@ async function main(): Promise<void> {
     const { createCliRenderer } = await import("@opentui/core");
     return createCliRenderer({ exitOnCtrlC: false, useMouse: true, targetFps: 30 });
   })();
-  // The command line, else $ATUI_VIM, else what Ctrl+X V last chose.
-  const vim = parsed.vim ?? (process.env.ATUI_VIM ? process.env.ATUI_VIM === "1" : (readPrefs().vim ?? false));
-  await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} />, renderer);
+  // The command line, else $ATUI_VIM, else what C-x v last chose.
+  const vim = parsed.vim ?? (process.env.ATUI_VIM ? process.env.ATUI_VIM === "1" : (prefs.vim ?? false));
+  await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} onGlass={(on) => writePrefs({ glass: on })} />, renderer);
 }
 
 if (import.meta.main) void main();

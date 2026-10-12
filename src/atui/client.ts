@@ -38,6 +38,16 @@ export class Server {
     }
     return (await res.json()) as T;
   }
+
+  /** A binary resource (a prompt's image), or null when it is gone or the server is unreachable. */
+  async bytes(path: string): Promise<Uint8Array | null> {
+    try {
+      const res = await fetch(this.base + path);
+      return res.ok ? new Uint8Array(await res.arrayBuffer()) : null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export type Connection = "connecting" | "connected" | "reconnecting";
