@@ -22,23 +22,28 @@ const XD_DEVICE_PREFIX = "xd://";
 const XD_RENDER = `${XD_DEVICE_PREFIX}${RENDER_TOOL_NAME}`;
 
 function isXdRenderWrite(toolName: string, args: unknown): boolean {
-  if (toolName !== "write" || !isArgsObj(args)) return false;
-  const path = (args as Record<string, unknown>).path;
-  return typeof path === "string" && path === XD_RENDER;
+  return toolName === "write" && typeof args === "object" && args !== null && !Array.isArray(args) && (args as Record<string, unknown>).path === XD_RENDER;
 }
-function isArgsObj(a: unknown): a is Record<string, unknown> {
-  return typeof a === "object" && a !== null && !Array.isArray(a);
+
+/**
+ * Whether a call is the render tool in one of its three shapes (extension, MCP,
+ * the xd:// device write). Decided from the call's raw args at its start, so a
+ * caller remembers only the answer, not the args (a write's args are a whole file).
+ */
+export function isHtmlRenderCall(toolName: string, args: unknown): boolean {
+  return toolName === RENDER_TOOL_NAME || toolName === HTML_RENDER_MCP_TOOL || isXdRenderWrite(toolName, args);
 }
 
 /** The reference a tool result's `details.htmlRender` holds, or undefined when it is not one. */
 export function htmlRenderFromDetails(toolName: string, args: unknown, details: unknown): HtmlRenderRef | undefined {
+  // A tool's own result can imitate the shape; only the render tool may carry it.
+  return isHtmlRenderCall(toolName, args) ? htmlRenderRef(details) : undefined;
+}
+
+/** A render call's result details → its page reference, or undefined when malformed. */
+export function htmlRenderRef(details: unknown): HtmlRenderRef | undefined {
   if (typeof details !== "object" || details === null || Array.isArray(details)) return undefined;
-  const candidate = (details as Record<string, unknown>).htmlRender;
-  const ref = readHtmlRenderRef(candidate);
-  if (ref === undefined) return undefined;
-  // A tool's own result can imitate the shape; only the render tool in one of its three
-  // shapes (extension, MCP, the xd:// device rewrite) may carry it.
-  return toolName === RENDER_TOOL_NAME || toolName === HTML_RENDER_MCP_TOOL || isXdRenderWrite(toolName, args) ? ref : undefined;
+  return readHtmlRenderRef((details as Record<string, unknown>).htmlRender);
 }
 
 function readHtmlRenderRef(value: unknown): HtmlRenderRef | undefined {
