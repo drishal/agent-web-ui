@@ -67,6 +67,19 @@ describe("historySections", () => {
     expect(labels).toHaveLength(5);
   });
 
+  it("orders this week's days by date, across a month end and past day 9", () => {
+    const at = (now: string, ago: number) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - ago);
+      return d.toISOString();
+    };
+    const labels = (now: string, agos: number[]) =>
+      historySections(overview(agos.map((a) => s(`d${a}`, at(now, a)))), { ...opts, now: new Date(now).getTime() }).map((sec) => sec.label);
+    // "Oct 9" sorts after "Oct 10" as text; by date it is older.
+    expect(labels("2026-10-12T15:00:00", [3, 2])).toEqual(["Oct 10", "Oct 9"]);
+    expect(labels("2026-10-03T15:00:00", [4, 2])).toEqual(["Oct 1", "Sep 29"]);
+  });
+
   it("pins stay out of the dated buckets", () => {
     const dated = historySections(hist, opts).filter((sec) => sec.label !== "Pinned");
     expect(dated.flatMap((sec) => sec.sessions.map((x) => x.id))).not.toContain("pinned");
