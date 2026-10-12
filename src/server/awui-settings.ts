@@ -80,12 +80,14 @@ export async function writeAwuiConfig(registry: HarnessRegistry, body: unknown):
   for (const [name, p] of Object.entries(patch.providers)) {
     const prior = existing.providers?.[name];
     // apiKey tri-state: undefined (dialog left it blank) keeps the stored
-    // key; "" clears it; anything else replaces it.
+    // key; "" clears it; anything else replaces it. modelOverrides has no
+    // field in the dialog, so an omitted one keeps what is stored too.
+    const modelOverrides = p.modelOverrides ?? prior?.modelOverrides;
     merged[name] = {
       baseUrl: p.baseUrl,
       api: p.api,
       ...(p.apiKey === undefined ? (prior?.apiKey !== undefined ? { apiKey: prior.apiKey } : {}) : p.apiKey === "" ? {} : { apiKey: p.apiKey }),
-      ...(p.modelOverrides !== undefined ? { modelOverrides: p.modelOverrides } : {}),
+      ...(modelOverrides !== undefined ? { modelOverrides } : {}),
     };
   }
   await fs.mkdir(agentDir, { recursive: true, mode: 0o700 });
