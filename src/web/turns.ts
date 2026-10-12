@@ -178,6 +178,25 @@ export function modelName(model: string, models: ReadonlyArray<{ key: string; id
 /** Text worth a row in the fold: some letter or digit, not a stray "." or blank lines a model sent between tool calls. */
 export const saysSomething = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
 
+/**
+ * A thinking blob that looks like prose meant for the user (a Kimi/omp stream
+ * quirk sends narration on the thinking channel once a tool call interrupts):
+ * markdown headings, numbered findings, links, or file paths, in sentences.
+ * Deliberately conservative — plain analysis prose stays in the Thought fold.
+ */
+export function readsAsNarration(thinking: string): boolean {
+  const lines = thinking.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+  let signals = 0;
+  if (lines.some((l) => /^#{1,6}\s+\S/.test(l))) signals += 2; // a markdown heading
+  if (lines.some((l) => /^\d+\.\s+\S+/.test(l))) signals += 2; // a numbered list
+  if (lines.some((l) => /https?:\/\/\S/.test(l))) signals += 2; // a URL
+  if (lines.some((l) => /\b[\w.-]+\/[\w./-]+/.test(l))) signals += 2; // a project file path (src/server/app.ts)
+  if (lines.some((l) => /\*\*\S[^*]*\*\*/.test(l))) signals += 1; // bolded spans
+  if (lines.length >= 3) signals += 1; // multi-line prose block
+  return signals >= 3;
+}
+
 /** A live turn's latest thought as one line: the first sentence of the newest thinking (T3 Code's live row). */
 export function latestThought(turn: Turn): string | null {
   const steps = [...turn.process, ...(turn.answer ? [turn.answer] : [])];
