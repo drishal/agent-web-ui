@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -120,8 +120,7 @@ describe("model switches", () => {
 
 describe("stray text between tool calls", () => {
   it("counts only text with a letter or digit as something said", () => {
-    expect([".", "\n\n\n", "", " - ", "…", "ok", "4", "Готово"].map(saysSomething)).toEqual([false, false, false, false, false, true, true, true]);
-  });
+    expect([".", "\n\n\n", "", " - ", "…", "ok", "4", "Готово"].map(saysSomething)).toEqual([false, false, false, false, false, true, true, true]);  });
   it("never picks blank text as the answer", () => {
     const items: ChatItem[] = [
       { kind: "user", id: "u", text: "q" },
@@ -129,6 +128,17 @@ describe("stray text between tool calls", () => {
       { kind: "assistant", id: "a2", text: "\n\n\n", thinking: "", streaming: false },
     ];
     expect(buildTurns(items, "idle")[0]?.answer?.id).toBe("a1");
+  });
+});
+
+describe("narration-looking thinking", () => {
+  it("flags prose with headings, numbered findings, or links", () => {
+    expect(readsAsNarration("Three confirmed findings, all match earlier predictions\n\n1. **SERVER_MARKER is embedded** in the decoy page\n2. POST to /p_2x.png returns 404\n\nGET https://workers.dev/x returned empty")).toBe(true);
+    expect(readsAsNarration("## Summary\nI checked the call sites; see src/server/app.ts.")).toBe(true);
+  });
+  it("leaves plain chain-of-thought alone", () => {
+    expect(readsAsNarration("The user asks whether the marker check is enough. The request is risky.")).toBe(false);
+    expect(readsAsNarration("hmm, maybe the constraint is upstream")).toBe(false);
   });
 });
 

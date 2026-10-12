@@ -6,7 +6,7 @@
 import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
-import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -173,14 +173,22 @@ function RequestRow({ item }: { item: RequestItem }) {
   );
 }
 
-/** Thinking and interim text between tool calls. */
-function ProcessAssistant({ item }: { item: AssistantItem }) {
+/** Thinking and interim text between tool calls. Pure thought stays in the thought fold; a thinking blob that reads as narration and arrived after a tool renders as plain text. */
+function ProcessAssistant({ item, afterTool }: { item: AssistantItem; afterTool: boolean }) {
   const arrival = useArrival(item.id);
   const text = saysSomething(item.text);
-  if (!text && !item.thinking.trim()) return null;
+  const thinking = item.thinking.trim();
+  if (!text && !thinking) return null;
+  const narrated = !text && afterTool && readsAsNarration(thinking);
   return (
     <div className={`process-step${arrival}`}>
-      {item.thinking.trim() ? <ThoughtRow thinking={item.thinking} streaming={item.streaming && !text} /> : null}
+      {thinking ? narrated ? (
+        <div className="process-text">
+          <Markdown text={thinking} />
+        </div>
+      ) : (
+        <ThoughtRow thinking={thinking} streaming={item.streaming && !text} />
+      ) : null}
       {text ? (
         <div className="process-text">
           <Markdown text={item.text} />
@@ -190,10 +198,10 @@ function ProcessAssistant({ item }: { item: AssistantItem }) {
   );
 }
 
-export function ProcessItem({ item, workspace }: { item: ChatItem; workspace: string }) {
+export function ProcessItem({ item, workspace, afterTool = false }: { item: ChatItem; workspace: string; afterTool?: boolean }) {
   switch (item.kind) {
     case "assistant":
-      return <ProcessAssistant item={item} />;
+      return <ProcessAssistant item={item} afterTool={afterTool} />;
     case "tool":
       return <ToolRow item={item} workspace={workspace} />;
     case "notice":
@@ -566,9 +574,14 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
       ) : null}
       {open ? (
         <div className="process-body">
-          {turn.process.map((item) => (
-            <ProcessItem key={item.id} item={item} workspace={workspace} />
-          ))}
+          {(() => {
+            let seenTool = false;
+            return turn.process.map((item) => {
+              const afterTool = seenTool;
+              if (item.kind === "tool") seenTool = true;
+              return <ProcessItem key={item.id} item={item} workspace={workspace} afterTool={afterTool} />;
+            });
+          })()}
           {answerThinking ? <ThoughtRow thinking={answerThinking.thinking} streaming={answerThinking.streaming && !answerThinking.text} /> : null}
         </div>
       ) : null}
