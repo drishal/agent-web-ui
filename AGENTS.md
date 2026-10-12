@@ -63,7 +63,7 @@ src/server/
   harness/types.ts            HarnessAdapter / LiveChat contract and the normalized HarnessEvent union.
   harness/registry.ts         One factory per harness; AWUI_HARNESSES selects them.
   harness/{pi,omp,hermes,claude}.ts   The four adapters. fake.ts is the deterministic test adapter.
-  harness/awui.ts              The Awui chat harness: a read-only `pi` child (subclass), own agent dir, write/exec tools denied. Web-only.
+  harness/awui.ts              The Awui chat harness: a read-only `pi` child (subclass), own agent dir, write/exec tools denied; loads render_html + eval_python, not rewind. Web-only.
   awui-settings.ts             The Awui harness's provider settings: edit its isolated agent dir's models.json (keys never echoed).
   harness/agent-events.ts     Pi-family event and transcript normalization (Pi and omp share it); historyToItems.
   harness/session-files.ts    Pi/omp session JSONL: active branch by parentId, fork and seed writers.
