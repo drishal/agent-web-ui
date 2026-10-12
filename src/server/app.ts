@@ -36,6 +36,7 @@ import {
   type SessionSummary,
   type WorkspaceInfo,
 } from "../shared/protocol.js";
+import { approvalAnswers } from "../shared/approval.js";
 import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import { storedImage } from "./image-store.js";
 import { isHtmlRenderId, readHtmlRender, saveHtmlRender } from "./html-render.js";
@@ -136,8 +137,17 @@ export function createApp(deps: AppDeps) {
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
   if (deps.checkpointsDir) manager.checkpoints = { service: new Checkpoints(deps.checkpointsDir), sessionsDir: path.join(deps.checkpointsDir, "sessions") };
-  manager.onNews = (chat, kind, text) => {
-    notifier.notify({ kind, chatId: chat.chatId, sessionId: chat.sessionId, title: chat.title || "New chat", body: text });
+  manager.onNews = (chat, kind, text, request) => {
+    // An approval's note carries its two answers, so the notification's own buttons can send one.
+    const answers = request ? approvalAnswers(request) : null;
+    notifier.notify({
+      kind,
+      chatId: chat.chatId,
+      sessionId: chat.sessionId,
+      title: chat.title || "New chat",
+      body: text,
+      ...(request && answers ? { approval: { requestId: request.id, ...answers } } : {}),
+    });
     if ((kind === "ask" || kind === "error") && chat.sessionId) marks.wake(chat.sessionId);
   };
   manager.onRunStart = (chat) => {

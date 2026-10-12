@@ -49,6 +49,7 @@ Server changes that the browser sees need e2e too.
 ```
 src/shared/protocol.ts        Wire types and Zod request schemas: the only contract between server and clients.
 src/shared/html-render.ts     Agent-rendered pages: bootstrap markup, theme payload, frame-height math (no harness types).
+src/shared/approval.ts        Which requests are plain approvals, and their Approve/Deny answers (the card and push notes).
 src/server/
   index.ts                    Startup: config, state-folder migration, registry, routes, listen, shutdown. Subcommand: `install tui`.
   app.ts                      Every route (Express 5), SSE, error mapping. All /api routes but health/login/logout need auth.

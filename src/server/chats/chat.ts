@@ -612,7 +612,7 @@ export class Chat implements CheckpointHost {
   /** The harness reported its subscription limits. */
   onLimits?: (account: LimitAccount) => void;
   /** A run finished or failed, or the agent asks for an answer: news for devices that want it. */
-  onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
+  onNews?: (chat: Chat, kind: PushNote["kind"], body: string, request?: InteractionRequest) => void;
   /** A run started. */
   onRunStart?: (chat: Chat) => void;
   /** Set while a status change is not news (a prompt the harness refused). */
@@ -768,7 +768,7 @@ export class Chat implements CheckpointHost {
       this.onLimits?.(event.account);
       return;
     }
-    if (event.type === "request") this.onNews?.(this, "ask", event.request.title);
+    if (event.type === "request") this.onNews?.(this, "ask", event.request.title, event.request);
     // Viewing must not promote the chat: only real conversation (a prompt sent
     // or a turn finished) counts as activity for sidebar ordering. Replay on
     // open, status flaps, config/title/usage refreshes all stay quiet.

@@ -1,7 +1,8 @@
 import { mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ChatSnapshot, SessionsOverview } from "../../src/shared/protocol.js";
+import { approvalAnswers } from "../../src/shared/approval.js";
+import type { ChatSnapshot, PushNote, SessionsOverview } from "../../src/shared/protocol.js";
 import { makeTestApp, openSse, signedIn, tempDir, type TestApp } from "../helpers/app.js";
 
 let t: TestApp | null = null;
@@ -530,6 +531,33 @@ describe("notifications", () => {
     await agent.post("/api/push/subscribe").send({ endpoint: "https://example.com/push" }).expect(422);
     expect((await agent.get("/api/push/key").expect(200)).body.key).toMatch(/^[\w-]{87}$/);
     sse.close();
+  });
+});
+
+describe("approving from a notification", () => {
+  it("puts an approval's two answers on its note, and the note's Approve answers the request", async () => {
+    const { agent, ws, t } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "please ask first" });
+    await sse.waitFor(() => t.manager.get(chat.chatId).snapshot().pending.length > 0);
+    const request = t.manager.get(chat.chatId).snapshot().pending[0];
+    const notes = (await agent.get("/api/notifications?since=0").expect(200)).body.notes as PushNote[];
+    const ask = notes.find((n) => n.kind === "ask");
+    expect(ask?.approval).toEqual({ requestId: request?.id, approve: { kind: "confirm", confirmed: true }, deny: { kind: "confirm", confirmed: false } });
+    // What the service worker posts when the notification's Approve is pressed.
+    await agent.post(`/api/chats/${chat.chatId}/requests/${ask?.approval?.requestId}`).send({ answer: ask?.approval?.approve }).expect(200);
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle");
+    // Pressed again (another device got there first): the worker reads a 409 as "Already answered".
+    expect((await agent.post(`/api/chats/${chat.chatId}/requests/${ask?.approval?.requestId}`).send({ answer: ask?.approval?.approve })).status).toBe(409);
+    sse.close();
+  });
+
+  it("knows an approval from a question", () => {
+    const base = { id: "r", title: "t", createdAt: 0 };
+    expect(approvalAnswers({ ...base, kind: "select", options: ["Approve", "Deny"] })?.approve).toEqual({ kind: "select", value: "Approve" });
+    expect(approvalAnswers({ ...base, kind: "select", options: ["A", "B", "C"] })).toBeNull();
+    expect(approvalAnswers({ ...base, kind: "input" })).toBeNull();
   });
 });
 
