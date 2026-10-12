@@ -23,6 +23,8 @@ export interface Turn {
   changedFiles: string[];
   /** HTML pages this turn's render calls published, shown full-width above the answer. */
   renders: HtmlRenderRef[];
+  /** How many process items came before the answer: work can follow a reply, and its thought belongs in order. */
+  answerAt: number;
   /** The model that answered (its last model call), when the harness says. */
   model?: string;
 }
@@ -47,13 +49,19 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     const rest = prompt ? group.slice(1) : group;
     const live = busy && index === groups.length - 1;
 
-    // The answer is the last assistant message with text, unless work follows it.
+    // The answer is the last assistant message with text. When work follows it,
+    // it stays the answer only if it reads as a reply: models write their reply
+    // and then call a tool (render_html, a todo, omp's yield), and that reply
+    // must not drop into the fold as grey process text. Short narration before
+    // more work ("Let me check the config") belongs in the fold. The same rule
+    // holds live and settled, so nothing changes style when a run ends.
     let answerIndex = -1;
+    let workAfter = false;
     for (let i = rest.length - 1; i >= 0; i--) {
       const item = rest[i] as ChatItem;
-      if (item.kind === "tool" || item.kind === "request") break;
-      if (item.kind === "assistant" && (item.text.trim() || item.error)) {
-        answerIndex = i;
+      if (item.kind === "tool" || item.kind === "request") workAfter = true;
+      else if (item.kind === "assistant" && (saysSomething(item.text) || item.error)) {
+        if (!workAfter || readsAsReply(item.text)) answerIndex = i;
         break;
       }
     }
@@ -61,8 +69,12 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     const process: ChatItem[] = [];
     const errors: NoticeItem[] = [];
     const after: NoticeItem[] = [];
+    let answerAt = -1;
     rest.forEach((item, i) => {
-      if (i === answerIndex) return;
+      if (i === answerIndex) {
+        answerAt = process.length;
+        return;
+      }
       if (item.kind === "notice" && item.ambient) after.push(item);
       else if (item.kind === "notice" && item.level === "error") errors.push(item);
       else process.push(item);
@@ -105,6 +117,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       counts,
       changedFiles: [...changed],
       renders,
+      answerAt: answerAt >= 0 ? answerAt : process.length,
       ...(model ? { model } : {}),
     };
   });
@@ -179,6 +192,15 @@ export function modelName(model: string, models: ReadonlyArray<{ key: string; id
 export const saysSomething = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
 
 /**
+ * Text that is a reply rather than a remark before more work: long, or shaped
+ * like an answer (paragraphs, a list, a heading, a table, a code block).
+ */
+export function readsAsReply(text: string): boolean {
+  const t = text.trim();
+  return t.length >= 280 || /\n\s*\n|^\s*(?:[-*+]|\d+[.)]|#{1,6}|\||```)\s?/m.test(t);
+}
+
+/**
  * A thinking blob that looks like prose meant for the user (a Kimi/omp stream
  * quirk sends narration on the thinking channel once a tool call interrupts):
  * markdown headings, numbered findings, links, or file paths, in sentences.
@@ -199,7 +221,7 @@ export function readsAsNarration(thinking: string): boolean {
 
 /** A live turn's latest thought as one line: the first sentence of the newest thinking (T3 Code's live row). */
 export function latestThought(turn: Turn): string | null {
-  const steps = [...turn.process, ...(turn.answer ? [turn.answer] : [])];
+  const steps = turn.answer ? [...turn.process.slice(0, turn.answerAt), turn.answer, ...turn.process.slice(turn.answerAt)] : turn.process;
   for (let i = steps.length - 1; i >= 0; i--) {
     const item = steps[i];
     if (item?.kind !== "assistant") continue;

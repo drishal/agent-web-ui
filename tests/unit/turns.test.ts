@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -67,6 +67,44 @@ describe("buildTurns", () => {
     expect(turn?.answer).toBeNull();
     expect(turn?.process.map((i) => i.id)).toEqual(["a1", "t1"]);
     expect(turn?.live).toBe(true);
+  });
+
+  it("keeps a reply as the answer when the model calls a tool after writing it", () => {
+    const reply = "Here is what I found.\n\nThe config loads twice because both extensions register it.";
+    const items: ChatItem[] = [
+      { kind: "user", id: "u1", text: "go" },
+      { kind: "assistant", id: "a1", text: "Let me look", thinking: "", streaming: false },
+      tool("t1", "command"),
+      { kind: "assistant", id: "a2", text: reply, thinking: "", streaming: false },
+      tool("t2", "command"),
+    ];
+    for (const status of ["running", "idle"] as const) {
+      const [turn] = buildTurns(items, status);
+      expect(turn?.answer?.id).toBe("a2");
+      expect(turn?.process.map((i) => i.id)).toEqual(["a1", "t1", "t2"]);
+      expect(turn?.answerAt).toBe(2);
+    }
+  });
+
+  it("reads the live thought in order when work follows the answer", () => {
+    const items: ChatItem[] = [
+      { kind: "user", id: "u1", text: "go" },
+      { kind: "assistant", id: "a1", text: "Done.\n\nAll set.", thinking: "Wrote the reply.", streaming: false },
+      tool("t1", "command"),
+      { kind: "assistant", id: "a2", text: "", thinking: "Now tidying up.", streaming: true },
+    ];
+    const [turn] = buildTurns(items, "running");
+    expect(turn?.answer?.id).toBe("a1");
+    expect(turn && latestThought(turn)).toBe("Now tidying up.");
+  });
+
+  it("tells a reply from a remark before more work", () => {
+    expect(readsAsReply("Let me check the config.")).toBe(false);
+    expect(readsAsReply("Now I'll run the tests to confirm.")).toBe(false);
+    expect(readsAsReply("Done.\n\nThe fix is in app.ts.")).toBe(true);
+    expect(readsAsReply("Findings:\n- one\n- two")).toBe(true);
+    expect(readsAsReply("## Summary\nAll good")).toBe(true);
+    expect(readsAsReply("x".repeat(300))).toBe(true);
   });
 
   it("formats counts, durations, and workspace-relative paths", () => {
