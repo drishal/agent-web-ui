@@ -1,6 +1,7 @@
 // The subscription limits the sidebar shows: what Claude Code said on its
-// latest run (kept across restarts) and what omp reports for every signed-in
-// account (asked at most once a minute, since omp asks each provider).
+// latest run (kept across restarts), and what the harnesses report when asked
+// (at most once a minute): omp for every signed-in account, Claude Code for
+// its plan. An account heard both ways shows its newer reading.
 import path from "node:path";
 import type { LimitAccount, UsageLimits } from "../shared/protocol.js";
 import { errorMessage } from "./chats/chat.js";
@@ -39,7 +40,12 @@ export class Limits {
   async get(): Promise<UsageLimits> {
     if (!this.polled || Date.now() - this.polled.at > POLL_MS) await this.poll();
     const polled = this.polled ?? { accounts: [], errors: [] };
-    return { accounts: [...this.reported.values(), ...polled.accounts], errors: polled.errors };
+    const byId = new Map<string, LimitAccount>();
+    for (const a of [...this.reported.values(), ...polled.accounts]) {
+      const held = byId.get(a.id);
+      if (!held || a.at >= held.at) byId.set(a.id, a);
+    }
+    return { accounts: [...byId.values()], errors: polled.errors };
   }
 
   private poll(): Promise<void> {

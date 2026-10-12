@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { claudeLimits, ompLimits } from "../../src/server/harness/limits.js";
+import { HarnessRegistry } from "../../src/server/harness/registry.js";
+import type { HarnessAdapter } from "../../src/server/harness/types.js";
+import { Limits } from "../../src/server/limits.js";
+import type { LimitAccount } from "../../src/shared/protocol.js";
 import { level, resetsIn, tightest } from "../../src/web/limits.js";
 
 // As Claude Code 2.x prints it on a run (stream-json).
@@ -75,5 +79,19 @@ describe("subscription limits", () => {
     expect(resetsIn(now + 40 * 60_000, now)).toBe("in 40m");
     expect(resetsIn(now + 192 * 60_000, now)).toBe("in 3h 12m");
     expect(resetsIn(now + 52 * 3600_000, now)).toBe("in 2d 4h");
+  });
+
+  it("shows an account heard both from a run and from a poll once, at its newer reading", async () => {
+    const registry = new HarnessRegistry();
+    const polled: LimitAccount = { id: "claude", source: "Claude Code", provider: "Anthropic", windows: [{ label: "5 hours", used: 0.7, resetsAt: null }], limited: false, at: 2000 };
+    registry.register({ id: "claude", displayName: "Claude Code", usageLimits: async () => [polled] } as unknown as HarnessAdapter);
+    registry.isAvailable = () => true;
+    const limits = Limits.inMemory(registry);
+    limits.report({ ...polled, windows: [{ label: "5 hours", used: 0.4, resetsAt: null }], at: 1000 });
+    const got = await limits.get();
+    expect(got.accounts).toHaveLength(1);
+    expect(got.accounts[0]?.windows[0]?.used).toBe(0.7);
+    limits.report({ ...polled, windows: [{ label: "5 hours", used: 0.9, resetsAt: null }], at: 3000 });
+    expect((await limits.get()).accounts[0]?.windows[0]?.used).toBe(0.9);
   });
 });
