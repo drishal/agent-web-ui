@@ -98,7 +98,7 @@ export async function mount(cwd: string, opts: { harness?: string; width?: numbe
     for (let y = 0; y < rows.length; y++) {
       const x = (rows[y] as string).indexOf(text);
       if (x >= 0) {
-        await setup.mockMouse.click(x + 1, y);
+        await setup.mockMouse.click(x, y);
         await wait(60);
         return;
       }
