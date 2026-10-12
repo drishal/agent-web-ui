@@ -583,6 +583,23 @@ export const imageAttachmentSchema = z.object({
     .regex(/^[A-Za-z0-9+/]+={0,2}$/, "not base64"),
 });
 
+/** A big text blob pasted into the composer, parked server-side as a file the agent can read. */
+export const MAX_PASTE_BYTES = 1024 * 1024;
+
+export interface PasteAttachment {
+  id: string;
+  path: string;
+  bytes: number;
+  lines: number;
+}
+
+/** The client may only reference a paste the server issued (id); the path is server-owned. */
+export const pasteRefSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/) });
+
+export const uploadPasteSchema = z.object({
+  text: z.string().min(1).max(MAX_PASTE_BYTES),
+});
+
 export const rewindSchema = z.object({
   turn: z.number().int().min(1).max(10_000),
   text: z.string().min(1).max(MAX_MESSAGE_CHARS),
@@ -592,6 +609,7 @@ export const sendMessageSchema = z.object({
   // Text stays required with images: some providers reject an empty text block.
   text: z.string().min(1).max(MAX_MESSAGE_CHARS),
   images: z.array(imageAttachmentSchema).max(MAX_IMAGES).default([]),
+  attachments: z.array(pasteRefSchema).max(4).default([]),
   mode: z.enum(["normal", "steer", "followUp", "stopAndSend"]).default("normal"),
   /** Compact the context first, then send (a normal send while idle). */
   compactFirst: z.boolean().optional(),

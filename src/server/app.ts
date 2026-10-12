@@ -31,6 +31,7 @@ import {
   type CheckpointRestored,
   type ProjectSession,
   sendMessageSchema,
+  uploadPasteSchema,
   type SessionsOverview,
   type SessionSummary,
   type WorkspaceInfo,
@@ -43,6 +44,7 @@ import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
 import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
+import { resolvePaste, storePaste } from "./paste-store.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
@@ -508,13 +510,23 @@ export function createApp(deps: AppDeps) {
     });
   });
 
+  app.post("/api/chats/:id/pastes", express.json({ limit: "1100kb" }), async (req, res) => {
+    const chat = manager.get(req.params.id);
+    const { text } = body(uploadPasteSchema, req);
+    res.status(201).json(await storePaste(chat.chatId, text));
+  });
+
   app.post("/api/chats/:id/messages", async (req, res) => {
     const chat = manager.get(req.params.id);
-    const { text, images, mode, compactFirst } = body(sendMessageSchema, req);
+    const { text, images, mode, compactFirst, attachments } = body(sendMessageSchema, req);
     for (const image of images) {
       if (sniffImage(image.data) !== image.mimeType) throw new ChatError(400, "bad_image", "An attachment is not the image type it claims to be");
     }
-    await chat.send(text, mode, images, compactFirst ? { compactFirst } : {});
+    const pastes = attachments.length > 0 ? await Promise.all(attachments.map((a) => resolvePaste(chat.chatId, a.id))) : [];
+    const header = pastes
+      .map((p) => `[Pasted content is saved as ${p.path} (${p.lines.toLocaleString("en-US")} lines). Read that file with your tools rather than asking me to resend it.]`)
+      .join("\n");
+    await chat.send(header ? `${header}\n\n${text}` : text, mode, images, compactFirst ? { compactFirst } : {});
     res.status(202).json({ accepted: true, mode });
   });
 
