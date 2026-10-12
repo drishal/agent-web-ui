@@ -32,12 +32,15 @@ const AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 export class AwuiAdapter extends PiAdapter {
   override readonly id = asHarnessId("awui");
   override readonly displayName = "Awui";
+  // Not only render_html: eval_python lets the chat compute without touching
+  // the project (its Python runs in a throwaway tmp dir, output-bounded).
+  // Both extensions write only outside the workspace.
   protected override capabilitySet: HarnessCapabilities = {
     supportsSteer: true,
     supportsFollowUp: true,
     supportsThinkingLevel: true,
     supportsCompact: true,
-    // The render extension is loaded, so extension affordances show.
+    // The render + eval extensions load, so extension affordances show.
     supportsExtensions: true,
     supportsInteractiveRequests: true,
     supportsRename: true,
