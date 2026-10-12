@@ -79,6 +79,7 @@ src/server/
   checkpoints.ts              Per-prompt work-tree snapshots in a shadow git repo; turn undo.
   git.ts, git-status.ts       Hardened git runner; the composer's git row.
   image-store.ts, notify.ts, limits.ts, session-marks.ts, run-command.ts, state-file.ts   Side features (see their header comments).
+  project-files.ts            A project's files for @mention pickers (git ls-files, else a bounded walk).
 src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css one stylesheet.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.

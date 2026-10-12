@@ -552,6 +552,23 @@ export const resumeChatSchema = z.object({
   workspaceId: z.string().min(1).max(128),
   sessionId: z.string().min(1).max(512),
 });
+/** A mention picker's search over a project's files. */
+export const fileSearchSchema = z.object({ q: z.string().max(200).default("") });
+/** One session's last exchange, for a history picker's preview. */
+export const sessionPreviewSchema = z.object({
+  harnessId: z.string().min(1).max(64),
+  workspaceId: z.string().min(1).max(128),
+  sessionId: z.string().min(1).max(512),
+});
+
+/** What a history picker shows beside a session: its last prompt and answer, cut short. */
+export interface SessionPreview {
+  prompt: string | null;
+  answer: string | null;
+  /** User turns in the session. */
+  turns: number;
+}
+
 /** Branch the chat after its Nth user turn (1-based). */
 export const forkChatSchema = z.object({
   through: z.number().int().min(1).max(10_000),
