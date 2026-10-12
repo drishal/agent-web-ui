@@ -101,9 +101,11 @@ const targets = ALL
 
 // The generated module is the embed payload: write it, then recompile just it into
 // dist (the earlier npm build compiled the checked-in stub), so the bundle carries it.
-await Bun.write(assetPath, assetSource);
-await $`npx tsc -p tsconfig.server.json`;
+// Inside the try: a failed compile must still put the checked-in stub back, or the
+// multi-megabyte generated file is left in src/ to be committed by accident.
 try {
+  await Bun.write(assetPath, assetSource);
+  await $`npx tsc -p tsconfig.server.json`;
   for (const target of targets) {
     const name = target.replace(/^bun-/, "");
     const outDir = path.join(root, "dist", "bin", name);
