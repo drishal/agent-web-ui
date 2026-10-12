@@ -88,6 +88,9 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               from a notification, the share target, the offline page (it never caches the app).
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
+  fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced
+                              streaming, meters, eased scrolls, the turn gutter, word-level diffs, task boxes,
+                              @mentions, ghost text, toasts, desktop notifications, image protocol and drops.
 extensions/rewind-to.ts       A Pi/omp extension the server loads into its children (-e) for in-place Edit/Retry.
 extensions/render-html.ts     A Pi/omp extension registering render_html, which publishes an HTML page into the chat.
 extensions/eval-python.ts     An awui-harness extension registering eval_python: runs a snippet in a scratch tmp dir (no workspace).
