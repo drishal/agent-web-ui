@@ -38,7 +38,7 @@ import {
 } from "../shared/protocol.js";
 import { ChatError, errorMessage, type Chat } from "./chats/chat.js";
 import { storedImage } from "./image-store.js";
-import { readHtmlRenderForChat, saveHtmlRender } from "./html-render.js";
+import { isHtmlRenderId, readHtmlRender, saveHtmlRender } from "./html-render.js";
 import type { ChatManager } from "./chats/manager.js";
 import type { HarnessRegistry } from "./harness/registry.js";
 import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
@@ -88,6 +88,12 @@ export interface AppDeps {
   stateDir?: string | null;
   log?: (message: string) => void;
 }
+
+/** What a render frame shows when its page is gone: a line in the frame, in system colours (no theme reaches it). */
+const RENDER_GONE_PAGE =
+  '<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">' +
+  '<body style="margin:0;display:grid;place-items:center;min-height:100vh;font:14px system-ui,sans-serif;color:GrayText;background:transparent">' +
+  "<p>This page is no longer stored on the server.</p>";
 
 function body<T>(schema: ZodType<T>, req: Request): T {
   return schema.parse(req.body ?? {});
@@ -190,7 +196,7 @@ export function createApp(deps: AppDeps) {
     const chat = token !== "" ? manager.chatForRenderToken(token) : undefined;
     if (!chat) throw new ChatError(403, "bad_render_token", "Not a live chat's render token");
     const html = typeof req.body?.html === "string" ? req.body.html : "";
-    const saved = await saveHtmlRender(stateDir, chat.chatId, { html, title: req.body?.title, height: req.body?.height });
+    const saved = await saveHtmlRender(stateDir, { html, title: req.body?.title, height: req.body?.height });
     if (!saved) throw new ChatError(400, "bad_render", "Empty or oversized HTML document");
     res.json({ id: saved.id, url: `/api/chats/${chat.chatId}/html-render/${saved.id}` });
   });
@@ -460,22 +466,29 @@ export function createApp(deps: AppDeps) {
   });
 
   // An agent-rendered HTML page, shown in a sandboxed frame. The id addresses
-  // the bytes the chat's render tool stored; the chat in the path must be the
-  // one that owns it, so one chat cannot read another's page. Served as HTML,
-  // but to an opaque-origin frame (never allow-same-origin), so its scripts
-  // cannot reach the app's session.
+  // the bytes the chat's render tool stored; the chat in the path must be one
+  // whose transcript carries that id, so one chat cannot read another's page.
+  // Served as HTML, but to an opaque-origin frame (never allow-same-origin),
+  // so its scripts cannot reach the app's session.
   app.get("/api/chats/:id/html-render/:renderId", async (req, res) => {
     const stateDir = deps.stateDir;
     if (!stateDir) throw new ChatError(404, "render_off", "HTML render is not wired on this server");
     const chat = manager.get(req.params.id);
-    const html = /^[0-9a-f]{32}$/.test(req.params.renderId) ? await readHtmlRenderForChat(stateDir, chat.chatId, req.params.renderId) : null;
-    if (html === null) throw new ChatError(404, "no_render", "That page is no longer held; reload the chat");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    const id = req.params.renderId;
+    const html = isHtmlRenderId(id) && chat.ownsHtmlRender(id) ? await readHtmlRender(stateDir, id) : null;
     res.setHeader("X-Content-Type-Options", "nosniff");
     // The chat embeds this page in a sandboxed iframe on the same origin; the
     // global helmet CSP (`frame-ancestors 'none'`) would block that framing.
+    // A missing page is framed too: a JSON error under 'none' shows as the
+    // browser's own "can't open this page" instead of saying what happened.
     res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'; sandbox allow-scripts allow-forms");
+    if (html === null) {
+      res.status(404).setHeader("Cache-Control", "no-store");
+      res.type("html").send(RENDER_GONE_PAGE);
+      return;
+    }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.send(html);
   });
 

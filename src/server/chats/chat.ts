@@ -719,6 +719,11 @@ export class Chat implements CheckpointHost {
     });
   }
 
+  /** Whether one of this chat's tool calls published the page `id`: what lets the chat serve it. */
+  ownsHtmlRender(id: string): boolean {
+    return this.reducer.items.some((i) => i.kind === "tool" && i.htmlRender?.id === id);
+  }
+
   snapshot(): ChatSnapshot {
     this.reducer.flushNow();
     return {

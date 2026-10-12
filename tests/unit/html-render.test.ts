@@ -1,7 +1,7 @@
 // An agent's render_html call publishes a page: the fake harness POSTs it to
 // the chat's render endpoint, the reference rides the tool card's details into
 // the transcript, and the framed page is served back under the chat that owns
-// it. Reloading the chat re-reads the stored reference and re-arms the frame.
+// it. Reopening the chat re-reads the stored reference and re-arms the frame.
 import { describe, expect, it, afterEach } from "vitest";
 import type { ChatSnapshot } from "../../src/shared/protocol.js";
 import { makeTestApp, openSse, signedIn, type TestApp } from "../helpers/app.js";
@@ -94,6 +94,23 @@ describe("agent HTML renders", () => {
     const history = await t.fake.readTranscript({ cwd: t.project, nativeId });
     const tool = history?.items.find((i) => i.kind === "tool" && i.name === "render_html");
     expect(tool && tool.kind === "tool" ? tool.htmlRender?.id : undefined).toBe(pageId);
+
+    // And the reopened chat (a new chat id, as after a restart) still serves the page.
+    await agent.post(`/api/chats/${first.chatId}/dispose`);
+    const reopened = (await agent.post("/api/chats/resume").send({ harnessId: "fake", workspaceId: ws.id, sessionId: first.sessionId })).body as ChatSnapshot;
+    expect(reopened.chatId).not.toBe(first.chatId);
+    const served = await agent.get(`/api/chats/${reopened.chatId}/html-render/${pageId}`);
+    expect(served.status).toBe(200);
+    expect(served.text).toContain("Fake report");
+  });
+
+  it("frames a missing page as a short HTML note, not a JSON error the browser refuses to frame", async () => {
+    const { agent, ws } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const res = await agent.get(`/api/chats/${chat.chatId}/html-render/${"a".repeat(32)}`);
+    expect(res.status).toBe(404);
+    expect(res.headers["content-type"]).toContain("text/html");
+    expect(res.headers["content-security-policy"]).toContain("frame-ancestors 'self'");
   });
 
   it("serves the render page with ONE csp header, so the app can frame it", async () => {
