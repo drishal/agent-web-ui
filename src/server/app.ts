@@ -31,6 +31,9 @@ import {
   type CheckpointRestored,
   type ProjectSession,
   sendMessageSchema,
+  fileSearchSchema,
+  sessionPreviewSchema,
+  type SessionPreview,
   uploadPasteSchema,
   type SessionsOverview,
   type SessionSummary,
@@ -46,6 +49,7 @@ import type { HarnessAdapter, NativeSessionSummary } from "./harness/types.js";
 import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import { resolvePaste, storePaste } from "./paste-store.js";
+import { projectFiles, searchFiles } from "./project-files.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
@@ -306,6 +310,14 @@ export function createApp(deps: AppDeps) {
     res.json(await workspaces.open(p));
   });
 
+  // A project's files for a client's @mention picker, relative to the project.
+  // Read-only and confined to an opened workspace (by id, never a path).
+  app.get("/api/workspaces/:id/files", async (req, res) => {
+    const ws = await workspaces.get(req.params.id);
+    const { q } = fileSearchSchema.parse(req.query);
+    res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
   const adapterOr404 = (id: string) => {
     const adapter = registry.get(id);
     if (!adapter) throw new ChatError(404, "unknown_harness", "Unknown harness");
@@ -343,6 +355,32 @@ export function createApp(deps: AppDeps) {
       });
     }
     res.json({ sessions });
+  });
+
+  // A session's last prompt and answer, for a history picker's preview: from
+  // the live chat when one is open, else the harness's own file (read only,
+  // the harness is not started). Cut short: a preview, not a transcript.
+  app.get("/api/sessions/preview", async (req, res) => {
+    const input = sessionPreviewSchema.parse(req.query);
+    const adapter = adapterOr404(input.harnessId);
+    const prefix = `${adapter.id}:`;
+    if (!input.sessionId.startsWith(prefix)) throw new ChatError(400, "wrong_harness", "Session belongs to another harness");
+    const nativeId = input.sessionId.slice(prefix.length);
+    const ws = await workspaces.get(input.workspaceId);
+    const live = manager.liveChatFor(adapter.id, nativeId);
+    const items = live ? live.snapshot().items : ((await adapter.readTranscript?.({ cwd: ws.path, nativeId }).catch(() => null))?.items ?? null);
+    if (!items) throw new ChatError(404, "no_preview", "That session cannot be read without opening it");
+    const cut = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1).trimEnd()}…` : text);
+    const prompts = items.filter((i) => i.kind === "user" && !i.command);
+    const lastPrompt = prompts[prompts.length - 1];
+    const after = lastPrompt ? items.slice(items.indexOf(lastPrompt) + 1) : items;
+    const answer = [...after].reverse().find((i) => i.kind === "assistant" && i.text.trim());
+    const preview: SessionPreview = {
+      prompt: lastPrompt && lastPrompt.kind === "user" ? cut(lastPrompt.text.trim(), 400) : null,
+      answer: answer && answer.kind === "assistant" ? cut(answer.text.trim(), 1500) : null,
+      turns: prompts.length,
+    };
+    res.json(preview);
   });
 
   // The sidebar's list: each harness's newest sessions across projects, every
