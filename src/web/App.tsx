@@ -30,6 +30,8 @@ import { Sidebar, type MarkChange } from "./components/Sidebar.js";
 import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
+import { useEdgeSwipe } from "./gestures.js";
+import { useLaunchActions } from "./launch.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { ReviewPanel } from "./components/ReviewPanel.js";
@@ -217,12 +219,13 @@ export function App() {
   };
 
   /** Show a chat: in its own tab when it has one, else in the shown tab, or a new tab with `newTab`. */
-  const showChat = (snapshot: ChatSnapshot, { newTab = false }: { newTab?: boolean } = {}) => {
+  /** `keepDrawer`: a tab reattaching (on load, or switched to) leaves the drawer as it is; picking a chat closes it. */
+  const showChat = (snapshot: ChatSnapshot, { newTab = false, keepDrawer = false }: { newTab?: boolean; keepDrawer?: boolean } = {}) => {
     rememberShown();
     setTabState((st) => placeChat(st, snapshot, { newTab }));
     setChat(snapshot);
     setBanner(null);
-    setDrawerOpen(false);
+    if (!keepDrawer) setDrawerOpen(false);
   };
 
   /** Make `ws` the current project, registering it with the server again if needed. */
@@ -254,6 +257,10 @@ export function App() {
     }
   };
 
+  // The installed app's shortcuts and shares (?new, ?sessions, ?share), and phones' swipe for the drawer.
+  useLaunchActions({ booted: Boolean(boot), ready: Boolean(boot && workspace && harnessId), newChat: () => newChat(), openSessions: () => setDrawerOpen(true) });
+  useEdgeSwipe(drawerOpen, setDrawerOpen);
+
   /**
    * Reattach a tab to its chat, or resume its session once the server no longer
    * holds the chat (a restart, or the idle reaper). A tab with neither is dropped.
@@ -266,7 +273,7 @@ export function App() {
         try {
           const live = await api<ChatSnapshot>(`/api/chats/${tab.chatId}`);
           setWorkspace(live.workspace);
-          showChat(live);
+          showChat(live, { keepDrawer: true });
           return;
         } catch (e) {
           if (!(e instanceof ApiError && e.status === 404)) throw e;
@@ -281,7 +288,7 @@ export function App() {
       }
       const ws = await api<WorkspaceInfo>("/api/workspaces/open", { body: { path: tab.workspacePath } });
       setWorkspace(ws);
-      showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } }));
+      showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } }), { keepDrawer: true });
     } catch (e) {
       fail(e);
     } finally {
@@ -823,6 +830,34 @@ export function App() {
       <Sidebar
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
         footer={<LimitsMeter limits={limits} />}
+        tabs={
+          tabState.tabs.length >= 2 ? (
+            <nav className="drawer-tabs" aria-label="Open tabs">
+              <p className="drawer-tabs-head">Open tabs</p>
+              <ul>
+                {tabState.tabs.map((tab, i) => (
+                  <li key={tab.key} className={i === tabState.active ? "is-active" : undefined}>
+                    <button
+                      type="button"
+                      className="drawer-tab"
+                      aria-current={i === tabState.active ? "page" : undefined}
+                      onClick={() => {
+                        activateTab(i);
+                        setDrawerOpen(false);
+                      }}
+                    >
+                      <span className="drawer-tab-title">{tab.title || "New chat"}</span>
+                      <span className="drawer-tab-harness">{boot.harnesses.find((h) => h.id === tab.harnessId)?.displayName ?? tab.harnessId}</span>
+                    </button>
+                    <button type="button" className="icon-btn drawer-tab-close" aria-label={`Close tab ${tab.title || "New chat"}`} onClick={() => closeTabAt(i)}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : null
+        }
         open={drawerOpen}
         harnesses={boot.harnesses}
         harnessId={harnessId}
@@ -952,6 +987,18 @@ export function App() {
                         </button>
                       </li>
                     ) : null}
+                    <li role="none" className="menu-phone-only">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setPaletteOpen(true);
+                        }}
+                      >
+                        Search and commands
+                      </button>
+                    </li>
                     <li role="none">
                       <button type="button" role="menuitem" disabled={!hasPrompt} onClick={exportChat}>
                         Export as Markdown

@@ -11,7 +11,9 @@ import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { QuoteButton } from "./QuoteButton.js";
-import { quoteParts } from "../draft-bus.js";
+import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
+import { useLongPress } from "../gestures.js";
+import { ActionSheet, type SheetAction } from "./ActionSheet.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
@@ -357,9 +359,22 @@ function UserPrompt({
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const press = useLongPress(() => setSheet(true));
   const arrival = useArrival(item.id);
+  // A long press on a phone: the hover actions as a sheet a thumb can use.
+  const sheetActions: SheetAction[] = [
+    ...(canBranch
+      ? [
+          { label: "Retry", icon: <IconRefresh size={16} />, run: () => actions.retry(through, item) },
+          { label: "Edit", icon: <IconEdit size={16} />, run: () => setEditing(true) },
+        ]
+      : []),
+    { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
+  ];
   return (
     <div className={`turn-prompt${arrival}${editing ? " is-editing" : ""}`}>
+      {sheet ? <ActionSheet title="Message" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
       <div className="bubble-stack">
         {item.images?.length ? <SentImages images={item.images} /> : null}
         {editing ? (
@@ -375,7 +390,7 @@ function UserPrompt({
             }}
           />
         ) : (
-          <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt">
+          <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt" {...press}>
             {quoteParts(item.text).map((part, i) =>
               part.quote ? (
                 <blockquote key={i} className="bubble-quote">
@@ -467,10 +482,22 @@ function Answer({
 }) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const press = useLongPress(() => {
+    if (!item.streaming && item.text) setSheet(true);
+  });
   const stopped = item.error === "Stopped";
   const arrival = useArrival(item.id);
+  const sheetActions: SheetAction[] = [
+    { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
+    // Selecting a passage to quote is fiddly on a phone; this quotes the whole reply.
+    { label: "Quote in message", icon: <IconEdit size={16} />, run: () => addToDraft(asQuote(item.text)) },
+    ...(canFork ? [{ label: "Fork from here", icon: <IconFork size={16} />, run: () => onFork(through) }] : []),
+    ...(canRestore ? [{ label: "Undo file changes from here", icon: <IconUndo size={16} />, run: () => onRestore(through) }] : []),
+  ];
   return (
-    <div className={`answer${arrival}`} data-testid="answer">
+    <div className={`answer${arrival}`} data-testid="answer" {...press}>
+      {sheet ? <ActionSheet title="Reply" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
       {item.text ? <Markdown text={item.text} allowRun={!item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}

@@ -1,0 +1,140 @@
+// awui on a phone: a 390×844 touch screen. Gestures are real touch events
+// (DevTools' Input.dispatchTouchEvent): a long press on a message opens its
+// actions, a swipe from the left edge opens the drawer, a drag down on a
+// sheet's handle closes it. Also the thumb bar's Stop, Search in the chat
+// menu, tabs in the drawer, the home-screen shortcuts, and a share from
+// another app arriving in a new chat's composer.
+import { expect, test, type Page } from "@playwright/test";
+import { newChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
+
+test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+async function touch(page: Page, points: Array<{ type: "touchStart" | "touchMove" | "touchEnd"; x: number; y: number; waitMs?: number }>) {
+  const cdp = await page.context().newCDPSession(page);
+  for (const p of points) {
+    await cdp.send("Input.dispatchTouchEvent", { type: p.type, touchPoints: p.type === "touchEnd" ? [] : [{ x: p.x, y: p.y }] });
+    if (p.waitMs) await page.waitForTimeout(p.waitMs);
+  }
+}
+
+async function center(page: Page, selector: string) {
+  const box = await page.locator(selector).first().boundingBox();
+  if (!box) throw new Error(`no box for ${selector}`);
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+test("a long press on a message opens its actions as a sheet, and a drag down on the handle closes it", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.keyboard.press("Escape");
+  await sendAndWait(page, "hello from a phone");
+  const at = await center(page, '[data-testid="user-prompt"]');
+  await touch(page, [
+    { type: "touchStart", ...at, waitMs: 700 },
+    { type: "touchEnd", ...at },
+  ]);
+  const sheet = page.getByRole("dialog", { name: "Message" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("menuitem", { name: "Copy" })).toBeVisible();
+  await expect(sheet.getByRole("menuitem", { name: "Retry" })).toBeVisible();
+  // Drag its handle down past the threshold.
+  const grip = await center(page, "dialog[open] .sheet-grip");
+  await touch(page, [
+    { type: "touchStart", ...grip },
+    { type: "touchMove", x: grip.x, y: grip.y + 60 },
+    { type: "touchMove", x: grip.x, y: grip.y + 160 },
+    { type: "touchEnd", x: grip.x, y: grip.y + 160 },
+  ]);
+  await expect(sheet).toBeHidden();
+});
+
+test("a swipe from the left edge opens the drawer and a swipe left closes it", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.keyboard.press("Escape");
+  const sidebar = page.locator(".sidebar");
+  await expect(sidebar).not.toHaveClass(/is-open/);
+  await touch(page, [
+    { type: "touchStart", x: 6, y: 420 },
+    { type: "touchMove", x: 60, y: 424 },
+    { type: "touchMove", x: 140, y: 426 },
+    { type: "touchEnd", x: 140, y: 426 },
+  ]);
+  await expect(sidebar).toHaveClass(/is-open/);
+  await touch(page, [
+    { type: "touchStart", x: 300, y: 420 },
+    { type: "touchMove", x: 200, y: 422 },
+    { type: "touchEnd", x: 120, y: 422 },
+  ]);
+  await expect(sidebar).not.toHaveClass(/is-open/);
+});
+
+test("a running chat shows a thumb bar whose Stop stops it; Search lives in the chat menu", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.keyboard.press("Escape");
+  await send(page, "slow stream please");
+  const bar = page.locator(".thumb-bar");
+  await expect(bar).toContainText("Working");
+  await page.getByRole("button", { name: "Stop now" }).click();
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 15_000 });
+  await expect(bar).toBeHidden();
+  // The header's Search button is folded into the chat menu here.
+  await expect(page.getByRole("button", { name: "Commands" })).toBeHidden();
+  await page.getByRole("button", { name: "Chat actions" }).click();
+  await page.getByRole("menuitem", { name: "Search and commands" }).click();
+  await expect(page.getByRole("dialog", { name: "Commands" })).toBeVisible();
+});
+
+test("open tabs move into the drawer, and the home-screen shortcuts open a new chat or the sessions", async ({ page }) => {
+  // Two tabs, made where the strip shows, then a phone.
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first tab");
+  await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".tab-strip")).toBeHidden();
+  await page.getByRole("button", { name: "Open menu" }).click();
+  const tabs = page.getByRole("navigation", { name: "Open tabs" });
+  await expect(tabs.getByRole("button", { name: /^first tab/ })).toBeVisible();
+  await tabs.getByRole("button", { name: /^first tab/ }).click();
+  await expect(page.locator(".sidebar")).not.toHaveClass(/is-open/);
+  await expect(page.getByTestId("user-prompt").first()).toHaveText("first tab");
+
+  await page.goto("/?sessions=1");
+  await expect(page.locator(".sidebar")).toHaveClass(/is-open/);
+  await expect(page).not.toHaveURL(/[?](sessions|new)=/);
+  await page.goto("/?new=1");
+  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
+  await expect(page).not.toHaveURL(/[?](sessions|new)=/);
+});
+
+test("a share from another app opens a new chat with the text and image in its composer", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  // The worker has to control the page before it can take a share.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.evaluate(() => navigator.serviceWorker.controller !== null || new Promise((r) => navigator.serviceWorker.addEventListener("controllerchange", () => r(true))));
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==";
+  // What Android's share sheet sends: a multipart POST to the manifest's share_target.
+  const status = await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const form = new FormData();
+    form.append("text", "look at this screenshot");
+    form.append("images", new File([bytes], "shot.png", { type: "image/png" }));
+    const res = await fetch("/share", { method: "POST", body: form, redirect: "manual" });
+    return res.type === "opaqueredirect" ? 303 : res.status;
+  }, png);
+  expect(status).toBe(303);
+  await page.goto("/?share=1");
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("look at this screenshot");
+  await expect(page.getByRole("list", { name: "Attached images" }).getByRole("listitem")).toHaveCount(1);
+});

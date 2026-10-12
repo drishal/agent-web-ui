@@ -336,6 +336,8 @@ export function Sidebar(props: {
   resizer?: React.ReactNode;
   /** Under the session list: the usage limits meter. */
   footer?: React.ReactNode;
+  /** Above the sessions on a phone: the open tabs (the tab strip is hidden there). */
+  tabs?: React.ReactNode;
   onClose: () => void;
   /** Wide screens: fold the sidebar away (the chat header gets the expand button). */
   onCollapse: () => void;
@@ -423,6 +425,7 @@ export function Sidebar(props: {
             <IconChevronDown size={16} className="rotate-90" />
           </button>
         </div>
+        {props.tabs}
 
         <button type="button" className="new-chat" onClick={props.onNewChat} disabled={props.newChatDisabled !== null}>
           <IconPlus size={15} /> New chat

@@ -6523,3 +6523,238 @@ button.harness-chip:disabled {
 .awui-providers { display: grid; gap: 8px; }
 .awui-provider { display: grid; grid-template-columns: minmax(90px,0.8fr) 1.6fr minmax(90px,1fr) minmax(90px,1fr) auto; gap: 6px; align-items: center; }
 .awui-provider .input { min-width: 0; }
+
+/* ---- phones: touch sizes, sheets, gestures -------------------------------
+   On a touch screen (pointer: coarse) the targets a thumb hits grow to the
+   44px touch guidelines ask for; a mouse keeps the dense layout. Under 641px
+   dialogs are bottom sheets with a handle (a drag down closes them, see
+   gestures.ts), the tab strip moves into the drawer, Search moves into the
+   chat menu, and a running chat shows a thumb-height bar with Stop. The page
+   never pulls to refresh, so scrolling to the top cannot reload a run. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+.sheet-handle,
+.drawer-tabs,
+.thumb-bar,
+.menu-phone-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .drow-head {
+    height: auto;
+    min-height: 44px;
+  }
+
+  .process-head {
+    min-height: 44px;
+  }
+
+  .ghost-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .icon-btn,
+  .round-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .pill-trigger,
+  .pill-btn,
+  .btn-small {
+    min-height: 40px;
+  }
+
+  .session {
+    min-height: 44px;
+  }
+
+  .menu-list button {
+    min-height: 44px;
+  }
+
+  /* No hover on a phone: the actions under a message stay visible, not faint (a long press opens them as a sheet too). */
+  .prompt-actions,
+  .answer-actions {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Dialogs as bottom sheets. */
+  .dialog {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .dialog[open] {
+    animation: rise-in 0.24s var(--ease-out);
+  }
+
+  .dialog-body {
+    transition: transform 0.2s var(--ease-out);
+  }
+
+  .sheet-grip {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: -16px -18px 0;
+    padding: 8px 18px 0;
+    background: var(--card);
+    touch-action: none;
+  }
+
+  .sheet-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 0 auto 10px;
+    border-radius: 999px;
+    background: var(--hairline-strong);
+  }
+
+  .model-pop::before {
+    content: "";
+    display: block;
+    flex: none;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 2px;
+    border-radius: 999px;
+    background: var(--hairline-strong);
+  }
+
+  /* The tab strip moves into the drawer; Search into the chat menu. */
+  .main > .tab-strip,
+  .chat-header .palette-open {
+    display: none;
+  }
+
+  .menu-phone-only {
+    display: list-item;
+  }
+
+  .drawer-tabs {
+    display: block;
+    margin: 4px 0 10px;
+  }
+
+  .drawer-tabs-head {
+    margin: 0 4px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .drawer-tabs ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .drawer-tabs li {
+    display: flex;
+    align-items: center;
+    border-radius: var(--r-lg);
+  }
+
+  .drawer-tabs li.is-active {
+    background: var(--surface-2);
+  }
+
+  .drawer-tab {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 4px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+  }
+
+  .drawer-tab-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .drawer-tab-harness {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* While a run goes: how long, and Stop where a thumb rests. */
+  .thumb-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+    padding: 4px 4px 4px 12px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 13px;
+  }
+
+  .thumb-bar-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .thumb-stop {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--danger);
+    color: var(--bg);
+  }
+
+  /* A message's actions as a sheet (a long press). */
+  .action-sheet-list {
+    margin: 0;
+    padding: 0 0 6px;
+    list-style: none;
+  }
+
+  .action-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 6px;
+    border: 0;
+    border-bottom: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--text);
+    font-size: 16px;
+    text-align: left;
+  }
+
+  .action-sheet-icon {
+    display: inline-flex;
+    color: var(--muted);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-body {
+    transition: none;
+  }
+}

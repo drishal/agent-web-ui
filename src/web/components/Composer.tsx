@@ -13,7 +13,9 @@ import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
-import { useAddToDraft } from "../draft-bus.js";
+import { useAddImagesToDraft, useAddToDraft } from "../draft-bus.js";
+import { useNow } from "../hooks.js";
+import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
 
@@ -78,6 +80,9 @@ export function Composer({
   const running = chat.status === "running";
   const stopping = chat.status === "stopping";
   const busy = running || stopping || chat.status === "compacting";
+  // The phone's thumb bar: how long this run has gone, from its prompt.
+  const now = useNow(running);
+  const runStart = running ? [...chat.items].reverse().find((i) => i.kind === "user")?.at : undefined;
   const closed = chat.status === "disposed";
 
   useEffect(() => {
@@ -192,6 +197,8 @@ export function Composer({
     setImages((current) => [...current, ...added].slice(0, MAX_IMAGES));
     area.current?.focus();
   };
+  // Images from elsewhere: what another app shared to awui.
+  useAddImagesToDraft((files) => void addImages(files));
 
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = imageFiles(e.clipboardData.files);
@@ -289,6 +296,20 @@ export function Composer({
 
   return (
     <div className={`composer${hero ? " is-hero" : ""}`}>
+      {busy ? (
+        <div className="thumb-bar" role="status">
+          <Spinner size={13} />
+          <span className="thumb-bar-label">
+            {stopping ? "Stopping" : chat.status === "compacting" ? "Compacting" : "Working"}
+            {runStart ? ` · ${formatDuration(Math.max(0, now - runStart))}` : ""}
+          </span>
+          {running ? (
+            <button type="button" className="btn btn-small thumb-stop" onClick={onStop} aria-label="Stop now">
+              <IconStop size={13} /> Stop
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <StatusStack
         chatId={chat.chatId}
         queue={chat.queue}
