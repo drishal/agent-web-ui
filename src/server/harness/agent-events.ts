@@ -5,7 +5,7 @@ import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/pr
 import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
 import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
-import { htmlRenderFromDetails } from "./render-token.js";
+import { htmlRenderRef, isHtmlRenderCall } from "./render-token.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -426,6 +426,8 @@ const withRuns = (runs: ToolItem["subagents"] | null) => (runs ? { subagents: ru
 export function historyToItems(messages: unknown[]): ChatItem[] {
   const items: ChatItem[] = [];
   const tools = new Map<string, ToolItem>();
+  // Tool calls that are the render tool, decided from their raw args at the call.
+  const renderCalls = new Set<string>();
   let n = 0;
   const nextId = (prefix: string) => `h${prefix}${n++}`;
   const report = (reports: AgentReport[]) => {
@@ -489,9 +491,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             ...(category === "agent" ? withRuns(runsFromArgs(block.arguments)) : {}),
             ...stamp,
           };
-          // The xd://render_html device's result must be matched on its args, which are
-          // stringified above; keep the raw around just for that one name lookup.
-          if (name === "write") (tool as ToolItem & { __rawArgs?: unknown }).__rawArgs = block.arguments;
+          if (isHtmlRenderCall(name, block.arguments)) renderCalls.add(id);
           tools.set(id, tool);
           items.push(tool);
         }
@@ -515,9 +515,8 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             if (runs) tool.subagents = settleRuns(runs, bounded.text, tool.status === "error");
           }
           // A render call's page reference survives in its result's details, so a reload re-arms the frame.
-          const page = htmlRenderFromDetails(tool.name, (tool as { __rawArgs?: unknown }).__rawArgs, raw.details);
+          const page = renderCalls.has(String(raw.toolCallId)) ? htmlRenderRef(raw.details) : undefined;
           if (page) tool.htmlRender = page;
-          delete (tool as { __rawArgs?: unknown }).__rawArgs;
         }
         // A wait or a proc read reports on background runs another call started.
         const reports = detailReports(raw.details);

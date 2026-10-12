@@ -29,7 +29,7 @@ import { promises as fs } from "node:fs";
 import { boundText, editShape, historyToItems, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
 import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords, type AgentReport } from "../harness/subagents.js";
-import { htmlRenderFromDetails } from "../harness/render-token.js";
+import { htmlRenderRef, isHtmlRenderCall } from "../harness/render-token.js";
 import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
@@ -226,6 +226,8 @@ class EventReducer {
 
   private index = new Map<string, number>();
   private pending = new Map<string, InteractionRequest>();
+  /** Running calls that are the render tool, decided from their raw args at tool_start. */
+  private renderCalls = new Set<string>();
   private counter = 0;
   private currentAssistant: string | null = null;
   private currentModel: string | undefined;
@@ -334,8 +336,7 @@ class EventReducer {
           ...(runs ? { subagents: runs } : {}),
           at: Date.now(),
         };
-        // The xd://render_html device submits as `write` with the device path; matcher reads it off raw args.
-        if (event.name === "write") (tool as ToolItem & { __rawArgs?: unknown }).__rawArgs = event.args;
+        if (isHtmlRenderCall(event.name, event.args)) this.renderCalls.add(event.toolCallId);
         this.put(tool);
         break;
       }
@@ -379,9 +380,8 @@ class EventReducer {
           const runs = runsFromDetails(event.toolCallId, event.details, settled.subagents ?? null);
           if (runs) settled.subagents = settleRuns(runs, event.output, event.isError);
         }
-        // A render_html/MCP render call publishes a page; its result's details carry the reference.
-        const page = base.name !== undefined ? htmlRenderFromDetails(base.name, (base as { __rawArgs?: unknown }).__rawArgs, event.details) : undefined;
-        delete (base as { __rawArgs?: unknown }).__rawArgs;
+        // A render call publishes a page; its result's details carry the reference.
+        const page = this.renderCalls.delete(event.toolCallId) ? htmlRenderRef(event.details) : undefined;
         // A failed edit keeps the diff it tried, but changed nothing to count.
         const { diffStat: _attempted, ...uncounted } = settled;
         this.put({
