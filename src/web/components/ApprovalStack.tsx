@@ -5,17 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import type { InteractionAnswer, InteractionRequest } from "../../shared/protocol.js";
 import { useNow } from "../hooks.js";
 import { IconStop } from "../icons.js";
+import { approvalAnswers, isApproval } from "../../shared/approval.js";
 import { choicesOf, splitStep } from "../questions.js";
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
   const now = useNow(true);
   return <span className="approval-countdown">{Math.max(0, Math.round((expiresAt - now) / 1000))}s</span>;
-}
-
-function isApproval(r: InteractionRequest): boolean {
-  if (r.kind === "confirm") return true;
-  const opts = (r.options ?? []).map((o) => o.toLowerCase());
-  return r.kind === "select" && opts.length === 2 && opts.includes("approve") && opts.includes("deny");
 }
 
 /** A question as a list: one row per option, numbered (1–9 pick it), its description under it. */
@@ -89,8 +84,7 @@ export function ApprovalStack({
   const { text: headline, step } = splitStep(labelled ? message : titleLine);
   const detail = labelled ? "" : [restLines.join("\n").trim(), message].filter(Boolean).join("\n\n");
   const behind = Math.min(pending.length - 1, 2);
-  const approveValue = request.options?.find((o) => o.toLowerCase() === "approve") ?? "Approve";
-  const denyValue = request.options?.find((o) => o.toLowerCase() === "deny") ?? "Deny";
+  const answers = approvalAnswers(request);
 
   return (
     <div className={`approval-stack behind-${behind}`} data-testid="approval-card">
@@ -161,7 +155,7 @@ export function ApprovalStack({
               type="button"
               className="btn btn-ghost"
               disabled={busy}
-              onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: false } : { kind: "select", value: denyValue })}
+              onClick={() => answers && onAnswer(request, answers.deny)}
             >
               Deny
             </button>
@@ -170,7 +164,7 @@ export function ApprovalStack({
               className="btn btn-primary"
               disabled={busy}
               autoFocus
-              onClick={() => onAnswer(request, request.kind === "confirm" ? { kind: "confirm", confirmed: true } : { kind: "select", value: approveValue })}
+              onClick={() => answers && onAnswer(request, answers.approve)}
             >
               Approve
             </button>

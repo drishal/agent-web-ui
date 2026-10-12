@@ -2,7 +2,7 @@
 // native session: `harnessId + nativeId -> chatId`. Another terminal or
 // process running the same harness is NOT locked out (documented in README).
 import { randomBytes, randomUUID } from "node:crypto";
-import type { LimitAccount, PushNote, WorkspaceInfo } from "../../shared/protocol.js";
+import type { InteractionRequest, LimitAccount, PushNote, WorkspaceInfo } from "../../shared/protocol.js";
 import { DeferredLiveChat } from "../harness/deferred.js";
 import type { HarnessAdapter, LiveChat } from "../harness/types.js";
 import { Chat, ChatError, errorMessage } from "./chat.js";
@@ -33,7 +33,7 @@ export class ChatManager {
    */
   render?: { baseUrl: string };
   /** Any chat finished a run, failed, or asks for an answer. */
-  onNews?: (chat: Chat, kind: PushNote["kind"], body: string) => void;
+  onNews?: (chat: Chat, kind: PushNote["kind"], body: string, request?: InteractionRequest) => void;
 
   constructor(private readonly idleDisposeMs = IDLE_DISPOSE_MS) {
     this.reaper = setInterval(() => void this.reap(), REAP_INTERVAL_MS);
@@ -80,7 +80,7 @@ export class ChatManager {
     chat.onSession = (c) => this.claimSession(c);
     chat.onDisposed = (c) => this.forget(c);
     chat.onLimits = (account) => this.onLimits?.(account);
-    chat.onNews = (c, kind, body) => this.onNews?.(c, kind, body);
+    chat.onNews = (c, kind, body, request) => this.onNews?.(c, kind, body, request);
     chat.onRunStart = (c) => this.onRunStart?.(c);
     if (this.checkpoints) {
       chat.checkpoints = new ChatCheckpoints(this.checkpoints.service, chat, this.checkpoints.sessionsDir);

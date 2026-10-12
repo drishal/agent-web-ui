@@ -385,6 +385,8 @@ export interface PushNote {
   body: string;
   /** Epoch ms. */
   at: number;
+  /** An approval the notification can answer itself (its Approve and Deny buttons): the request and the two answers. */
+  approval?: { requestId: string; approve: InteractionAnswer; deny: InteractionAnswer };
 }
 
 export interface TodoItem {
