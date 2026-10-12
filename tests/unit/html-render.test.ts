@@ -41,6 +41,9 @@ describe("agent HTML renders", () => {
     const served = await agent.get(`/api/chats/${chat.chatId}/html-render/${page!.id}`);
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toMatch(/^text\/html/);
+    // Framing from the chat itself only, never from a stranger site.
+    expect(served.headers["content-security-policy"]).toContain("frame-ancestors 'self'");
+    expect(served.headers["x-frame-options"]?.toUpperCase() ?? "SAMEORIGIN").not.toBe("DENY");
     expect(served.text).toContain("<h1>Fake report</h1>");
     expect(served.text).toContain("awui-html-render-theme");
     sse.close();

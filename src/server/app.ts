@@ -469,6 +469,9 @@ export function createApp(deps: AppDeps) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
+    // The chat embeds this page in a sandboxed iframe on the same origin; the
+    // global helmet CSP (`frame-ancestors 'none'`) would block that framing.
+    res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'; sandbox allow-scripts allow-forms");
     res.send(html);
   });
 
