@@ -2860,6 +2860,55 @@ body.is-resizing {
 
 /* Attached images: plain rounded frames, each labelled with its #N and size,
    so a prompt can say "#2". */
+.composer-pastes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.composer-paste {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--muted);
+  animation: settle-in 0.24s var(--ease-out);
+}
+
+.composer-paste .paste-label strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.composer-paste .composer-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+/* The oversized-paste choice shown in place of the blob. */
+.paste-offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 .composer-images {
   display: flex;
   flex-wrap: wrap;

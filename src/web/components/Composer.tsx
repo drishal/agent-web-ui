@@ -1,7 +1,7 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, type SendMode, type SlashCommand } from "../../shared/protocol.js";
+import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
@@ -16,6 +16,9 @@ import { StatusStack } from "./StatusStack.js";
 import { useAddToDraft } from "../draft-bus.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
+
+/** Paste larger than this many UTF-16 chars offers "attach as file" instead of filling the box. */
+const PASTE_FILE_OFFER = 12_000;
 
 /** Context share (%) from which the chip is offered, and from which it starts on. */
 const COMPACT_OFFER = 50;
@@ -44,7 +47,7 @@ export function Composer({
   maxChars: number;
   hero?: boolean;
   placeholder?: string;
-  onSend: (text: string, mode: SendMode, images: ImageAttachment[], options?: { compactFirst?: boolean }) => Promise<boolean>;
+  onSend: (text: string, mode: SendMode, images: ImageAttachment[], options?: { compactFirst?: boolean; attachments?: string[] }) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
   onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
@@ -61,6 +64,11 @@ export function Composer({
   const [gitOpen, setGitOpen] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
+  // A big pasted blob the user chose to send as a file instead of inline text.
+  const [pastes, setPastes] = useState<PasteAttachment[]>([]);
+  // The oversized paste awaiting the user's choice (inline vs file).
+  const [pendingPaste, setPendingPaste] = useState<string | null>(null);
+  const [pasteBusy, setPasteBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
   const thumbs = useRef(new Map<number, HTMLElement>());
@@ -109,27 +117,60 @@ export function Composer({
       // Clear immediately so text typed while the request is in flight survives;
       // restore only if the send failed and nothing new was typed or attached.
       const attached = images;
+      const pasted = pastes;
       setSending(true);
       setText("");
       setImages([]);
+      setPastes([]);
       setImageError(null);
       const ok = await onSend(
         value,
         mode,
         attached.map(({ mimeType, data }) => ({ mimeType, data })),
-        mode === "normal" && compactFirst ? { compactFirst: true } : {},
+        { ...(mode === "normal" && compactFirst ? { compactFirst: true } : {}), ...(pasted.length > 0 ? { attachments: pasted.map((p) => p.id) } : {}) },
       );
       setSending(false);
       if (ok) setCompactChoice(null);
       if (!ok) {
         setText((current) => current || value);
         setImages((current) => (current.length > 0 ? current : attached));
+        setPastes((current) => (current.length > 0 ? current : pasted));
       }
       area.current?.focus();
       return ok;
     },
-    [onSend, sending, text, images, compactFirst],
+    [onSend, sending, text, images, pastes, compactFirst],
   );
+
+  /** Park the oversized paste as a file on the server and chip it. */
+  const attachPaste = async () => {
+    if (!pendingPaste || pasteBusy) return;
+    setPasteBusy(true);
+    setImageError(null);
+    try {
+      const blob = pendingPaste;
+      if (new TextEncoder().encode(blob).length > MAX_PASTE_BYTES) {
+        setImageError("That paste is larger than the 1 MiB file limit");
+        return;
+      }
+      const pasted = await api<PasteAttachment>(`/api/chats/${chat.chatId}/pastes`, { body: { text: blob } });
+      setPastes((current) => [...current, pasted].slice(0, 4));
+      setPendingPaste(null);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPasteBusy(false);
+      area.current?.focus();
+    }
+  };
+
+  /** The user wants it inline after all. */
+  const inlinePaste = () => {
+    if (pendingPaste === null) return;
+    setText((current) => current + pendingPaste);
+    setPendingPaste(null);
+    area.current?.focus();
+  };
 
   const addImages = async (files: File[]) => {
     if (files.length === 0) return;
@@ -155,7 +196,15 @@ export function Composer({
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = imageFiles(e.clipboardData.files);
     // Spreadsheets and rich editors copy a rendering beside the text; paste the text then.
-    if (files.length === 0 || e.clipboardData.getData("text/plain")) return;
+    if (files.length === 0 || e.clipboardData.getData("text/plain")) {
+      // A big text blob would flood the box and the context; offer sending it as a file.
+      const blob = e.clipboardData.getData("text/plain");
+      if (blob.length > PASTE_FILE_OFFER) {
+        e.preventDefault();
+        setPendingPaste(blob);
+      }
+      return;
+    }
     e.preventDefault();
     void addImages(files);
   };
@@ -278,6 +327,36 @@ export function Composer({
             void addImages(imageFiles(e.dataTransfer.files));
           }}
         >
+          {pendingPaste !== null ? (
+            <div className="paste-offer" role="group" aria-label="Large paste">
+              <span className="paste-offer-note">Pasting {(pendingPaste.length / 1024).toFixed(0)} KB ({pendingPaste.split("\n").length.toLocaleString("en-US")} lines)</span>
+              <button type="button" className="btn btn-small" disabled={pasteBusy} onClick={() => void attachPaste()}>
+                {pasteBusy ? "Saving…" : "Attach as file"}
+              </button>
+              <button type="button" className="btn btn-small btn-ghost" disabled={pasteBusy} onClick={inlinePaste}>
+                Paste inline
+              </button>
+            </div>
+          ) : null}
+          {pastes.length > 0 ? (
+            <ul className="composer-pastes" aria-label="Pasted files">
+              {pastes.map((paste, i) => (
+                <li key={paste.id} className="composer-paste">
+                  <span className="paste-label" title={paste.path}>
+                    <strong>paste-{i + 1}.txt</strong> {paste.lines.toLocaleString("en-US")} lines · {(paste.bytes / 1024).toFixed(1)} KB
+                  </span>
+                  <button
+                    type="button"
+                    className="composer-image-remove"
+                    aria-label={`Remove paste #${i + 1}`}
+                    onClick={() => setPastes((current) => current.filter((x) => x.id !== paste.id))}
+                  >
+                    <IconX size={11} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {images.length > 0 ? (
             <ul className="composer-images" aria-label="Attached images">
               {images.map((image, i) => {
