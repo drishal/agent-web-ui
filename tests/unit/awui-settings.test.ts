@@ -36,6 +36,15 @@ describe("awui harness settings", () => {
     expect(cleared.providers.local?.hasApiKey).toBe(false);
   });
 
+  it("keeps a provider's modelOverrides when a save leaves them out (the dialog has no field for them)", async () => {
+    const { registry, agentDir } = registryWith();
+    const overrides = { "gpt-x": { contextWindow: 128000 } };
+    await writeAwuiConfig(registry, { providers: { local: { baseUrl: "http://h:4/v1", api: "openai-completions", modelOverrides: overrides } } });
+    await writeAwuiConfig(registry, { providers: { local: { baseUrl: "http://h:4/v2", api: "openai-completions" } } });
+    const raw = JSON.parse(await readFile(path.join(agentDir, "models.json"), "utf8")) as { providers: Record<string, { baseUrl: string; modelOverrides?: unknown }> };
+    expect(raw.providers.local).toMatchObject({ baseUrl: "http://h:4/v2", modelOverrides: overrides });
+  });
+
   it("writes the isolated agent dir's models.json with the key on disk", async () => {
     const { registry, agentDir } = registryWith();
     await writeAwuiConfig(registry, { providers: { litellm: { baseUrl: "http://h:3/v1", api: "openai-completions", apiKey: "sk-x" } } });
