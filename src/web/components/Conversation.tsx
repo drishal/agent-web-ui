@@ -575,14 +575,25 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
       {open ? (
         <div className="process-body">
           {(() => {
+            // The answer's own thought sits where the answer came, before any work that followed it.
+            const answerThought = answerThinking ? <ThoughtRow thinking={answerThinking.thinking} streaming={answerThinking.streaming && !answerThinking.text} /> : null;
             let seenTool = false;
-            return turn.process.map((item) => {
-              const afterTool = seenTool;
-              if (item.kind === "tool") seenTool = true;
-              return <ProcessItem key={item.id} item={item} workspace={workspace} afterTool={afterTool} />;
-            });
+            return (
+              <>
+                {turn.process.map((item, i) => {
+                  const afterTool = seenTool;
+                  if (item.kind === "tool") seenTool = true;
+                  return (
+                    <Fragment key={item.id}>
+                      {i === turn.answerAt ? answerThought : null}
+                      <ProcessItem item={item} workspace={workspace} afterTool={afterTool} />
+                    </Fragment>
+                  );
+                })}
+                {turn.answerAt >= turn.process.length ? answerThought : null}
+              </>
+            );
           })()}
-          {answerThinking ? <ThoughtRow thinking={answerThinking.thinking} streaming={answerThinking.streaming && !answerThinking.text} /> : null}
         </div>
       ) : null}
     </div>
