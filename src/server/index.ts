@@ -265,6 +265,8 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
       else if (a === "--help" || a === "-h") out.help = true;
       else if (a === "--version" || a === "-v") out.version = true;
       else if (a.startsWith("-")) throw new Error(`unknown flag: ${a}`);
+      // A stray word is a mistyped command (`awui instal tui`): say so rather than start serving.
+      else throw new Error(`unknown command: ${a}`);
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
     }
@@ -272,9 +274,12 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
   return out;
 }
 
-/** `awui install tui` — fetch and install the terminal client; flags and everything else run the web server. */
+/** `awui install tui|service`, or flags that run the web server; anything else is a usage error. */
 const args = process.argv.slice(2);
-if (args[0] === "install" && (args[1] === "tui" || args[1] === "service")) {
+if (args[0] === "install" && args[1] !== "tui" && args[1] !== "service") {
+  console.error(`awui install: expected \`tui\` or \`service\`${args[1] ? `, not \`${args[1]}\`` : ""}\n\n${HELP}`);
+  process.exit(64);
+} else if (args[0] === "install") {
   const what = args[1] as string;
   const rest = args.slice(2);
   const flags = parseFlags(rest);
