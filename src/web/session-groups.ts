@@ -164,7 +164,10 @@ export interface HistorySection {
 export function historySections(overview: SessionsOverview, opts: GroupOptions): HistorySection[] {
   const sessions = visible(overview, opts).filter((s) => !s.archived);
   const pinned = sessions.filter((s) => s.pinned);
-  const rest = sessions.filter((s) => !s.pinned);
+  // Newest first (undated last), so the buckets come out in display order as they fill:
+  // Today, Yesterday, this week's days newest first, Older.
+  const time = (s: ProjectSession) => (s.updatedAt ? Date.parse(s.updatedAt) : -Infinity);
+  const rest = sessions.filter((s) => !s.pinned).sort((a, b) => time(b) - time(a));
   const byBucket = new Map<string, ProjectSession[]>();
   const now = opts.now !== undefined ? new Date(opts.now) : new Date();
   for (const s of rest) {
@@ -175,17 +178,7 @@ export function historySections(overview: SessionsOverview, opts: GroupOptions):
   }
   const out: HistorySection[] = [];
   if (pinned.length > 0) out.push({ label: "Pinned", sessions: pinned });
-  // Buckets in the order Claude.ai shows them: Today, Yesterday, this week's dates newest first, Older last.
-  const keys = [...byBucket.keys()].sort((a, b) => {
-    const rank = (k: string) => (k === "Today" ? 0 : k === "Yesterday" ? 1 : k === "Older" ? 3 : 2);
-    const ra = rank(a);
-    const rb = rank(b);
-    if (ra !== rb) return ra - rb;
-    if (ra !== 2) return 0;
-    // Both are short dates in this week: "Oct 6" vs "Oct 3" — newest first.
-    return b.localeCompare(a);
-  });
-  for (const label of keys) out.push({ label, sessions: byBucket.get(label) ?? [] });
+  for (const [label, list] of byBucket) out.push({ label, sessions: list });
   return out;
 }
 
