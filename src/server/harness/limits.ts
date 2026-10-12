@@ -1,6 +1,7 @@
 // Subscription limits from the harnesses' own reports, in one shape: Claude
-// Code's rate_limit_event (per run) and omp's `usage --json` (every signed-in
-// account). Account names and emails are dropped here.
+// Code's rate_limit_event (per run) and its get_usage answer (asked for), and
+// omp's `usage --json` (every signed-in account). Account names and emails
+// are dropped here.
 import type { LimitAccount, LimitWindow } from "../../shared/protocol.js";
 import { isObj, type Obj } from "./agent-events.js";
 
@@ -46,6 +47,45 @@ export function claudeLimits(info: Obj, at = Date.now()): LimitAccount {
     provider: "Anthropic",
     windows,
     limited: info.status === "rejected",
+    at,
+  };
+}
+
+/** Claude Code's named weekly windows beyond the session and week (codenamed rows it also sends are left out). */
+const CLAUDE_USAGE_WINDOWS: Array<[key: string, label: string]> = [
+  ["five_hour", "5 hours"],
+  ["seven_day", "7 days"],
+  ["seven_day_opus", "7 days · Opus"],
+  ["seven_day_sonnet", "7 days · Sonnet"],
+  ["seven_day_oauth_apps", "7 days · apps"],
+];
+
+/**
+ * Claude Code's `get_usage` control reply (the data its /usage shows):
+ * the plan's windows, utilization 0-100 and an ISO reset time each, plus
+ * per-model weekly windows. Null when the plan has no limits (an API key, a
+ * cloud provider) or the CLI could not fetch them.
+ */
+export function claudeUsageLimits(usage: unknown, at = Date.now()): LimitAccount | null {
+  if (!isObj(usage) || usage.rate_limits_available !== true || !isObj(usage.rate_limits)) return null;
+  const limits = usage.rate_limits;
+  const windows: LimitWindow[] = [];
+  const add = (label: string, w: unknown) => {
+    if (!isObj(w)) return;
+    const pct = num(w.utilization);
+    const resets = typeof w.resets_at === "string" ? Date.parse(w.resets_at) : Number.NaN;
+    windows.push({ label, used: pct === null ? null : Math.min(1, Math.max(0, pct / 100)), resetsAt: Number.isFinite(resets) ? resets : null });
+  };
+  for (const [key, label] of CLAUDE_USAGE_WINDOWS) add(label, limits[key]);
+  for (const m of Array.isArray(limits.model_scoped) ? limits.model_scoped : []) if (isObj(m) && str(m.display_name)) add(`7 days · ${str(m.display_name)}`, m);
+  if (windows.length === 0) return null;
+  return {
+    id: "claude",
+    source: "Claude Code",
+    provider: "Anthropic",
+    ...(str(usage.subscription_type) ? { plan: str(usage.subscription_type) } : {}),
+    windows,
+    limited: windows.some((w) => (w.used ?? 0) >= 1),
     at,
   };
 }

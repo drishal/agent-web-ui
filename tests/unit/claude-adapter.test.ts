@@ -229,3 +229,27 @@ describe("claude adapter (scripted CLI)", () => {
     await expect(adapter.openChat({ cwd: project, resumeNativeId: "00000000-0000-4000-8000-000000000000" })).rejects.toThrow(/not found/);
   });
 });
+
+describe("Claude plan limits", () => {
+  it("asks Claude Code for its plan usage in a quiet probe and keeps only the named windows", async () => {
+    const accounts = await adapter.usageLimits();
+    expect(accounts).toHaveLength(1);
+    const claude = accounts[0];
+    expect(claude).toMatchObject({ id: "claude", source: "Claude Code", plan: "pro", limited: false });
+    expect(claude?.windows.map((w) => `${w.label} ${w.used}`)).toEqual(["5 hours 0.7", "7 days 0.1", "7 days · Fable 0.05"]);
+    expect(claude?.windows[0]?.resetsAt).toBe(Date.parse("2026-10-12T22:59:59.775244+00:00"));
+    // Only the plan's windows are asked for, from a child that writes no session and starts no MCP server or user hook.
+    const asked = recorded("usage") as Array<{ skip_behaviors: boolean; args: string[] }>;
+    expect(asked[0]?.skip_behaviors).toBe(true);
+    expect(asked[0]?.args).toEqual(expect.arrayContaining(["--no-session-persistence", "--strict-mcp-config", "--setting-sources", "project"]));
+    // A second ask within minutes is the cached answer: no new child.
+    await adapter.usageLimits();
+    expect(recorded("usage")).toHaveLength(1);
+  });
+
+  it("has no account when the plan has no limits", async () => {
+    const { claudeUsageLimits } = await import("../../src/server/harness/limits.js");
+    expect(claudeUsageLimits({ rate_limits_available: false, rate_limits: null })).toBeNull();
+    expect(claudeUsageLimits({ rate_limits_available: true, rate_limits: { five_hour: { utilization: 100, resets_at: null } } })?.limited).toBe(true);
+  });
+});

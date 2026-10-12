@@ -254,6 +254,20 @@ function control(frame) {
       return ok();
     case "list_models":
       return ok({ models: [...MODELS, { value: "sonnet", resolvedModel: "fake-sonnet", displayName: "Sonnet", supportedEffortLevels: ["low"] }] });
+    case "get_usage":
+      record("usage", { skip_behaviors: request.skip_behaviors, args: process.argv.slice(2) });
+      return ok({
+        subscription_type: "pro",
+        rate_limits_available: true,
+        rate_limits: {
+          five_hour: { utilization: 70, resets_at: "2026-10-12T22:59:59.775244+00:00" },
+          seven_day: { utilization: 10, resets_at: "2026-10-19T17:59:59+00:00" },
+          seven_day_opus: null,
+          iguana_necktie: { utilization: 0, resets_at: "2026-11-05T07:59:00+00:00" },
+          model_scoped: [{ display_name: "Fable", utilization: 5, resets_at: null }],
+        },
+        behaviors: null,
+      });
     case "get_context_usage":
       return ok({
         totalTokens: 3000,

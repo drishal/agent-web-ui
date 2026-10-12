@@ -20,6 +20,7 @@ import {
   type ImageAttachment,
   type InteractionAnswer,
   type InteractionRequest,
+  type LimitAccount,
   type ModelInfo,
   type QueueState,
   type SlashCommand,
@@ -38,7 +39,7 @@ import {
   type SessionMeta,
   type UsageBaseline,
 } from "./claude-sessions.js";
-import { claudeLimits } from "./limits.js";
+import { claudeLimits, claudeUsageLimits } from "./limits.js";
 import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
@@ -57,6 +58,14 @@ const run = promisify(execFile);
 /** How long the initialize handshake may take (hooks and MCP servers start first). */
 const READY_TIMEOUT_MS = 60_000;
 const MODEL_CACHE_MS = 5 * 60_000;
+/** How long a fetched plan usage stands: each ask starts a claude child, and the plan's windows move slowly. */
+const USAGE_CACHE_MS = 3 * 60_000;
+/**
+ * The usage probe's child: no session written, no MCP servers, and only
+ * project settings (it runs in the home folder, so the user's hooks do not
+ * fire). Its login is Claude Code's own; awui never sees the token.
+ */
+const USAGE_PROBE_ARGS = ["--no-session-persistence", "--strict-mcp-config", "--setting-sources", "project"];
 /**
  * The SDK's transport: JSON lines both ways, partial messages for streaming,
  * user messages echoed when the CLI takes them (that is when a queued one
@@ -757,6 +766,7 @@ export class ClaudeAdapter implements HarnessAdapter {
     supportsHtmlRender: false,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
+  private usageCache: { at: number; accounts: LimitAccount[] } | null = null;
   private metaCache = new Map<string, { mtimeMs: number; size: number; meta: SessionMeta | null }>();
 
   constructor(private readonly options: ClaudeOptions) {
@@ -867,6 +877,22 @@ export class ClaudeAdapter implements HarnessAdapter {
       const models = (Array.isArray(init.models) ? init.models : []).map(toModelInfo).filter((m): m is ModelInfo => m !== null);
       this.modelCache = { at: Date.now(), models };
       return models;
+    } finally {
+      await rpc.kill().catch(() => undefined);
+    }
+  }
+
+  /** The plan's limits, asked of Claude Code itself (its get_usage control request), at most every few minutes. */
+  async usageLimits(): Promise<LimitAccount[]> {
+    if (this.usageCache && Date.now() - this.usageCache.at < USAGE_CACHE_MS) return this.usageCache.accounts;
+    const rpc = new ClaudeRpc(this.cliCommand, [...STREAM_ARGS, ...USAGE_PROBE_ARGS], this.childEnv(), this.options.home, () => undefined);
+    try {
+      await rpc.init;
+      const usage = await rpc.request<unknown>({ subtype: "get_usage", skip_behaviors: true }, 30_000);
+      const account = claudeUsageLimits(usage);
+      const accounts = account ? [account] : [];
+      this.usageCache = { at: Date.now(), accounts };
+      return accounts;
     } finally {
       await rpc.kill().catch(() => undefined);
     }
