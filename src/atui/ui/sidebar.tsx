@@ -1,17 +1,26 @@
-// Sessions, grouped as the web sidebar does (Needs you, Working, Pinned, then
-// projects, this one first). Ctrl+X S moves here; ↑/↓ and Enter open one,
-// Esc goes back to the composer.
+// The side panel, in two tabs. Sessions: grouped as the web sidebar does
+// (Needs you, Working, Pinned, then projects, this one first). Info: the
+// open chat's context, usage, todos, git, changes, and limits (panel.tsx).
+// C-x s opens Sessions and C-x i Info; with the panel focused ↑/↓ and Enter
+// pick a session, Tab switches tabs, Esc goes back to the composer. The « in
+// the corner folds the panel to a rail, whose » brings it back.
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { ProjectSession } from "../../shared/protocol.js";
 import { groupByProject, isBusy, sidebarSections } from "../../web/session-groups.js";
 import { clip } from "../format.js";
+import { spinnerFor } from "../fx.js";
 import { accentOf } from "../theme.js";
-import { SPINNER, useAtui, useTheme } from "./context.js";
+import { useAtui, useTheme } from "./context.js";
+import { InfoBody } from "./panel.js";
 import { tick } from "./ticker.js";
 
 const PER_PROJECT = 6;
 const PER_OTHER = 3;
+/** The folded panel: a rail just wide enough for its » button. */
+export const RAIL_WIDTH = 3;
+
+export type SidebarTab = "sessions" | "info";
 
 type Row = { kind: "head"; label: string; color?: string; count: number } | { kind: "session"; s: ProjectSession; project?: string };
 
@@ -25,7 +34,25 @@ function age(iso: string | null): string {
   return `${Math.round(h / 24)}d`;
 }
 
-export function Sidebar(p: { active: boolean; width: number; onOpened: () => void; onLeave: () => void }) {
+/** The folded panel: a » to unfold it. */
+export function SidebarRail(p: { onExpand: () => void }) {
+  const t = useTheme();
+  return (
+    <box flexDirection="column" width={RAIL_WIDTH} flexShrink={0} border={["right"]} borderColor={t().border} alignItems="center" onMouseDown={p.onExpand}>
+      <text fg={t().accent}>»</text>
+    </box>
+  );
+}
+
+export function Sidebar(p: {
+  active: boolean;
+  width: number;
+  tab: SidebarTab;
+  onTab: (tab: SidebarTab) => void;
+  onCollapse: () => void;
+  onOpened: () => void;
+  onLeave: () => void;
+}) {
   const app = useAtui();
   const t = useTheme();
   const isActive = (s: ProjectSession) => {
@@ -53,6 +80,7 @@ export function Sidebar(p: { active: boolean; width: number; onOpened: () => voi
     return out;
   });
   const sessionRows = createMemo(() => rows().flatMap((r, i) => (r.kind === "session" ? [i] : [])));
+
   const [sel, setSel] = createSignal(0);
   createEffect(() => {
     if (!p.active) return;
@@ -62,17 +90,20 @@ export function Sidebar(p: { active: boolean; width: number; onOpened: () => voi
 
   useKeyboard((key) => {
     if (!p.active || key.defaultPrevented) return;
-    const n = sessionRows().length;
+    const n = p.tab === "sessions" ? sessionRows().length : 0;
     if (key.name === "escape") {
       key.preventDefault();
       p.onLeave();
+    } else if (key.name === "tab") {
+      key.preventDefault();
+      p.onTab(p.tab === "sessions" ? "info" : "sessions");
     } else if ((key.name === "down" || key.name === "j") && n > 0) {
       key.preventDefault();
       setSel((i) => Math.min(n - 1, i + 1));
     } else if ((key.name === "up" || key.name === "k") && n > 0) {
       key.preventDefault();
       setSel((i) => Math.max(0, i - 1));
-    } else if (key.name === "return") {
+    } else if (key.name === "return" && p.tab === "sessions") {
       key.preventDefault();
       const row = rows()[sessionRows()[sel()] ?? -1];
       if (row?.kind === "session") void app.openSession(row.s).then(p.onOpened);
@@ -84,49 +115,83 @@ export function Sidebar(p: { active: boolean; width: number; onOpened: () => voi
   const width = () => p.width - 5;
   const meta = (row: Extract<Row, { kind: "session" }>) => ` ${row.project ? `${clip(row.project, 10)} ` : ""}${age(row.s.updatedAt)}`;
 
+  const Tab = (q: { id: SidebarTab; label: string }) => (
+    <text flexShrink={0} fg={p.tab === q.id ? t().text : t().muted} onMouseDown={() => p.onTab(q.id)}>
+      {p.tab === q.id ? <b>{q.label}</b> : q.label}
+    </text>
+  );
+
   return (
     <box flexDirection="column" width={p.width} flexShrink={0} border={["right"]} borderColor={t().border} paddingLeft={1} paddingRight={1}>
-      <text fg={t().text} flexShrink={0}>
-        <b>Sessions</b>
-        <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{`  ${app.harness()?.displayName ?? ""}`}</span>
+      <box flexDirection="row" flexShrink={0}>
+        <Tab id="sessions" label="Sessions" />
+        <text flexShrink={0} fg={t().border}>
+          {" │ "}
+        </text>
+        <Tab id="info" label="Info" />
+        <box flexGrow={1} />
+        {/* Three cells to hit, not one. */}
+        <box width={3} flexShrink={0} flexDirection="row" justifyContent="flex-end" onMouseDown={p.onCollapse}>
+          <text fg={t().muted}>«</text>
+        </box>
+      </box>
+      {/* The active tab's underline: an accent rule under its name, a quiet one under the rest. */}
+      <text flexShrink={0} wrapMode="none">
+        <span style={{ fg: p.tab === "sessions" ? t().accent : t().border }}>{"━".repeat(8)}</span>
+        <span style={{ fg: t().border }}>{"━━━"}</span>
+        <span style={{ fg: p.tab === "info" ? t().accent : t().border }}>{"━".repeat(4)}</span>
+        <span style={{ fg: t().border }}>{"━".repeat(Math.max(0, p.width - 17))}</span>
       </text>
-      <text fg={t().muted} wrapMode="none" truncate flexShrink={0}>
-        {app.workspace()?.path ?? "no project"}
-      </text>
-      <scrollbox flexGrow={1} marginTop={1} verticalScrollbarOptions={{ visible: false }}>
-        <For each={rows()}>
-          {(row, i) =>
-            row.kind === "head" ? (
-              <text fg={row.color ?? t().muted} marginTop={i() === 0 ? 0 : 1}>
-                {`${row.label} `}
-                <span style={{ fg: t().muted }}>{String(row.count)}</span>
-              </text>
-            ) : (
-              <box
-                flexDirection="row"
-                backgroundColor={i() === selectedRow() && p.active ? t().selection : isActive(row.s) ? t().surface2 : undefined}
-                onMouseDown={() => void app.openSession(row.s).then(p.onOpened)}
-              >
-                <text flexShrink={0} fg={row.s.asking ? t().warn : isBusy(row.s.status) ? t().accent : row.s.liveChatId ? t().ok : t().muted}>
-                  {row.s.asking ? "▲ " : isBusy(row.s.status) ? `${SPINNER[tick() % SPINNER.length]} ` : row.s.liveChatId ? "● " : "· "}
+      <Show
+        when={p.tab === "sessions"}
+        fallback={
+          <>
+            <InfoBody width={p.width} />
+            <text fg={t().muted} flexShrink={0}>
+              {p.active ? "Tab sessions · Esc back" : "C-x i info"}
+            </text>
+          </>
+        }
+      >
+        <text fg={t().muted} wrapMode="none" truncate flexShrink={0}>
+          <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{`${app.harness()?.displayName ?? ""}  `}</span>
+          {app.workspace()?.path ?? "no project"}
+        </text>
+        <scrollbox flexGrow={1} marginTop={1} verticalScrollbarOptions={{ visible: false }}>
+          <For each={rows()}>
+            {(row, i) =>
+              row.kind === "head" ? (
+                <text fg={row.color ?? t().muted} marginTop={i() === 0 ? 0 : 1}>
+                  {`${row.label} `}
+                  <span style={{ fg: t().muted }}>{String(row.count)}</span>
                 </text>
-                <text flexGrow={1} fg={isActive(row.s) ? t().text : t().text2} wrapMode="none">
-                  {clip(row.s.title || "New chat", width() - meta(row).length)}
-                </text>
-                <text flexShrink={0} fg={t().muted}>
-                  {meta(row)}
-                </text>
-              </box>
-            )
-          }
-        </For>
-        <Show when={rows().length === 0}>
-          <text fg={t().muted}>No sessions yet</text>
-        </Show>
-      </scrollbox>
-      <text fg={t().muted} flexShrink={0}>
-        {p.active ? "↑↓ Enter · Esc back" : "^X S to browse"}
-      </text>
+              ) : (
+                <box
+                  flexDirection="row"
+                  backgroundColor={i() === selectedRow() && p.active ? t().selection : isActive(row.s) ? t().surface2 : undefined}
+                  onMouseDown={() => void app.openSession(row.s).then(p.onOpened)}
+                >
+                  <text flexShrink={0} fg={row.s.asking ? t().warn : isBusy(row.s.status) ? t().accent : row.s.liveChatId ? t().ok : t().muted}>
+                    {row.s.asking ? "▲ " : isBusy(row.s.status) ? `${spinnerFor(row.s.harnessId)[tick() % spinnerFor(row.s.harnessId).length]} ` : row.s.liveChatId ? "● " : "· "}
+                  </text>
+                  <text flexGrow={1} fg={isActive(row.s) ? t().text : t().text2} wrapMode="none">
+                    {clip(row.s.title || "New chat", width() - meta(row).length)}
+                  </text>
+                  <text flexShrink={0} fg={t().muted}>
+                    {meta(row)}
+                  </text>
+                </box>
+              )
+            }
+          </For>
+          <Show when={rows().length === 0}>
+            <text fg={t().muted}>No sessions yet</text>
+          </Show>
+        </scrollbox>
+        <text fg={t().muted} flexShrink={0}>
+          {p.active ? "↑↓ Enter · Tab · Esc back" : "C-x s to browse"}
+        </text>
+      </Show>
     </box>
   );
 }

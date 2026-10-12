@@ -1,6 +1,6 @@
 // What atui prints, worked out apart from the drawing so it can be tested:
 // tool lines, the fold line, diffs in unified form for OpenTUI's <diff>,
-// token counts, limits, and the status words.
+// token counts, limit labels, and the status words.
 import type { ChatStatus, LimitAccount, ToolDiff, ToolItem } from "../shared/protocol.js";
 import { countSummary, formatDuration, relativePath, type Turn } from "../web/turns.js";
 
@@ -69,12 +69,13 @@ export function tokens(n: number): string {
 
 const PROVIDERS: Record<string, string> = { anthropic: "Anthropic", "openai-codex": "ChatGPT", openai: "OpenAI", "google-gemini-cli": "Gemini", "github-copilot": "Copilot" };
 
-/** "Claude 5h 15% · 7d 55%": an account's windows on one line. */
-export function limitLine(a: LimitAccount): string {
-  const name = a.source === "Claude Code" ? "Claude" : (PROVIDERS[a.provider] ?? a.provider);
-  const windows = a.windows.map((w) => `${w.label.replace(" hours", "h").replace(" days", "d")} ${w.used === null ? "—" : `${Math.round(w.used * 100)}%`}`);
-  return [name, ...windows].join(" · ") + (a.limited ? " · limited" : "");
+/** An account's short name: "Claude", "ChatGPT", or its provider id. */
+export function accountName(a: LimitAccount): string {
+  return a.source === "Claude Code" ? "Claude" : (PROVIDERS[a.provider] ?? a.provider);
 }
+
+/** A limit window's short label: "5h", "7d". */
+export const windowLabel = (label: string): string => label.replace(" hours", "h").replace(" days", "d");
 
 /** A short line of text, cut with an ellipsis. */
 export function clip(text: string, width: number): string {

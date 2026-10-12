@@ -1,14 +1,15 @@
-// atui's screen: sessions on the left, the conversation and composer in the
-// middle, a status line at the bottom; dialogs over it all. Keys are written
-// the Emacs way (C- is Ctrl, M- is Alt). Global keys: C-k commands, C-r
-// history, M-h/M-m/M-t the harness, model, and thinking pickers (the
-// composer's footer opens them on a click too), C-x then a letter for the rest
-// (a which-key panel lists them until a key, Esc, or C-g), PageUp/PageDown
-// scroll, Esc Esc stops the agent, C-c clears, stops, or (twice) quits. In vim
-// mode (--vim, or C-x v) Esc leaves the composer for NORMAL, where
-// src/atui/vim.ts's keys move around; i goes back to typing. Jumps of more
-// than a line glide; C-x g is glass mode (no fills, the terminal's background
-// shows through); background sessions' news toasts in the corner.
+// atui's screen: a side panel on the left (Sessions and Info tabs, folding to
+// a rail), the conversation and composer beside it, a status line at the bottom; dialogs
+// over it all. Keys are written the Emacs way (C- is Ctrl, M- is Alt). Global
+// keys: C-k commands, C-r history, M-h/M-m/M-t the harness, model, and
+// thinking pickers (the composer's footer opens them on a click too), C-x
+// then a letter for the rest (a which-key panel lists them until a key, Esc,
+// or C-g), PageUp/PageDown scroll, Esc Esc stops the agent, C-c clears,
+// stops, or (twice) quits. In vim mode (--vim, or C-x v) Esc leaves the
+// composer for NORMAL, where src/atui/vim.ts's keys move around; i goes back
+// to typing. Jumps of more than a line glide; C-x g is glass mode (no fills, the
+// terminal's background shows through); background sessions' news toasts in
+// the corner.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
@@ -21,11 +22,10 @@ import type { Atui } from "../state.js";
 import { accentOf } from "../theme.js";
 import { Composer } from "./composer.js";
 import { AtuiContext } from "./context.js";
-import { InfoPanel } from "./panel.js";
 import { glideBy, glideTo, Shimmer } from "./fx.js";
 import { Picker, type PreviewText } from "./picker.js";
 import { RequestCard } from "./request.js";
-import { Sidebar } from "./sidebar.js";
+import { Sidebar, SidebarRail, type SidebarTab } from "./sidebar.js";
 import { Splash } from "./splash.js";
 import { Toasts } from "./toasts.js";
 import { Transcript } from "./transcript.js";
@@ -41,7 +41,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
   const t = app.theme;
   const size = useTerminalDimensions();
   const [sidebar, setSidebar] = createSignal(size().width >= 110);
-  const [panel, setPanel] = createSignal(size().width >= 150);
+  const [sideTab, setSideTab] = createSignal<SidebarTab>("sessions");
   const [focus, setFocus] = createSignal<"composer" | "sidebar">("composer");
   const [dialog, setDialog] = createSignal<Dialog>(null);
   const [showWork, setShowWork] = createSignal(false);
@@ -70,7 +70,6 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
   const pending = createMemo(() => app.chat()?.pending[0] ?? null);
   const hasPrompt = createMemo(() => app.chat()?.items.some((i) => i.kind === "user") ?? false);
   const sideWidth = () => Math.min(36, Math.max(26, Math.floor(size().width * 0.24)));
-  const panelWidth = () => Math.min(36, Math.max(26, Math.floor(size().width * 0.22)));
 
   // A run that ends: git and limits may have moved.
   createEffect(
@@ -148,11 +147,15 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
         return;
       case "s":
         setSidebar(true);
+        setSideTab("sessions");
         setFocus("sidebar");
         composer?.blur();
         return;
       case "i":
-        return setPanel(!panel());
+        // Info is a tab of the side panel: C-x i shows it, and again goes back to the sessions.
+        if (sidebar() && sideTab() === "info") return setSideTab("sessions");
+        setSidebar(true);
+        return setSideTab("info");
       case "n":
         app.newChat();
         return leave();
@@ -287,8 +290,8 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     if (c && app.busy()) add({ id: "stop", label: "Stop the agent", hint: "Esc Esc", run: app.stop });
     add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
     add({ id: "sessions", label: "Browse sessions", hint: leader("s"), run: () => runLeader("s") });
-    add({ id: "sidebar", label: sidebar() ? "Hide sessions" : "Show sessions", hint: leader("b"), run: () => runLeader("b") });
-    add({ id: "panel", label: panel() ? "Hide info panel" : "Show info panel", hint: leader("i"), run: () => runLeader("i") });
+    add({ id: "sidebar", label: sidebar() ? "Fold the side panel" : "Unfold the side panel", hint: leader("b"), run: () => runLeader("b") });
+    add({ id: "panel", label: sidebar() && sideTab() === "info" ? "Show sessions" : "Show info: context, usage, git, limits", hint: leader("i"), run: () => runLeader("i") });
     add({ id: "work", label: showWork() ? "Fold the work" : "Show the work of every turn", hint: leader("e"), run: () => runLeader("e") });
     add({ id: "glass", label: app.glass() ? "Glass off: solid panels" : "Glass on: see the terminal through", hint: leader("g"), run: () => runLeader("g") });
     if (c?.capabilities.supportsCompact) add({ id: "compact", label: "Compact context", hint: leader("c"), disabled: idle ? undefined : "Wait until the agent is idle", run: () => runLeader("c") });
@@ -424,8 +427,19 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     <AtuiContext.Provider value={app}>
       <box flexDirection="column" width="100%" height="100%">
         <box flexDirection="row" flexGrow={1}>
-          <Show when={sidebar()}>
-            <Sidebar active={focus() === "sidebar" && !dialog()} width={sideWidth()} onOpened={leave} onLeave={leave} />
+          <Show when={sidebar()} fallback={<SidebarRail onExpand={() => setSidebar(true)} />}>
+            <Sidebar
+              active={focus() === "sidebar" && !dialog()}
+              width={sideWidth()}
+              tab={sideTab()}
+              onTab={setSideTab}
+              onCollapse={() => {
+                setSidebar(false);
+                leave();
+              }}
+              onOpened={leave}
+              onLeave={leave}
+            />
           </Show>
           <box flexDirection="column" flexGrow={1}>
             <box flexDirection="row" flexShrink={0} paddingLeft={2} paddingRight={2}>
@@ -483,13 +497,10 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
               {(request) => <RequestCard request={request} more={(app.chat()?.pending.length ?? 1) - 1} active={focus() === "composer" && !dialog()} />}
             </Show>
           </box>
-          <Show when={panel()}>
-            <InfoPanel width={panelWidth()} />
-          </Show>
         </box>
         <Show when={leaderOn() && !dialog()}>
           <WhichKey
-            state={{ b: sidebar() ? "on" : "off", i: panel() ? "on" : "off", e: showWork() ? "on" : "off", v: vim() ? "on" : "off", g: app.glass() ? "on" : "off" }}
+            state={{ b: sidebar() ? "on" : "off", i: sidebar() && sideTab() === "info" ? "on" : "off", e: showWork() ? "on" : "off", v: vim() ? "on" : "off", g: app.glass() ? "on" : "off" }}
             onPick={(k) => {
               setLeaderOn(false);
               runLeader(k);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem, InteractionRequest, LimitAccount, ToolItem } from "../../src/shared/protocol.js";
 import { parseArgs } from "../../src/atui/args.js";
-import { ago, clip, foldLabel, limitLine, tokens, toolTarget, unifiedDiff } from "../../src/atui/format.js";
+import { accountName, ago, clip, foldLabel, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
 import { isApproval, optionsOf } from "../../src/atui/requests.js";
 import { DARK, themeFrom } from "../../src/atui/theme.js";
 import { buildTurns } from "../../src/web/turns.js";
@@ -66,7 +66,8 @@ describe("atui formatting", () => {
   it("shortens counts, limits, and long lines", () => {
     expect([tokens(950), tokens(12_400), tokens(1_250_000)]).toEqual(["950", "12k", "1.3M"]);
     const claude: LimitAccount = { id: "claude", source: "Claude Code", provider: "Anthropic", windows: [{ label: "5 hours", used: 0.15, resetsAt: null }, { label: "7 days", used: 0.55, resetsAt: null }], limited: false, at: 0 };
-    expect(limitLine(claude)).toBe("Claude · 5h 15% · 7d 55%");
+    expect(accountName(claude)).toBe("Claude");
+    expect(claude.windows.map((w) => windowLabel(w.label))).toEqual(["5h", "7d"]);
     expect(clip("a  long\n line", 8)).toBe("a long …");
   });
 });

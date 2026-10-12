@@ -238,6 +238,27 @@ describe("atui", () => {
     expect(await ui.frame()).toContain("▣ #1");
   }, 30_000);
 
+  it("keeps sessions and info in one side panel, switched by tab, folding to a rail", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { width: 150, height: 40 });
+    await ui.type("tool please");
+    ui.keys.pressEnter();
+    await ui.until("Echo: tool please");
+    await idle(ui);
+    expect(await ui.frame()).toContain("Sessions │ Info");
+    // C-x i: the Info tab, where the right panel's context and usage now live.
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("i");
+    expect(await ui.until("Tool definitions")).toContain("Context");
+    await ui.click("Sessions");
+    await ui.until("C-x s to browse");
+    // « folds it to a rail; » unfolds it.
+    await ui.click("«");
+    const folded = await ui.until("»");
+    expect(folded).not.toContain("Sessions │ Info");
+    await ui.click("»");
+    await ui.until("Sessions │ Info");
+  }, 30_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");
@@ -252,7 +273,7 @@ describe("atui", () => {
     await ui.until(() => (ui?.app.overview().sessions.filter((s) => s.title.endsWith("session here")).length ?? 0) >= 2);
     ui.keys.pressKey("x", { ctrl: true });
     await ui.type("s");
-    await ui.until("↑↓ Enter · Esc back");
+    await ui.until("↑↓ Enter · Tab · Esc back");
     ui.keys.pressArrow("down");
     await wait(30);
     ui.keys.pressEnter();

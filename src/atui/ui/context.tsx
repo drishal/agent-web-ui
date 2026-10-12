@@ -14,5 +14,3 @@ export function useAtui(): Atui {
 export function useTheme(): Accessor<Theme> {
   return useAtui().theme;
 }
-
-export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
