@@ -1,7 +1,7 @@
-// The service worker: the notes' push, and the Approve and Deny buttons
-// they carry. It never caches the app: a page load goes to the network as
-// before, so a rebuild shows on the next reload, and there is no fetch
-// handler.
+// The service worker: notifications, the share target, and a page for when the
+// server cannot be reached. It never caches the app: a page load goes to the
+// network as before, so a rebuild shows on the next reload; only when that
+// load fails does it answer with a short offline page.
 //
 // A push carries no payload; it only says "something happened". The notes are
 // read from the server with this device's cookie, and one is skipped when a
@@ -17,6 +17,7 @@
 
 let cursor = null;
 const shown = new Set();
+const SHARE_CACHE = "awui-share";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -93,4 +94,41 @@ self.addEventListener("notificationclick", (event) => {
       await self.clients.openWindow(chatId ? `/#chat=${chatId}` : "/");
     })(),
   );
+});
+
+/** Keep a share's text and images until the app asks for them, then open it. */
+async function takeShare(request) {
+  const form = await request.formData();
+  const cache = await caches.open(SHARE_CACHE);
+  const text = [form.get("title"), form.get("text"), form.get("url")].filter((v) => typeof v === "string" && v.trim()).join("\n");
+  const files = form.getAll("images").filter((f) => f instanceof File && f.type.startsWith("image/")).slice(0, 8);
+  await cache.put("/share/text", new Response(text));
+  await cache.put("/share/count", new Response(String(files.length)));
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    await cache.put(`/share/image/${i}`, new Response(file, { headers: { "content-type": file.type, "x-name": encodeURIComponent(file.name || `shared-${i + 1}`) } }));
+  }
+  return Response.redirect("/?share=1", 303);
+}
+
+/** What a page load answers when the server cannot be reached. Plain HTML, no script: it retries itself. */
+function offlinePage() {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><meta http-equiv="refresh" content="15"><title>awui · offline</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui,sans-serif;background:Canvas;color:CanvasText}main{max-width:22rem;padding:24px;text-align:center}h1{font-size:18px;margin:0 0 8px}p{margin:0 0 16px;color:GrayText}a{display:inline-block;padding:10px 18px;border-radius:999px;border:1px solid GrayText;color:inherit;text-decoration:none}</style></head>
+<body><main><h1>The awui server is unreachable</h1><p>Your chats keep running on it. Check that the server is up and that this device can reach it (Tailscale connected?). This page tries again every 15 seconds.</p><a href="/">Try again</a></main></body></html>`;
+  return new Response(html, { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (request.method === "POST" && url.pathname === "/share") {
+    event.respondWith(takeShare(request));
+    return;
+  }
+  // Page loads only: everything else goes to the network untouched.
+  if (request.mode === "navigate" && request.method === "GET") {
+    event.respondWith(fetch(request).catch(() => offlinePage()));
+  }
 });

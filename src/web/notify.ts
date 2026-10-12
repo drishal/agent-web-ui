@@ -34,7 +34,8 @@ const sameKey = (a: ArrayBuffer | null | undefined, b: Uint8Array): boolean => {
   return view.every((x, i) => x === b[i]);
 };
 
-async function worker(): Promise<ServiceWorkerRegistration | null> {
+/** The service worker (notifications, sharing to awui, the offline page), registered where the browser allows one. */
+export async function worker(): Promise<ServiceWorkerRegistration | null> {
   if (!window.isSecureContext || !("serviceWorker" in navigator)) return null;
   try {
     return await navigator.serviceWorker.register("./sw.js");
