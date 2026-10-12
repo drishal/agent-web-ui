@@ -142,7 +142,11 @@ export function createApp(deps: AppDeps) {
   app.disable("x-powered-by");
   app.set("etag", false);
 
-  app.use(
+  // The render-doc page serves its own CSP header (see the route below); the global
+  // helmet CSP would add a *second* one and the browser enforces the stricter, which
+  // would forbid that page's own framing from the same origin. So helmet skips it.
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/render/") && req.path.endsWith("/doc")) return next();
     helmet({
       contentSecurityPolicy: {
         useDefaults: false,
@@ -162,8 +166,8 @@ export function createApp(deps: AppDeps) {
       referrerPolicy: { policy: "no-referrer" },
       crossOriginEmbedderPolicy: false,
       strictTransportSecurity: false,
-    }),
-  );
+    })(req, res, next);
+  });
   app.use(security.trust);
 
   app.get("/api/health", (_req, res) => {

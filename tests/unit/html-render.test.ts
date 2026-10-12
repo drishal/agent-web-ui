@@ -95,4 +95,26 @@ describe("agent HTML renders", () => {
     const tool = history?.items.find((i) => i.kind === "tool" && i.name === "render_html");
     expect(tool && tool.kind === "tool" ? tool.htmlRender?.id : undefined).toBe(pageId);
   });
+
+  it("serves the render page with ONE csp header, so the app can frame it", async () => {
+    const { agent, ws } = await setup();
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t as TestApp, chat.chatId, agent.cookie);
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "snapshot"));
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "render" });
+    await sse.waitFor(() => sse.chatEvents().some((e) => e.type === "status" && e.status === "idle"));
+    const snap = (await agent.get(`/api/chats/${chat.chatId}`)).body as ChatSnapshot;
+    const page = snap.items.find((i) => i.kind === "tool" && i.htmlRender);
+    const id = page && page.kind === "tool" ? page.htmlRender?.id : undefined;
+
+    const served = await agent.get(`/api/chats/${chat.chatId}/html-render/${id}`);
+    expect(served.status).toBe(200);
+    // Exactly one CSP: two headers (global helmet 'none' + the route's 'self') make the
+    // browser enforce the stricter and permanently block the frame (the clickjacking page).
+    // Express's res.headers returns a string or string[]; a doubled header is a string[].
+    const csp = served.headers["content-security-policy"];
+    expect(Array.isArray(csp) ? csp.length : 1).toBe(1);
+    expect(csp).toContain("frame-ancestors 'self'");
+    sse.close();
+  });
 });
