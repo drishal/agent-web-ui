@@ -32,6 +32,7 @@ import {
   type ProjectSession,
   sendMessageSchema,
   fileSearchSchema,
+  queueSchema,
   sessionPreviewSchema,
   type SessionPreview,
   uploadPasteSchema,
@@ -633,6 +634,13 @@ export function createApp(deps: AppDeps) {
     const chat = manager.get(req.params.id);
     await chat.refreshModels();
     res.json(chat.snapshot().config);
+  });
+
+  // An edited or removed queued message: the whole queue, as it should now be.
+  app.put("/api/chats/:id/queue", async (req, res) => {
+    const chat = manager.get(req.params.id);
+    await chat.replaceQueue(body(queueSchema, req));
+    res.json({ accepted: true });
   });
 
   app.post("/api/chats/:id/rename", async (req, res) => {

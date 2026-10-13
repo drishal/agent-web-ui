@@ -132,6 +132,13 @@ export interface LiveChat {
   followUp(text: string, images?: ImageAttachment[]): Promise<void>;
   /** Aborts the run, clears queues where supported, resolves when idle. */
   abort(): Promise<void>;
+  /**
+   * Take back every queued steering and follow-up message and queue these in
+   * their place, in order (an edited or removed one). Text only: a queued
+   * message's images do not survive. Only harnesses with
+   * capabilities.supportsQueueEdit implement it.
+   */
+  replaceQueue?(queue: QueueState): Promise<void>;
   setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void>;
   /** Drop cached models so the next getConfig() sees new ones (local servers, catalogs, config edits). */
   refreshModels(): Promise<void>;

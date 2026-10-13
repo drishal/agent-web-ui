@@ -22,6 +22,8 @@ export interface HarnessCapabilities {
   supportsRewind: boolean;
   /** The harness was given awui's render tool, so its calls can publish an HTML page into the chat. */
   supportsHtmlRender: boolean;
+  /** Queued steering and follow-up messages can be taken back and replaced (edited, removed) before they run. */
+  supportsQueueEdit: boolean;
 }
 
 export interface HarnessStatus {
@@ -554,6 +556,11 @@ export const resumeChatSchema = z.object({
 });
 /** A mention picker's search over a project's files. */
 export const fileSearchSchema = z.object({ q: z.string().max(200).default("") });
+/** A chat's whole queue, to replace what the harness holds (an edited or removed queued message). */
+export const queueSchema = z.object({
+  steering: z.array(z.string().min(1).max(MAX_MESSAGE_CHARS)).max(20),
+  followUp: z.array(z.string().min(1).max(MAX_MESSAGE_CHARS)).max(20),
+});
 /** One session's last exchange, for a history picker's preview. */
 export const sessionPreviewSchema = z.object({
   harnessId: z.string().min(1).max(64),
