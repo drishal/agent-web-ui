@@ -6992,6 +6992,79 @@ body {
   display: inline-flex;
 }
 
+.composer-bar .composer-stash {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+.stash-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.menu-list.stash-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 8px);
+  left: -6px;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(360px, 50dvh);
+  overflow-y: auto;
+  transform-origin: bottom left;
+}
+
+.stash-menu kbd {
+  margin-left: auto;
+}
+
+.stash-empty {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.stash-entry {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.menu-list .stash-take {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stash-text,
+.stash-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-meta {
+  font-size: 11px;
+}
+
+.menu-list .stash-drop {
+  width: 26px;
+  flex: none;
+}
+
 .composer-linked {
   display: flex;
   align-items: center;

@@ -93,6 +93,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   prompt-history.ts           ↑/↓ recall of a chat's sent prompts in the composer.
   list-continue.ts            Markdown lists in the composer: Shift+Enter continues one, Tab indents it.
   prompt-link.ts              Prompt links (?prompt=): hidden characters taken out, a link made.
+  stash.ts                    The prompt stash: drafts parked in browser storage, images within a budget.
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced

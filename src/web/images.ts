@@ -16,6 +16,11 @@ export interface PendingImage extends ImageAttachment {
 
 let nextId = 1;
 
+/** An image kept elsewhere (the prompt stash) back as one waiting in the composer. */
+export function pendingImage(image: ImageAttachment & { width: number | null; height: number | null }): PendingImage {
+  return { id: nextId++, mimeType: image.mimeType, data: image.data, width: image.width, height: image.height };
+}
+
 const accepted = (type: string): type is ImageMimeType => (IMAGE_MIME_TYPES as readonly string[]).includes(type);
 
 /** The image files in a paste or drop. */
