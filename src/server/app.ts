@@ -390,10 +390,24 @@ export function createApp(deps: AppDeps) {
     const lastPrompt = prompts[prompts.length - 1];
     const after = lastPrompt ? items.slice(items.indexOf(lastPrompt) + 1) : items;
     const answer = [...after].reverse().find((i) => i.kind === "assistant" && i.text.trim());
+    const modelled = [...items].reverse().find((i) => i.kind === "assistant" && i.model);
+    const files: string[] = [];
+    for (const item of items) {
+      if (item.kind !== "tool" || item.status === "error" || (item.category !== "edit" && item.category !== "write")) continue;
+      for (const p of item.paths) {
+        const rel = path.isAbsolute(p) ? path.relative(ws.path, p) : p;
+        if (rel.startsWith("..") || !rel) continue;
+        const at = files.indexOf(rel);
+        if (at >= 0) files.splice(at, 1);
+        files.push(rel);
+      }
+    }
     const preview: SessionPreview = {
       prompt: lastPrompt && lastPrompt.kind === "user" ? cut(lastPrompt.text.trim(), 400) : null,
       answer: answer && answer.kind === "assistant" ? cut(answer.text.trim(), 1500) : null,
       turns: prompts.length,
+      model: modelled && modelled.kind === "assistant" ? (modelled.model ?? null) : null,
+      files: files.slice(-8),
     };
     res.json(preview);
   });

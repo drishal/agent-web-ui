@@ -7116,6 +7116,90 @@ body {
   display: block;
 }
 
+/* ---- session hover card ----------------------------------------------------------------- */
+
+/* Beside the sidebar; it never takes a click (the pointer is on the row it describes). */
+.session-card {
+  position: fixed;
+  z-index: 40;
+  width: 340px;
+  padding: 10px 12px 12px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  font-size: 12px;
+  pointer-events: none;
+  animation: fade-in 0.14s ease-out;
+}
+
+.session-card-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 5px 0 8px;
+  color: var(--muted);
+}
+
+.session-card-model {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.session-card-prompt {
+  display: -webkit-box;
+  margin: 0 0 6px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bubble);
+  color: var(--text);
+}
+
+.session-card-answer {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  color: var(--text-2);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.session-card-files {
+  margin: 8px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.session-card-files li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .session-card {
+    display: none;
+  }
+}
+
 /* The browser's own clear button clashes with the theme; Escape closes both boxes instead. */
 .find-input::-webkit-search-cancel-button,
 .search-input::-webkit-search-cancel-button {

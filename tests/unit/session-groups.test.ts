@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectSession, SessionsOverview, WorkspaceInfo } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
-import { archivedCount, dateBucket, groupByProject, pinnedSessions } from "../../src/web/session-groups.js";
+import { archivedCount, dateBucket, groupByProject, pinnedSessions, plainPreview } from "../../src/web/session-groups.js";
 
 const ws = (id: string): WorkspaceInfo => ({ id, path: `/home/u/${id}`, name: id });
 const s = (id: string, workspaceId: string, harness: string, updatedAt: string, title = id): ProjectSession => ({
@@ -104,5 +104,11 @@ describe("dateBucket", () => {
     expect(dateBucket(at(2026, 8, 14), now)).toBe("September");
     expect(dateBucket(at(2025, 7, 3), now)).toBe("August 2025");
     expect(dateBucket(null, now)).toBe("Older");
+  });
+});
+
+describe("the hover card's answer", () => {
+  it("reads as plain text", () => {
+    expect(plainPreview("## Done\n\n- line 1 with **markdown**\n- see [docs](https://x)\n```ts\ncode\n```\nend")).toBe("Done\n\n• line 1 with markdown\n• see docs\n\nend");
   });
 });

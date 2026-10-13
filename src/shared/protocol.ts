@@ -593,12 +593,16 @@ export const sessionPreviewSchema = z.object({
   sessionId: z.string().min(1).max(512),
 });
 
-/** What a history picker shows beside a session: its last prompt and answer, cut short. */
+/** What a history picker or a hover card shows of a session: its last prompt and answer, cut short. */
 export interface SessionPreview {
   prompt: string | null;
   answer: string | null;
   /** User turns in the session. */
   turns: number;
+  /** The model of its last answer, where the transcript names one. */
+  model: string | null;
+  /** Files its edits and writes changed, relative to the project, newest last (at most 8). */
+  files: string[];
 }
 
 /** Branch the chat after its Nth user turn (1-based). */
