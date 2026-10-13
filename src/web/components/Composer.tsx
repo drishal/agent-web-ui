@@ -314,7 +314,7 @@ export function Composer({
         chatId={chat.chatId}
         queue={chat.queue}
         todos={chat.todos}
-        extensionStatus={chat.extensionStatus}
+        notice={chat.extensionStatus[`${chat.harnessId}:status`] ?? null}
         base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
