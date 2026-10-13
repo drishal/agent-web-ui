@@ -22,6 +22,18 @@ test("↑ and ↓ walk this chat's prompts", async ({ page }) => {
   await expect(box(page)).toHaveValue("");
 });
 
+test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await box(page).pressSequentially("1. one");
+  await page.keyboard.press("Shift+Enter");
+  await expect(box(page)).toHaveValue("1. one\n2. ");
+  await page.keyboard.press("Tab");
+  await expect(box(page)).toHaveValue("1. one\n  2. ");
+  await page.keyboard.press("Shift+Enter");
+  await expect(box(page)).toHaveValue("1. one\n");
+});
+
 test("Ctrl+F finds in the chat, opening the fold a match is in, and steps through matches", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
