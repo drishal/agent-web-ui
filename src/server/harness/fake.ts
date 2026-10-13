@@ -7,6 +7,7 @@
 //   "quiz"  ask a multiple-choice question (omp's style; "quiz described": Claude Code's)
 //   "wait"  report a provider wait on the harness's status line for 1.5 s
 //   "planned" hand a ten-step plan over for review (an ExitPlanMode call)
+//   "ratelimit" stop on a usage limit that resets in an hour
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -470,6 +471,15 @@ class FakeLiveChat implements LiveChat {
         await this.call({ name: "ExitPlanMode", args: { plan }, output: "User has approved your plan." }, signal);
       }
       if (/\brender\b|\bhtmlrender\b/i.test(text)) await this.render(signal);
+      if (/\bratelimit\b/i.test(text)) {
+        // A stop on a usage limit, worded as Claude Code words it (the reset as an epoch after "|").
+        const error = `Claude AI usage limit reached|${Math.floor(Date.now() / 1000) + 3600}`;
+        this.emit({ type: "assistant_start", model: this.model });
+        await this.pause(signal);
+        this.record({ role: "assistant", content: [], stopReason: "error", errorMessage: error });
+        this.emit({ type: "assistant_end", text: "", thinking: "", error });
+        return;
+      }
       if (/\bfail\b/i.test(text)) {
         this.emit({ type: "assistant_start", model: this.model });
         await this.pause(signal);

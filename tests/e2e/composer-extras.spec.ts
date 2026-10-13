@@ -90,6 +90,21 @@ test("a proposed plan shows as a card whose Implement sends it on", async ({ pag
   await expect(page.getByTestId("user-prompt").last()).toHaveText("Implement the plan.");
 });
 
+test("a run stopped on a usage limit says when it resets and can continue", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "ratelimit me");
+  const banner = page.getByTestId("limit-recovery");
+  await expect(banner).toContainText("Usage limit reached");
+  await expect(banner).toContainText("resets");
+  await banner.getByRole("button", { name: "Continue when it resets" }).click();
+  await expect(banner).toContainText("keep this tab open");
+  await banner.getByRole("button", { name: "Cancel" }).click();
+  await banner.getByRole("button", { name: "Continue now" }).click();
+  await expect(page.getByTestId("user-prompt").last()).toHaveText("Continue from where you stopped.");
+  await expect(banner).toBeHidden();
+});
+
 test("a queued follow-up can be edited or removed before it runs", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

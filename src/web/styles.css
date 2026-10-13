@@ -7075,6 +7075,30 @@ body {
   flex: 1;
 }
 
+.limit-recovery {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 4px 8px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--hairline));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--warn) 9%, var(--card));
+  font-size: 13px;
+  animation: rise-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.limit-recovery-icon {
+  display: inline-flex;
+  color: var(--warn);
+}
+
+.limit-recovery-text {
+  flex: 1;
+  min-width: 12em;
+}
+
 /* ---- status stack: editing a queued message --------------------------------------------- */
 
 .stack-actions {

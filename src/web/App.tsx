@@ -1213,6 +1213,7 @@ export function App() {
                   onConfig={configure}
                   onHandoff={(id, draft) => handoffChat(id, draft)}
                   onNewChat={() => void newChat(chat.workspace, { newTab: true })}
+                  limits={limits}
                 />
               </div>
             </div>
@@ -1249,6 +1250,7 @@ export function App() {
                 onConfig={configure}
                 onHandoff={(id, draft) => handoffChat(id, draft)}
                 onNewChat={() => void newChat(chat.workspace, { newTab: true })}
+                limits={limits}
               />
             </>
           ) : (

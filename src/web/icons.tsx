@@ -238,6 +238,12 @@ export const IconPlan = (p: IconProps) => (
     <path d="M2.75 4.25 3.75 5.25l1.75-2M2.75 8.75l1 1 1.75-2M7.5 4.25h6M7.5 8.75h6M7.5 12.75h6M3 12.75h1.5" />
   </Svg>
 );
+/** A usage limit: a gauge at its end. */
+export const IconGauge = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.75 11.5a5.25 5.25 0 1 1 10.5 0M8 11.5l3-3.5" />
+  </Svg>
+);
 /** Open in a new tab: a box with an arrow out of its corner. */
 export const IconNewTab = (p: IconProps) => (
   <Svg {...p}>
