@@ -32,6 +32,7 @@ import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
 import { ProjectSearch } from "./components/ProjectSearch.js";
+import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
 import { useLaunchActions } from "./launch.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
@@ -182,7 +183,47 @@ export function App() {
     const finished = new Set([...busyBefore.current].filter((id) => !busyNow.has(id) && id !== chatId));
     busyBefore.current = busyNow;
     setTabState((st) => markUnread(st, finished));
+    if (finished.size > 0 && document.hidden) chime();
   }, [overview, chatId]);
+
+  // What needs you, from another tab (attention.ts): a count in the title and on the favicon, and a chime.
+  const askingIds = useMemo(() => overview.sessions.flatMap((x) => (x.asking && x.liveChatId ? [x.liveChatId] : [])), [overview]);
+  // Chats already asking when the page loads are not news; only a new question chimes.
+  const askedBefore = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const before = askedBefore.current;
+    askedBefore.current = new Set(askingIds);
+    if (!before) return;
+    const fresh = askingIds.filter((id) => !before.has(id));
+    if (fresh.length > 0 && (document.hidden || fresh.some((id) => id !== chatId))) chime();
+  }, [askingIds]);
+  useEffect(() => primeAudio(), []);
+  const attention = attentionCount(
+    askingIds,
+    tabState.tabs.flatMap((t) => (t.unread && t.chatId ? [t.chatId] : [])),
+  );
+  const pageTitle = titleWith(attention, chat ? `${chat.title || "New chat"} · awui` : "awui");
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
+  // The favicon carries the count too: drawn from the app's icon, put back when nothing is waiting.
+  useEffect(() => {
+    const icons = [...document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')];
+    for (const link of icons) link.dataset.plain ??= link.href;
+    if (attention === 0) {
+      for (const link of icons) link.href = link.dataset.plain ?? link.href;
+      return;
+    }
+    let cancelled = false;
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--danger").trim() || "#c81e1e";
+    void badgedIcon("/icon-192.png", attention, color).then((url) => {
+      if (cancelled || !url) return;
+      for (const link of icons) link.href = url;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attention]);
 
   const changedFiles = useMemo(() => (chat ? collectChanges(chat.items, chat.workspace.path).length : 0), [chat?.items, chat?.workspace.path]);
 

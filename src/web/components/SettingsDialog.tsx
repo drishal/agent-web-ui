@@ -11,6 +11,7 @@ import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
 import { IconRefresh } from "../icons.js";
 import type { NotifyState } from "../notify.js";
+import { chime, chimeOn, setChime } from "../attention.js";
 
 const NOTIFY_NOTE: Record<NotifyState["mode"], string> = {
   off: "When a run finishes, fails, or asks for an answer.",
@@ -244,6 +245,7 @@ export function SettingsDialog({
   };
 
   const [notifyBusy, setNotifyBusy] = useState(false);
+  const [chimes, setChimes] = useState(chimeOn);
   const [notifyError, setNotifyError] = useState<string | null>(null);
   const notifyOn = notify.mode === "push" || notify.mode === "page";
   const notifyAction = async (action: () => Promise<void>) => {
@@ -300,6 +302,27 @@ export function SettingsDialog({
           {notifyError ??
             `${NOTIFY_NOTE[notify.mode]}${notify.why === "insecure" ? " Push needs HTTPS (Tailscale Serve) or this machine." : notify.why === "no-push" ? " This browser has no push service." : ""}`}
         </p>
+        <div className="settings-row">
+          <span className="settings-label" id="settings-chime">
+            Sound
+          </span>
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              aria-labelledby="settings-chime"
+              aria-pressed={chimes}
+              onClick={() => {
+                setChime(!chimes);
+                setChimes(!chimes);
+                if (!chimes) chime();
+              }}
+            >
+              {chimes ? "On" : "Off"}
+            </button>
+          </div>
+        </div>
+        <p className="settings-note">A chime, in this browser, when a chat finishes out of sight or asks for an answer.</p>
       </section>
 
       <section className="settings-section" aria-labelledby="settings-server">
