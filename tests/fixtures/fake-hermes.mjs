@@ -25,6 +25,7 @@ let runtimeId = "4242";
 let title = "Fake Hermes session";
 let multimodel = false;
 let model = "fake-model";
+let provider = "fake";
 let effort = "medium";
 let aborted = false;
 let turns = 0;
@@ -56,7 +57,7 @@ function emitUsage() {
 async function runPrompt(text) {
   aborted = false;
   const sessionId = runtimeId;
-  event("session.info", { model, provider: "fake", reasoning_effort: effort, running: true, title, stored_session_id: storedId });
+  event("session.info", { model, provider, reasoning_effort: effort, running: true, title, stored_session_id: storedId });
   event("message.start", undefined, sessionId);
   event("thinking.delta", { text: "(´･_･`) musing..." }, sessionId);
   if (/\bwait\b/.test(text)) {
@@ -93,7 +94,8 @@ async function runPrompt(text) {
     event("tool.complete", { tool_id: "t2", name: "edit", result: { content: [{ type: "text", text: "Edited src/app.ts (+1 -1)" }] } });
   }
   let body = "";
-  const chunks = /\bslow\b/.test(text) ? ["a", "b", "c", "d", "e"] : [`hermes says ${text}`];
+  // "whoami": say which provider the request went to (a model switch must move it).
+  const chunks = /\bslow\b/.test(text) ? ["a", "b", "c", "d", "e"] : /\bwhoami\b/.test(text) ? [`on ${provider} as ${model}`] : [`hermes says ${text}`];
   for (const chunk of chunks) {
     if (aborted) break;
     await new Promise((r) => setTimeout(r, 5));
@@ -110,6 +112,8 @@ async function runPrompt(text) {
     // A gateway configured with several providers: model arrives already qualified
     // and the catalog lists two providers under the same slug (local + remote custom).
     multimodel = true;
+    provider = "custom";
+    model = "local/opencode-go-v4-flash";
     event("session.info", { model: "local/opencode-go-v4-flash", provider: "custom", reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
     const now = Date.now() / 1000;
     messages.push({ role: "user", text, timestamp: now, row_id: ++rowIds });
@@ -119,7 +123,7 @@ async function runPrompt(text) {
   turns += 1;
   const failed = /\bfail\b/.test(text);
   event("message.complete", { text: body, status: aborted ? "interrupted" : failed ? "error" : "complete", ...(failed ? { error: "fake failure" } : {}), reasoning: "hmm ", usage: emitUsage() }, sessionId);
-  event("session.info", { model, provider: "fake", reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
+  event("session.info", { model, provider, reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
   const now = Date.now() / 1000;
   messages.push({ role: "user", text, timestamp: now, row_id: ++rowIds });
   // Stored tool rows: the shape session.history returns (no args here, so `context` names the target).
@@ -217,13 +221,17 @@ rl.on("line", (line) => {
       return ok(id, { attached: true, count: 1, name: params.filename ?? "pasted.png" });
     case "config.set":
       if (params.key === "model") {
-        model = String(params.value).split("/").pop();
-        event("session.info", { model, provider: String(params.value).split("/")[0], reasoning_effort: effort, running: false, stored_session_id: storedId, title });
+        // As the real gateway: `<model> --provider <slug>` switches both; without
+        // --provider the provider stays and the whole value is the model's name.
+        const [, name, slug] = /^(\S+)(?:\s+--provider\s+(\S+))?$/.exec(String(params.value).trim()) ?? [];
+        model = name ?? String(params.value);
+        if (slug) provider = slug;
+        event("session.info", { model, provider, reasoning_effort: effort, running: false, stored_session_id: storedId, title });
         return ok(id, { key: "model", value: params.value });
       }
       if (params.key === "reasoning") {
         effort = String(params.value);
-        event("session.info", { model, provider: "fake", reasoning_effort: effort, running: false, stored_session_id: storedId, title });
+        event("session.info", { model, provider, reasoning_effort: effort, running: false, stored_session_id: storedId, title });
         return ok(id, { key: "reasoning", value: params.value });
       }
       return fail(id, 4002, `unknown config key: ${params.key}`);
@@ -231,8 +239,8 @@ rl.on("line", (line) => {
       return ok(id, multimodel
         ? {
             providers: [
-              { slug: "local", name: "Local", models: ["opencode-go-v4-flash", "glm-local"], capabilities: { "opencode-go-v4-flash": { reasoning: true } }, authenticated: true },
-              { slug: "remote", name: "Remote", models: ["opencode-go-v4-flash", "opus-4-1"], capabilities: {}, authenticated: true },
+              { slug: "local", name: "Local", models: ["opencode-go-v4-flash", "glm-local"], capabilities: { "opencode-go-v4-flash": { reasoning: true } }, authenticated: true, is_user_defined: true },
+              { slug: "remote", name: "Remote", models: ["opencode-go-v4-flash", "opus-4-1"], capabilities: {}, authenticated: true, is_user_defined: true },
             ],
             model: "local/opencode-go-v4-flash",
           }
