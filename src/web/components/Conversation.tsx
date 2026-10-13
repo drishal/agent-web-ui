@@ -3,7 +3,7 @@
 //    fold, 24px disclosure rows, the I/O card, the turn rail;
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
-import { Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration } from "../turns.js";
@@ -21,6 +21,14 @@ import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 
 const PIN_DISTANCE_PX = 96;
+/**
+ * A chat opens at its end: the last few turns are drawn at once, and the older
+ * ones go in above them a batch at a time (a transition, so typing and clicks
+ * win), out of sight while the view sits at the bottom. A long session then
+ * shows in a frame instead of after every turn's Markdown has been laid out.
+ */
+const FIRST_TURNS = 6;
+const MORE_TURNS = 12;
 const LONG_PROMPT_CHARS = 600;
 const LONG_PROMPT_LINES = 8;
 
@@ -776,6 +784,35 @@ export function Conversation({
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
 
+  // Turns before `from` are not drawn yet; a new chat starts near its end.
+  const [drawn, setDrawn] = useState({ chatId: "", from: 0 });
+  let from = drawn.from;
+  if (drawn.chatId !== chatId) {
+    from = Math.max(0, turns.length - FIRST_TURNS);
+    setDrawn({ chatId, from });
+  }
+  from = Math.min(from, Math.max(0, turns.length - FIRST_TURNS));
+  useEffect(() => {
+    if (from <= 0) return;
+    const frame = window.requestAnimationFrame(() => startTransition(() => setDrawn((d) => (d.chatId === chatId ? { chatId, from: Math.max(0, d.from - MORE_TURNS) } : d))));
+    return () => window.cancelAnimationFrame(frame);
+  }, [from, chatId]);
+  // The rail can aim at a turn not drawn yet: draw the rest, then go there.
+  const revealing = useRef<string | null>(null);
+  const reveal = useCallback(
+    (id: string) => {
+      revealing.current = id;
+      setDrawn({ chatId, from: 0 });
+    },
+    [chatId],
+  );
+  useLayoutEffect(() => {
+    const id = revealing.current;
+    if (from > 0 || !id) return;
+    revealing.current = null;
+    document.getElementById(`turn-${id}`)?.scrollIntoView({ block: "start" });
+  }, [from]);
+
   const onToggle = useCallback((id: string) => {
     setOverrides((prev) => {
       const turn = turnsRef.current.find((t) => t.id === id);
@@ -861,6 +898,22 @@ export function Conversation({
   // Smooth scroll only when a new turn appears (the chat's "alive" beat);
   // token deltas and window resizes stay instant.
   const turnCountRef = useRef(0);
+
+  // Another chat: it opens at its end, whatever this one was scrolled to, and settles in.
+  const shownChat = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (shownChat.current === chatId) return;
+    shownChat.current = chatId;
+    pinned.current = true;
+    jumpingRef.current = false;
+    turnCountRef.current = turnsRef.current.length;
+    setShowJump(false);
+    const thread = scroller.current?.firstElementChild;
+    if (thread && !reducedMotion()) {
+      thread.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+    }
+  }, [chatId]);
+
   useLayoutEffect(() => {
     if (pinned.current) {
       const el = scroller.current;
@@ -916,7 +969,7 @@ export function Conversation({
         <ChatIdContext.Provider value={chatId}>
           <ArrivalsContext.Provider value={arrivals}>
             <div className="thread">
-              {turns.map((turn) => (
+              {(from > 0 ? turns.slice(from) : turns).map((turn) => (
                 <Fragment key={turn.id}>
                   {switches.has(turn.id) ? (
                     <div className="model-switch" role="separator" data-testid="model-switch">
@@ -943,7 +996,7 @@ export function Conversation({
         </ChatIdContext.Provider>
       </div>
       <QuoteButton scope={scroller} />
-      <TurnRail turns={turns} scroller={scroller} />
+      <TurnRail turns={turns} scroller={scroller} onReveal={reveal} />
       {showJump ? (
         <button type="button" className="jump" onClick={jump}>
           Jump to latest <IconChevronDown size={14} />

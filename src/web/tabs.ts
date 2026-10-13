@@ -52,19 +52,28 @@ export function findTab(state: TabState, chat: { chatId: string | null; sessionI
  * after it with `newTab` (or when nothing is open yet).
  */
 export function placeChat(state: TabState, snapshot: ChatSnapshot, { newTab = false }: { newTab?: boolean } = {}): TabState {
-  const existing = findTab(state, snapshot);
+  const { key: _key, ...tab } = fromSnapshot(snapshot, "");
+  return placeTab(state, tab, { newTab });
+}
+
+/**
+ * placeChat for a tab with no snapshot yet: a session being opened shows in its
+ * tab at once, and placeChat fills the same tab in (it finds it by session or chat).
+ */
+export function placeTab(state: TabState, tab: Omit<Tab, "key">, { newTab = false }: { newTab?: boolean } = {}): TabState {
+  const existing = findTab(state, tab);
   if (existing >= 0) {
     const tabs = state.tabs.slice();
-    tabs[existing] = { ...fromSnapshot(snapshot, (tabs[existing] as Tab).key) };
+    tabs[existing] = { ...tab, key: (tabs[existing] as Tab).key };
     return { tabs, active: existing };
   }
   if (newTab || state.active < 0) {
     const at = state.active + 1;
-    const tabs = [...state.tabs.slice(0, at), fromSnapshot(snapshot, newKey()), ...state.tabs.slice(at)];
+    const tabs = [...state.tabs.slice(0, at), { ...tab, key: newKey() }, ...state.tabs.slice(at)];
     return { tabs, active: at };
   }
   const tabs = state.tabs.slice();
-  tabs[state.active] = fromSnapshot(snapshot, (tabs[state.active] as Tab).key);
+  tabs[state.active] = { ...tab, key: (tabs[state.active] as Tab).key };
   return { tabs, active: state.active };
 }
 

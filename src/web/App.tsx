@@ -30,6 +30,7 @@ import { Sidebar, type MarkChange } from "./components/Sidebar.js";
 import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
+import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
 import { useEdgeSwipe } from "./gestures.js";
 import { useLaunchActions } from "./launch.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
@@ -41,7 +42,7 @@ import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconEdit, IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
-import { closeTab, findTab, loadTabs, markUnread, placeChat, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
+import { closeTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
@@ -193,6 +194,67 @@ export function App() {
   const tabStatus = (tab: Tab) =>
     chat && tab.chatId === chat.chatId ? chat.status : (overview.sessions.find((x) => x.liveChatId !== undefined && x.liveChatId === tab.chatId)?.status ?? null);
 
+  // ---- opening a chat at once -----------------------------------------------------------
+
+  // A click on a session answers in the same frame: its tab, title, and a loading
+  // screen show while the snapshot comes, and the screen fades once the chat has drawn.
+  // Each open takes a number, so a slow earlier one landing after a later click is dropped.
+  const nav = useRef(0);
+  const [splash, setSplash] = useState<{ target: SplashTarget; leaving: boolean } | null>(null);
+  const splashFor = (tab: Pick<Tab, "title" | "harnessId" | "workspacePath">): SplashTarget => ({
+    title: tab.title || "Chat",
+    harnessId: tab.harnessId,
+    harnessName: boot?.harnesses.find((h) => h.id === tab.harnessId)?.displayName ?? tab.harnessId,
+    project: tab.harnessId === "awui" ? null : (tab.workspacePath.split("/").filter(Boolean).pop() ?? null),
+  });
+  /** Start an open: later ones win. With a target, its loading screen shows until showChat. */
+  const beginOpen = (target: SplashTarget | null): number => {
+    nav.current += 1;
+    setSplash(target ? { target, leaving: false } : null);
+    return nav.current;
+  };
+  useEffect(() => {
+    if (!splash?.leaving) return;
+    const t = window.setTimeout(() => setSplash(null), 260);
+    return () => window.clearTimeout(t);
+  }, [splash]);
+
+  /** What opening a session needs: its project (registered with the server again if need be) and its chat, live or resumed from the file. */
+  const fetchSession = async (s: ProjectSession, target: WorkspaceInfo): Promise<{ ws: WorkspaceInfo; snapshot: ChatSnapshot }> => {
+    const ws = target.id === workspace?.id ? Promise.resolve(target) : api<WorkspaceInfo>("/api/workspaces/open", { body: { path: target.path } });
+    if (s.liveChatId) {
+      const [opened, snapshot] = await Promise.all([ws, api<ChatSnapshot>(`/api/chats/${s.liveChatId}`)]);
+      return { ws: opened, snapshot };
+    }
+    const opened = await ws;
+    return { ws: opened, snapshot: await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: opened.id, sessionId: s.id } }) };
+  };
+
+  /**
+   * Opens started before the click: on a mouse press (the click lands ~100 ms
+   * later), and on hover for a live chat, whose read has no side effects. A
+   * resume starts the harness, so it waits for a press. Used once, or dropped.
+   */
+  const early = useRef(new Map<string, { at: number; result: ReturnType<typeof fetchSession> }>());
+  const EARLY_MS = 10_000;
+  const warmSession = (s: ProjectSession, why: "hover" | "press") => {
+    if (why === "hover" && !s.liveChatId) return;
+    if (findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id }) >= 0) return;
+    const known = early.current.get(s.id);
+    if (known && Date.now() - known.at < EARLY_MS) return;
+    const target = overview.workspaces.find((w) => w.id === s.workspaceId);
+    if (!target) return;
+    const result = fetchSession(s, target);
+    // The click reports a failure; one nobody clicks is dropped quietly.
+    result.catch(() => undefined);
+    early.current.set(s.id, { at: Date.now(), result });
+  };
+  const takeEarly = (s: ProjectSession) => {
+    const known = early.current.get(s.id);
+    early.current.delete(s.id);
+    return known && Date.now() - known.at < EARLY_MS ? known.result : null;
+  };
+
   // ---- actions -------------------------------------------------------------------------
 
   const chooseHarness = (id: string) => {
@@ -225,6 +287,7 @@ export function App() {
     setTabState((st) => placeChat(st, snapshot, { newTab }));
     setChat(snapshot);
     setBanner(null);
+    setSplash((sp) => (sp ? { ...sp, leaving: true } : sp));
     if (!keepDrawer) setDrawerOpen(false);
   };
 
@@ -243,13 +306,17 @@ export function App() {
       target = boot.home ? ({ id: "__home", path: boot.home, name: "home" } as WorkspaceInfo) : target;
     }
     if (!target || !harnessId) return;
+    const token = beginOpen(null);
     setOpening(true);
     setBanner(null);
     try {
       const ws = await enterWorkspace(target);
-      showChat(await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } }), { newTab });
+      const snapshot = await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } });
+      if (token !== nav.current) return;
+      showChat(snapshot, { newTab });
       void refreshSessions();
     } catch (e) {
+      if (token !== nav.current) return;
       fail(e);
       setDrawerOpen(false);
     } finally {
@@ -266,12 +333,14 @@ export function App() {
    * holds the chat (a restart, or the idle reaper). A tab with neither is dropped.
    */
   const loadTab = async (tab: Tab) => {
+    const token = beginOpen(splashFor(tab));
     setOpening(true);
     setBanner(null);
     try {
       if (tab.chatId) {
         try {
           const live = await api<ChatSnapshot>(`/api/chats/${tab.chatId}`);
+          if (token !== nav.current) return;
           setWorkspace(live.workspace);
           showChat(live, { keepDrawer: true });
           return;
@@ -279,7 +348,9 @@ export function App() {
           if (!(e instanceof ApiError && e.status === 404)) throw e;
         }
       }
+      if (token !== nav.current) return;
       if (!tab.sessionId) {
+        setSplash(null);
         setTabState((st) => {
           const i = st.tabs.findIndex((t) => t.key === tab.key);
           return i < 0 ? st : closeTab(st, i);
@@ -287,12 +358,16 @@ export function App() {
         return;
       }
       const ws = await api<WorkspaceInfo>("/api/workspaces/open", { body: { path: tab.workspacePath } });
+      const snapshot = await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } });
+      if (token !== nav.current) return;
       setWorkspace(ws);
-      showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } }), { keepDrawer: true });
+      showChat(snapshot, { keepDrawer: true });
     } catch (e) {
+      if (token !== nav.current) return;
+      setSplash(null);
       fail(e);
     } finally {
-      setOpening(false);
+      if (token === nav.current) setOpening(false);
     }
   };
 
@@ -304,6 +379,8 @@ export function App() {
     setTabState((st) => ({ active: index, tabs: st.tabs.map((t, i) => (i === index && t.unread ? { ...t, unread: undefined } : t)) }));
     const cached = tabCache.current.get(tab.key);
     if (cached && cached.chatId === tab.chatId && cached.status !== "disposed") {
+      beginOpen(null);
+      setOpening(false);
       setWorkspace(cached.workspace);
       setChat(cached);
       setBanner(null);
@@ -344,6 +421,7 @@ export function App() {
     const next = after.tabs[after.active];
     if (next) activateTab(after.active);
     else {
+      beginOpen(null);
       setChat(null);
       setHash(null);
     }
@@ -407,18 +485,37 @@ export function App() {
     }
     const target = overview.workspaces.find((w) => w.id === s.workspaceId);
     if (!target) return;
+    // Its tab and loading screen first; the snapshot fills the same tab in.
+    const tab = { chatId: s.liveChatId ?? null, sessionId: s.id, harnessId: s.harnessId, workspacePath: target.path, title: s.title };
+    const token = beginOpen(splashFor(tab));
+    rememberShown();
+    const before = tabsRef.current;
+    const placed = placeTab(before, tab, { newTab });
+    tabsRef.current = placed;
+    setTabState(placed);
+    setDrawerOpen(false);
     setOpening(true);
     setBanner(null);
     try {
-      const ws = await enterWorkspace(target);
-      if (s.liveChatId) showChat(await api<ChatSnapshot>(`/api/chats/${s.liveChatId}`), { newTab });
-      else showChat(await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }), { newTab });
+      const { ws, snapshot } = await (takeEarly(s) ?? fetchSession(s, target));
+      if (token !== nav.current) return;
+      if (ws.id !== workspace?.id) {
+        setWorkspace(ws);
+        setRecent(rememberWorkspace(ws.path));
+      }
+      showChat(snapshot);
     } catch (e) {
+      if (token !== nav.current) return;
+      setSplash(null);
+      // The tab goes back to what it showed.
+      if (tabsRef.current === placed) {
+        tabsRef.current = before;
+        setTabState(before);
+      }
       fail(e);
-      setDrawerOpen(false);
       void refreshSessions();
     } finally {
-      setOpening(false);
+      if (token === nav.current) setOpening(false);
     }
   };
 
@@ -430,11 +527,14 @@ export function App() {
       activateTab(tab);
       return;
     }
+    const token = beginOpen(null);
     try {
       const live = await api<ChatSnapshot>(`/api/chats/${note.chatId}`);
+      if (token !== nav.current) return;
       setWorkspace(live.workspace);
       showChat(live, { newTab: true });
     } catch (e) {
+      if (token !== nav.current) return;
       const session = note.sessionId ? overview.sessions.find((x) => x.id === note.sessionId) : undefined;
       if (session) void openSession(session, { newTab: true });
       else fail(e);
@@ -821,6 +921,8 @@ export function App() {
           : null;
   const chatHarness = chat ? boot.harnesses.find((h) => h.id === chat.harnessId) : undefined;
   const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
+  /** The chat being opened names the header until it is shown. */
+  const heading = splash && !splash.leaving ? splash.target : null;
 
   return (
     <div
@@ -876,10 +978,12 @@ export function App() {
         sessionsLoading={sessionsLoading}
         query={query}
         onQuery={setQuery}
-        activeSessionId={chat?.sessionId ?? null}
-        activeChatId={chatId}
-        activeStatus={chat?.status ?? null}
+        // While a chat opens, its row is the current one already (its tab is in place).
+        activeSessionId={heading ? (tabState.tabs[tabState.active]?.sessionId ?? null) : (chat?.sessionId ?? null)}
+        activeChatId={heading ? (tabState.tabs[tabState.active]?.chatId ?? null) : chatId}
+        activeStatus={heading ? null : (chat?.status ?? null)}
         onOpenSession={(s, newTab) => void openSession(s, { newTab })}
+        onWarmSession={warmSession}
         onMarkSession={(s, change) => void markSessionAs(s, change)}
         onRefresh={() => void refreshSessions()}
         onSettings={() => {
@@ -932,22 +1036,37 @@ export function App() {
             </button>
           ) : null}
           <div className="chat-title">
-            <h1>{chat ? chat.title || "New chat" : harnessId === "awui" ? "awui" : workspace ? workspace.name : "awui"}</h1>
-            {chat ? (
-              <div className="chat-sub">
-                <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>
-                  {chatHarness?.displayName ?? chat.harnessId}
-                </span>
-                <span className={`status status-${chat.status}`} data-testid="chat-status">
-                  {STATUS_LABEL[chat.status] ?? chat.status}
-                </span>
-                {chat.harnessId !== "awui" ? (
-                  <span className="chat-path" title={chat.workspace.path}>
-                    {chat.workspace.name}
+            {heading ? (
+              <>
+                <h1>{heading.title}</h1>
+                <div className="chat-sub">
+                  <span className="badge badge-harness" style={harnessColor(heading.harnessId)}>
+                    {heading.harnessName}
                   </span>
+                  <span className="status status-starting">Opening</span>
+                  {heading.project ? <span className="chat-path">{heading.project}</span> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <h1>{chat ? chat.title || "New chat" : harnessId === "awui" ? "awui" : workspace ? workspace.name : "awui"}</h1>
+                {chat ? (
+                  <div className="chat-sub">
+                    <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>
+                      {chatHarness?.displayName ?? chat.harnessId}
+                    </span>
+                    <span className={`status status-${chat.status}`} data-testid="chat-status">
+                      {STATUS_LABEL[chat.status] ?? chat.status}
+                    </span>
+                    {chat.harnessId !== "awui" ? (
+                      <span className="chat-path" title={chat.workspace.path}>
+                        {chat.workspace.name}
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
-            ) : null}
+              </>
+            )}
           </div>
           {chat && changedFiles > 0 ? (
             <button type="button" className="btn btn-small review-open" title="Review the changes and comment on them" onClick={() => setReviewOpen(true)}>
@@ -1040,38 +1159,73 @@ export function App() {
           </div>
         ) : null}
 
-        {chat && !hasPrompt ? (
-          <div className="hero">
-            <div className="hero-inner">
-              {chat.items.length > 0 ? (
-                <div className="hero-notices">
-                  {chat.items.map((item) =>
-                    item.kind === "notice" ? (
-                      <div key={item.id} className={`notice-row notice-${item.level}`}>
-                        <span className="notice-text">{item.text}</span>
-                      </div>
-                    ) : null,
+        <div className="chat-body">
+          {chat && !hasPrompt ? (
+            <div className="hero">
+              <div className="hero-inner">
+                {chat.items.length > 0 ? (
+                  <div className="hero-notices">
+                    {chat.items.map((item) =>
+                      item.kind === "notice" ? (
+                        <div key={item.id} className={`notice-row notice-${item.level}`}>
+                          <span className="notice-text">{item.text}</span>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                ) : null}
+                <h2 className="hero-title">
+                  {chat.harnessId === "awui" ? (
+                    <>Ask anything</>
+                  ) : (
+                    <>
+                      What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
+                    </>
                   )}
-                </div>
-              ) : null}
-              <h2 className="hero-title">
-                {chat.harnessId === "awui" ? (
-                  <>Ask anything</>
-                ) : (
-                  <>
-                    What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
-                  </>
-                )}
-              </h2>
-              <p className="hero-sub muted">{chat.harnessId === "awui" ? "It reads, searches, and computes — it never edits your files." : "It runs with its normal tools, as you, in this folder."}</p>
+                </h2>
+                <p className="hero-sub muted">{chat.harnessId === "awui" ? "It reads, searches, and computes — it never edits your files." : "It runs with its normal tools, as you, in this folder."}</p>
+                {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
+                <Composer
+                  key={chat.chatId}
+                  hero
+                  chat={chat}
+                  harnesses={boot.harnesses}
+                  maxChars={boot.limits.maxMessageChars}
+                  placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
+                  onSend={send}
+                  onRefreshModels={refreshModels}
+                  onStop={stop}
+                  onAnswer={answer}
+                  onConfig={configure}
+                  onHandoff={(id, draft) => handoffChat(id, draft)}
+                  onNewChat={() => void newChat(chat.workspace, { newTab: true })}
+                />
+              </div>
+            </div>
+          ) : chat ? (
+            <>
+              <Conversation
+                chatId={chat.chatId}
+                items={chat.items}
+                status={chat.status}
+                workspace={chat.workspace.path}
+                canFork={chat.capabilities.supportsFork}
+                onFork={forkChat}
+                models={chat.config.models}
+                checkpoints={chat.checkpoints ?? []}
+                onRestore={setRestoreTurn}
+                promptActions={{
+                  inPlace: chat.capabilities.supportsRewind,
+                  retry: (through, item) => void rerun(through, item, item.text, false),
+                  edit: (through, item, text, undoFiles) => rerun(through, item, text, undoFiles),
+                }}
+              />
               {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
               <Composer
                 key={chat.chatId}
-                hero
                 chat={chat}
                 harnesses={boot.harnesses}
                 maxChars={boot.limits.maxMessageChars}
-                placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
                 onSend={send}
                 onRefreshModels={refreshModels}
                 onStop={stop}
@@ -1080,71 +1234,39 @@ export function App() {
                 onHandoff={(id, draft) => handoffChat(id, draft)}
                 onNewChat={() => void newChat(chat.workspace, { newTab: true })}
               />
+            </>
+          ) : (
+            <div className="empty empty-main">
+              {!workspace && harnessId !== "awui" ? (
+                <>
+                  <h2>Choose a project</h2>
+                  <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
+                  <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+                    Choose folder
+                  </button>
+                </>
+              ) : available.length === 0 ? (
+                <>
+                  <h2>No harness installed</h2>
+                  <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
+                </>
+              ) : (
+                <>
+                  <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
+                  <p className="muted">Start a new chat or resume one from the list.</p>
+                  <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
+                    New {currentHarness?.displayName ?? ""} chat
+                  </button>
+                  {newChatDisabled && newChatDisabled !== "Opening…" ? <p className="muted">{newChatDisabled}</p> : null}
+                  <button type="button" className="btn btn-ghost drawer-open-inline" onClick={() => setDrawerOpen(true)}>
+                    Show sessions
+                  </button>
+                </>
+              )}
             </div>
-          </div>
-        ) : chat ? (
-          <>
-            <Conversation
-              chatId={chat.chatId}
-              items={chat.items}
-              status={chat.status}
-              workspace={chat.workspace.path}
-              canFork={chat.capabilities.supportsFork}
-              onFork={forkChat}
-              models={chat.config.models}
-              checkpoints={chat.checkpoints ?? []}
-              onRestore={setRestoreTurn}
-              promptActions={{
-                inPlace: chat.capabilities.supportsRewind,
-                retry: (through, item) => void rerun(through, item, item.text, false),
-                edit: (through, item, text, undoFiles) => rerun(through, item, text, undoFiles),
-              }}
-            />
-            {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
-            <Composer
-              key={chat.chatId}
-              chat={chat}
-              harnesses={boot.harnesses}
-              maxChars={boot.limits.maxMessageChars}
-              onSend={send}
-              onRefreshModels={refreshModels}
-              onStop={stop}
-              onAnswer={answer}
-              onConfig={configure}
-              onHandoff={(id, draft) => handoffChat(id, draft)}
-              onNewChat={() => void newChat(chat.workspace, { newTab: true })}
-            />
-          </>
-        ) : (
-          <div className="empty empty-main">
-            {!workspace && harnessId !== "awui" ? (
-              <>
-                <h2>Choose a project</h2>
-                <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
-                <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-                  Choose folder
-                </button>
-              </>
-            ) : available.length === 0 ? (
-              <>
-                <h2>No harness installed</h2>
-                <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
-              </>
-            ) : (
-              <>
-                <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
-                <p className="muted">Start a new chat or resume one from the list.</p>
-                <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
-                  New {currentHarness?.displayName ?? ""} chat
-                </button>
-                {newChatDisabled && newChatDisabled !== "Opening…" ? <p className="muted">{newChatDisabled}</p> : null}
-                <button type="button" className="btn btn-ghost drawer-open-inline" onClick={() => setDrawerOpen(true)}>
-                  Show sessions
-                </button>
-              </>
-            )}
-          </div>
-        )}
+          )}
+          {splash ? <SwitchSplash target={splash.target} leaving={splash.leaving} /> : null}
+        </div>
       </main>
       {toast ? (
         <div className="toast" role="status" data-testid="toast">
