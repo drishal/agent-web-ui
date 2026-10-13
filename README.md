@@ -429,7 +429,7 @@ git pull && npm ci && npm run build && systemctl --user restart awui   # update
 ## Testing
 
 - `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing), and the **Claude Code adapter against a scripted `claude`** (`tests/fixtures/fake-claude.mjs`, frames as recorded from Claude Code 2.1.289: streaming, tools, approvals, AskUserQuestion, steer and follow-up, stop, todos, model and effort, context, rename, resume from the file, fork, compaction).
-- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `config.yml` (kept across restarts, revoked by a new password), a run that carries on after the browser closes and finishes in front of a second (phone-sized) browser, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), images (paste, drop, picker, remove, vision warning, send), the working spinner, and 390×844 and 320 px layouts.
+- `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `config.yml` (kept across restarts, revoked by a new password), a run that carries on after the browser closes and finishes in front of a second (phone-sized) browser, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), images (paste, drop, picker, remove, vision warning, send), the working spinner, prompt recall, lists, the stash, find in chat, plan cards, usage-limit stops, queue edits, search in project, the hover card, prompt links, the title's count, and 390×844 and 320 px layouts.
 - `npm run smoke` runs the real Pi, omp, Hermes, and Claude Code: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Claude Code takes `SMOKE_CLAUDE_MODEL` instead (e.g. `haiku`). Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
@@ -440,7 +440,7 @@ nix eval --raw ~/dotfiles/NixOS#nixosConfigurations.$(hostname).pkgs.playwright-
 
 ## Design credits
 
-The interface borrows patterns, not code, from three MIT-licensed projects:
+The interface borrows patterns, not code, from four MIT-licensed projects:
 
 - **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** (© 2026 DeepSeek):
   - plain answers with user bubbles;
@@ -462,6 +462,12 @@ The interface borrows patterns, not code, from three MIT-licensed projects:
   - chat text size separate from page zoom;
   - the bottom status bar;
   - an animated loader instead of "Loading…".
+- **[T3 Code](https://github.com/pingdotgg/t3code)** (© 2026 T3 Tools Inc.):
+  - the compact-before-send chip and the *Needs you* inbox;
+  - ↑ prompt recall, list continuation, and the prompt stash in the composer;
+  - find in chat and search in project;
+  - the proposed-plan card, the usage-limit recovery banner, and editing queued messages;
+  - the session hover card, prompt links, and the count of what needs you in the title.
 
 ## Not included (by design)
 

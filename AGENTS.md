@@ -197,7 +197,8 @@ if every test passes.
   kind), `subagents` (a parallel pi-subagents run with live progress and
   transcripts), `recall`, `todo`, `bloat`, `slow` (many small chunks, to act
   mid-run), `fail`, `planned` (an ExitPlanMode plan), `ratelimit` (a stop on a
-  usage limit). Add a word there when a feature needs a new scenario,
+  usage limit), `wait` (a provider wait on the harness's status line). Add a
+  word there when a feature needs a new scenario,
   rather than mocking deeper.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
   `fake-claude.mjs`) speak each harness's real wire protocol. Adapter changes
