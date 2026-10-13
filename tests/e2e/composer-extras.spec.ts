@@ -54,3 +54,24 @@ test("a queued follow-up can be edited or removed before it runs", async ({ page
   await expect(rows).toHaveCount(1);
   await expect(page.getByTestId("user-prompt").last()).toHaveText("queued one, edited", { timeout: 20_000 });
 });
+
+test("search in project finds a line and puts it into the message as @path:line", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const root = await page.locator(".chat-path").getAttribute("title");
+  expect(root).toBeTruthy();
+  writeFileSync(path.join(root as string, "search-me.txt"), "nothing\nthe zebra-quartz line\n");
+  await page.keyboard.press("Control+Shift+KeyF");
+  const dialog = page.getByRole("dialog", { name: "Search in project" });
+  await dialog.getByRole("searchbox", { name: "Search the project's files" }).fill("zebra-quartz");
+  await expect(dialog.getByRole("option")).toHaveCount(1);
+  await expect(dialog.getByRole("option")).toContainText("the zebra-quartz line");
+  await dialog.getByRole("searchbox").press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(box(page)).toHaveValue("@search-me.txt:2");
+  // One Escape closes it, even with a query typed.
+  await page.keyboard.press("Control+Shift+KeyF");
+  await dialog.getByRole("searchbox").fill("zebra");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
