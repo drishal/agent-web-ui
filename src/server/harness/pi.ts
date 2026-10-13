@@ -426,6 +426,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsHandoff: true,
     supportsRewind: rewindExtension() !== null,
     supportsHtmlRender: renderHtmlExtension() !== null,
+    supportsQueueEdit: true,
   };
   get capabilities(): HarnessCapabilities {
     return this.capabilitySet;
@@ -906,6 +907,14 @@ class PiLiveChat implements LiveChat {
       message: text,
       ...(images?.length ? { images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : {}),
     });
+  }
+
+  /** pi clears its queues in one call; the new ones go back in order. */
+  async replaceQueue(queue: QueueState): Promise<void> {
+    const rpc = this.live;
+    await rpc.command("clear_queue");
+    for (const message of queue.steering) await rpc.command("steer", { message });
+    for (const message of queue.followUp) await rpc.command("follow_up", { message });
   }
 
   async abort(): Promise<void> {

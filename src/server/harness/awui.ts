@@ -52,6 +52,7 @@ export class AwuiAdapter extends PiAdapter {
     supportsRewind: false,
     // Artifacts belong in a chat surface; render_html publishes display-only pages.
     supportsHtmlRender: renderHtmlExtension() !== null,
+    supportsQueueEdit: true,
   };
   // A distinct accent so the harness menu tells it apart from Pi.
   protected override accentToken = "thinking";

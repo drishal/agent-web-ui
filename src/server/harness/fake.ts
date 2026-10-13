@@ -98,6 +98,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsHandoff: true,
       supportsRewind: true,
       supportsHtmlRender: true,
+      supportsQueueEdit: true,
       ...options.capabilities,
     };
   }
@@ -337,6 +338,12 @@ class FakeLiveChat implements LiveChat {
   async followUp(text: string): Promise<void> {
     if (!this.running) throw new Error("Nothing to follow");
     this.followUps.push(text);
+    this.emitQueue();
+  }
+
+  async replaceQueue(queue: { steering: string[]; followUp: string[] }): Promise<void> {
+    this.steering = [...queue.steering];
+    this.followUps = [...queue.followUp];
     this.emitQueue();
   }
 

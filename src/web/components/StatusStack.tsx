@@ -4,10 +4,13 @@
 // thinking: Hermes's "Provider temporarily unavailable — retrying in 69s", so
 // a long "Working" has a reason. Pi extensions' status lines are not shown:
 // they are written for pi's terminal footer (ANSI colours, terse labels) and
-// read as noise here. Hiding is per chat.
+// read as noise here. Hiding is per chat. Where the harness can take its queue
+// back, a queued message can be edited or removed before it runs (T3 Code's);
+// an edit whose message ran meanwhile goes to the composer instead of being lost.
 import { useEffect, useState } from "react";
 import type { QueueState, TodoItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCircle, IconClock, IconQueue, IconSteer, Spinner } from "../icons.js";
+import { addToDraft } from "../draft-bus.js";
+import { IconCheck, IconChevronDown, IconCircle, IconClock, IconEdit, IconQueue, IconSteer, IconX, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
 
 function TodoIcon({ status }: { status: string }) {
@@ -45,11 +48,14 @@ export function StatusStack({
   queue,
   todos,
   notice,
+  onEditQueue,
   base,
 }: {
   chatId: string;
   /** The harness's own status line (`<harness>:status`), when it has one. */
   notice?: string | null;
+  /** Put a changed queue in place of the harness's; given only where it can take its queue back. */
+  onEditQueue?: (queue: QueueState) => Promise<boolean>;
   queue: QueueState;
   todos: TodoItem[];
   /** Always shown under the rest, even when it is hidden (the git row). */
@@ -58,8 +64,36 @@ export function StatusStack({
   const key = `stack.${chatId}`;
   const [hidden, setHidden] = useState(() => load<boolean>(key, false));
   useEffect(() => setHidden(load<boolean>(key, false)), [key]);
-  const queued = [...queue.steering.map((t) => ({ t, k: "Steering" })), ...queue.followUp.map((t) => ({ t, k: "Follow-up" }))];
-  const count = (notice ? 1 : 0) + queued.length + (todos.length > 0 ? 1 : 0);
+  const queued = [...queue.steering.map((t, i) => ({ t, k: "Steering", i })), ...queue.followUp.map((t, i) => ({ t, k: "Follow-up", i }))];
+  const [editing, setEditing] = useState<{ k: string; i: number; original: string; draft: string } | null>(null);
+  const [lost, setLost] = useState(false);
+  /** The queue with this message changed (or, with null, removed), from the queue as it is now. */
+  const change = async (k: string, i: number, original: string, next: string | null) => {
+    const field = k === "Steering" ? "steering" : "followUp";
+    const list = queue[field];
+    const at = list[i] === original ? i : list.indexOf(original);
+    if (at < 0) {
+      // It ran (or went) while being edited: the edit is not thrown away.
+      if (next) addToDraft(next);
+      setLost(Boolean(next));
+      setEditing(null);
+      return;
+    }
+    const replaced = next === null || !next.trim() ? list.filter((_, j) => j !== at) : list.map((t, j) => (j === at ? next : t));
+    if (await (onEditQueue?.({ ...queue, [field]: replaced }) ?? Promise.resolve(false))) setEditing(null);
+  };
+  // The message being edited ran (or was removed elsewhere): the edit moves to the composer.
+  useEffect(() => {
+    if (!editing) return;
+    const list = editing.k === "Steering" ? queue.steering : queue.followUp;
+    if (list.includes(editing.original)) return;
+    if (editing.draft.trim() && editing.draft !== editing.original) {
+      addToDraft(editing.draft);
+      setLost(true);
+    }
+    setEditing(null);
+  }, [queue, editing]);
+  const count = (notice ? 1 : 0) + queued.length + (todos.length > 0 ? 1 : 0) + (lost ? 1 : 0);
   if (count === 0) return base ? <div className="status-stack is-base-only">{base}</div> : null;
   const done = todos.filter((t) => /done|complete/.test(t.status)).length;
 
@@ -88,15 +122,56 @@ export function StatusStack({
               <span className="stack-text">{notice}</span>
             </div>
           ) : null}
+          {lost ? (
+            <div className="stack-row stack-notice" role="status">
+              <span className="stack-text">That message ran before the edit was saved; the edit is in the composer.</span>
+              <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setLost(false)}>
+                <IconX size={11} />
+              </button>
+            </div>
+          ) : null}
           {queued.length > 0 ? (
             <ul className="stack-queue" aria-label="Queued messages">
-              {queued.map((q, i) => (
-                <li key={`${q.k}${i}`} className="stack-row" data-testid="queue-row">
-                  <span className="stack-icon">{q.k === "Steering" ? <IconSteer size={13} /> : <IconQueue size={13} />}</span>
-                  <span className="stack-kind">{q.k}</span>
-                  <span className="stack-text">{q.t}</span>
-                </li>
-              ))}
+              {queued.map((q) => {
+                const open = editing && editing.k === q.k && editing.i === q.i ? editing : null;
+                return (
+                  <li key={`${q.k}${q.i}`} className={`stack-row${open ? " is-editing" : ""}`} data-testid="queue-row">
+                    <span className="stack-icon">{q.k === "Steering" ? <IconSteer size={13} /> : <IconQueue size={13} />}</span>
+                    <span className="stack-kind">{q.k}</span>
+                    {open ? (
+                      <textarea
+                        className="stack-edit"
+                        aria-label={`Edit the queued ${q.k.toLowerCase()}`}
+                        autoFocus
+                        rows={Math.min(6, open.draft.split("\n").length)}
+                        value={open.draft}
+                        onChange={(e) => setEditing({ ...open, draft: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            setEditing(null);
+                          } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            void change(q.k, q.i, open.original, open.draft);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="stack-text">{q.t}</span>
+                    )}
+                    {onEditQueue && !open ? (
+                      <span className="stack-actions">
+                        <button type="button" className="icon-btn" aria-label={`Edit the queued ${q.k.toLowerCase()}`} onClick={() => setEditing({ k: q.k, i: q.i, original: q.t, draft: q.t })}>
+                          <IconEdit size={12} />
+                        </button>
+                        <button type="button" className="icon-btn" aria-label={`Remove the queued ${q.k.toLowerCase()}`} onClick={() => void change(q.k, q.i, q.t, null)}>
+                          <IconX size={12} />
+                        </button>
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
           {todos.length > 0 ? (

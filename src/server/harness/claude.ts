@@ -688,6 +688,19 @@ class ClaudeLiveChat implements LiveChat {
     this.emitQueue();
   }
 
+  /**
+   * Claude Code cancels a queued message by its uuid; the new ones are sent
+   * again in order. One the CLI already took runs anyway (its echo removes it).
+   */
+  async replaceQueue(queue: QueueState): Promise<void> {
+    const rpc = this.live;
+    const queued = this.queued.splice(0);
+    await Promise.all(queued.map((q) => rpc.request({ subtype: "cancel_async_message", message_uuid: q.uuid }).catch(() => undefined)));
+    for (const text of queue.steering) this.queued.push({ uuid: this.send(text, undefined, "next"), text, mode: "steering" });
+    for (const text of queue.followUp) this.queued.push({ uuid: this.send(text, undefined), text, mode: "followUp" });
+    this.emitQueue();
+  }
+
   async abort(): Promise<void> {
     const rpc = this.live;
     const queued = this.queued.splice(0);
@@ -764,6 +777,7 @@ export class ClaudeAdapter implements HarnessAdapter {
     supportsHandoff: false,
     supportsRewind: false,
     supportsHtmlRender: false,
+    supportsQueueEdit: true,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
   private usageCache: { at: number; accounts: LimitAccount[] } | null = null;

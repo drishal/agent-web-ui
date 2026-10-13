@@ -1031,6 +1031,18 @@ export class Chat implements CheckpointHost {
     this.reducer.replaceConfig(await this.live.getConfig());
   }
 
+  /**
+   * Put this queue in place of the one the harness holds: a queued message
+   * edited or removed before it ran. Only while a run is going (nothing waits
+   * otherwise); the harness's own queue event then updates every viewer.
+   */
+  async replaceQueue(queue: QueueState): Promise<void> {
+    this.assertOpen();
+    if (!this.adapter.capabilities.supportsQueueEdit || !this.live.replaceQueue) throw new ChatError(400, "unsupported", "This harness cannot change its queue");
+    if (this.status !== "running") throw new ChatError(409, "not_running", "Nothing is queued: the run has ended");
+    await this.live.replaceQueue(queue);
+  }
+
   async rename(name: string): Promise<void> {
     this.assertOpen();
     if (!this.adapter.capabilities.supportsRename) throw new ChatError(400, "unsupported", "Rename is not supported");

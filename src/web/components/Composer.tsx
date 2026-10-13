@@ -1,8 +1,8 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type SendMode, type SlashCommand } from "../../shared/protocol.js";
-import { api } from "../api.js";
+import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
+import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
 import { IconArrowUp, IconImage, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
@@ -200,6 +200,19 @@ export function Composer({
   // Images from elsewhere: what another app shared to awui.
   useAddImagesToDraft((files) => void addImages(files));
 
+  // An edited or removed queued message (StatusStack): the whole queue goes back to the harness.
+  const editQueue = caps.supportsQueueEdit
+    ? async (queue: QueueState): Promise<boolean> => {
+        try {
+          await api(`/api/chats/${chat.chatId}/queue`, { method: "PUT", body: queue });
+          return true;
+        } catch (error) {
+          setImageError(errorText(error));
+          return false;
+        }
+      }
+    : undefined;
+
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = imageFiles(e.clipboardData.files);
     // Spreadsheets and rich editors copy a rendering beside the text; paste the text then.
@@ -315,6 +328,7 @@ export function Composer({
         queue={chat.queue}
         todos={chat.todos}
         notice={chat.extensionStatus[`${chat.harnessId}:status`] ?? null}
+        onEditQueue={editQueue}
         base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}

@@ -571,6 +571,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsHandoff: true,
     supportsRewind: rewindExtension() !== null,
     supportsHtmlRender: renderHtmlExtension() !== null,
+    supportsQueueEdit: true,
   };
   private lister: AcpLister;
   private sessionFiles = new SessionFiles(() => this.resolveSessionDir());
@@ -1140,6 +1141,15 @@ class OmpLiveChat implements LiveChat {
 
   async followUp(text: string, images?: ImageAttachment[]): Promise<void> {
     await this.live.command("follow_up", withImages(text, images));
+  }
+
+  /** omp takes queued messages back one at a time, by text; the new ones go back in order. */
+  async replaceQueue(queue: QueueState): Promise<void> {
+    const rpc = this.live;
+    for (const message of this.queue.steering) await rpc.command("remove_queued_message", { message, queue: "steering" }).catch(() => undefined);
+    for (const message of this.queue.followUp) await rpc.command("remove_queued_message", { message, queue: "followUp" }).catch(() => undefined);
+    for (const text of queue.steering) await rpc.command("steer", withImages(text, undefined));
+    for (const text of queue.followUp) await rpc.command("follow_up", withImages(text, undefined));
   }
 
   async abort(): Promise<void> {
