@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
 import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
@@ -7,6 +7,7 @@ import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
+import { SessionCard } from "./SessionCard.js";
 
 /** Sessions shown per project before "Show N more". */
 const VISIBLE_CURRENT = 8;
@@ -42,6 +43,8 @@ export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boole
  */
 const WarmSession = createContext<(s: ProjectSession, why: "hover" | "press") => void>(() => {});
 const HOVER_WARM_MS = 90;
+/** How long the mouse rests on a row before its hover card shows. */
+const HOVER_CARD_MS = 500;
 
 /**
  * Open in a new tab, pin, settle, snooze, archive: from the row's ⋯ button or a
@@ -156,7 +159,26 @@ function SessionRow({
   const markable = !s.id.includes(":live-");
   const warm = useContext(WarmSession);
   const hover = useRef(0);
-  useEffect(() => () => window.clearTimeout(hover.current), []);
+  const cardTimer = useRef(0);
+  const [cardAt, setCardAt] = useState<DOMRect | null>(null);
+  const cardId = useId();
+  const hideCard = () => {
+    window.clearTimeout(cardTimer.current);
+    setCardAt(null);
+  };
+  useEffect(
+    () => () => {
+      window.clearTimeout(hover.current);
+      window.clearTimeout(cardTimer.current);
+    },
+    [],
+  );
+  // The card follows the row; a scroll of the list would leave it behind, so it goes.
+  useEffect(() => {
+    if (!cardAt) return;
+    window.addEventListener("scroll", hideCard, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", hideCard, { capture: true });
+  }, [cardAt]);
   return (
     <li className={`session-item${menuAt ? " is-menu-open" : ""}`}>
       <button
@@ -168,14 +190,22 @@ function SessionRow({
         }}
         // A touch press may be the start of a scroll, so only a mouse's press counts.
         onPointerDown={(e) => {
+          hideCard();
           if (e.pointerType === "mouse" && (e.button === 0 || e.button === 1)) warm(s, "press");
         }}
         onPointerEnter={(e) => {
           if (e.pointerType !== "mouse") return;
           window.clearTimeout(hover.current);
           hover.current = window.setTimeout(() => warm(s, "hover"), HOVER_WARM_MS);
+          const row = e.currentTarget;
+          window.clearTimeout(cardTimer.current);
+          if (markable) cardTimer.current = window.setTimeout(() => setCardAt(row.getBoundingClientRect()), HOVER_CARD_MS);
         }}
-        onPointerLeave={() => window.clearTimeout(hover.current)}
+        onPointerLeave={() => {
+          window.clearTimeout(hover.current);
+          hideCard();
+        }}
+        aria-describedby={cardAt ? cardId : undefined}
         onAuxClick={(e) => {
           if (e.button !== 1) return;
           e.preventDefault();
@@ -183,6 +213,7 @@ function SessionRow({
         }}
         onContextMenu={(e) => {
           e.preventDefault();
+          hideCard();
           setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
         }}
         aria-current={active ? "true" : undefined}
@@ -218,6 +249,7 @@ function SessionRow({
       >
         <IconMore size={14} />
       </button>
+      {cardAt && !menuAt ? <SessionCard s={s} anchor={cardAt} harnessName={harnessName} project={project ?? ""} id={cardId} /> : null}
       {menuAt ? <RowMenu s={s} anchor={menuAt} markable={markable} onOpenNewTab={() => onOpen(true)} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
     </li>
   );

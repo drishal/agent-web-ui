@@ -87,3 +87,17 @@ test("search in project finds a line and puts it into the message as @path:line"
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });
+
+test("resting on a session row shows its hover card", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "hover card prompt");
+  await newChat(page);
+  await showSidebar(page);
+  await page.locator(".session", { hasText: "hover card prompt" }).first().hover();
+  const card = page.getByRole("tooltip");
+  await expect(card).toContainText("hover card prompt");
+  await expect(card).toContainText("1 turn");
+  await page.mouse.move(800, 400);
+  await expect(card).toBeHidden();
+});

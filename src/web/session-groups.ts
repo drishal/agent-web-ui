@@ -196,3 +196,14 @@ export function dateBucket(iso: string | null, now = new Date()): string {
   const month = then.toLocaleDateString("en-US", { month: "long" });
   return then.getFullYear() === now.getFullYear() ? month : `${month} ${then.getFullYear()}`;
 }
+
+/** An answer's Markdown as plain text for a hover card's few lines: marks off, list bullets as •. */
+export const plainPreview = (text: string): string =>
+  text
+    .replace(/```[\s\S]*?(```|$)/g, "")
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "")
+    .replace(/^[ \t]*[-*+][ \t]+/gm, "• ")
+    .replace(/(\*\*|__|`)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
