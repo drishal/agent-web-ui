@@ -7,6 +7,31 @@ import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helper
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
+test("Ctrl+F finds in the chat, opening the fold a match is in, and steps through matches", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "read a tool, walrus");
+  await sendAndWait(page, "and walrus again");
+  await page.locator(".chat-header h1").click();
+  await page.keyboard.press("Control+KeyF");
+  const find = page.getByRole("searchbox", { name: "Find in chat" });
+  await expect(find).toBeFocused();
+  await find.fill("WALRUS");
+  // Each prompt and each answer echoing it, and, in the folds the query opened, each thought quoting it.
+  await expect(page.getByTestId("find-count")).toHaveText("1 of 6");
+  await find.press("Enter");
+  await expect(page.getByTestId("find-count")).toHaveText("2 of 6");
+  await find.press("Shift+Enter");
+  await find.press("Shift+Enter");
+  await expect(page.getByTestId("find-count")).toHaveText("6 of 6");
+  // README.md is the tool's path, inside the first turn's closed fold.
+  await find.fill("README");
+  await expect(page.getByTestId("find-count")).toHaveText("1 of 1");
+  await expect(page.getByText("README.md").first()).toBeVisible();
+  await find.press("Escape");
+  await expect(find).toBeHidden();
+});
+
 test("a queued follow-up can be edited or removed before it runs", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

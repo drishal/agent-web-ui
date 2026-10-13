@@ -86,6 +86,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
                               app's shortcuts and shares (?new, ?sessions, ?share). public/sw.js: push, Approve/Deny
                               from a notification, the share target, the offline page (it never caches the app).
+  find.ts                     Find in chat: matches and the folds to open (Conversation walks and paints the DOM).
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced

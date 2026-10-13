@@ -5,7 +5,8 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
@@ -963,8 +964,138 @@ export function Conversation({
     };
   }, [settle]);
 
+  // ---- find in chat (find.ts) ----
+  // Ctrl+F opens a find bar over the thread; pressed again while its box has the focus, the
+  // browser's own find opens. A query draws every turn and opens the folds that hold a match,
+  // then the drawn text is searched and painted with the CSS Custom Highlight API.
+  const [find, setFind] = useState<{ query: string; current: number } | null>(null);
+  const [matchCount, setMatchCount] = useState(0);
+  const ranges = useRef<Range[]>([]);
+  const findInput = useRef<HTMLInputElement>(null);
+  const paint = typeof CSS !== "undefined" && "highlights" in CSS && typeof Highlight !== "undefined" ? CSS.highlights : null;
+  const clearPaint = useCallback(() => {
+    paint?.delete("awui-find");
+    paint?.delete("awui-find-current");
+  }, [paint]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.code !== "KeyF") return;
+      if (document.activeElement === findInput.current || (e.target as HTMLElement | null)?.closest("dialog")) return;
+      e.preventDefault();
+      const picked = window.getSelection()?.toString().trim() ?? "";
+      setFind((f) => f ?? { query: picked.includes("\n") ? "" : picked.slice(0, 100), current: -1 });
+      window.requestAnimationFrame(() => {
+        findInput.current?.focus();
+        findInput.current?.select();
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const query = find?.query.trim() ?? "";
+  const [searched, setSearched] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearched(query), query ? 120 : 0);
+    return () => window.clearTimeout(t);
+  }, [query]);
+  // A query reaches what is not drawn or folded: every turn, and the folds holding a match.
+  useEffect(() => {
+    if (!searched) return;
+    setDrawn((d) => (d.chatId === chatId && d.from === 0 ? d : { chatId, from: 0 }));
+    const open = foldsToOpen(turnsRef.current, searched);
+    if (open.length > 0) setOverrides((prev) => (open.every((id) => prev[id]) ? prev : { ...prev, ...Object.fromEntries(open.map((id) => [id, true])) }));
+  }, [searched, chatId]);
+  useEffect(() => {
+    const thread = scroller.current?.querySelector(".thread");
+    if (!searched || !thread) {
+      ranges.current = [];
+      setMatchCount(0);
+      clearPaint();
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const found: Range[] = [];
+      const walker = document.createTreeWalker(thread, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => (n.parentElement?.closest('[aria-hidden="true"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      });
+      for (let node = walker.nextNode(); node && found.length < 5000; node = walker.nextNode()) {
+        for (const at of findOffsets(node.nodeValue ?? "", searched)) {
+          const range = document.createRange();
+          range.setStart(node, at);
+          range.setEnd(node, at + searched.length);
+          found.push(range);
+        }
+      }
+      ranges.current = found;
+      setMatchCount(found.length);
+      paint?.set("awui-find", new Highlight(...found));
+      setFind((f) => (f ? { ...f, current: found.length === 0 ? -1 : Math.min(Math.max(f.current, 0), found.length - 1) } : f));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [searched, from, overrides, items, clearPaint, paint]);
+  // The current match: painted apart, and brought into view a third of the way down.
+  const current = find?.current ?? -1;
+  useEffect(() => {
+    const range = current >= 0 ? ranges.current[current] : undefined;
+    if (!range) {
+      paint?.delete("awui-find-current");
+      return;
+    }
+    paint?.set("awui-find-current", new Highlight(range));
+    const el = scroller.current;
+    if (!el) return;
+    const box = range.getBoundingClientRect();
+    const view = el.getBoundingClientRect();
+    if (box.top < view.top + 48 || box.bottom > view.bottom - 48) {
+      pinned.current = false;
+      jumpingRef.current = false;
+      el.scrollTop += box.top - view.top - view.height / 3;
+    }
+  }, [current, matchCount, paint]);
+  const closeFind = () => {
+    setFind(null);
+    clearPaint();
+  };
+  useEffect(() => () => clearPaint(), [clearPaint]);
+  const step = (by: 1 | -1) => setFind((f) => (f ? { ...f, current: stepMatch(f.current, ranges.current.length, by) } : f));
+
   return (
     <div className="conversation-wrap" ref={wrap}>
+      {find ? (
+        <div className="find-bar" role="search" aria-label="Find in chat">
+          <IconSearch size={13} />
+          <input
+            ref={findInput}
+            className="find-input"
+            type="search"
+            aria-label="Find in chat"
+            placeholder="Find in chat"
+            value={find.query}
+            onChange={(e) => setFind({ query: e.target.value, current: -1 })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                step(e.shiftKey ? -1 : 1);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                closeFind();
+              }
+            }}
+          />
+          <span className="find-count" data-testid="find-count" aria-live="polite">
+            {searched ? (matchCount > 0 ? `${current + 1} of ${matchCount}` : "No matches") : ""}
+          </span>
+          <button type="button" className="icon-btn" aria-label="Previous match" disabled={matchCount === 0} onClick={() => step(-1)}>
+            <IconChevronUp size={14} />
+          </button>
+          <button type="button" className="icon-btn" aria-label="Next match" disabled={matchCount === 0} onClick={() => step(1)}>
+            <IconChevronDown size={14} />
+          </button>
+          <button type="button" className="icon-btn" aria-label="Close find" onClick={closeFind}>
+            <IconX size={12} />
+          </button>
+        </div>
+      ) : null}
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <ChatIdContext.Provider value={chatId}>
           <ArrivalsContext.Provider value={arrivals}>
