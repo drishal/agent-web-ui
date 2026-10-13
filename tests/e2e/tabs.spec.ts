@@ -159,3 +159,57 @@ test("the sidebar lifts what needs you and what is working, and settling can be 
   await expect(page.locator(".session-item", { hasText: "settle me later" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "1 settled" })).toHaveCount(0);
 });
+
+test("a row's menu opens its session in a new tab, next to the shown one", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "menu tab one");
+  await newChat(page);
+  await sendAndWait(page, "menu tab two");
+  await expect(tabs(page)).toHaveCount(1);
+
+  await showSidebar(page);
+  await page.getByRole("button", { name: "More for menu tab one" }).click();
+  await page.getByRole("menuitem", { name: "Open in new tab" }).click();
+  await expect(tabs(page)).toHaveCount(2);
+  await expect(tab(page, "menu tab one")).toHaveAttribute("aria-selected", "true");
+  await expect(prompts(page)).toHaveText(["menu tab one"]);
+  await expect(tab(page, "menu tab two")).toHaveAttribute("aria-selected", "false");
+});
+
+test("a session opens at once: its tab, title, and a loading screen show while it loads", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "slow to load");
+  await newChat(page);
+  await sendAndWait(page, "shown meanwhile");
+  // Hold the chat's snapshot back, as a slow link would.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/chats\/[\w-]+$/, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await showSidebar(page);
+  await session(page, "slow to load").click();
+  const splash = page.getByRole("status", { name: "Opening slow to load" });
+  await expect(splash).toBeVisible();
+  await expect(page.locator(".chat-header h1")).toHaveText("slow to load");
+  await expect(tab(page, "slow to load")).toHaveAttribute("aria-selected", "true");
+  release();
+  await expect(prompts(page)).toHaveText(["slow to load"]);
+  await expect(splash).toHaveCount(0);
+  await page.unroute(/\/api\/chats\/[\w-]+$/);
+});
+
+test("a long chat draws its end first, then the rest above it", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  for (let i = 1; i <= 9; i++) await sendAndWait(page, `long chat turn ${i}`);
+  await newTab(page);
+  await page.reload();
+  await tab(page, "long chat turn 1").click();
+  await expect(prompts(page)).toHaveCount(9);
+  await expect(prompts(page).last()).toHaveText("long chat turn 9");
+  await expect(prompts(page).last()).toBeInViewport();
+});

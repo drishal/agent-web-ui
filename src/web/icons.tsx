@@ -215,6 +215,12 @@ export const IconPlus = (p: IconProps) => (
     <path d="M8 3v10M3 8h10" />
   </Svg>
 );
+/** Open in a new tab: a box with an arrow out of its corner. */
+export const IconNewTab = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v4H2.5V4h4" />
+  </Svg>
+);
 export const IconQueue = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h5" />

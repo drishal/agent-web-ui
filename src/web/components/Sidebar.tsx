@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
 import { dateBucket, groupByProject, historySections, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
@@ -35,9 +35,34 @@ function relativeTime(iso: string | null): string {
 
 export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boolean; snoozedUntil?: number | null };
 
-/** Pin and archive, from the row's ⋯ button or a right-click (a long press on phones). */
-function RowMenu({ s, anchor, onMark, onClose }: { s: ProjectSession; anchor: DOMRect; onMark: (change: MarkChange) => void; onClose: () => void }) {
-  const below = anchor.bottom + 260 < window.innerHeight;
+/**
+ * Start opening a session before its click: App fetches it on a hover (live
+ * chats) or a mouse press, so the click finds it loaded. A context, so the
+ * rows in every list get it without threading it through each one.
+ */
+const WarmSession = createContext<(s: ProjectSession, why: "hover" | "press") => void>(() => {});
+const HOVER_WARM_MS = 90;
+
+/**
+ * Open in a new tab, pin, settle, snooze, archive: from the row's ⋯ button or a
+ * right-click (a long press on phones). A session not saved yet can only be opened.
+ */
+function RowMenu({
+  s,
+  anchor,
+  markable,
+  onOpenNewTab,
+  onMark,
+  onClose,
+}: {
+  s: ProjectSession;
+  anchor: DOMRect;
+  markable: boolean;
+  onOpenNewTab: () => void;
+  onMark: (change: MarkChange) => void;
+  onClose: () => void;
+}) {
+  const below = anchor.bottom + 300 < window.innerHeight;
   const style = {
     position: "fixed" as const,
     right: Math.max(8, window.innerWidth - anchor.right),
@@ -52,35 +77,52 @@ function RowMenu({ s, anchor, onMark, onClose }: { s: ProjectSession; anchor: DO
       <div className="menu-backdrop" onClick={onClose} aria-hidden="true" />
       <ul className="menu-list row-menu" role="menu" style={style} onKeyDown={(e) => e.key === "Escape" && onClose()}>
         <li role="none">
-          <button type="button" role="menuitem" autoFocus onClick={() => pick({ pinned: !s.pinned })}>
-            <IconPin size={14} /> {s.pinned ? "Unpin" : "Pin"}
+          <button
+            type="button"
+            role="menuitem"
+            autoFocus
+            onClick={() => {
+              onClose();
+              onOpenNewTab();
+            }}
+          >
+            <IconNewTab size={14} /> Open in new tab
           </button>
         </li>
-        <li role="none">
-          <button type="button" role="menuitem" onClick={() => pick({ settled: !s.settled })}>
-            <IconCheck size={14} /> {s.settled ? "Unsettle" : "Settle"}
-          </button>
-        </li>
-        {s.snoozedUntil && s.snoozedUntil > Date.now() ? (
-          <li role="none">
-            <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: null })}>
-              <IconClock size={14} /> Wake now
-            </button>
-          </li>
-        ) : (
-          snoozeOptions().map((o) => (
-            <li role="none" key={o.label}>
-              <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: o.until })}>
-                <IconClock size={14} /> Snooze {o.label.toLowerCase()}
+        {markable ? (
+          <>
+            <li role="none">
+              <button type="button" role="menuitem" onClick={() => pick({ pinned: !s.pinned })}>
+                <IconPin size={14} /> {s.pinned ? "Unpin" : "Pin"}
               </button>
             </li>
-          ))
-        )}
-        <li role="none">
-          <button type="button" role="menuitem" onClick={() => pick({ archived: !s.archived })}>
-            <IconArchive size={14} /> {s.archived ? "Unarchive" : "Archive"}
-          </button>
-        </li>
+            <li role="none">
+              <button type="button" role="menuitem" onClick={() => pick({ settled: !s.settled })}>
+                <IconCheck size={14} /> {s.settled ? "Unsettle" : "Settle"}
+              </button>
+            </li>
+            {s.snoozedUntil && s.snoozedUntil > Date.now() ? (
+              <li role="none">
+                <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: null })}>
+                  <IconClock size={14} /> Wake now
+                </button>
+              </li>
+            ) : (
+              snoozeOptions().map((o) => (
+                <li role="none" key={o.label}>
+                  <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: o.until })}>
+                    <IconClock size={14} /> Snooze {o.label.toLowerCase()}
+                  </button>
+                </li>
+              ))
+            )}
+            <li role="none">
+              <button type="button" role="menuitem" onClick={() => pick({ archived: !s.archived })}>
+                <IconArchive size={14} /> {s.archived ? "Unarchive" : "Archive"}
+              </button>
+            </li>
+          </>
+        ) : null}
       </ul>
     </>
   );
@@ -109,6 +151,9 @@ function SessionRow({
   const moreRef = useRef<HTMLButtonElement>(null);
   // A session not saved yet has nothing to mark.
   const markable = !s.id.includes(":live-");
+  const warm = useContext(WarmSession);
+  const hover = useRef(0);
+  useEffect(() => () => window.clearTimeout(hover.current), []);
   return (
     <li className={`session-item${menuAt ? " is-menu-open" : ""}`}>
       <button
@@ -118,13 +163,22 @@ function SessionRow({
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault();
         }}
+        // A touch press may be the start of a scroll, so only a mouse's press counts.
+        onPointerDown={(e) => {
+          if (e.pointerType === "mouse" && (e.button === 0 || e.button === 1)) warm(s, "press");
+        }}
+        onPointerEnter={(e) => {
+          if (e.pointerType !== "mouse") return;
+          window.clearTimeout(hover.current);
+          hover.current = window.setTimeout(() => warm(s, "hover"), HOVER_WARM_MS);
+        }}
+        onPointerLeave={() => window.clearTimeout(hover.current)}
         onAuxClick={(e) => {
           if (e.button !== 1) return;
           e.preventDefault();
           onOpen(true);
         }}
         onContextMenu={(e) => {
-          if (!markable) return;
           e.preventDefault();
           setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
         }}
@@ -150,20 +204,18 @@ function SessionRow({
           )}
         </span>
       </button>
-      {markable ? (
-        <button
-          ref={moreRef}
-          type="button"
-          className="icon-btn session-more"
-          aria-label={`More for ${s.title}`}
-          aria-haspopup="menu"
-          aria-expanded={menuAt !== null}
-          onClick={() => setMenuAt(moreRef.current?.getBoundingClientRect() ?? null)}
-        >
-          <IconMore size={14} />
-        </button>
-      ) : null}
-      {menuAt ? <RowMenu s={s} anchor={menuAt} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
+      <button
+        ref={moreRef}
+        type="button"
+        className="icon-btn session-more"
+        aria-label={`More for ${s.title}`}
+        aria-haspopup="menu"
+        aria-expanded={menuAt !== null}
+        onClick={() => setMenuAt(moreRef.current?.getBoundingClientRect() ?? null)}
+      >
+        <IconMore size={14} />
+      </button>
+      {menuAt ? <RowMenu s={s} anchor={menuAt} markable={markable} onOpenNewTab={() => onOpen(true)} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
     </li>
   );
 }
@@ -327,6 +379,8 @@ export function Sidebar(props: {
   activeStatus: ChatStatus | null;
   /** `newTab`: open it in a new tab rather than the shown one. */
   onOpenSession: (s: ProjectSession, newTab: boolean) => void;
+  /** Start fetching a session the pointer is on, before its click. */
+  onWarmSession: (s: ProjectSession, why: "hover" | "press") => void;
   /** Pin or archive a session. */
   onMarkSession: (s: ProjectSession, change: MarkChange) => void;
   onRefresh: () => void;
@@ -404,7 +458,7 @@ export function Sidebar(props: {
   );
 
   return (
-    <>
+    <WarmSession.Provider value={props.onWarmSession}>
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">
@@ -563,6 +617,6 @@ export function Sidebar(props: {
         {props.footer}
         {props.resizer}
       </aside>
-    </>
+    </WarmSession.Provider>
   );
 }

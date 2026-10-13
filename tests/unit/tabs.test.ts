@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatSnapshot } from "../../src/shared/protocol.js";
-import { closeTab, findTab, markUnread, NO_TABS, placeChat, runningChats, syncActive, type TabState } from "../../src/web/tabs.js";
+import { closeTab, findTab, markUnread, NO_TABS, placeChat, placeTab, runningChats, syncActive, type TabState } from "../../src/web/tabs.js";
 
 const snap = (chatId: string, sessionId: string | null = `fake:${chatId}`, title = chatId) =>
   ({ chatId, sessionId, harnessId: "fake", workspace: { id: "w", path: "/p", name: "p" }, title }) as unknown as ChatSnapshot;
@@ -28,6 +28,19 @@ describe("session tabs", () => {
     s = placeChat(s, snap("b2", "fake:b"));
     expect([ids(s), s.active, s.tabs[1]?.key]).toEqual([["a", "b2"], 1, key]);
     expect(findTab(s, { chatId: null, sessionId: "fake:a" })).toBe(0);
+  });
+
+  it("shows a session being opened in its tab at once, and its snapshot fills that same tab in", () => {
+    const opening = { chatId: null, sessionId: "fake:b", harnessId: "fake", workspacePath: "/p", title: "b, from the list" };
+    let s = placeTab(placeChat(NO_TABS, snap("a")), opening, { newTab: true });
+    expect([ids(s), s.active, s.tabs[1]?.title]).toEqual([["a", null], 1, "b, from the list"]);
+    const key = s.tabs[1]?.key;
+    s = placeChat(s, snap("b"));
+    expect([ids(s), s.active, s.tabs[1]?.key, s.tabs[1]?.title]).toEqual([["a", "b"], 1, key, "b"]);
+    // Without newTab it takes over the shown tab, keeping that tab's key.
+    const shown = placeChat(NO_TABS, snap("a"));
+    const over = placeTab(shown, opening);
+    expect([ids(over), over.tabs[0]?.key]).toEqual([[null], shown.tabs[0]?.key]);
   });
 
   it("closes a tab and hands the view to its right neighbour, else its left", () => {

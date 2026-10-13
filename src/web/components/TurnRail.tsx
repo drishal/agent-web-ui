@@ -5,7 +5,8 @@ import type { Turn } from "../turns.js";
 
 const MIN_TURNS = 3;
 
-export function TurnRail({ turns, scroller }: { turns: Turn[]; scroller: React.RefObject<HTMLDivElement | null> }) {
+/** `onReveal`: the turn is not drawn yet (a long chat draws its older turns after its end). */
+export function TurnRail({ turns, scroller, onReveal }: { turns: Turn[]; scroller: React.RefObject<HTMLDivElement | null>; onReveal: (id: string) => void }) {
   const prompted = turns.filter((t) => t.prompt !== null);
   const [active, setActive] = useState<string | null>(null);
   const ids = prompted.map((t) => t.id).join(",");
@@ -48,7 +49,11 @@ export function TurnRail({ turns, scroller }: { turns: Turn[]; scroller: React.R
             className={`rail-mark${turn.id === active ? " is-active" : ""}${turn.live ? " is-live" : ""}`}
             aria-label={`Turn ${i + 1}: ${preview}`}
             aria-current={turn.id === active ? "true" : undefined}
-            onClick={() => document.getElementById(`turn-${turn.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" })}
+            onClick={() => {
+              const node = document.getElementById(`turn-${turn.id}`);
+              if (node) node.scrollIntoView({ block: "start", behavior: "smooth" });
+              else onReveal(turn.id);
+            }}
           >
             <span className="rail-tick" aria-hidden="true" />
             <span className="rail-preview" aria-hidden="true">
