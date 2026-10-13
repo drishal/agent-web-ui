@@ -1,6 +1,7 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card. From
-// T3 Code: ↑/↓ recall this chat's prompts.
+// T3 Code: ↑/↓ recall this chat's prompts, and Shift+Enter continues a
+// Markdown list (Tab indents it).
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
@@ -16,6 +17,7 @@ import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
 import { useAddImagesToDraft, useAddToDraft } from "../draft-bus.js";
 import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
+import { continueList, indentList } from "../list-continue.js";
 import { useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
@@ -319,6 +321,23 @@ export function Composer({
         e.preventDefault();
         recall.current = step.recall;
         setTextAt(step.text, step.text.length);
+      }
+      return;
+    }
+    if (e.key === "Tab" && plain) {
+      const next = indentList(text, el.selectionStart, el.selectionEnd, e.shiftKey);
+      if (next) {
+        e.preventDefault();
+        setTextAt(next.text, next.from, next.to);
+      }
+      return;
+    }
+    // A new line (Shift+Enter, or Enter on a touch screen) inside a list item starts the next item.
+    if (e.key === "Enter" && plain && (e.shiftKey || coarsePointer()) && el.selectionStart === el.selectionEnd) {
+      const next = continueList(text, el.selectionStart);
+      if (next) {
+        e.preventDefault();
+        setTextAt(next.text, next.caret);
       }
       return;
     }
