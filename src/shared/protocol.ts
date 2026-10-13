@@ -556,6 +556,29 @@ export const resumeChatSchema = z.object({
 });
 /** A mention picker's search over a project's files. */
 export const fileSearchSchema = z.object({ q: z.string().max(200).default("") });
+/** Text search across a project's files (fixed strings, never a regex). */
+export const projectSearchSchema = z.object({
+  q: z.string().trim().min(2).max(200),
+  /** "1": match case. */
+  case: z.enum(["0", "1"]).default("0"),
+});
+
+/** One line of a project search. */
+export interface SearchMatch {
+  /** Relative to the project. */
+  path: string;
+  /** 1-based. */
+  line: number;
+  /** The line, cut to a few hundred characters around the match. */
+  text: string;
+}
+
+export interface ProjectSearch {
+  matches: SearchMatch[];
+  /** More matched than were returned. */
+  truncated: boolean;
+}
+
 /** A chat's whole queue, to replace what the harness holds (an edited or removed queued message). */
 export const queueSchema = z.object({
   steering: z.array(z.string().min(1).max(MAX_MESSAGE_CHARS)).max(20),

@@ -31,6 +31,7 @@ import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
+import { ProjectSearch } from "./components/ProjectSearch.js";
 import { useEdgeSwipe } from "./gestures.js";
 import { useLaunchActions } from "./launch.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
@@ -95,7 +96,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** What the window-wide shortcuts call, kept current (the listener is added once). */
-  const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null }>({ step: () => {}, reopen: () => {}, undo: null });
+  const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null; search: () => void }>({ step: () => {}, reopen: () => {}, undo: null, search: () => {} });
+  const [searchOpen, setSearchOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   /** The turn whose checkpoint the restore dialog shows. */
   const [restoreTurn, setRestoreTurn] = useState<number | null>(null);
@@ -114,6 +116,9 @@ export function App() {
       } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {
         e.preventDefault();
         keysRef.current.reopen();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyF") {
+        e.preventDefault();
+        keysRef.current.search();
       } else if (mod && e.code === "KeyZ" && keysRef.current.undo) {
         const target = e.target as HTMLElement | null;
         if (target?.closest("input, textarea, [contenteditable='true']")) return;
@@ -742,7 +747,8 @@ export function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), 8000);
   };
 
-  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab(), undo: toast ? toast.undo : null };
+  const searchWorkspace = chat?.workspace ?? workspace;
+  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab(), undo: toast ? toast.undo : null, search: () => searchWorkspace && setSearchOpen(true) };
 
   const markSessionAs = async (s: ProjectSession, change: MarkChange) => {
     const before: SessionMarkState = {
@@ -806,6 +812,14 @@ export function App() {
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
+    items.push({
+      id: "search",
+      section: "Actions",
+      label: "Search in project",
+      hint: "Ctrl+Shift+F",
+      disabled: searchWorkspace ? undefined : "Choose a project first",
+      run: () => setSearchOpen(true),
+    });
     items.push({ id: "folder", section: "Actions", label: "Choose project folder…", run: () => setPickerOpen(true) });
     items.push({ id: "reopen", section: "Actions", label: "Reopen closed tab", hint: "Alt+Shift+T", disabled: closedTabs.current.length ? undefined : "No tab closed yet", searchOnly: true, run: reopenClosedTab });
     items.push({ id: "back", section: "Actions", label: "Back to the previous chat", hint: "Ctrl+[", searchOnly: true, disabled: visits.current.at > 0 ? undefined : "Nothing before this", run: () => stepVisits(-1) });
@@ -1322,6 +1336,7 @@ export function App() {
         />
       ) : null}
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
+      {searchOpen && searchWorkspace ? <ProjectSearch workspace={searchWorkspace} onClose={() => setSearchOpen(false)} /> : null}
       {pairOpen ? <PairDialog urls={boot.pairing.urls} username={boot.auth.username} onClose={() => setPairOpen(false)} /> : null}
     </div>
   );

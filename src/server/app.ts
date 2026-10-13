@@ -32,6 +32,7 @@ import {
   type ProjectSession,
   sendMessageSchema,
   fileSearchSchema,
+  projectSearchSchema,
   queueSchema,
   sessionPreviewSchema,
   type SessionPreview,
@@ -51,6 +52,7 @@ import { briefPrompt, isEmptySeed, toSeed } from "./harness/handoff.js";
 import { sniffImage } from "./images.js";
 import { resolvePaste, storePaste } from "./paste-store.js";
 import { projectFiles, searchFiles } from "./project-files.js";
+import { searchProject } from "./project-search.js";
 import type { Security } from "./security.js";
 import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
@@ -317,6 +319,18 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(req.params.id);
     const { q } = fileSearchSchema.parse(req.query);
     res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
+  // Search in project: lines holding a fixed string (never a pattern), bounded
+  // (project-search.ts). Only inside an opened workspace, as the file list is.
+  app.get("/api/workspaces/:id/search", async (req, res) => {
+    const ws = await workspaces.get(req.params.id);
+    const { q, case: matchCase } = projectSearchSchema.parse(req.query);
+    try {
+      res.json(await searchProject(ws.path, q, matchCase === "1"));
+    } catch (error) {
+      throw new ChatError(500, "search_failed", `Search failed: ${errorMessage(error)}`);
+    }
   });
 
   const adapterOr404 = (id: string) => {
