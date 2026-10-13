@@ -6985,6 +6985,23 @@ body {
   margin-left: auto;
 }
 
+/* ---- composer extras: the link note, the stash, the usage-limit banner -------------------- */
+
+.stash {
+  position: relative;
+  display: inline-flex;
+}
+
+.composer-linked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-linked span {
+  flex: 1;
+}
+
 /* ---- status stack: editing a queued message --------------------------------------------- */
 
 .stack-actions {

@@ -1,13 +1,14 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card. From
-// T3 Code: ↑/↓ recall this chat's prompts, and Shift+Enter continues a
-// Markdown list (Tab indents it).
+// T3 Code: ↑/↓ recall this chat's prompts, Shift+Enter continues a Markdown
+// list (Tab indents it), and a prompt link's text arrives with a note to read
+// it.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
-import { IconArrowUp, IconImage, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { IconArrowUp, IconImage, IconLink, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
@@ -15,7 +16,7 @@ import { ApprovalStack } from "./ApprovalStack.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
-import { useAddImagesToDraft, useAddToDraft } from "../draft-bus.js";
+import { useAddImagesToDraft, useAddToDraft, useLinkedPrompt } from "../draft-bus.js";
 import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
 import { continueList, indentList } from "../list-continue.js";
 import { useNow } from "../hooks.js";
@@ -118,6 +119,14 @@ export function Composer({
     setText(next);
   };
 
+  // A prompt link's text: into an empty composer (else after the draft), with a note to read it first.
+  const [linked, setLinked] = useState<{ hidden: number } | null>(null);
+  useLinkedPrompt((prompt) => {
+    setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${prompt.text}` : prompt.text));
+    setLinked({ hidden: prompt.hidden });
+    window.requestAnimationFrame(() => area.current?.focus());
+  });
+
   useAddToDraft((added) => {
     setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${added}` : added));
     window.requestAnimationFrame(() => {
@@ -148,6 +157,7 @@ export function Composer({
       setImages([]);
       setPastes([]);
       setImageError(null);
+      setLinked(null);
       recall.current = null;
       const ok = await onSend(
         value,
@@ -480,6 +490,18 @@ export function Composer({
           {imageError || blind ? (
             <p className="composer-note" role="status">
               {imageError ?? `${model?.name ?? "This model"} does not take image input; switch to a vision model before sending.`}
+            </p>
+          ) : null}
+          {linked ? (
+            <p className="composer-note composer-linked" role="status">
+              <IconLink size={13} />
+              <span>
+                From a link: read it before you send it.
+                {linked.hidden > 0 ? ` ${linked.hidden} hidden character${linked.hidden === 1 ? " was" : "s were"} taken out.` : ""}
+              </span>
+              <button type="button" className="icon-btn" aria-label="Dismiss the link note" onClick={() => setLinked(null)}>
+                <IconX size={11} />
+              </button>
             </p>
           ) : null}
           {menuOpen ? (
