@@ -220,6 +220,12 @@ export const IconPlus = (p: IconProps) => (
     <path d="M8 3v10M3 8h10" />
   </Svg>
 );
+/** A plan: a checklist. */
+export const IconPlan = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.75 4.25 3.75 5.25l1.75-2M2.75 8.75l1 1 1.75-2M7.5 4.25h6M7.5 8.75h6M7.5 12.75h6M3 12.75h1.5" />
+  </Svg>
+);
 /** Open in a new tab: a box with an arrow out of its corner. */
 export const IconNewTab = (p: IconProps) => (
   <Svg {...p}>

@@ -245,6 +245,8 @@ export interface ToolItem {
   subagents?: SubagentsInfo;
   /** An HTML page the call published, shown in a sandboxed frame. */
   htmlRender?: HtmlRenderRef;
+  /** A proposed plan the call handed over for review (Claude's ExitPlanMode, pi-plan-mode's plan_mode_complete), as Markdown. */
+  plan?: string;
   at?: number;
   endedAt?: number;
 }

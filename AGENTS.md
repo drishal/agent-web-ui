@@ -81,6 +81,7 @@ src/server/
   image-store.ts, notify.ts, limits.ts, session-marks.ts, run-command.ts, state-file.ts   Side features (see their header comments).
   project-files.ts            A project's files for @mention pickers (git ls-files, else a bounded walk).
   project-search.ts           Search in project: bounded `git grep -F` (else a scan of project-files' walk).
+  harness/plans.ts            A plan call's plan (ExitPlanMode, plan_mode_complete) onto its tool item, bounded.
 src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css one stylesheet.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
@@ -188,7 +189,8 @@ if every test passes.
   `ask`, `twice`, `quiz`, `described`, `edit`, `showcase` (one call of every tool
   kind), `subagents` (a parallel pi-subagents run with live progress and
   transcripts), `recall`, `todo`, `bloat`, `slow` (many small chunks, to act
-  mid-run), `fail`. Add a word there when a feature needs a new scenario,
+  mid-run), `fail`, `planned` (an ExitPlanMode plan). Add a word there when a
+  feature needs a new scenario,
   rather than mocking deeper.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
   `fake-claude.mjs`) speak each harness's real wire protocol. Adapter changes

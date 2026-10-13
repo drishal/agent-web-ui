@@ -1228,6 +1228,8 @@ export function App() {
                 models={chat.config.models}
                 checkpoints={chat.checkpoints ?? []}
                 onRestore={setRestoreTurn}
+                onSend={(text) => void send(text, "normal")}
+                asking={chat.pending.length > 0}
                 promptActions={{
                   inPlace: chat.capabilities.supportsRewind,
                   retry: (through, item) => void rerun(through, item, item.text, false),

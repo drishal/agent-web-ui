@@ -6,6 +6,7 @@ import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
 import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
 import { htmlRenderRef, isHtmlRenderCall } from "./render-token.js";
+import { planFromArgs } from "./plans.js";
 import type { HarnessEvent, StepUsage } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -421,6 +422,7 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
 }
 
 const withRuns = (runs: ToolItem["subagents"] | null) => (runs ? { subagents: runs } : {});
+const withPlan = (plan: string | null) => (plan ? { plan } : {});
 
 /** Rebuild display items from the active branch's message list. */
 export function historyToItems(messages: unknown[]): ChatItem[] {
@@ -489,6 +491,7 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
             paths: toolPaths(block.arguments),
             ...(edits ? editShape(argsDiff(block.arguments), null) : {}),
             ...(category === "agent" ? withRuns(runsFromArgs(block.arguments)) : {}),
+            ...withPlan(planFromArgs(name, block.arguments)),
             ...stamp,
           };
           if (isHtmlRenderCall(name, block.arguments)) renderCalls.add(id);

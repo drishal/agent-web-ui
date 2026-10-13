@@ -23,6 +23,8 @@ export interface Turn {
   changedFiles: string[];
   /** HTML pages this turn's render calls published, shown full-width above the answer. */
   renders: HtmlRenderRef[];
+  /** Plans this turn's calls handed over for review (ExitPlanMode, plan_mode_complete), shown as cards above the answer. */
+  plans: Array<{ id: string; plan: string }>;
   /** How many process items came before the answer: work can follow a reply, and its thought belongs in order. */
   answerAt: number;
   /** The model that answered (its last model call), when the harness says. */
@@ -85,6 +87,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     const counts: Partial<Record<ToolCategory, number>> = {};
     const changed = new Set<string>();
     const renders: HtmlRenderRef[] = [];
+    const plans: Array<{ id: string; plan: string }> = [];
     let startedAt = prompt?.at;
     let endedAt: number | undefined;
     for (const item of rest) {
@@ -94,6 +97,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
           for (const p of item.paths) changed.add(p);
         }
         if (item.htmlRender) renders.push(item.htmlRender);
+        if (item.plan && item.status !== "error") plans.push({ id: item.id, plan: item.plan });
       }
       // Timing comes from the agent's own work, never from notices.
       if (item.kind === "notice") continue;
@@ -117,6 +121,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       counts,
       changedFiles: [...changed],
       renders,
+      plans,
       answerAt: answerAt >= 0 ? answerAt : process.length,
       ...(model ? { model } : {}),
     };
