@@ -1,10 +1,12 @@
-// What the installed app is opened to do, from its URL: the home-screen
-// shortcuts (?new=1 a new chat, ?sessions=1 the session list) and a share
-// from another app (?share=1: the service worker kept the shared text and
-// images in its cache; they go into a new chat's composer). The query is
-// dropped once read, so a reload does not do it again.
+// What the app is opened to do, from its URL: the home-screen shortcuts
+// (?new=1 a new chat, ?sessions=1 the session list), a share from another app
+// (?share=1: the service worker kept the shared text and images in its cache;
+// they go into a new chat's composer), and a prompt link (?prompt=…: its text
+// goes into a new chat's composer to be read; a link never sends). The query
+// is dropped once read, so a reload does not do it again.
 import { useEffect, useRef } from "react";
-import { addImagesToDraft, addToDraft } from "./draft-bus.js";
+import { addImagesToDraft, addLinkedPrompt, addToDraft } from "./draft-bus.js";
+import { linkedPrompt } from "./prompt-link.js";
 import { worker } from "./notify.js";
 
 const SHARE_CACHE = "awui-share";
@@ -41,7 +43,7 @@ export function useLaunchActions(opts: { booted: boolean; ready: boolean; newCha
   useEffect(() => {
     if (!opts.booted || done.current) return;
     const params = new URLSearchParams(window.location.search);
-    const action = params.has("share") ? "share" : params.has("new") ? "new" : params.has("sessions") ? "sessions" : null;
+    const action = params.has("share") ? "share" : params.get("prompt") ? "prompt" : params.has("new") ? "new" : params.has("sessions") ? "sessions" : null;
     if (!action) {
       done.current = true;
       return;
@@ -52,7 +54,10 @@ export function useLaunchActions(opts: { booted: boolean; ready: boolean; newCha
     if (action === "sessions") return latest.current.openSessions();
     void (async () => {
       const shared = action === "share" ? await takeShare() : null;
+      const linked = action === "prompt" ? linkedPrompt(params.get("prompt") ?? "") : null;
       await latest.current.newChat();
+      // The new chat's composer, not the one it replaces, takes it: wait for it to mount.
+      if (linked?.text.trim()) window.requestAnimationFrame(() => window.requestAnimationFrame(() => addLinkedPrompt(linked)));
       if (shared?.text) addToDraft(shared.text);
       if (shared?.images.length) addImagesToDraft(shared.images);
     })();

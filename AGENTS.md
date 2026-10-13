@@ -86,11 +86,13 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
-                              app's shortcuts and shares (?new, ?sessions, ?share). public/sw.js: push, Approve/Deny
-                              from a notification, the share target, the offline page (it never caches the app).
+                              app's shortcuts, shares, and prompt links (?new, ?sessions, ?share, ?prompt).
+                              public/sw.js: push, Approve/Deny from a notification, the share target, the
+                              offline page (it never caches the app).
   find.ts                     Find in chat: matches and the folds to open (Conversation walks and paints the DOM).
   prompt-history.ts           ↑/↓ recall of a chat's sent prompts in the composer.
   list-continue.ts            Markdown lists in the composer: Shift+Enter continues one, Tab indents it.
+  prompt-link.ts              Prompt links (?prompt=): hidden characters taken out, a link made.
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced

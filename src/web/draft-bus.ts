@@ -1,5 +1,6 @@
 // Text and images for the shown composer's draft from elsewhere on the page:
-// a quoted passage, a command's output, or what another app shared to awui.
+// a quoted passage, a command's output, what another app shared to awui, a
+// prompt link's text, or a project search's @path:line.
 // The composer appends it and takes the focus. What arrives while no composer
 // is mounted (a share opens the app before its chat exists) waits for the
 // next one.
@@ -11,6 +12,36 @@ let textListeners = 0;
 let imageListeners = 0;
 const waitingText: string[] = [];
 const waitingImages: File[] = [];
+const LINKED = "awui:linked-prompt";
+let linkedListeners = 0;
+const waitingLinked: LinkedPrompt[] = [];
+
+/** A prompt a link carried: it fills an empty composer with a note to read it first. */
+export interface LinkedPrompt {
+  text: string;
+  /** Hidden characters taken out of it. */
+  hidden: number;
+}
+
+export function addLinkedPrompt(prompt: LinkedPrompt): void {
+  if (linkedListeners === 0) waitingLinked.push(prompt);
+  else window.dispatchEvent(new CustomEvent<LinkedPrompt>(LINKED, { detail: prompt }));
+}
+
+export function useLinkedPrompt(handler: (prompt: LinkedPrompt) => void): void {
+  const ref = useRef(handler);
+  ref.current = handler;
+  useEffect(() => {
+    const listener = (e: Event) => ref.current((e as CustomEvent<LinkedPrompt>).detail);
+    window.addEventListener(LINKED, listener);
+    linkedListeners++;
+    for (const prompt of waitingLinked.splice(0)) ref.current(prompt);
+    return () => {
+      window.removeEventListener(LINKED, listener);
+      linkedListeners--;
+    };
+  }, []);
+}
 
 export function addToDraft(text: string): void {
   if (textListeners === 0) waitingText.push(text);

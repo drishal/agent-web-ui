@@ -220,6 +220,12 @@ export const IconPlus = (p: IconProps) => (
     <path d="M8 3v10M3 8h10" />
   </Svg>
 );
+/** A link: two chain loops. */
+export const IconLink = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.75 9.25a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.75.75M9.25 6.75a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.75-.75" />
+  </Svg>
+);
 /** A plan: a checklist. */
 export const IconPlan = (p: IconProps) => (
   <Svg {...p}>

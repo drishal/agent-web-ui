@@ -5,7 +5,8 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration } from "../turns.js";
 import { useNow } from "../hooks.js";
@@ -369,8 +370,15 @@ function UserPrompt({
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [sheet, setSheet] = useState(false);
   const press = useLongPress(() => setSheet(true));
+  // A link that opens a new chat with this prompt ready to read and send (prompt-link.ts).
+  const copyLink = () =>
+    void navigator.clipboard?.writeText(promptLink(window.location.origin, item.text)).then(() => {
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1500);
+    });
   const arrival = useArrival(item.id);
   // A long press on a phone: the hover actions as a sheet a thumb can use.
   const sheetActions: SheetAction[] = [
@@ -381,6 +389,7 @@ function UserPrompt({
         ]
       : []),
     { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
+    { label: "Copy prompt link", icon: <IconLink size={16} />, run: copyLink },
   ];
   return (
     <div className={`turn-prompt${arrival}${editing ? " is-editing" : ""}`}>
@@ -466,6 +475,15 @@ function UserPrompt({
               }}
             >
               {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            </button>
+            <button
+              type="button"
+              className="ghost-icon"
+              aria-label={linkCopied ? "Link copied" : "Copy prompt link"}
+              title="Copy a link that opens a new chat with this prompt, ready to send"
+              onClick={copyLink}
+            >
+              {linkCopied ? <IconCheck size={14} /> : <IconLink size={14} />}
             </button>
           </div>
         ) : null}

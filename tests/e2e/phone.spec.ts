@@ -36,7 +36,7 @@ test("a long press on a message opens its actions as a sheet, and a drag down on
   ]);
   const sheet = page.getByRole("dialog", { name: "Message" });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole("menuitem", { name: "Copy" })).toBeVisible();
+  await expect(sheet.getByRole("menuitem", { name: "Copy", exact: true })).toBeVisible();
   await expect(sheet.getByRole("menuitem", { name: "Retry" })).toBeVisible();
   // Drag its handle down past the threshold.
   const grip = await center(page, "dialog[open] .sheet-grip");
