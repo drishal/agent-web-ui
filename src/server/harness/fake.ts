@@ -6,6 +6,7 @@
 //   "bloat" pad the session to about two thirds of the context window
 //   "quiz"  ask a multiple-choice question (omp's style; "quiz described": Claude Code's)
 //   "wait"  report a provider wait on the harness's status line for 1.5 s
+//   "planned" hand a ten-step plan over for review (an ExitPlanMode call)
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -463,6 +464,11 @@ class FakeLiveChat implements LiveChat {
       if (/\bedit\b/i.test(text)) await this.tool("edit", signal);
       if (/\bshowcase\b/i.test(text)) for (const call of this.showcase()) await this.call(call, signal);
       if (/\bsubagents\b/i.test(text)) await this.subagents(signal);
+      if (/\bplanned\b/i.test(text)) {
+        // A plan handed over for review, as Claude Code's ExitPlanMode does it.
+        const plan = "## Plan\n\n1. Read `src/app.ts`\n2. Split the handler\n3. Add a test\n4. Run the suite\n5. Update the README\n6. Check the build\n7. Tidy the imports\n8. Write the commit\n9. Push it\n10. Tell the user";
+        await this.call({ name: "ExitPlanMode", args: { plan }, output: "User has approved your plan." }, signal);
+      }
       if (/\brender\b|\bhtmlrender\b/i.test(text)) await this.render(signal);
       if (/\bfail\b/i.test(text)) {
         this.emit({ type: "assistant_start", model: this.model });

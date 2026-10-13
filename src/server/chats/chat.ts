@@ -30,6 +30,7 @@ import { boundText, editShape, historyToItems, stringifyArgs, toolCategory, tool
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
 import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords, type AgentReport } from "../harness/subagents.js";
 import { htmlRenderRef, isHtmlRenderCall } from "../harness/render-token.js";
+import { planFromArgs } from "../harness/plans.js";
 import { branchMessages } from "../harness/session-files.js";
 import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
@@ -321,6 +322,7 @@ class EventReducer {
         const category = toolCategory(event.name);
         const edits = category === "edit" || category === "write";
         const runs = category === "agent" ? runsFromArgs(event.args) : null;
+        const plan = planFromArgs(event.name, event.args);
         const tool: ToolItem = {
           kind: "tool",
           id: `t:${event.toolCallId}`,
@@ -334,6 +336,7 @@ class EventReducer {
           paths: toolPaths(event.args),
           ...(edits ? editShape(argsDiff(event.args), null) : {}),
           ...(runs ? { subagents: runs } : {}),
+          ...(plan ? { plan } : {}),
           at: Date.now(),
         };
         if (isHtmlRenderCall(event.name, event.args)) this.renderCalls.add(event.toolCallId);

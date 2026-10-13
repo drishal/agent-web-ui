@@ -20,6 +20,7 @@ import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
+import { IMPLEMENT_TEXT, PlanCard } from "./PlanCard.js";
 
 const PIN_DISTANCE_PX = 96;
 /**
@@ -674,6 +675,7 @@ const TurnView = memo(function TurnView({
   canBranch,
   hasCheckpoint,
   promptActions,
+  onImplement,
 }: {
   turn: Turn;
   open: boolean;
@@ -686,6 +688,8 @@ const TurnView = memo(function TurnView({
   canBranch: boolean;
   hasCheckpoint: boolean;
   promptActions: PromptActions;
+  /** The latest turn's plan can be acted on (idle, nothing asked): Implement sends it on. */
+  onImplement: (() => void) | null;
 }) {
   if (!turn.prompt) {
     // Startup notices before any prompt: plain rows, no fold.
@@ -710,6 +714,9 @@ const TurnView = memo(function TurnView({
           ))}
         </div>
       ) : null}
+      {turn.plans.map((p) => (
+        <PlanCard key={p.id} plan={p.plan} onImplement={onImplement} />
+      ))}
       {turn.answer ? (
         <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
       ) : null}
@@ -747,6 +754,8 @@ export function Conversation({
   onRestore,
   promptActions,
   models,
+  onSend,
+  asking = false,
 }: {
   chatId: string;
   items: ChatItem[];
@@ -760,6 +769,10 @@ export function Conversation({
   promptActions: PromptActions;
   /** The chat's models, to name the one a turn switched to. */
   models: ReadonlyArray<{ key: string; id: string; name: string }>;
+  /** Send a message as the user (a plan's Implement). */
+  onSend?: (text: string) => void;
+  /** The harness is asking something (an approval, a question): a plan's buttons wait. */
+  asking?: boolean;
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -837,6 +850,11 @@ export function Conversation({
     () => ({ inPlace, retry: (t, i) => actionsRef.current.retry(t, i), edit: (t, i, text, undo) => actionsRef.current.edit(t, i, text, undo) }),
     [inPlace],
   );
+  const sendRef = useRef(onSend);
+  sendRef.current = onSend;
+  const implement = useCallback(() => sendRef.current?.(IMPLEMENT_TEXT), []);
+  const lastTurn = turns[turns.length - 1];
+  const canImplement = Boolean(onSend) && idle && !asking;
 
   // A smooth scroll aims at the scrollHeight of the moment it starts, and the
   // delta handler / ResizeObserver force-scrolling would cancel it, so while
@@ -1119,6 +1137,7 @@ export function Conversation({
                     canBranch={idle && turn.through > 0 && (inPlace || turn.through === 1 || canFork)}
                     hasCheckpoint={turn.through > 0 && checkpoints.includes(turn.through)}
                     promptActions={actions}
+                    onImplement={canImplement && turn === lastTurn && turn.plans.length > 0 ? implement : null}
                   />
                 </Fragment>
               ))}

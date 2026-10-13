@@ -32,6 +32,18 @@ test("Ctrl+F finds in the chat, opening the fold a match is in, and steps throug
   await expect(find).toBeHidden();
 });
 
+test("a proposed plan shows as a card whose Implement sends it on", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "planned work please");
+  const card = page.getByTestId("plan-card");
+  await expect(card).toContainText("Split the handler");
+  await card.getByRole("button", { name: "Show the whole plan" }).click();
+  await expect(card).toContainText("Tell the user");
+  await card.getByRole("button", { name: "Implement" }).click();
+  await expect(page.getByTestId("user-prompt").last()).toHaveText("Implement the plan.");
+});
+
 test("a queued follow-up can be edited or removed before it runs", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
