@@ -172,3 +172,14 @@ test("a prompt link opens a new chat with the text ready to read, hidden charact
   await expect(page).not.toHaveURL(/prompt=/);
   await expect(page.getByTestId("user-prompt")).toHaveCount(0);
 });
+
+test("the page title and favicon count a chat that finished out of sight", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "slow please for the title");
+  await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await expect(page).toHaveTitle(/^\(1\) /, { timeout: 20_000 });
+  await expect.poll(() => page.locator('link[rel="icon"]').first().getAttribute("href")).toMatch(/^data:image\/png/);
+  await page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: /slow please for the title/ }).click();
+  await expect(page).not.toHaveTitle(/^\(\d+\) /);
+});
