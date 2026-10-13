@@ -1,9 +1,13 @@
-// One collapsible stack above the composer for queued messages, todos, and
-// extension status (after Hermes Desktop's composer status stack). Todos and
-// the queue start open; extension status starts folded. Hiding is per chat.
+// One collapsible stack above the composer for the harness's own status line,
+// queued messages, and todos (after Hermes Desktop's composer status stack).
+// The status line is what the harness says it is doing when that is not plain
+// thinking: Hermes's "Provider temporarily unavailable — retrying in 69s", so
+// a long "Working" has a reason. Pi extensions' status lines are not shown:
+// they are written for pi's terminal footer (ANSI colours, terse labels) and
+// read as noise here. Hiding is per chat.
 import { useEffect, useState } from "react";
 import type { QueueState, TodoItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconCircle, IconQueue, IconSteer, Spinner } from "../icons.js";
+import { IconCheck, IconChevronDown, IconCircle, IconClock, IconQueue, IconSteer, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
 
 function TodoIcon({ status }: { status: string }) {
@@ -40,22 +44,22 @@ export function StatusStack({
   chatId,
   queue,
   todos,
-  extensionStatus,
+  notice,
   base,
 }: {
   chatId: string;
+  /** The harness's own status line (`<harness>:status`), when it has one. */
+  notice?: string | null;
   queue: QueueState;
   todos: TodoItem[];
-  extensionStatus: Record<string, string>;
   /** Always shown under the rest, even when it is hidden (the git row). */
   base?: React.ReactNode;
 }) {
   const key = `stack.${chatId}`;
   const [hidden, setHidden] = useState(() => load<boolean>(key, false));
   useEffect(() => setHidden(load<boolean>(key, false)), [key]);
-  const statuses = Object.entries(extensionStatus).filter(([, v]) => v.trim());
   const queued = [...queue.steering.map((t) => ({ t, k: "Steering" })), ...queue.followUp.map((t) => ({ t, k: "Follow-up" }))];
-  const count = queued.length + (todos.length > 0 ? 1 : 0) + (statuses.length > 0 ? 1 : 0);
+  const count = (notice ? 1 : 0) + queued.length + (todos.length > 0 ? 1 : 0);
   if (count === 0) return base ? <div className="status-stack is-base-only">{base}</div> : null;
   const done = todos.filter((t) => /done|complete/.test(t.status)).length;
 
@@ -76,6 +80,14 @@ export function StatusStack({
       </button>
       {!hidden ? (
         <div className="stack-body">
+          {notice ? (
+            <div className="stack-row stack-notice" role="status" data-testid="harness-status">
+              <span className="stack-icon">
+                <IconClock size={13} />
+              </span>
+              <span className="stack-text">{notice}</span>
+            </div>
+          ) : null}
           {queued.length > 0 ? (
             <ul className="stack-queue" aria-label="Queued messages">
               {queued.map((q, i) => (
@@ -97,18 +109,6 @@ export function StatusStack({
                     </span>
                     <span className="stack-text">{todo.text}</span>
                     {todo.phase && todo.phase !== todos[i - 1]?.phase ? <span className="stack-meta">{todo.phase}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            </Group>
-          ) : null}
-          {statuses.length > 0 ? (
-            <Group title="Extensions" meta={String(statuses.length)} defaultOpen={false}>
-              <ul className="stack-list">
-                {statuses.map(([k, v]) => (
-                  <li key={k} className="stack-row stack-ext">
-                    <span className="stack-kind">{k.replace(/^widget:/, "")}</span>
-                    <span className="stack-text">{v}</span>
                   </li>
                 ))}
               </ul>

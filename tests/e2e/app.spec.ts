@@ -515,6 +515,17 @@ test("todos from the harness show in the status stack, which can be hidden", asy
   await expect(page.getByTestId("status-stack").getByRole("button", { name: "Show status" })).toBeVisible();
 });
 
+test("a long Working says why: the harness's own status line shows above the composer until it clears", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "please wait for the provider");
+  const line = page.getByTestId("harness-status");
+  await expect(line).toHaveText("Provider temporarily unavailable — retrying in 2s (cycle 1/5)");
+  await expect(page.getByTestId("chat-status")).toHaveText("Working");
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 15_000 });
+  await expect(line).toHaveCount(0);
+});
+
 test("context ring, edited files, and the turn rail", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

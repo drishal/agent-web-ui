@@ -5,6 +5,7 @@
 //   "big"   produce oversized tool output    "edit"  edit a file (src/app.ts)
 //   "bloat" pad the session to about two thirds of the context window
 //   "quiz"  ask a multiple-choice question (omp's style; "quiz described": Claude Code's)
+//   "wait"  report a provider wait on the harness's status line for 1.5 s
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -432,6 +433,13 @@ class FakeLiveChat implements LiveChat {
           await this.reply(`Denied: ${text}`, signal);
           return;
         }
+      }
+      if (/\bwait\b/i.test(text)) {
+        // A provider wait, as Hermes reports one: the harness's own status line, then cleared.
+        this.emit({ type: "extension_status", key: "fake:status", text: "Provider temporarily unavailable — retrying in 2s (cycle 1/5)" });
+        if (signal.aborted) throw new Aborted();
+        await sleep(1500);
+        this.emit({ type: "extension_status", key: "fake:status", text: null });
       }
       if (/\bbloat\b/i.test(text)) for (let i = 0; i < 70; i++) this.session.messages.push({ role: "custom", content: "filler" });
       if (/\bquiz\b/i.test(text)) {

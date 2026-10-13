@@ -3374,10 +3374,9 @@ body.is-resizing {
   color: var(--text-2);
 }
 
-.stack-ext .stack-text {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  white-space: pre-wrap;
+.stack-notice .stack-text {
+  white-space: normal;
+  color: var(--warn);
 }
 
 .stack-meta {
