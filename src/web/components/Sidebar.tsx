@@ -63,9 +63,12 @@ function RowMenu({
   onClose: () => void;
 }) {
   const below = anchor.bottom + 300 < window.innerHeight;
+  // Under the ⋯ button it lines up with the button's right edge; at a right-click's
+  // point (no width) it opens rightwards, since the sidebar sits at the window's left.
+  const across = anchor.width === 0 ? { left: Math.max(8, Math.min(anchor.left, window.innerWidth - 240)) } : { right: Math.max(8, window.innerWidth - anchor.right) };
   const style = {
     position: "fixed" as const,
-    right: Math.max(8, window.innerWidth - anchor.right),
+    ...across,
     ...(below ? { top: anchor.bottom + 4 } : { bottom: window.innerHeight - anchor.top + 4 }),
   };
   const pick = (change: MarkChange) => {
