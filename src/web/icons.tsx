@@ -220,6 +220,12 @@ export const IconPlus = (p: IconProps) => (
     <path d="M8 3v10M3 8h10" />
   </Svg>
 );
+/** The prompt stash: a tray with an arrow into it. */
+export const IconStash = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 9.5h3l1 1.5h3l1-1.5h3M2.5 9.5v3a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-3M8 2.5v5M5.75 5.25 8 7.5l2.25-2.25" />
+  </Svg>
+);
 /** A link: two chain loops. */
 export const IconLink = (p: IconProps) => (
   <Svg {...p}>

@@ -1,15 +1,15 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card. From
 // T3 Code: ↑/↓ recall this chat's prompts, Shift+Enter continues a Markdown
-// list (Tab indents it), and a prompt link's text arrives with a note to read
-// it.
+// list (Tab indents it), the stash parks a draft for later (Alt+S), and a
+// prompt link's text arrives with a note to read it.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
-import { IconArrowUp, IconImage, IconLink, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
-import { dataUrl, imageFiles, type PendingImage, prepareImage } from "../images.js";
+import { IconArrowUp, IconImage, IconLink, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
@@ -19,7 +19,8 @@ import { StatusStack } from "./StatusStack.js";
 import { useAddImagesToDraft, useAddToDraft, useLinkedPrompt } from "../draft-bus.js";
 import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
 import { continueList, indentList } from "../list-continue.js";
-import { useNow } from "../hooks.js";
+import { loadStash, saveStash, stashDraft, takeFromStash, type StashEntry } from "../stash.js";
+import { useDismiss, useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
@@ -231,6 +232,54 @@ export function Composer({
   // Images from elsewhere: what another app shared to awui.
   useAddImagesToDraft((files) => void addImages(files));
 
+  // The stash (stash.ts): park this draft, or take one back (what is here then goes in its place).
+  const [stash, setStash] = useState<StashEntry[]>(loadStash);
+  const [stashOpen, setStashOpen] = useState(false);
+  const stashRef = useRef<HTMLDivElement>(null);
+  // Escape closes it wherever the focus is; the focus starts on its first item that can be used.
+  useDismiss(stashRef, stashOpen, () => setStashOpen(false), { escape: true, outside: false });
+  useEffect(() => {
+    if (stashOpen) stashRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+  }, [stashOpen]);
+  const [stashNote, setStashNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!stashNote) return;
+    const t = window.setTimeout(() => setStashNote(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [stashNote]);
+  const from = chat.title || "New chat";
+  const stashNow = () => {
+    const next = stashDraft(loadStash(), { text, images, from });
+    if (!next) return;
+    if (!saveStash(next)) {
+      setImageError("The browser's storage is full: the draft stays here");
+      return;
+    }
+    const dropped = next[0]?.dropped ?? 0;
+    setStash(next);
+    setStashOpen(false);
+    setText("");
+    setImages([]);
+    setLinked(null);
+    setStashNote(dropped > 0 ? `Stashed; ${dropped} image${dropped === 1 ? " was" : "s were"} too big to keep` : "Stashed");
+  };
+  const unstash = (id: string) => {
+    const { entries, entry } = takeFromStash(loadStash(), id);
+    if (!entry) return;
+    const swapped = stashDraft(entries, { text, images, from }) ?? entries;
+    saveStash(swapped);
+    setStash(swapped);
+    setStashOpen(false);
+    setTextAt(entry.text, entry.text.length);
+    setImages(entry.images.map(pendingImage).slice(0, MAX_IMAGES));
+    area.current?.focus();
+  };
+  const dropStashed = (id: string) => {
+    const { entries } = takeFromStash(loadStash(), id);
+    saveStash(entries);
+    setStash(entries);
+  };
+
   // An edited or removed queued message (StatusStack): the whole queue goes back to the harness.
   const editQueue = caps.supportsQueueEdit
     ? async (queue: QueueState): Promise<boolean> => {
@@ -325,6 +374,11 @@ export function Composer({
     }
     const el = e.currentTarget;
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing;
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyS") {
+      e.preventDefault();
+      stashNow();
+      return;
+    }
     if ((e.key === "ArrowUp" || e.key === "ArrowDown") && plain && !e.shiftKey) {
       const step = recallStep(sentPrompts(chat.items), recall.current, e.key === "ArrowUp" ? "up" : "down", text, el.selectionStart);
       if (step) {
@@ -504,6 +558,11 @@ export function Composer({
               </button>
             </p>
           ) : null}
+          {stashNote ? (
+            <p className="composer-note" role="status">
+              {stashNote}
+            </p>
+          ) : null}
           {menuOpen ? (
             <div className="command-menu" id={menuId} role="listbox" aria-label="Commands">
               <div className="command-menu-head" aria-hidden="true">
@@ -584,6 +643,51 @@ export function Composer({
                 e.target.value = "";
               }}
             />
+            <div className="stash" ref={stashRef}>
+              <button
+                type="button"
+                className="icon-btn composer-stash"
+                aria-label={stash.length > 0 ? `Stash (${stash.length} kept)` : "Stash"}
+                aria-haspopup="menu"
+                aria-expanded={stashOpen}
+                title="Stash this draft for later (Alt+S), or take a stashed one back"
+                disabled={closed}
+                onClick={() => {
+                  setStash(loadStash());
+                  setStashOpen((v) => !v);
+                }}
+              >
+                <IconStash size={16} />
+                {stash.length > 0 ? <span className="stash-count">{stash.length}</span> : null}
+              </button>
+              {stashOpen ? (
+                <>
+                  <div className="menu-backdrop" onClick={() => setStashOpen(false)} aria-hidden="true" />
+                  <ul className="menu-list stash-menu" role="menu" aria-label="Stash" onKeyDown={(e) => e.key === "Escape" && setStashOpen(false)}>
+                    <li role="none">
+                      <button type="button" role="menuitem" disabled={empty && images.length === 0} onClick={stashNow}>
+                        <IconStash size={14} /> Stash this draft <kbd>Alt+S</kbd>
+                      </button>
+                    </li>
+                    {stash.length === 0 ? <li className="stash-empty muted">Nothing stashed</li> : null}
+                    {stash.map((entry) => (
+                      <li key={entry.id} role="none" className="stash-entry">
+                        <button type="button" role="menuitem" className="stash-take" title={entry.text} onClick={() => unstash(entry.id)}>
+                          <span className="stash-text">{entry.text.trim().split("\n")[0] || `${entry.images.length} image${entry.images.length === 1 ? "" : "s"}`}</span>
+                          <span className="stash-meta muted">
+                            {entry.from}
+                            {entry.images.length > 0 ? ` · ${entry.images.length} image${entry.images.length === 1 ? "" : "s"}` : ""}
+                          </span>
+                        </button>
+                        <button type="button" className="icon-btn stash-drop" aria-label={`Drop stashed “${entry.text.trim().slice(0, 40)}”`} onClick={() => dropStashed(entry.id)}>
+                          <IconX size={11} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
             <ComposerControls chat={chat} harnesses={harnesses} onConfig={onConfig} onRefreshModels={onRefreshModels} onHandoff={(id) => onHandoff(id, text)} />
             <div className="composer-actions">
               {tooLong ? (

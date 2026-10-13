@@ -34,6 +34,25 @@ test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", 
   await expect(box(page)).toHaveValue("1. one\n");
 });
 
+test("the stash parks a draft and gives it back in another chat", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await box(page).fill("park this for later");
+  await page.keyboard.press("Alt+KeyS");
+  await expect(box(page)).toHaveValue("");
+  const stash = page.getByRole("button", { name: /^Stash \(\d+ kept\)$/ });
+  await expect(stash).toBeVisible();
+  // With nothing to stash, the menu still closes on Escape.
+  await stash.click();
+  await expect(page.getByRole("menu", { name: "Stash" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Stash" })).toBeHidden();
+  await newChat(page);
+  await page.getByRole("button", { name: /^Stash/ }).click();
+  await page.getByRole("menuitem", { name: /park this for later/ }).click();
+  await expect(box(page)).toHaveValue("park this for later");
+});
+
 test("Ctrl+F finds in the chat, opening the fold a match is in, and steps through matches", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
