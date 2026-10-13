@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
-import { HermesAdapter, liveHermesChildren } from "../../src/server/harness/hermes.js";
+import { HermesAdapter, hermesModelKey, liveHermesChildren } from "../../src/server/harness/hermes.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -200,6 +200,37 @@ describe("hermes adapter (scripted gateway)", () => {
     await chat.setConfig({ model: "fake/fake-mini", thinkingLevel: "high" });
     const config = await live.getConfig();
     expect(config).toMatchObject({ model: "fake/fake-mini", thinkingLevel: "high" });
+  });
+
+  it("switches to a model on another provider with --provider, as Hermes's picker does", async () => {
+    const { chat } = await openChat();
+    await chat.send("multimodel check", "normal");
+    await until(() => chat.status === "idle");
+    // Both providers list this id; the pick names the remote one.
+    await chat.setConfig({ model: "remote/opencode-go-v4-flash" });
+    await until(() => chat.snapshot().config.model === "remote/opencode-go-v4-flash");
+    // The key alone reads the same either way (a qualified name passes through); the request is what moved.
+    await chat.send("whoami", "normal");
+    await until(() => chat.status === "idle");
+    const answer = chat.snapshot().items.findLast((i) => i.kind === "assistant");
+    expect(answer && "text" in answer ? answer.text : "").toBe("on remote as opencode-go-v4-flash");
+  });
+
+  it("names the picked model by the provider Hermes reports, never a catalog entry the requests do not reach", () => {
+    const models = [
+      { key: "opencode-go/deepseek-v4.1-flash", provider: "opencode-go", id: "deepseek-v4.1-flash", name: "deepseek-v4.1-flash" },
+      { key: "custom:local//models/bonsai.gguf", provider: "custom:local", id: "/models/bonsai.gguf", name: "bonsai" },
+      { key: "local/glm-local", provider: "local", id: "glm-local", name: "glm-local" },
+    ];
+    const mine = new Set(["custom:local", "local"]);
+    expect(hermesModelKey("deepseek-v4.1-flash", "opencode-go", models, mine)).toBe("opencode-go/deepseek-v4.1-flash");
+    // A local endpoint reports provider "custom"; its row is one of the user's own.
+    expect(hermesModelKey("/models/bonsai.gguf", "custom", models, mine)).toBe("custom:local//models/bonsai.gguf");
+    expect(hermesModelKey("local/glm-local", "custom", models, mine)).toBe("local/glm-local");
+    // A bare switch's leftover: DeepSeek's name, sent to the local endpoint. Not DeepSeek.
+    expect(hermesModelKey("opencode-go/deepseek-v4.1-flash", "custom", models, mine)).toBe("custom/opencode-go/deepseek-v4.1-flash");
+    // No catalog yet: the name as reported.
+    expect(hermesModelKey("deepseek-v4.1-flash", "opencode-go", [], new Set())).toBe("opencode-go/deepseek-v4.1-flash");
   });
 
   it("reports a turn failure as an error on the assistant item", async () => {

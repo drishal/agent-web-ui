@@ -446,9 +446,7 @@ class HermesLiveChat implements LiveChat {
     const model = str(info.model);
     const provider = str(info.provider);
     if (model || provider) {
-      // model may already arrive fully qualified ("provider/model") for multi-provider
-      // gateways; adding info.provider on top would double it (custom/local/x).
-      const qualified = model && model.includes("/") ? model : provider && model ? `${provider}/${model}` : model;
+      const qualified = this.modelKey();
       this.emit({
         type: "config",
         config: {
@@ -456,6 +454,8 @@ class HermesLiveChat implements LiveChat {
           ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort) } : {}),
         },
       });
+      // The key needs the catalog to tell a real pick from a stranded name; once it is read, say it again.
+      if (!this.models) void this.modelList().then(() => this.emit({ type: "config", config: { model: this.modelKey() || null } }), () => undefined);
     }
     const wasRunning = this.running;
     this.running = info.running === true;
@@ -706,15 +706,18 @@ class HermesLiveChat implements LiveChat {
   }
 
   async getConfig(): Promise<ChatConfig> {
-    const model = str(this.info.model);
-    const provider = str(this.info.provider);
-    const qualified = model && model.includes("/") ? model : provider && model ? `${provider}/${model}` : model;
+    const models = await this.modelList();
     return {
-      model: qualified || null,
+      model: this.modelKey() || null,
       thinkingLevel: str(this.info.reasoning_effort) || null,
-      models: await this.modelList(),
+      models,
       thinkingLevels: REASONING_LEVELS,
     };
+  }
+
+  /** The picker's key for the model this session is on (see hermesModelKey). */
+  private modelKey(): string {
+    return hermesModelKey(str(this.info.model), str(this.info.provider), this.models ?? [], this.adapter.userDefinedProviders(this.cwd));
   }
 
   /** Asked of this chat's own gateway: a probe child would cost a second gateway start (~2 s). */
@@ -846,13 +849,34 @@ class HermesLiveChat implements LiveChat {
   async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
     const id = this.requireSession();
     if (patch.model !== undefined) {
-      const result = await this.live.request<Obj>("config.set", { session_id: id, key: "model", value: patch.model, confirm_expensive_model: false });
+      const value = await this.switchTarget(patch.model);
+      const result = await this.live.request<Obj>("config.set", { session_id: id, key: "model", value, confirm_expensive_model: false });
       if (result?.confirm_required === true) throw new Error(str(result.confirm_message) || "That model needs confirmation");
       this.models = null;
     }
     if (patch.thinkingLevel !== undefined) {
       await this.live.request("config.set", { session_id: id, key: "reasoning", value: patch.thinkingLevel });
     }
+  }
+
+  /**
+   * What config.set's model takes for a picked key ("provider/model"): the
+   * model and `--provider`, as Hermes's own picker sends it. Given the bare key,
+   * Hermes keeps the provider it is on and takes the whole key as the model's
+   * name, so a pick from another provider goes to the old endpoint (a local
+   * server, say) under a name it does not know, and the turn retries until it
+   * gives up.
+   */
+  private async switchTarget(key: string): Promise<string> {
+    const ask = (params: Obj) => this.live.request<Obj>("model.options", params);
+    this.models ??= await this.adapter.listModels(this.cwd, false, ask);
+    let picked = this.models.find((m) => m.key === key);
+    // A list read before the gateway's providers changed: read it again once.
+    if (!picked) {
+      this.models = await this.adapter.listModels(this.cwd, true, ask);
+      picked = this.models.find((m) => m.key === key);
+    }
+    return picked?.provider ? `${picked.id} --provider ${picked.provider}` : key;
   }
 
   async refreshModels(): Promise<void> {
@@ -885,6 +909,29 @@ class HermesLiveChat implements LiveChat {
     if (!this.runtimeId) throw new Error("This chat has no hermes session yet");
     return this.runtimeId;
   }
+}
+
+/**
+ * The catalog key for the model a session is on. Hermes reports the model and
+ * its provider apart, and the model may already read "vendor/model" (an
+ * endpoint group's models, or a name carried over by a bare switch). A catalog
+ * entry counts only when its provider is the one reported, or, for "custom",
+ * one of the user-defined endpoints. A name sent to the wrong provider (a
+ * "opencode-go/deepseek-v4.1-flash" that went to the local endpoint) gets a key
+ * outside the catalog, so the picker shows nothing picked instead of claiming
+ * the model the requests are not going to.
+ */
+export function hermesModelKey(model: string, provider: string, models: readonly ModelInfo[], userDefined: ReadonlySet<string>): string {
+  if (!model) return "";
+  const plain = model.includes("/") || !provider ? model : `${provider}/${model}`;
+  if (!provider) return plain;
+  const fits = (m: ModelInfo) => m.provider === provider || (provider === "custom" && m.provider !== undefined && userDefined.has(m.provider));
+  const byId = models.filter((m) => m.id === model && fits(m));
+  const exact = byId.find((m) => m.provider === provider) ?? byId[0];
+  if (exact) return exact.key;
+  const byKey = models.find((m) => m.key === model && fits(m));
+  if (byKey) return byKey.key;
+  return models.some((m) => m.key === plain) ? `${provider}/${model}` : plain;
 }
 
 function approvalChoice(answer: InteractionAnswer, choices: string[]): string {
@@ -933,7 +980,7 @@ export class HermesAdapter implements HarnessAdapter {
     supportsRewind: true,
     supportsHtmlRender: false,
   };
-  private probes = new Map<string, { at: number; models: ModelInfo[] }>();
+  private probes = new Map<string, { at: number; models: ModelInfo[]; userDefined: Set<string> }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;
 
   constructor(private readonly options: { command?: string; args?: string[] } = {}) {}
@@ -1021,9 +1068,11 @@ export class HermesAdapter implements HarnessAdapter {
     const result = ask ? await ask(params) : await this.withProbe(cwd, (rpc) => rpc.request<Obj>("model.options", params));
     const models: ModelInfo[] = [];
     const seen = new Set<string>();
+    const userDefined = new Set<string>();
     for (const provider of Array.isArray(result?.providers) ? result.providers : []) {
       if (!isObj(provider)) continue;
       const slug = str(provider.slug);
+      if (provider.is_user_defined === true) userDefined.add(slug);
       const capabilities = isObj(provider.capabilities) ? provider.capabilities : {};
       for (const model of Array.isArray(provider.models) ? provider.models : []) {
         const id = String(model);
@@ -1034,8 +1083,13 @@ export class HermesAdapter implements HarnessAdapter {
         models.push({ key, provider: slug, id, name: id, ...(isObj(capability) && capability.reasoning === true ? { reasoning: true } : {}) });
       }
     }
-    this.probes.set(cwd, { at: Date.now(), models });
+    this.probes.set(cwd, { at: Date.now(), models, userDefined });
     return models;
+  }
+
+  /** The providers in the last catalog read for `cwd` that are the user's own endpoints (Hermes's "custom"). */
+  userDefinedProviders(cwd: string): ReadonlySet<string> {
+    return this.probes.get(cwd)?.userDefined ?? new Set();
   }
 
   async listThinkingLevels(): Promise<string[]> {
