@@ -1,5 +1,6 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
-// the bottom row, a status stack above, approvals taking over the card.
+// the bottom row, a status stack above, approvals taking over the card. From
+// T3 Code: ↑/↓ recall this chat's prompts.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
@@ -14,6 +15,7 @@ import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
 import { useAddImagesToDraft, useAddToDraft } from "../draft-bus.js";
+import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
 import { useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
@@ -98,6 +100,22 @@ export function Composer({
 
   const tooLong = text.length > maxChars;
 
+  // ↑/↓ walk this chat's sent prompts (prompt-history.ts); an edit ends the walk.
+  const recall = useRef<Recall | null>(null);
+  // Where the caret goes once a text set by a key (recall, a list, the stash) has rendered.
+  const caretAfter = useRef<[number, number] | null>(null);
+  useLayoutEffect(() => {
+    const at = caretAfter.current;
+    const el = area.current;
+    if (!at || !el) return;
+    caretAfter.current = null;
+    el.setSelectionRange(at[0], at[1]);
+  }, [text]);
+  const setTextAt = (next: string, from: number, to = from) => {
+    caretAfter.current = [from, to];
+    setText(next);
+  };
+
   useAddToDraft((added) => {
     setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${added}` : added));
     window.requestAnimationFrame(() => {
@@ -128,6 +146,7 @@ export function Composer({
       setImages([]);
       setPastes([]);
       setImageError(null);
+      recall.current = null;
       const ok = await onSend(
         value,
         mode,
@@ -290,6 +309,17 @@ export function Composer({
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (menuKey(e)) {
       e.preventDefault();
+      return;
+    }
+    const el = e.currentTarget;
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing;
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && plain && !e.shiftKey) {
+      const step = recallStep(sentPrompts(chat.items), recall.current, e.key === "ArrowUp" ? "up" : "down", text, el.selectionStart);
+      if (step) {
+        e.preventDefault();
+        recall.current = step.recall;
+        setTextAt(step.text, step.text.length);
+      }
       return;
     }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || coarsePointer()) return;

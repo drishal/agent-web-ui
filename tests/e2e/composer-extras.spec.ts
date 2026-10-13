@@ -7,6 +7,21 @@ import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helper
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
+test("↑ and ↓ walk this chat's prompts", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first recall");
+  await sendAndWait(page, "second recall");
+  await box(page).focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(box(page)).toHaveValue("second recall");
+  await page.keyboard.press("ArrowUp");
+  await expect(box(page)).toHaveValue("first recall");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect(box(page)).toHaveValue("");
+});
+
 test("Ctrl+F finds in the chat, opening the fold a match is in, and steps through matches", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
