@@ -1,10 +1,11 @@
 // The composer card (DeepSeek Harness): text on top, settings and actions in
 // the bottom row, a status stack above, approvals taking over the card. From
 // T3 Code: ↑/↓ recall this chat's prompts, Shift+Enter continues a Markdown
-// list (Tab indents it), the stash parks a draft for later (Alt+S), and a
-// prompt link's text arrives with a note to read it.
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand } from "../../shared/protocol.js";
+// list (Tab indents it), the stash parks a draft for later (Alt+S), a prompt
+// link's text arrives with a note to read it, and a run stopped on a usage
+// limit offers to continue when the limit resets.
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
@@ -20,6 +21,8 @@ import { useAddImagesToDraft, useAddToDraft, useLinkedPrompt } from "../draft-bu
 import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
 import { continueList, indentList } from "../list-continue.js";
 import { loadStash, saveStash, stashDraft, takeFromStash, type StashEntry } from "../stash.js";
+import { CONTINUE_TEXT, limitStop } from "../limit-stop.js";
+import { LimitRecovery } from "./LimitRecovery.js";
 import { useDismiss, useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
@@ -49,6 +52,7 @@ export function Composer({
   onRefreshModels,
   onHandoff,
   onNewChat,
+  limits,
 }: {
   chat: ChatState;
   harnesses: HarnessStatus[];
@@ -63,6 +67,8 @@ export function Composer({
   onHandoff: (harnessId: string, draft: string) => Promise<void>;
   /** Ctrl+Alt+Enter: once the message is sent, open a new chat. */
   onNewChat?: () => void;
+  /** The subscriptions' limits: where a stop on a usage limit learns when it resets. */
+  limits?: UsageLimits | null;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -419,6 +425,8 @@ export function Composer({
   const model = chat.config.models.find((m) => m.key === chat.config.model);
   const blind = images.length > 0 && model?.vision === false;
   const pending = closed ? [] : chat.pending;
+  const harnessName = harnesses.find((h) => h.id === chat.harnessId)?.displayName ?? chat.harnessId;
+  const stopped = useMemo(() => limitStop(chat.items, chat.status, limits ?? null, harnessName), [chat.items, chat.status, limits, harnessName]);
 
   return (
     <div className={`composer${hero ? " is-hero" : ""}`}>
@@ -445,6 +453,9 @@ export function Composer({
         base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
+      {stopped && !busy && pending.length === 0 && !closed ? (
+        <LimitRecovery key={stopped.id} chatId={chat.chatId} stop={stopped} idle={!busy} onContinue={() => void onSend(CONTINUE_TEXT, "normal", [])} />
+      ) : null}
       {pending.length > 0 ? (
         <ApprovalStack
           pending={pending}

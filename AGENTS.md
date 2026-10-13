@@ -94,6 +94,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   list-continue.ts            Markdown lists in the composer: Shift+Enter continues one, Tab indents it.
   prompt-link.ts              Prompt links (?prompt=): hidden characters taken out, a link made.
   stash.ts                    The prompt stash: drafts parked in browser storage, images within a budget.
+  limit-stop.ts               A run stopped on a usage limit, and when the limit resets.
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced
@@ -194,8 +195,8 @@ if every test passes.
   `ask`, `twice`, `quiz`, `described`, `edit`, `showcase` (one call of every tool
   kind), `subagents` (a parallel pi-subagents run with live progress and
   transcripts), `recall`, `todo`, `bloat`, `slow` (many small chunks, to act
-  mid-run), `fail`, `planned` (an ExitPlanMode plan). Add a word there when a
-  feature needs a new scenario,
+  mid-run), `fail`, `planned` (an ExitPlanMode plan), `ratelimit` (a stop on a
+  usage limit). Add a word there when a feature needs a new scenario,
   rather than mocking deeper.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
   `fake-claude.mjs`) speak each harness's real wire protocol. Adapter changes
