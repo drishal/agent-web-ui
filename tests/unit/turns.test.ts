@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workSegments } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -113,6 +113,35 @@ describe("buildTurns", () => {
     expect(formatDuration(3_720_000)).toBe("1h 2m");
     expect(relativePath("/w/src/a.ts", "/w")).toBe("src/a.ts");
     expect(relativePath("/other/a.ts", "/w")).toBe("/other/a.ts");
+  });
+});
+
+describe("replies between tool calls", () => {
+  const items: ChatItem[] = [
+    { kind: "user", id: "u1", text: "reply, run something, then say done" },
+    { kind: "assistant", id: "a1", text: "this is reply block 1", thinking: "They want a reply first.", streaming: false },
+    tool("t1", "command"),
+    { kind: "assistant", id: "a2", text: "done with tool call", thinking: "The command ran.", streaming: false },
+  ];
+
+  it("show in order as replies, with only the work between them folded", () => {
+    const [turn] = buildTurns(items, "idle");
+    expect(turn?.answer?.id).toBe("a2");
+    const segments = turn ? workSegments(turn) : [];
+    // The first reply's thought, the reply; then the command and the answer's thought.
+    expect(segments.map((s) => [s.items.map((i) => i.id), s.reply?.id ?? null, s.answerAt])).toEqual([
+      [["a1"], "a1", -1],
+      [["t1"], null, 1],
+    ]);
+    expect(segments[1]?.counts).toEqual({ command: 1 });
+  });
+
+  it("are the same while the run is live, and a turn with no reply between work keeps one fold", () => {
+    const [live] = buildTurns(items.slice(0, 3), "running");
+    expect(live?.answer).toBeNull();
+    expect(live ? workSegments(live).map((s) => s.reply?.id ?? null) : []).toEqual(["a1", null]);
+    const [plain] = buildTurns([items[0] as ChatItem, tool("t1", "read"), { kind: "assistant", id: "a9", text: "Done.", thinking: "", streaming: false }], "idle");
+    expect(plain ? workSegments(plain).map((s) => [s.items.map((i) => i.id), s.reply]) : []).toEqual([[["t1"], null]]);
   });
 });
 

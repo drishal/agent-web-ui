@@ -8,6 +8,7 @@
 //   "wait"  report a provider wait on the harness's status line for 1.5 s
 //   "planned" hand a ten-step plan over for review (an ExitPlanMode call)
 //   "ratelimit" stop on a usage limit that resets in an hour
+//   "interleaved" reply, run a command, then answer (a reply between tool calls)
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -465,6 +466,11 @@ class FakeLiveChat implements LiveChat {
       if (/\bedit\b/i.test(text)) await this.tool("edit", signal);
       if (/\bshowcase\b/i.test(text)) for (const call of this.showcase()) await this.call(call, signal);
       if (/\bsubagents\b/i.test(text)) await this.subagents(signal);
+      if (/\binterleaved\b/i.test(text)) {
+        // A reply to the user, then a command, then the answer: the reply is not process text.
+        await this.reply("this is reply block 1", signal);
+        await this.call({ name: "bash", args: { command: "sleep 1" }, output: "" }, signal);
+      }
       if (/\bplanned\b/i.test(text)) {
         // A plan handed over for review, as Claude Code's ExitPlanMode does it.
         const plan = "## Plan\n\n1. Read `src/app.ts`\n2. Split the handler\n3. Add a test\n4. Run the suite\n5. Update the README\n6. Check the build\n7. Tidy the imports\n8. Write the commit\n9. Push it\n10. Tell the user";

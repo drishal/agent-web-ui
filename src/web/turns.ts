@@ -139,6 +139,51 @@ const COUNT_LABELS: Array<[ToolCategory, string, string]> = [
   ["other", "tool call", "tool calls"],
 ];
 
+/** A stretch of a turn's work, and the reply the agent wrote to the user after it (null for the work after the last one). */
+export interface WorkSegment {
+  key: string;
+  /** The work: tools, notices, requests, and thinking (a reply's own thought stays here, before it). */
+  items: ChatItem[];
+  reply: AssistantItem | null;
+  counts: Partial<Record<ToolCategory, number>>;
+  /** Where in `items` the answer's thought goes, or -1 when it is in another stretch. */
+  answerAt: number;
+}
+
+/**
+ * A turn's process in the order it happened: work, a reply to the user, more
+ * work, another reply. What the agent writes to the user between tool calls is
+ * a reply, shown as one, not grey process text inside the fold ("Reply with X,
+ * then run a command, then say done" reads X, the command's fold, done). Only
+ * the stretches of work fold away. With no reply between work, there is one
+ * stretch: the turn's single fold.
+ */
+export function workSegments(turn: Turn): WorkSegment[] {
+  const segments: WorkSegment[] = [];
+  let items: ChatItem[] = [];
+  let counts: Partial<Record<ToolCategory, number>> = {};
+  let answerAt = -1;
+  const close = (reply: AssistantItem | null) => {
+    segments.push({ key: `${turn.id}#${segments.length}`, items, reply, counts, answerAt });
+    items = [];
+    counts = {};
+    answerAt = -1;
+  };
+  turn.process.forEach((item, i) => {
+    if (i === turn.answerAt) answerAt = items.length;
+    if (item.kind === "tool") counts[item.category] = (counts[item.category] ?? 0) + 1;
+    if (item.kind === "assistant" && saysSomething(item.text)) {
+      if (item.thinking.trim()) items.push(item);
+      close(item);
+      return;
+    }
+    items.push(item);
+  });
+  if (turn.answerAt >= turn.process.length) answerAt = items.length;
+  if (items.length > 0 || segments.length === 0 || answerAt >= 0) close(null);
+  return segments;
+}
+
 export function countSummary(counts: Turn["counts"]): string {
   const parts: string[] = [];
   for (const [key, one, many] of COUNT_LABELS) {

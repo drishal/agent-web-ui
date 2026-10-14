@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn, readsAsNarration, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
@@ -187,9 +187,10 @@ function RequestRow({ item }: { item: RequestItem }) {
 }
 
 /** Thinking and interim text between tool calls. Pure thought stays in the thought fold; a thinking blob that reads as narration and arrived after a tool renders as plain text. */
-function ProcessAssistant({ item, afterTool }: { item: AssistantItem; afterTool: boolean }) {
+function ProcessAssistant({ item, afterTool, thoughtOnly = false }: { item: AssistantItem; afterTool: boolean; thoughtOnly?: boolean }) {
   const arrival = useArrival(item.id);
-  const text = saysSomething(item.text);
+  // A reply between tool calls is drawn as a reply after its stretch of work; here only its thought.
+  const text = !thoughtOnly && saysSomething(item.text);
   const thinking = item.thinking.trim();
   if (!text && !thinking) return null;
   const narrated = !text && afterTool && readsAsNarration(thinking);
@@ -211,10 +212,10 @@ function ProcessAssistant({ item, afterTool }: { item: AssistantItem; afterTool:
   );
 }
 
-export function ProcessItem({ item, workspace, afterTool = false }: { item: ChatItem; workspace: string; afterTool?: boolean }) {
+export function ProcessItem({ item, workspace, afterTool = false, thoughtOnly = false }: { item: ChatItem; workspace: string; afterTool?: boolean; thoughtOnly?: boolean }) {
   switch (item.kind) {
     case "assistant":
-      return <ProcessAssistant item={item} afterTool={afterTool} />;
+      return <ProcessAssistant item={item} afterTool={afterTool} thoughtOnly={thoughtOnly} />;
     case "tool":
       return <ToolRow item={item} workspace={workspace} />;
     case "notice":
@@ -602,22 +603,46 @@ function ChangedFiles({ files, workspace }: { files: string[]; workspace: string
   );
 }
 
-function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: boolean; onToggle: (id: string) => void; workspace: string }) {
-  const now = useNow(turn.live);
-  const counts = countSummary(turn.counts);
+/**
+ * The fold over a turn's work: the whole turn's when no reply came between tool
+ * calls, else one stretch of it (`segment`, at `place` among them). The first
+ * stretch carries how long the turn took; the last, while the turn runs, the
+ * spinner and the live thought; the others name what they ran.
+ */
+function ProcessFold({
+  turn,
+  open,
+  onToggle,
+  workspace,
+  segment,
+  place,
+}: {
+  turn: Turn;
+  open: boolean;
+  onToggle: (id: string) => void;
+  workspace: string;
+  segment?: WorkSegment;
+  place?: "first" | "middle" | "last";
+}) {
+  const live = turn.live && (place === undefined || place === "last");
+  const now = useNow(live);
+  const items = segment?.items ?? turn.process;
+  const answerAt = segment ? segment.answerAt : turn.answerAt;
+  const counts = countSummary(segment?.counts ?? turn.counts);
   const duration =
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
-  const label = turn.live ? "Working" : duration ? `Worked for ${duration}` : "Worked";
-  const answerThinking = turn.answer?.thinking ? turn.answer : null;
-  const thought = turn.live && !open ? latestThought(turn) : null;
+  const leading = place === undefined || place === "first";
+  const label = live ? "Working" : leading ? (duration ? `Worked for ${duration}` : "Worked") : counts ? counts.charAt(0).toUpperCase() + counts.slice(1) : "Worked";
+  const answerThinking = answerAt >= 0 && turn.answer?.thinking ? turn.answer : null;
+  const thought = live && !open ? latestThought(turn) : null;
   return (
-    <div className={`process${open ? " is-open" : ""}${turn.live ? " is-live" : ""}`}>
+    <div className={`process${open ? " is-open" : ""}${live ? " is-live" : ""}`}>
       <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(turn.id)} data-testid="process-toggle">
-        {turn.live ? <Spinner size={13} /> : null}
+        {live ? <Spinner size={13} /> : null}
         <span className="process-label">
           {label}
-          {turn.live && duration ? <span className="process-time"> · {duration}</span> : null}
-          {counts ? <span className="process-counts"> · {counts}</span> : null}
+          {live && duration ? <span className="process-time"> · {duration}</span> : null}
+          {counts && (live || leading) ? <span className="process-counts"> · {counts}</span> : null}
         </span>
         <IconChevronDown size={14} className="process-chevron" />
       </button>
@@ -635,23 +660,75 @@ function ProcessFold({ turn, open, onToggle, workspace }: { turn: Turn; open: bo
             let seenTool = false;
             return (
               <>
-                {turn.process.map((item, i) => {
+                {items.map((item, i) => {
                   const afterTool = seenTool;
                   if (item.kind === "tool") seenTool = true;
                   return (
                     <Fragment key={item.id}>
-                      {i === turn.answerAt ? answerThought : null}
-                      <ProcessItem item={item} workspace={workspace} afterTool={afterTool} />
+                      {i === answerAt ? answerThought : null}
+                      <ProcessItem item={item} workspace={workspace} afterTool={afterTool} thoughtOnly={segment !== undefined} />
                     </Fragment>
                   );
                 })}
-                {turn.answerAt >= turn.process.length ? answerThought : null}
+                {answerAt >= items.length ? answerThought : null}
               </>
             );
           })()}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** A reply the agent wrote between tool calls: the answer's look, without the answer's actions (those are the turn's). */
+function InterimReply({ item }: { item: AssistantItem }) {
+  const arrival = useArrival(item.id);
+  return (
+    <div className={`answer answer-interim${arrival}`} data-testid="interim-reply">
+      <Markdown text={item.text} allowRun={!item.streaming} />
+    </div>
+  );
+}
+
+/**
+ * A turn whose replies came between tool calls, in order: each stretch of work
+ * folded (or, when it is only thinking, its thought rows as they are), then the
+ * reply after it. All the stretches open and close together.
+ */
+function SegmentedWork({ turn, segments, open, onToggle, workspace }: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: (id: string) => void; workspace: string }) {
+  // While the turn runs on after a reply, a live fold follows it for what comes next.
+  const ended = segments[segments.length - 1]?.reply !== null;
+  const all: WorkSegment[] = turn.live && ended ? [...segments, { key: `${turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : segments;
+  const lastIndex = all.length - 1;
+  const live = (n: number) => turn.live && n === lastIndex;
+  const shape = all.map((segment, n) =>
+    segment.items.length === 0 && !live(n) ? "none" : segment.items.every((item) => item.kind === "assistant") && !live(n) ? "thought" : "fold",
+  );
+  // The first fold carries how long the turn took, the live one the spinner.
+  const firstFold = shape.indexOf("fold");
+  return (
+    <>
+      {all.map((segment, n) => {
+        const place = live(n) ? "last" : n === firstFold ? "first" : "middle";
+        const work =
+          shape[n] === "none" ? null : shape[n] === "thought" ? (
+            <div className="process-inline">
+              {segment.items.map((item) => (
+                <ProcessItem key={item.id} item={item} workspace={workspace} thoughtOnly />
+              ))}
+              {segment.answerAt >= 0 && turn.answer?.thinking ? <ThoughtRow thinking={turn.answer.thinking} streaming={turn.answer.streaming && !turn.answer.text} /> : null}
+            </div>
+          ) : (
+            <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} segment={segment} place={place} />
+          );
+        return (
+          <Fragment key={segment.key}>
+            {work}
+            {segment.reply ? <InterimReply item={segment.reply} /> : null}
+          </Fragment>
+        );
+      })}
+    </>
   );
 }
 
@@ -721,10 +798,16 @@ const TurnView = memo(function TurnView({
   }
   const hasProcess = turn.process.length > 0 || Boolean(turn.answer?.thinking);
   const chatId = useContext(ChatIdContext);
+  const segments = hasProcess ? workSegments(turn) : [];
+  const split = segments.some((segment) => segment.reply !== null);
   return (
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} through={turn.through} canBranch={canBranch} hasCheckpoint={hasCheckpoint} actions={promptActions} />
-      {hasProcess ? <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} /> : null}
+      {split ? (
+        <SegmentedWork turn={turn} segments={segments} open={open} onToggle={onToggle} workspace={workspace} />
+      ) : hasProcess ? (
+        <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} />
+      ) : null}
       {turn.renders.length > 0 && chatId !== null ? (
         <div className="turn-renders">
           {turn.renders.map((render) => (
