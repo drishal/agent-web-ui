@@ -32,11 +32,8 @@ export const LEADER_KEYS: PrefixKey[] = [
 /** The C-x keys on one line, for a narrow terminal's hint. */
 export const LEADER_HELP = LEADER_KEYS.map((k) => `${k.key} ${k.label.replace(/^\+/, "")}`).join(" · ");
 
-/** The status line's reminder of the direct keys. */
-export const KEYS_HELP = "C-k commands · C-r history · M-h harness · M-m model · M-t thinking · C-x more · Esc Esc stop · C-c C-c quit";
-
-/** NORMAL mode's reminder. */
-export const VIM_HELP = "j/k scroll · C-d/C-u half page · gg/G top/bottom · {/} turns · zR/zM folds · h sessions · : commands · / history · i type";
+/** NORMAL mode's reminder as it starts, short enough for the composer's footer (the README has them all). */
+export const VIM_HELP = "j/k scroll · gg/G top/bottom · {/} turns · i type";
 
 /** The C-x hint for a key: "C-x n". */
 export const leader = (key: string): string => `C-x ${key}`;

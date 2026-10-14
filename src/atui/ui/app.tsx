@@ -1,6 +1,7 @@
 // atui's screen: a side panel on the left (Sessions and Info tabs, folding to
-// a rail), the conversation and composer beside it, a status line at the bottom; dialogs
-// over it all. Keys are written the Emacs way (C- is Ctrl, M- is Alt). Global
+// a rail), the conversation and composer beside it, and no status bar: the
+// composer's footer carries vim's mode, a waiting C-x, a lost connection, and
+// a passing hint; dialogs over it all. Keys are written the Emacs way (C- is Ctrl, M- is Alt). Global
 // keys: C-k commands, C-r history, M-h/M-m/M-t the harness, model, and
 // thinking pickers (the composer's footer opens them on a click too), C-x
 // then a letter for the rest (a which-key panel lists them until a key, Esc,
@@ -16,7 +17,7 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { PaletteItem } from "../../web/palette.js";
 import { isBusy } from "../../web/session-groups.js";
 import { ago, STATUS_LABEL } from "../format.js";
-import { KEYS_HELP, leader, LEADER_KEYS, VIM_HELP } from "../keys.js";
+import { leader, LEADER_KEYS, VIM_HELP } from "../keys.js";
 import { harnessGlyph } from "../neat.js";
 import type { Atui } from "../state.js";
 import { accentOf } from "../theme.js";
@@ -102,6 +103,8 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     setMode("normal");
     vimPending = "";
     composer?.blur();
+    // With no status bar to keep it on screen, NORMAL's keys show for a moment as it starts.
+    flash(VIM_HELP, 4000);
   };
 
   const half = () => Math.max(3, Math.floor(size().height / 2));
@@ -486,6 +489,7 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
               keyed
               fallback={
                 <Composer
+                  status={{ mode: vim() ? (normal() ? "normal" : "insert") : null, leader: leaderOn(), note: hint() }}
                   focused={focus() === "composer" && !dialog() && !normal()}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
@@ -507,25 +511,6 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
             }}
           />
         </Show>
-        <box flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={app.glass() ? undefined : t().surface}>
-          <text flexShrink={0} fg={app.conn() === "connected" ? t().ok : app.conn() === "idle" ? t().muted : t().warn}>
-            {app.conn() === "connected" ? "● " : app.conn() === "idle" ? "○ " : "◌ "}
-          </text>
-          <Show when={vim()}>
-            <text flexShrink={0} fg={normal() ? t().accent : t().muted}>
-              <b>{normal() ? "-- NORMAL -- " : "-- INSERT -- "}</b>
-            </text>
-          </Show>
-          <Show when={leaderOn()}>
-            <text flexShrink={0} fg={t().accent}>
-              <b>{"C-x- "}</b>
-            </text>
-          </Show>
-          <text flexGrow={1} fg={t().muted} wrapMode="none" truncate>
-            {leaderOn() ? "a key from the list · Esc or C-g cancels" : (hint() ?? (normal() ? VIM_HELP : KEYS_HELP))}
-          </text>
-          <text flexShrink={0} fg={t().muted}>{` atui ${app.boot()?.version ?? ""}`}</text>
-        </box>
         <Show when={dialog() === "palette"}>
           <Picker title="Commands" placeholder="Search commands, sessions, thinking…" items={paletteItems()} onClose={() => setDialog(null)} />
         </Show>

@@ -8,7 +8,7 @@ import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, noti
 import { meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor } from "../../src/atui/fx.js";
 import { filetypeOf, taskBoxes } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
-import { KEYS_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
+import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
 import { highlightPreview, wordDiff } from "../../src/atui/words.js";
 import { attachmentFrom, byteSize, clipboardTool, imageModeFrom, imagePathsFromPaste, imageProtocol, pickImageType } from "../../src/atui/images.js";
 
@@ -226,8 +226,7 @@ describe("images", () => {
 
 describe("keys", () => {
   it("writes keys the Emacs way and lays C-x out column by column like which-key", () => {
-    expect(KEYS_HELP).toContain("C-k commands");
-    expect(KEYS_HELP).not.toMatch(/\^|Ctrl\+/);
+    expect(LEADER_HELP).not.toMatch(/\^|Ctrl\+/);
     expect(new Set(LEADER_KEYS.map((k) => k.key)).size).toBe(LEADER_KEYS.length);
     expect(whichKeyGrid(14, 100, 34)).toEqual({ columns: 2, rows: 7 });
     expect(whichKeyColumns([1, 2, 3, 4, 5], 100, 34)).toEqual([[1, 2, 3], [4, 5]]);
