@@ -34,6 +34,8 @@ export function Composer(p: {
   onCompactChoice: (on: boolean | null) => void;
   /** A click on the footer's harness, model, or thinking level opens its picker. */
   onPick: (picker: "harness" | "models" | "thinking") => void;
+  /** What the status bar used to say, now in the footer: vim's mode, a waiting C-x, a passing hint. */
+  status: { mode: "normal" | "insert" | null; leader: boolean; note: string | null };
   ref: (el: TextareaRenderable) => void;
 }) {
   const app = useAtui();
@@ -326,6 +328,23 @@ export function Composer(p: {
       </box>
       <box flexDirection="row" paddingLeft={1} paddingRight={1}>
         <box flexDirection="row" flexGrow={1} overflow="hidden">
+          <Show when={p.status.mode}>
+            {(mode) => (
+              <text flexShrink={0} wrapMode="none" fg={mode() === "normal" ? t().accent : t().muted}>
+                <b>{mode() === "normal" ? "-- NORMAL -- " : "-- INSERT -- "}</b>
+              </text>
+            )}
+          </Show>
+          <Show when={p.status.leader}>
+            <text flexShrink={0} wrapMode="none" fg={t().accent}>
+              <b>{"C-x- "}</b>
+            </text>
+          </Show>
+          <Show when={app.conn() !== "connected" && app.conn() !== "idle"}>
+            <text flexShrink={0} wrapMode="none" fg={t().warn}>
+              {"◌ reconnecting  "}
+            </text>
+          </Show>
           <text flexShrink={0} wrapMode="none" fg={accentOf(t(), app.harness()?.accent)} onMouseDown={() => p.onPick("harness")}>
             {`${harnessGlyph(app.harness()?.id ?? "")} ${app.harness()?.displayName ?? "—"} ▾`}
           </text>
@@ -339,8 +358,17 @@ export function Composer(p: {
               {`  ${app.chat()?.config.thinkingLevel} ▾`}
             </text>
           </Show>
+          <Show when={p.status.note}>
+            {(note) => (
+              // A narrow footer cuts the hint before the model's name.
+              <text flexShrink={100} wrapMode="none" truncate fg={t().warn}>
+                {`  ${note()}`}
+              </text>
+            )}
+          </Show>
         </box>
         <text flexShrink={0}>
+          {"  "}
           <Show when={offer()}>
             <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (C-x f)  `}</span>
           </Show>
