@@ -501,6 +501,23 @@ test("markdown never renders raw HTML or unsafe links", async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { pwned?: number }).pwned)).toBeUndefined();
 });
 
+test("a reply written before a tool call shows as a reply, in order, with only the work folded", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "interleaved please");
+  const turn = page.getByTestId("turn").last();
+  const reply = turn.getByTestId("interim-reply");
+  await expect(reply).toContainText("this is reply block 1");
+  // Folded, the reply stays in view, above the fold holding the command, and the answer comes after.
+  const fold = turn.getByTestId("process-toggle");
+  await expect(fold).toHaveAttribute("aria-expanded", "false");
+  await expect(fold.last()).toContainText("1 command");
+  const top = async (l: ReturnType<typeof page.locator>) => (await l.boundingBox())?.y ?? 0;
+  expect(await top(reply)).toBeLessThan(await top(fold.last()));
+  expect(await top(fold.last())).toBeLessThan(await top(turn.getByTestId("answer")));
+  await expect(turn.getByTestId("answer")).toContainText("Echo: interleaved please");
+});
+
 test("todos from the harness show in the status stack, which can be hidden", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

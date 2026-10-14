@@ -1811,6 +1811,19 @@ body.is-resizing {
   padding: 8px 0 2px;
 }
 
+/* A stretch that is only thinking, between replies: its thought rows as they are, no fold. */
+.process-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 10px;
+}
+
+/* A reply between tool calls: the answer's look, with room before the work that follows. */
+.answer-interim {
+  margin-bottom: 14px;
+}
+
 .process-text {
   padding: 2px 0 4px 22px;
   color: var(--text-2);
