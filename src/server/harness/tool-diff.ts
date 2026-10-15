@@ -225,8 +225,9 @@ function parseOmpPatch(input: string): ToolDiff | null {
   return finish(out);
 }
 
-const OLD_KEYS = ["oldText", "old_string", "oldStr", "original"];
-const NEW_KEYS = ["newText", "new_string", "newStr", "updated"];
+// oldString/newString: OpenCode's edit.
+const OLD_KEYS = ["oldText", "old_string", "oldString", "oldStr", "original"];
+const NEW_KEYS = ["newText", "new_string", "newString", "newStr", "updated"];
 const DIFF_KEYS = ["diff", "patch", "unifiedDiff"];
 const firstString = (args: Obj, keys: string[]): string | null => {
   for (const key of keys) if (typeof args[key] === "string") return args[key] as string;
