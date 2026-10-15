@@ -71,6 +71,14 @@ describe("subscription limits", () => {
     expect(ompLimits({ nope: true })).toEqual([]);
   });
 
+  it("names two limits on one window by their own labels, as xAI's credits and GrokChat cap are", () => {
+    const limit = (label: string, used: number) => ({ label, window: { label: "Weekly", resetsAt: 1792269519760 }, amount: { usedFraction: used }, status: "ok" });
+    const [xai] = ompLimits({
+      reports: [{ provider: "xai-oauth", fetchedAt: 1, limits: [limit("SuperGrok Weekly Credits", 0.34), limit("GrokChat (Weekly)", 0.34), { label: "Monthly cap", window: { label: "Monthly" }, amount: { usedFraction: 0.1 } }] }],
+    });
+    expect(xai?.windows.map((w) => w.label)).toEqual(["SuperGrok Weekly Credits", "GrokChat (Weekly)", "Monthly"]);
+  });
+
   it("picks the fullest window, grades it, and says when it resets", () => {
     const top = tightest([...ompLimits(ompJson), claudeLimits(claudeInfo)]);
     expect([top?.account.id, top?.window.label]).toEqual(["claude", "7 days"]);

@@ -103,12 +103,17 @@ export function ompLimits(json: unknown, at = Date.now()): LimitAccount[] {
     const meta = isObj(report.metadata) ? report.metadata : {};
     const windows: LimitWindow[] = [];
     let limited = meta.limitReached === true || meta.allowed === false;
-    for (const limit of Array.isArray(report.limits) ? report.limits : []) {
-      if (!isObj(limit)) continue;
+    const limits = (Array.isArray(report.limits) ? report.limits : []).filter(isObj);
+    const windowLabel = (limit: Obj) => (isObj(limit.window) ? str(limit.window.label) : "");
+    // Two limits on one window (xAI's credits and its GrokChat cap, both "Weekly") go by their own names.
+    const shared = new Map<string, number>();
+    for (const limit of limits) shared.set(windowLabel(limit), (shared.get(windowLabel(limit)) ?? 0) + 1);
+    for (const limit of limits) {
       const window = isObj(limit.window) ? limit.window : {};
       const amount = isObj(limit.amount) ? limit.amount : {};
+      const own = windowLabel(limit);
       windows.push({
-        label: str(window.label) || str(limit.label) || "limit",
+        label: (own && (shared.get(own) ?? 0) < 2 ? own : str(limit.label) || own) || "limit",
         used: share(amount.usedFraction),
         resetsAt: epochMs(window.resetsAt),
       });
