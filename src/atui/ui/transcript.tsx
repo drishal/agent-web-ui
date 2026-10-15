@@ -11,7 +11,7 @@
 // the prompt of the turn you are reading stays pinned at the top.
 import { createEffect, createMemo, createResource, createSignal, For, Index, Match, on, onCleanup, Show, Switch, type Accessor } from "solid-js";
 import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opentui/core";
-import { useTerminalDimensions } from "@opentui/solid";
+import { useRenderer, useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, fileUrl, foldLabel, outputTail, unifiedDiff } from "../format.js";
@@ -133,33 +133,90 @@ function PromptImage(p: { image: ImageRef; n: number }) {
   );
 }
 
-/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. `glow` (0 to 1) lights its edge in the harness's colour. */
-function UserPrompt(p: { item: UserItem; glow: number }) {
+/** One action under a prompt: a chip that runs on a click. */
+function Chip(p: { label: string; onPress: () => void; tone?: string }) {
+  const t = useTheme();
+  return (
+    <box flexShrink={0} marginRight={1} paddingLeft={1} paddingRight={1} backgroundColor={mix(t().bg, t().surface2, 0.9)} onMouseDown={p.onPress}>
+      <text fg={p.tone ?? t().text2}>{p.label}</text>
+    </box>
+  );
+}
+
+/**
+ * What a past prompt offers, under its card once clicked (the web UI's hover
+ * row): Retry and Edit (in place where the harness can, else in a branch),
+ * Undo files where it has a checkpoint, Fork, and Copy, each only where the
+ * chat and the harness allow it, and only while the agent is idle.
+ */
+function PromptActions(p: { item: UserItem; through: number; onDone: () => void }) {
+  const app = useAtui();
+  const t = useTheme();
+  const renderer = useRenderer();
+  const c = () => app.chat();
+  const idle = () => c()?.status === "idle" || c()?.status === "error";
+  const inPlace = () => c()?.capabilities.supportsRewind ?? false;
+  const canFork = () => c()?.capabilities.supportsFork ?? false;
+  const canBranch = () => idle() && (inPlace() || p.through === 1 || canFork());
+  const hasCheckpoint = () => (c()?.checkpoints ?? []).includes(p.through);
+  const run = (action: () => void) => () => {
+    p.onDone();
+    action();
+  };
+  return (
+    <box flexDirection="row" flexWrap="wrap" marginTop={0} paddingLeft={1}>
+      <Show when={canBranch()}>
+        <Chip label="↻ Retry" onPress={run(() => void app.rerun(p.through, p.item, p.item.text))} />
+        <Chip label="✎ Edit" onPress={run(() => app.setEditing({ through: p.through, item: p.item }))} />
+      </Show>
+      <Show when={idle() && hasCheckpoint()}>
+        <Chip label="↶ Undo files" tone={t().warn} onPress={run(() => app.setUndoTurn(p.through))} />
+      </Show>
+      <Show when={idle() && canFork() && p.through > 1}>
+        <Chip label="⑂ Fork before" onPress={run(() => void app.fork(p.through - 1))} />
+      </Show>
+      <Chip label="⧉ Copy" onPress={run(() => void renderer.copyToClipboardOSC52(p.item.text))} />
+      <Show when={!idle()}>
+        <text fg={t().muted}>{" Retry and Edit wait until the agent is idle"}</text>
+      </Show>
+    </box>
+  );
+}
+
+/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. `glow` (0 to 1) lights its edge in the harness's colour; a click shows what the prompt offers. */
+function UserPrompt(p: { item: UserItem; glow: number; through: number }) {
   const t = useTheme();
   const app = useAtui();
+  const [actions, setActions] = createSignal(false);
   return (
-    <box
-      border
-      borderStyle="rounded"
-      borderColor={p.glow > 0 ? mix(t().ok, accentOf(t(), app.harness()?.accent), p.glow) : t().ok}
-      title={harnessGlyph(app.chat()?.harnessId ?? "")}
-      titleColor={t().danger}
-      backgroundColor={app.glass() ? undefined : t().surface}
-      paddingLeft={1}
-      paddingRight={1}
-      marginTop={1}
-      flexDirection="column"
-    >
-      <text fg={t().text} wrapMode="word">
-        {p.item.text}
-        <Show when={p.item.imageCount && !p.item.images?.length}>
-          <span style={{ fg: t().muted }}>{`  [${p.item.imageCount} ${p.item.imageCount === 1 ? "image" : "images"}]`}</span>
+    <box flexDirection="column">
+      <box
+        onMouseDown={() => p.through > 0 && setActions(!actions())}
+        border
+        borderStyle="rounded"
+        borderColor={p.glow > 0 ? mix(t().ok, accentOf(t(), app.harness()?.accent), p.glow) : t().ok}
+        title={harnessGlyph(app.chat()?.harnessId ?? "")}
+        titleColor={t().danger}
+        backgroundColor={app.glass() ? undefined : t().surface}
+        paddingLeft={1}
+        paddingRight={1}
+        marginTop={1}
+        flexDirection="column"
+      >
+        <text fg={t().text} wrapMode="word">
+          {p.item.text}
+          <Show when={p.item.imageCount && !p.item.images?.length}>
+            <span style={{ fg: t().muted }}>{`  [${p.item.imageCount} ${p.item.imageCount === 1 ? "image" : "images"}]`}</span>
+          </Show>
+        </text>
+        <Show when={p.item.images?.length}>
+          <box flexDirection="row" flexWrap="wrap" marginTop={1}>
+            <Index each={p.item.images ?? []}>{(image, i) => <PromptImage image={image()} n={i + 1} />}</Index>
+          </box>
         </Show>
-      </text>
-      <Show when={p.item.images?.length}>
-        <box flexDirection="row" flexWrap="wrap" marginTop={1}>
-          <Index each={p.item.images ?? []}>{(image, i) => <PromptImage image={image()} n={i + 1} />}</Index>
-        </box>
+      </box>
+      <Show when={actions()}>
+        <PromptActions item={p.item} through={p.through} onDone={() => setActions(false)} />
       </Show>
     </box>
   );
@@ -680,7 +737,7 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
           </box>
         )}
       </Show>
-      <Show when={p.turn().prompt}>{(prompt) => <UserPrompt item={prompt()} glow={glow()} />}</Show>
+      <Show when={p.turn().prompt}>{(prompt) => <UserPrompt item={prompt()} glow={glow()} through={p.turn().through} />}</Show>
       <Show
         when={split()}
         fallback={

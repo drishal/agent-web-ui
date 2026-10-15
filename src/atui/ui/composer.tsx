@@ -214,9 +214,28 @@ export function Composer(p: {
   });
   const compactFirst = () => offer() && (p.compactChoice ?? (percent() ?? 0) >= COMPACT_DEFAULT);
 
+  // Edit on a past prompt: its text comes in here, and Enter replaces the prompt with what is then typed.
+  createEffect(
+    on(app.editing, (e) => {
+      if (!e || !area) return;
+      area.setText(e.item.text);
+      area.gotoBufferEnd();
+      // Edit was a click in the transcript, which took the focus: the typing that follows is for here.
+      area.focus();
+    }),
+  );
+
   const submit = async () => {
     const text = area?.plainText ?? "";
     const attached = images();
+    const editing = app.editing();
+    if (editing) {
+      if (!text.trim()) return;
+      area?.clear();
+      if (await app.rerun(editing.through, editing.item, text)) app.setEditing(null);
+      else if (area && !area.plainText) area.setText(text);
+      return;
+    }
     if (!text.trim() && attached.length === 0) return;
     area?.clear();
     setImages([]);
@@ -403,6 +422,11 @@ export function Composer(p: {
           <Show when={app.chat()?.config.thinkingLevel}>
             <text flexShrink={0} wrapMode="none" fg={t().muted} onMouseDown={() => p.onPick("thinking")}>
               {`  ${app.chat()?.config.thinkingLevel} ▾`}
+            </text>
+          </Show>
+          <Show when={app.editing() !== null}>
+            <text flexShrink={0} wrapMode="none" fg={t().accent}>
+              {`  ✎ editing message ${app.editing()?.through ?? ""} · Enter replaces it · Esc cancels`}
             </text>
           </Show>
           <Show when={p.status.note}>
