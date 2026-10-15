@@ -8,6 +8,7 @@ import { parseArgs, USAGE } from "./args.js";
 import { notifySequence } from "./assist.js";
 import { readPrefs, writePrefs } from "./prefs.js";
 import { createAtui, message } from "./state.js";
+import { progressSequence, speaksProgress, type Progress, type TerminalState } from "./terminal.js";
 import { App } from "./ui/app.js";
 import { startTicker, stopTicker } from "./ui/ticker.js";
 
@@ -40,6 +41,9 @@ async function main(): Promise<void> {
     const c = app.chat();
     app.dispose();
     stopTicker();
+    // The tab's progress outlives atui unless it is taken away.
+    if (shown) process.stdout.write(progressSequence(null));
+    renderer.setTerminalTitle("");
     renderer.destroy();
     if (c && c.items.some((i) => i.kind === "user")) {
       console.log(`The chat keeps running on the server: atui --chat ${c.chatId}, or ${parsed.url}/#chat=${c.chatId}`);
@@ -50,9 +54,17 @@ async function main(): Promise<void> {
     const { createCliRenderer } = await import("@opentui/core");
     return createCliRenderer({ exitOnCtrlC: false, useMouse: true, targetFps: 30 });
   })();
+  // The title through the renderer; the progress (OSC 9;4) moves no cursor either, so it goes between frames.
+  const progress = speaksProgress(process.env);
+  let shown: Progress = null;
+  const onTerminal = (state: TerminalState) => {
+    renderer.setTerminalTitle(state.title);
+    if (progress && state.progress !== shown) process.stdout.write(progressSequence(state.progress));
+    if (progress) shown = state.progress;
+  };
   // The command line, else $ATUI_VIM, else what C-x v last chose.
   const vim = parsed.vim ?? (process.env.ATUI_VIM ? process.env.ATUI_VIM === "1" : (prefs.vim ?? false));
-  await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} onGlass={(on) => writePrefs({ glass: on })} />, renderer);
+  await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} onGlass={(on) => writePrefs({ glass: on })} onTerminal={onTerminal} />, renderer);
 }
 
 if (import.meta.main) void main();
