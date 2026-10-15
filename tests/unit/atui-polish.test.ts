@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
 import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
-import { breathe, flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, unrollCounts } from "../../src/atui/fx.js";
+import { breathe, flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, unrollCounts } from "../../src/atui/fx.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
 import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
@@ -48,6 +48,16 @@ describe("fx", () => {
     expect(meter(0.5, 4)).toBe("██  ");
     expect(meter(1, 3)).toBe("███");
     expect(meter(0.1, 4)).toHaveLength(4);
+  });
+
+  it("draws a diff stat bar scaled to the largest change, each side that changed in it", () => {
+    expect(statBar(40, 10, 50, 5)).toEqual({ add: 4, del: 1, rest: 0 });
+    expect(statBar(5, 0, 50, 5)).toEqual({ add: 1, del: 0, rest: 4 });
+    expect(statBar(1, 99, 100, 5)).toEqual({ add: 1, del: 4, rest: 0 });
+    expect(statBar(99, 1, 100, 5)).toEqual({ add: 4, del: 1, rest: 0 });
+    expect(statBar(0, 0, 50, 5)).toEqual({ add: 0, del: 0, rest: 5 });
+    // A single file is the largest: it fills the bar.
+    expect(statBar(3, 0, 3, 5)).toEqual({ add: 5, del: 0, rest: 0 });
   });
 
   it("eases a scroll and lands exactly on the target", () => {
