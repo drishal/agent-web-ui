@@ -1,6 +1,10 @@
 // atui's state and actions: the same things the web App holds and does
 // (bootstrap, the session list, the shown chat and its event stream, limits,
-// git), as Solid signals, talking to the server through client.ts.
+// git, the open tabs), as Solid signals, talking to the server through
+// client.ts. Tabs are the web UI's (web/tabs.ts): a chat opened takes over the
+// shown tab unless asked for a new one, a tab switched away from keeps its
+// chat to come back to at once, and a run that finishes in a tab not shown
+// marks it.
 import { batch, createEffect, createMemo, createSignal, on } from "solid-js";
 import type {
   Bootstrap,
@@ -18,6 +22,7 @@ import type {
   WorkspaceInfo,
 } from "../shared/protocol.js";
 import { applyEvents, type ChatState } from "../web/chat-state.js";
+import { closeTab as closeTabIn, findTab, markUnread, NO_TABS, placeChat, placeTab, runningChats, syncActive, type Tab, type TabState } from "../web/tabs.js";
 import { appCommand } from "../web/commands.js";
 import { isBusy } from "../web/session-groups.js";
 import { newsBetween, type News } from "./assist.js";
@@ -77,6 +82,9 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   const [toasts, setToasts] = createSignal<Toast[]>([]);
   const [contextHistory, setContextHistory] = createSignal<number[]>([]);
   const [glass, setGlass] = createSignal(opts.glass ?? false);
+  const [tabs, setTabs] = createSignal<TabState>(NO_TABS);
+  /** Each tab's chat as last shown, by tab key: a switch back shows it at once, and its stream replays what it missed. */
+  const tabCache = new Map<string, ChatState>();
   /** The protocol prompt images are drawn with, or null when they are off. */
   const imageMode = imageProtocol(opts.images ?? imageModeFrom(undefined, process.env), process.env);
 
@@ -90,7 +98,25 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   let queued: ChatEvent[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const show = (snapshot: ChatSnapshot) => {
+  /** Keep the shown tab's chat, to come back to it. */
+  const remember = () => {
+    const { tabs: list, active } = tabs();
+    const shown = chat();
+    const tab = list[active];
+    if (shown && tab && tab.chatId === shown.chatId) tabCache.set(tab.key, shown);
+  };
+
+  const show = (snapshot: ChatSnapshot, { newTab = false }: { newTab?: boolean } = {}) => {
+    remember();
+    setTabs((st) => placeChat(st, snapshot, { newTab }));
+    follow(snapshot);
+  };
+
+  /**
+   * Show a chat and stream it from where its snapshot left off; a tab's cached
+   * chat (`fresh`) shows at once and is replaced by the server's snapshot.
+   */
+  const follow = (snapshot: ChatState, { fresh = false }: { fresh?: boolean } = {}) => {
     stopStream?.();
     queued = [];
     if (flushTimer) clearTimeout(flushTimer);
@@ -102,7 +128,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
       setBanner(null);
     });
     const chatId = snapshot.chatId;
-    stopStream = followChat(server, chatId, snapshot.lastEventId, {
+    stopStream = followChat(server, chatId, fresh ? null : snapshot.lastEventId, {
       onEvent: (event) => {
         queued.push(event);
         flushTimer ??= setTimeout(() => {
@@ -123,6 +149,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   // ---- loading --------------------------------------------------------------------------
 
   let lastSessions: ProjectSession[] | null = null;
+  let busyBefore = new Set<string>();
   let toastId = 0;
   const toastTimers = new Set<ReturnType<typeof setTimeout>>();
   const dismissToast = (id: number) => setToasts((list) => list.filter((x) => x.id !== id));
@@ -148,6 +175,11 @@ export function createAtui(server: Server, opts: AtuiOptions) {
       announce(newsBetween(lastSessions, next.sessions, chat()?.sessionId ?? null));
       lastSessions = next.sessions;
       setOverview(next);
+      // A tab not shown whose run just finished gets a mark.
+      const busyNow = runningChats(next.sessions);
+      const finished = new Set([...busyBefore].filter((id) => !busyNow.has(id) && id !== chat()?.chatId));
+      busyBefore = busyNow;
+      setTabs((st) => markUnread(st, finished));
     } catch {
       // keep the last list
     }
@@ -287,16 +319,85 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     return opened;
   };
 
-  const openSession = async (s: ProjectSession) => {
+  // ---- tabs ----------------------------------------------------------------------------
+
+  /** The shown tab's title and session follow its chat. */
+  createEffect(
+    on(
+      () => {
+        const c = chat();
+        return c ? `${c.chatId}:${c.title}:${c.sessionId}` : "";
+      },
+      () => {
+        const c = chat();
+        if (c) setTabs((st) => syncActive(st, c));
+      },
+    ),
+  );
+
+  /** Bring tab `index` to the front: its cached chat at once, else the live chat, else its session resumed. */
+  const switchTab = async (index: number) => {
+    const st = tabs();
+    const tab = st.tabs[index];
+    if (!tab || index === st.active) return;
+    remember();
+    setTabs({ active: index, tabs: st.tabs.map((t, i) => (i === index && t.unread ? { ...t, unread: undefined } : t)) });
+    const cached = tabCache.get(tab.key);
+    if (cached && cached.chatId === tab.chatId && cached.status !== "disposed") return follow(cached, { fresh: true });
+    if (!tab.chatId && !tab.sessionId) return blank();
+    setOpening({ title: tab.title, harnessId: tab.harnessId });
+    try {
+      if (tab.chatId) {
+        try {
+          return follow(await server.call<ChatSnapshot>(`/api/chats/${tab.chatId}`));
+        } catch (error) {
+          if (!(error instanceof ServerError && error.status === 404) || !tab.sessionId) throw error;
+        }
+      }
+      const ws = await server.call<WorkspaceInfo>("/api/workspaces/open", { body: { path: tab.workspacePath } });
+      const snapshot = await server.call<ChatSnapshot>("/api/chats/resume", { body: { harnessId: tab.harnessId, workspaceId: ws.id, sessionId: tab.sessionId } });
+      // The resumed chat has a new id: the tab follows it.
+      setTabs((now) => ({ ...now, tabs: now.tabs.map((t) => (t.key === tab.key ? { ...t, chatId: snapshot.chatId } : t)) }));
+      follow(snapshot);
+    } catch (error) {
+      fail(error);
+    } finally {
+      setOpening(null);
+    }
+  };
+
+  /** Close tab `index`; closing the shown one shows its neighbour, or an empty new chat when it was the last. */
+  const closeTab = (index: number) => {
+    const before = tabs();
+    const closing = before.tabs[index];
+    if (!closing) return;
+    tabCache.delete(closing.key);
+    const after = closeTabIn(before, index);
+    if (index !== before.active) return setTabs(after);
+    // Nothing shown for a moment, so the switch below does not take the closed tab for the shown one.
+    setTabs({ ...after, active: -1 });
+    if (after.tabs[after.active]) void switchTab(after.active);
+    else blank();
+  };
+
+  const stepTab = (by: 1 | -1) => {
+    const { tabs: list, active } = tabs();
+    if (list.length < 2) return;
+    void switchTab((active + by + list.length) % list.length);
+  };
+
+  const openSession = async (s: ProjectSession, { newTab = false }: { newTab?: boolean } = {}) => {
+    const open = findTab(tabs(), { chatId: s.liveChatId ?? null, sessionId: s.id });
+    if (open >= 0) return switchTab(open);
     const target = overview().workspaces.find((w) => w.id === s.workspaceId);
     setOpening({ title: s.title || "New chat", harnessId: s.harnessId });
     try {
       if (s.liveChatId) {
-        show(await server.call<ChatSnapshot>(`/api/chats/${s.liveChatId}`));
+        show(await server.call<ChatSnapshot>(`/api/chats/${s.liveChatId}`), { newTab });
       } else {
         if (!target) throw new Error("That session's project is not open on the server");
         const ws = await enterWorkspace(target);
-        show(await server.call<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }));
+        show(await server.call<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }), { newTab });
       }
       void refreshSessions();
     } catch (error) {
@@ -307,7 +408,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   };
 
   /** A new chat starts empty on screen; the server's chat is made on the first message. */
-  const newChat = () => {
+  /** Nothing on screen: an empty new chat, its server chat made on the first message. */
+  const blank = () => {
     stopStream?.();
     stopStream = null;
     batch(() => {
@@ -316,6 +418,14 @@ export function createAtui(server: Server, opts: AtuiOptions) {
       setGit(null);
       setBanner(null);
     });
+  };
+
+  /** A new chat, in the shown tab (it takes the tab's place, as in the web UI) or, with `newTab`, a tab of its own. */
+  const newChat = ({ newTab = false }: { newTab?: boolean } = {}) => {
+    remember();
+    const placeholder: Omit<Tab, "key"> = { chatId: null, sessionId: null, harnessId: harnessId() ?? "", workspacePath: workspace()?.path ?? "", title: "New chat" };
+    setTabs((st) => (st.tabs.length === 0 ? st : placeTab(st, placeholder, { newTab })));
+    blank();
   };
 
   const createChat = async (): Promise<ChatState> => {
@@ -451,6 +561,10 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     harnessId,
     harness,
     workspace,
+    tabs,
+    switchTab,
+    closeTab,
+    stepTab,
     overview,
     chat,
     conn,

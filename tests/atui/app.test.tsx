@@ -398,6 +398,33 @@ describe("atui", () => {
     expect(thread).not.toContain("Opening");
   }, 30_000);
 
+  it("keeps chats in tabs: a new one beside, M-number and C-x ] to switch, a dot for news, C-x w to close", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { width: 150 });
+    await ui.type("first tab chat");
+    ui.keys.pressEnter();
+    await idle(ui);
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("a");
+    await ui.until("What should Fake do in alpha?");
+    await ui.type("slow second tab chat");
+    ui.keys.pressEnter();
+    const bar = await ui.until("2 F slow second tab chat");
+    expect(bar).toContain("1 F first tab chat");
+    // M-1 brings the first back; the second's run finishes out of sight and marks its tab.
+    ui.keys.pressKey("1", { meta: true });
+    await ui.until(() => ui?.app.chat()?.title === "first tab chat");
+    await ui.until("slow second tab chat ●", 20_000);
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("]");
+    await ui.until(() => ui?.app.chat()?.title === "slow second tab chat");
+    expect(await ui.frame()).not.toContain("slow second tab chat ●");
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("w");
+    await ui.until(() => ui?.app.chat()?.title === "first tab chat");
+    // One tab left: the bar goes.
+    expect(await ui.frame()).not.toContain("1 F first tab chat");
+  }, 40_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");
@@ -412,7 +439,7 @@ describe("atui", () => {
     await ui.until(() => (ui?.app.overview().sessions.filter((s) => s.title.endsWith("session here")).length ?? 0) >= 2);
     ui.keys.pressKey("x", { ctrl: true });
     await ui.type("s");
-    await ui.until("↑↓ Enter · Tab · Esc back");
+    await ui.until("↑↓ Enter · t tab · Esc back");
     ui.keys.pressArrow("down");
     await wait(30);
     ui.keys.pressEnter();

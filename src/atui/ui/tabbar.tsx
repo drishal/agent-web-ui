@@ -1,0 +1,54 @@
+// The open tabs, along the top of the conversation once there are two (the
+// web UI's tab strip): each with its number (M-1 to M-9 bring it), its
+// harness's mark, its title, and a dot when a run finished there unseen; a
+// click brings one, × closes the shown one. C-x ] and C-x [ step through them,
+// C-x w closes, C-x a opens a new chat in a new tab.
+import { Index, Show } from "solid-js";
+import { clip } from "../format.js";
+import { mix } from "../fx.js";
+import { harnessGlyph } from "../neat.js";
+import { accentOf } from "../theme.js";
+import { useAtui, useTheme } from "./context.js";
+
+/** A tab's title gets this many characters at most. */
+const TITLE_CHARS = 24;
+
+export function TabBar() {
+  const app = useAtui();
+  const t = useTheme();
+  const accent = (harnessId: string) => accentOf(t(), app.boot()?.harnesses.find((h) => h.id === harnessId)?.accent);
+  return (
+    <Show when={app.tabs().tabs.length >= 2}>
+      <box flexDirection="row" flexShrink={0} height={1} overflow="hidden" paddingLeft={1}>
+        <Index each={app.tabs().tabs}>
+          {(tab, i) => {
+            const active = () => i === app.tabs().active;
+            return (
+              <>
+                <box flexShrink={0} paddingLeft={1} paddingRight={active() ? 0 : 1} backgroundColor={active() ? mix(t().bg, t().surface2, 0.9) : undefined} onMouseDown={() => void app.switchTab(i)}>
+                  <text wrapMode="none" fg={active() ? t().text : t().muted}>
+                    <span style={{ fg: t().muted }}>{i < 9 ? `${i + 1} ` : ""}</span>
+                    <span style={{ fg: accent(tab().harnessId) }}>{`${harnessGlyph(tab().harnessId)} `}</span>
+                    {active() ? <b>{clip(tab().title || "New chat", TITLE_CHARS)}</b> : clip(tab().title || "New chat", TITLE_CHARS)}
+                    <Show when={tab().unread}>
+                      <span style={{ fg: t().accent }}>{" ●"}</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={active()}>
+                  {/* Beside the tab, not inside it: a click here closes, and must not also bring the tab. */}
+                  <box flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={mix(t().bg, t().surface2, 0.9)} onMouseDown={() => app.closeTab(i)}>
+                    <text fg={t().muted}>×</text>
+                  </box>
+                </Show>
+                <text flexShrink={0} fg={t().border}>
+                  {" "}
+                </text>
+              </>
+            );
+          }}
+        </Index>
+      </box>
+    </Show>
+  );
+}
