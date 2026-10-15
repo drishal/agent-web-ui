@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
 import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
-import { breathe, flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, unrollCounts } from "../../src/atui/fx.js";
+import { breathe, flashAt, meter, mix, ramp, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, unrollCounts } from "../../src/atui/fx.js";
+import { contextTone, DARK } from "../../src/atui/theme.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
 import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
@@ -48,6 +49,22 @@ describe("fx", () => {
     expect(meter(0.5, 4)).toBe("██  ");
     expect(meter(1, 3)).toBe("███");
     expect(meter(0.1, 4)).toHaveLength(4);
+  });
+
+  it("ramps a colour between stops, holding the ends", () => {
+    const stops: Array<[number, string]> = [
+      [0, "#000000"],
+      [10, "#ffffff"],
+      [20, "#ff0000"],
+    ];
+    expect(ramp(-5, stops)).toBe("#000000");
+    expect(ramp(5, stops)).toBe("#808080");
+    expect(ramp(15, stops)).toBe("#ff8080");
+    expect(ramp(99, stops)).toBe("#ff0000");
+    // The context: green with room, amber where compacting is offered, red as it runs out.
+    expect(contextTone(DARK, 10)).toBe(DARK.ok);
+    expect(contextTone(DARK, 65)).toBe(DARK.warn);
+    expect(contextTone(DARK, 95)).toBe(DARK.danger);
   });
 
   it("draws a diff stat bar scaled to the largest change, each side that changed in it", () => {

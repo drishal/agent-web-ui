@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { RGBA, TextAttributes } from "@opentui/core";
 import path from "node:path";
+import { contextTone } from "../../src/atui/theme.js";
 import { mount, startServer, wait, type Mounted } from "./helpers.js";
 
 let server: Awaited<ReturnType<typeof startServer>>;
@@ -114,6 +115,24 @@ describe("atui", () => {
     expect(live).toContain("● Bash · running…");
     await idle(ui);
     expect(await ui.frame()).not.toContain("step-6.test.ts");
+  }, 30_000);
+
+  it("colours the context from green toward red as it fills", async () => {
+    ui = await mount(path.join(server.root, "beta"));
+    const label = async () => (await ui?.spans())?.flat().find((s) => /^ctx \d+%$/.test(s.text));
+    const toneAt = (percent: number) => RGBA.fromHex(contextTone(ui?.app.theme() as never, percent)).toInts().join();
+    await ui.type("hello there");
+    ui.keys.pressEnter();
+    await idle(ui);
+    const low = await ui.until("ctx ").then(label);
+    expect(low?.fg.toInts().join()).toBe(toneAt(ui.app.chat()?.context?.percent ?? 0));
+    await ui.type("bloat it");
+    ui.keys.pressEnter();
+    await idle(ui);
+    await ui.until(() => (ui?.app.chat()?.context?.percent ?? 0) > 50);
+    const high = await label();
+    expect(high?.fg.toInts().join()).toBe(toneAt(ui.app.chat()?.context?.percent ?? 0));
+    expect(high?.fg.toInts().join()).not.toBe(low?.fg.toInts().join());
   }, 30_000);
 
   it("underlines a failure as well as colouring it", async () => {
