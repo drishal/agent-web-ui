@@ -1,7 +1,7 @@
 // atui's motion and small graphics, worked out apart from the drawing so they
 // can be tested: colour mixing for the "Working" shimmer and for ramps (the
 // context going from green to amber to red), the pace streamed
-// text is revealed at, sparklines, meters, and diff stat bars drawn with
+// text is revealed at and the rate it arrives at, sparklines, meters, and diff stat bars drawn with
 // block characters, eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
 // session opens behind, a slow breath for what waits on you, and each
 // harness's spinner.
@@ -59,6 +59,18 @@ export function revealStep(shown: number, target: number, ms: number): number {
   const behind = target - shown;
   const perSecond = Math.max(90, behind * 6);
   return Math.min(target, shown + Math.max(1, Math.ceil((perSecond * ms) / 1000)));
+}
+
+/**
+ * Tokens a second over `samples` (`[ms, characters so far]`, oldest first),
+ * at about four characters a token, as the harnesses' own estimates go. Null
+ * until the samples span half a second, too little to tell.
+ */
+export function streamRate(samples: Array<[number, number]>): number | null {
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (!first || !last || last[0] - first[0] < 500) return null;
+  return Math.max(0, (last[1] - first[1]) / 4 / ((last[0] - first[0]) / 1000));
 }
 
 /** Where to cut `text` near `n` characters so a word or Markdown token is not shown half-made. */

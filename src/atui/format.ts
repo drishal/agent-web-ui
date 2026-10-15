@@ -1,7 +1,8 @@
 // What atui prints, worked out apart from the drawing so it can be tested:
 // tool lines, the fold line, a running command's last lines, diffs in unified
-// form for OpenTUI's <diff>, token counts, limit labels, and the status words.
-import type { ChatStatus, LimitAccount, ToolDiff, ToolItem } from "../shared/protocol.js";
+// form for OpenTUI's <diff>, token counts, how much the latest turn has
+// streamed, limit labels, and the status words.
+import type { ChatItem, ChatStatus, LimitAccount, ToolDiff, ToolItem } from "../shared/protocol.js";
 import { countSummary, formatDuration, relativePath, type Turn } from "../web/turns.js";
 
 export const STATUS_LABEL: Record<ChatStatus, string> = {
@@ -82,6 +83,17 @@ export function unifiedDiff(file: string, diff: ToolDiff): string {
     for (const l of hunk) out.push(`${l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}${l.text}`);
   }
   return `${out.join("\n")}\n`;
+}
+
+/** How many characters the agent has written (replies and thinking) since the last prompt: what its rate is measured on. */
+export function streamedChars(items: ChatItem[]): number {
+  let n = 0;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i] as ChatItem;
+    if (item.kind === "user") break;
+    if (item.kind === "assistant") n += item.text.length + item.thinking.length;
+  }
+  return n;
 }
 
 /** 950, 12k, 1.2M. */

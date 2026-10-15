@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
 import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
-import { breathe, flashAt, meter, mix, ramp, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, unrollCounts } from "../../src/atui/fx.js";
+import { breathe, flashAt, meter, mix, ramp, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, streamRate, unrollCounts } from "../../src/atui/fx.js";
 import { contextTone, DARK } from "../../src/atui/theme.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
@@ -41,6 +41,14 @@ describe("fx", () => {
     expect(frames).toBeLessThan(40);
     expect(revealCut("hello wonderful world", 13)).toBe("hello");
     expect(revealCut("abc", 10)).toBe("abc");
+  });
+
+  it("measures how fast text streams, in tokens a second, once there is enough to tell", () => {
+    expect(streamRate([])).toBeNull();
+    expect(streamRate([[0, 0], [300, 400]])).toBeNull();
+    // 800 characters in two seconds: 200 tokens, 100 a second.
+    expect(streamRate([[0, 100], [1000, 500], [2000, 900]])).toBe(100);
+    expect(streamRate([[0, 900], [1000, 900]])).toBe(0);
   });
 
   it("draws sparklines and meters with block characters", () => {
