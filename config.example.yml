@@ -37,3 +37,14 @@ theme: system
 # Fold the sidebar away in narrow windows (below 1200 px; phones use the
 # drawer anyway). A sidebar you collapsed yourself stays collapsed.
 autocollapse_sidebar: true
+
+# How each harness's CLI starts (read at startup; the Settings dialog does not
+# show this, since a command is a program the server runs). command: its
+# executable instead of the name on PATH. args: added to every chat's command
+# line (not Hermes's, whose chats run its gateway; never the Awui harness's).
+# PI_BIN, OMP_BIN, HERMES_BIN, and CLAUDE_BIN win over command.
+# harnesses:
+#   pi:
+#     command: ~/code/pi/bin/pi
+#   claude:
+#     args: [--add-dir, /srv/docs]   # passed as they are: no shell, so no ~

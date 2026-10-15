@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     if (migrateConfigDir(process.env) === "moved") console.log(`  config: moved from agentwebui to ${configDir()}`);
     settings = readUserConfig(configDir());
     // Real environment variables win over config.yml; the password never enters process.env.
-    config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env });
+    config = loadConfig({ ...(settings ? configEnv(settings.config) : {}), ...process.env }, settings?.config);
   } catch (error) {
     if (error instanceof ConfigError || error instanceof UserConfigError) {
       console.error(`awui: ${error.message}`);

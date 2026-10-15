@@ -37,6 +37,7 @@ import type {
   HarnessAdapter,
   HarnessDiscovery,
   HarnessEventListener,
+  HarnessLaunch,
   HarnessUsage,
   LiveChat,
   NativeSessionSummary,
@@ -407,7 +408,14 @@ function activeBranch(entries: Obj[]): Obj[] {
 export class PiAdapter implements HarnessAdapter {
   readonly id: HarnessId = asHarnessId("pi");
   readonly displayName: string = "Pi";
-  readonly cliCommand = "pi";
+  readonly cliCommand: string;
+  /** config.yml's extra arguments for every chat child. */
+  private readonly extraArgs: string[];
+
+  constructor(launch: HarnessLaunch = {}) {
+    this.cliCommand = launch.command ?? "pi";
+    this.extraArgs = launch.args ?? [];
+  }
   /** Its colour in the theme (HARNESS_ACCENTS); subclasses re-pick so a variant does not wear pi's. */
   protected accentToken = "link";
   get accent(): string {
@@ -633,11 +641,16 @@ export class PiAdapter implements HarnessAdapter {
       const found = (await listSessionFiles(dir)).some((m) => m.id === req.resumeNativeId);
       if (!found) throw new Error("Session not found in Pi's session list");
     }
-    const args = ["--mode", "rpc", ...this.toolArgs(), ...this.extensionArgs(), "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
+    const args = ["--mode", "rpc", ...this.toolArgs(), ...this.extensionArgs(), ...this.launchArgs(), "--session-dir", this.sessionDirFor(req.cwd, await this.resolveAgentDir())];
     if (req.resumeNativeId) args.push("--session", req.resumeNativeId);
     const chat = new PiLiveChat(this.cliCommand, args, this.spawnEnv(req.cwd, req.renderEnv), req.cwd);
     await chat.start();
     return chat;
+  }
+
+  /** config.yml's own arguments for a chat child (before awui's --session-dir, which must win). */
+  protected launchArgs(): string[] {
+    return this.extraArgs;
   }
 
   /** The extensions a chat child loads: Edit/Retry's rewind, and render_html. Subclasses cut this back. */

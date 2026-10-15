@@ -13,12 +13,12 @@ const fakeDelay = () => Number(process.env.AWUI_FAKE_DELAY_MS ?? 15);
 const fakeResumeDelay = () => Number(process.env.AWUI_FAKE_RESUME_MS ?? 0);
 
 const factories: Record<string, (config: ServerConfig) => HarnessAdapter> = {
-  pi: () => new PiAdapter(),
-  omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home }),
-  hermes: () => new HermesAdapter(),
-  claude: (config) => new ClaudeAdapter({ home: config.home }),
+  pi: (config) => new PiAdapter(config.launch.pi),
+  omp: (config) => new OmpAdapter({ agentDir: config.ompAgentDir, sessionDir: config.ompSessionDir, home: config.home, ...config.launch.omp }),
+  hermes: (config) => new HermesAdapter(config.launch.hermes?.command ? { launcher: config.launch.hermes.command } : {}),
+  claude: (config) => new ClaudeAdapter({ home: config.home, ...config.launch.claude }),
   // A locked-down pi child: chat-style, read-only (web search + read tools + read-only MCP), its own agent dir.
-  awui: (config) => new AwuiAdapter(config.stateDir),
+  awui: (config) => new AwuiAdapter(config.stateDir, config.launch.pi?.command),
   // Test-only adapters, selected with AWUI_HARNESSES=fake,fake-b.
   fake: () => new FakeAdapter({ chunkDelayMs: fakeDelay(), resumeDelayMs: fakeResumeDelay() }),
   "fake-b": () =>
