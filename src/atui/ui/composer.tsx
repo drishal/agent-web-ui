@@ -123,7 +123,10 @@ export function Composer(p: {
     if (k === "prompt") return promptMatches().map((sp): SlashCommand => ({ name: sp.name, description: promptGist(sp), source: "saved" }));
     return [];
   });
-  createEffect(on(() => app.chat()?.chatId, () => setCommands(null)));
+  // A memo, not the chat itself: `on()` runs on every change of its source's signals, and the chat changes with
+  // each streamed event, which emptied the list mid-run (the / menu fell back to awui's own commands).
+  const chatId = createMemo(() => app.chat()?.chatId);
+  createEffect(on(chatId, () => setCommands(null)));
   // Asked for once each is first wanted: the commands (and skills), and the saved prompts.
   const wantsCommands = () => p.focused && (slash() !== undefined || skillQuery() !== undefined);
   createEffect(
@@ -521,8 +524,9 @@ export function Composer(p: {
             when={app.chat()?.status === "compacting"}
             fallback={
               <>
+                {/* The last dozen samples: enough to see the trend without taking the hint's room. */}
                 <Show when={app.contextHistory().length > 1}>
-                  <span style={{ fg: tone() }}>{`${sparkline(app.contextHistory(), 100)} `}</span>
+                  <span style={{ fg: tone() }}>{`${sparkline(app.contextHistory().slice(-12), 100)} `}</span>
                 </Show>
                 <Show when={percent() !== null}>
                   <span style={{ fg: tone() }}>{`ctx ${Math.round(percent() ?? 0)}%`}</span>
