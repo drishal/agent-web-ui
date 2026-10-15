@@ -135,6 +135,15 @@ describe("atui", () => {
     expect(high?.fg.toInts().join()).not.toBe(low?.fg.toInts().join());
   }, 30_000);
 
+  it("says how fast the agent writes while it streams, and nothing once it is done", async () => {
+    ui = await mount(path.join(server.root, "alpha"));
+    await ui.type("slow stream for the rate");
+    ui.keys.pressEnter();
+    expect(await ui.until(" tok/s", 10_000)).toMatch(/~\d+ tok\/s/);
+    await idle(ui);
+    expect(await ui.frame()).not.toContain("tok/s");
+  }, 30_000);
+
   it("underlines a failure as well as colouring it", async () => {
     ui = await mount(path.join(server.root, "alpha"));
     await ui.type("fail please");

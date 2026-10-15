@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem, InteractionRequest, LimitAccount, ToolItem } from "../../src/shared/protocol.js";
 import { parseArgs } from "../../src/atui/args.js";
-import { accountName, ago, clip, fileUrl, foldLabel, outputTail, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
+import { accountName, ago, clip, fileUrl, foldLabel, outputTail, streamedChars, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
 import { isApproval, optionsOf } from "../../src/atui/requests.js";
 import { DARK, themeFrom } from "../../src/atui/theme.js";
 import { buildTurns } from "../../src/web/turns.js";
@@ -71,6 +71,13 @@ describe("atui formatting", () => {
     expect(outputTail("\x1b[32m✓ ok\x1b[0m\r\n 10%\r 55%\r 90%", 3)).toEqual(["✓ ok", " 90%"]);
     expect(outputTail("\x1b]8;;file:///x\x07link\x1b]8;;\x07 \x07bell", 1)).toEqual(["link bell"]);
     expect(outputTail("", 3)).toEqual([]);
+  });
+
+  it("counts what the agent has written since the last prompt", () => {
+    const say = (id: string, text: string, thinking = ""): ChatItem => ({ kind: "assistant", id, text, thinking, streaming: false }) as ChatItem;
+    const items: ChatItem[] = [{ kind: "user", id: "u1", text: "hi" } as ChatItem, say("a1", "old answer"), { kind: "user", id: "u2", text: "again" } as ChatItem, say("a2", "four", "ab"), tool(), say("a3", "six!!!")];
+    expect(streamedChars(items)).toBe(12);
+    expect(streamedChars([])).toBe(0);
   });
 
   it("says how long ago a session was active", () => {

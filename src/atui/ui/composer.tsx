@@ -7,7 +7,8 @@
 // empty box takes the last one off. The line under it names the
 // harness, model and thinking level, the context used (with its recent
 // history as a sparkline, green to amber to red as it fills, and a sweep while
-// it compacts), and whether the next message compacts first.
+// it compacts), whether the next message compacts first, and while the agent
+// writes, how fast (tokens a second, with their own sparkline).
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show } from "solid-js";
 import { createHostClipboard, decodePasteBytes, type HostClipboardService, type TextareaRenderable } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/solid";
@@ -15,8 +16,8 @@ import { IMAGE_MIME_TYPES, MAX_IMAGES, type SlashCommand } from "../../shared/pr
 import { APP_COMMANDS, matchCommands, mergeCommands } from "../../web/commands.js";
 import { modelName } from "../../web/turns.js";
 import { applyMention, ghostCompletion, mentionAt } from "../assist.js";
-import { tokens } from "../format.js";
-import { mix, shimmer, sparkline } from "../fx.js";
+import { streamedChars, tokens } from "../format.js";
+import { mix, shimmer, sparkline, streamRate } from "../fx.js";
 import { attachmentFrom, attachmentFromFile, byteSize, clipboardImageByTool, imagePathsFromPaste, type PendingImage } from "../images.js";
 import { harnessGlyph } from "../neat.js";
 import { accentOf, contextTone } from "../theme.js";
@@ -27,6 +28,11 @@ import { tick } from "./ticker.js";
 /** From this share of the context the composer offers to compact first, and from this one it starts on. */
 export const COMPACT_OFFER = 50;
 export const COMPACT_DEFAULT = 80;
+
+/** The rate is measured over this much of the stream, and its sparkline keeps a sample every half second. */
+const RATE_WINDOW_MS = 2000;
+const RATE_EVERY_TICKS = 5;
+const RATE_SAMPLES = 12;
 
 /** Cells in the sweep drawn while the context compacts. */
 const SWEEP_CELLS = 8;
@@ -231,6 +237,34 @@ export function Composer(p: {
 
   const tone = () => contextTone(t(), percent() ?? 0);
 
+  // How fast the agent writes: what the turn has streamed, sampled on the clock while it runs.
+  const [rate, setRate] = createSignal<number | null>(null);
+  const [rates, setRates] = createSignal<number[]>([]);
+  let samples: Array<[number, number]> = [];
+  let sampled: string | null = null;
+  createEffect(
+    on(tick, (n) => {
+      const c = app.chat();
+      // Another chat shown: its rate starts over.
+      if (c?.chatId !== sampled) samples = [];
+      sampled = c?.chatId ?? null;
+      if (!c || c.status !== "running") {
+        if (samples.length > 0 || rate() !== null) {
+          samples = [];
+          setRate(null);
+          setRates([]);
+        }
+        return;
+      }
+      const now = Date.now();
+      samples.push([now, streamedChars(c.items)]);
+      samples = samples.filter(([at]) => now - at <= RATE_WINDOW_MS);
+      const r = streamRate(samples);
+      setRate(r);
+      if (r !== null && n % RATE_EVERY_TICKS === 0) setRates((h) => [...h, r].slice(-RATE_SAMPLES));
+    }),
+  );
+
   const model = () => {
     const c = app.chat();
     if (!c?.config.model) return null;
@@ -382,6 +416,13 @@ export function Composer(p: {
         </box>
         <text flexShrink={0}>
           {"  "}
+          {/* Gone the moment the run ends, not at the next sample. */}
+          <Show when={app.chat()?.status === "running" && (rate() ?? 0) >= 1}>
+            <span style={{ fg: t().muted }}>{`~${Math.round(rate() ?? 0)} tok/s `}</span>
+            <Show when={rates().length > 1}>
+              <span style={{ fg: t().text2 }}>{`${sparkline(rates())}  `}</span>
+            </Show>
+          </Show>
           <Show when={offer()}>
             <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (C-x f)  `}</span>
           </Show>
