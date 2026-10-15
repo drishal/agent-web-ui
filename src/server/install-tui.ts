@@ -50,5 +50,5 @@ export async function installTui(stateDir: string): Promise<void> {
     `#!/bin/sh\nexec bun --preload "${preload.replace(/"/g, '\\"')}" "${mainFile.replace(/"/g, '\\"')}" "$@"\n`,
     { mode: 0o755 },
   );
-  console.log(`atui installed at ${binPath}; run it with \`atui\`.`);
+  console.log(`atui installed at ${binPath}; run it with \`atui\` (in a Tern pane, \`awui tern\` draws awui natively).`);
 }

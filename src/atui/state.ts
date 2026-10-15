@@ -445,6 +445,18 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     return snapshot;
   };
 
+  /** The shown chat, made on the server first when there is none yet (to pick its model before the first message). */
+  const ensureChat = async (): Promise<ChatState | null> => {
+    const c = chat();
+    if (c && c.status !== "disposed") return c;
+    try {
+      return await createChat();
+    } catch (error) {
+      fail(error);
+      return null;
+    }
+  };
+
   const runAppCommand = async (c: ChatState | null, name: string, arg: string) => {
     if (name === "new") return newChat();
     if (!c) throw new Error(`/${name} needs a chat`);
@@ -734,6 +746,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     refreshLimits,
     openSession,
     newChat,
+    ensureChat,
     send,
     stop,
     answer,
