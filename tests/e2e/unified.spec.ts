@@ -146,12 +146,33 @@ test("a saved prompt goes in with # and its blanks are filled in with Tab; any d
   await other.close();
 });
 
-test("Usage across chats adds up the calls by day, harness, and model, and opens a chat that used much", async ({ page }) => {
+test("Usage shows the plan limits, then adds up the calls by day, harness, and model, and opens a chat that used much", async ({ page }) => {
+  // The fake harnesses report no plan limits: these stand in, xAI's two limits on one window among them.
+  const week = Date.now() + 3 * 86_400_000;
+  await page.route("**/api/limits", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [
+          { id: "claude", source: "Claude Code", provider: "Anthropic", plan: "pro", limited: false, at: Date.now(), windows: [{ label: "5 hours", used: 0.41, resetsAt: week }, { label: "7 days", used: 0.86, resetsAt: week }] },
+          { id: "omp:xai-oauth:0", source: "omp", provider: "xai-oauth", limited: false, at: Date.now(), windows: [{ label: "SuperGrok Weekly Credits", used: 0.34, resetsAt: week }, { label: "GrokChat (Weekly)", used: 0.34, resetsAt: week }] },
+        ],
+        errors: [],
+      },
+    }),
+  );
   await signInAndOpen(page);
   await newChat(page);
   await sendAndWait(page, "spend some tokens on the usage report");
-  await page.getByRole("button", { name: "Usage across chats" }).click();
+  // One row in the sidebar: Usage, with the fullest limit.
+  const row = page.getByRole("button", { name: /^Usage/ });
+  await expect(row).toContainText("Claude 7 days · 86%");
+  await row.click();
   const usage = page.getByRole("dialog", { name: "Usage" });
+  const limits = usage.getByRole("region", { name: "Plan limits" });
+  await expect(limits.locator(".limits-account")).toHaveCount(2);
+  await expect(limits.getByRole("meter")).toHaveCount(4);
+  await expect(limits.locator(".limits-account").nth(1)).toContainText("SuperGrok Weekly Credits");
+  await expect(limits.locator(".limits-account").nth(1)).toContainText("GrokChat (Weekly)");
   await expect(usage.locator(".usage-card").first()).toContainText(/Tokens\s*[\d.]+k?/);
   await expect(usage.getByRole("region", { name: "Tokens by day" }).locator(".usage-day")).toHaveCount(30);
   await usage.getByRole("button", { name: "7 days" }).click();

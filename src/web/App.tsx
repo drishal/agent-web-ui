@@ -23,7 +23,7 @@ import { appCommand } from "./commands.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
-import { LimitsMeter } from "./components/LimitsMeter.js";
+import { LimitsSummary } from "./components/LimitsMeter.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar, type MarkChange } from "./components/Sidebar.js";
@@ -1103,19 +1103,18 @@ export function App() {
       <Sidebar
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
         footer={
-          <>
-            <LimitsMeter limits={limits} />
-            <button
-              type="button"
-              className="usage-link"
-              onClick={() => {
-                setUsageOpen(true);
-                setDrawerOpen(false);
-              }}
-            >
-              <IconGauge size={13} /> Usage across chats
-            </button>
-          </>
+          <button
+            type="button"
+            className="usage-link"
+            onClick={() => {
+              setUsageOpen(true);
+              setDrawerOpen(false);
+            }}
+          >
+            <IconGauge size={13} />
+            <span className="usage-link-label">Usage</span>
+            <LimitsSummary limits={limits} />
+          </button>
         }
         tabs={
           tabState.tabs.length >= 2 ? (
@@ -1592,7 +1591,7 @@ export function App() {
         />
       ) : null}
       {usageOpen ? (
-        <UsageDialog harnesses={boot.harnesses} onOpenSession={(s, ws) => void openSession(s, ws ? { workspace: ws } : {})} onClose={() => setUsageOpen(false)} />
+        <UsageDialog harnesses={boot.harnesses} limits={limits} onOpenSession={(s, ws) => void openSession(s, ws ? { workspace: ws } : {})} onClose={() => setUsageOpen(false)} />
       ) : null}
       {viewer && searchWorkspace ? <FileViewer workspace={searchWorkspace} request={viewer.request} changes={chat ? changes : []} onClose={() => setViewer(null)} /> : null}
       {chatSearch !== null ? (
