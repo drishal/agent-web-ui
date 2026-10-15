@@ -10,7 +10,7 @@
 //   "wait"  a provider-wait line on the status line (thinking.delta)
 // Every turn starts with the gateway's spinner frame on the status line, as the real one does.
 // Session rows for projects.tree/list come from FAKE_HERMES_STATE (JSON file).
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
 
 const stateFile = process.env.FAKE_HERMES_STATE;
@@ -41,9 +41,12 @@ const state = () => {
     return { rows: [], spawns: [] };
   }
 };
+// Written whole and renamed into place: a test (or another fake) reading it meanwhile sees the old state or the new, never an empty file.
 const persist = (patch) => {
   if (!stateFile) return;
-  writeFileSync(stateFile, JSON.stringify({ ...state(), ...patch }));
+  const temp = `${stateFile}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify({ ...state(), ...patch }));
+  renameSync(temp, stateFile);
 };
 
 persist({ spawns: [...state().spawns, { cwd: process.cwd(), args: process.argv.slice(2) }] });
