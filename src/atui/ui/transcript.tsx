@@ -16,7 +16,7 @@ import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, Subage
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, fileUrl, foldLabel, unifiedDiff } from "../format.js";
 import { mix } from "../fx.js";
-import { filetypeOf, taskBoxes } from "../markdown.js";
+import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
 import { harnessGlyph, neatRow, thoughtTitle, thoughtTokens } from "../neat.js";
 import type { Theme } from "../theme.js";
@@ -82,16 +82,26 @@ const rendererFor = (theme: Theme) => {
   return hit;
 };
 
-/** Markdown as atui draws it: revealed at a steady pace while it streams, task lists as boxes, tables in rounded borders. */
+/** How long the stream's cursor shows, then hides, in ticks of 100 ms. */
+const CARET_ON = 6;
+const CARET_OFF = 4;
+
+/** Markdown as atui draws it: revealed at a steady pace while it streams (a blinking cursor where it writes), task lists as boxes, tables in rounded borders. */
 function Md(p: { text: string; streaming: boolean; fg: string }) {
   const t = useTheme();
   const paced = usePaced(
     () => p.text,
     () => p.streaming,
   );
+  // The clock is read only while streaming: a finished answer is not drawn again every tick.
+  const content = () => {
+    const text = taskBoxes(paced());
+    if (!p.streaming) return text;
+    return tick() % (CARET_ON + CARET_OFF) < CARET_ON ? withCaret(text) : text;
+  };
   return (
     <markdown
-      content={taskBoxes(paced())}
+      content={content()}
       syntaxStyle={syntaxFor(t())}
       fg={p.fg}
       conceal
