@@ -52,6 +52,11 @@ describe("atui formatting", () => {
     expect(done && foldLabel(done)).toBe("Worked for 13s · 1 edit");
     const [live] = buildTurns(items.slice(0, 2), "running");
     expect(live && foldLabel(live, 4000)).toBe("Working · 3s · 1 edit");
+    // A fold per stretch of work: the first has the time, one between replies only what it did.
+    expect(done && foldLabel(done, 0, { counts: { read: 2 }, place: "first" })).toBe("Worked for 13s · 2 reads");
+    expect(done && foldLabel(done, 0, { counts: { read: 2, edit: 1 }, place: "middle" })).toBe("2 reads, 1 edit");
+    expect(done && foldLabel(done, 0, { counts: {}, place: "middle" })).toBe("Worked");
+    expect(live && foldLabel(live, 4000, { counts: {}, place: "last" })).toBe("Working · 3s");
   });
 
   it("says how long ago a session was active", () => {
