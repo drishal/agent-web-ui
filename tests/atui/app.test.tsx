@@ -469,8 +469,9 @@ describe("atui", () => {
     writeFileSync(path.join(repo, "app.ts"), "const a = 2;\n");
     await ui.click("│ change the app");
     await ui.click("↶ Undo files");
-    const dialog = await ui.until("Undo file changes from message 1 on");
-    expect(dialog).toContain("[x] app.ts");
+    await ui.until("Undo file changes from message 1 on");
+    // The dialog opens on "Comparing the files…" and lists them once the preview arrives.
+    const dialog = await ui.until("[x] app.ts");
     expect(dialog).toContain("put back");
     ui.keys.pressEnter();
     await ui.until("C-x z puts them back");
