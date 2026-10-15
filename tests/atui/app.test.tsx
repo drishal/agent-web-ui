@@ -84,6 +84,25 @@ describe("atui", () => {
     expect(await edge()).toBe(ok);
   }, 30_000);
 
+  it("breathes a session that asks for you in the side panel", async () => {
+    ui = await mount(path.join(server.root, "beta"), { width: 150 });
+    await ui.type("please ask first");
+    ui.keys.pressEnter();
+    await ui.until("Waiting for approval");
+    await ui.until(() => ui?.app.overview().sessions.some((s) => s.asking) ?? false);
+    const mark = async () => (await ui?.spans())?.flat().find((s) => s.text.startsWith("▲"))?.fg.toInts().join();
+    // Three looks a little apart: a breath cannot show the same colour at all of them.
+    const seen = [await ui.until("▲ please ask first").then(mark)];
+    for (const _ of [1, 2]) {
+      await wait(400);
+      seen.push(await mark());
+    }
+    expect(seen.every(Boolean)).toBe(true);
+    expect(new Set(seen).size).toBeGreaterThan(1);
+    ui.keys.pressKey("1");
+    await idle(ui);
+  }, 30_000);
+
   it("underlines a failure as well as colouring it", async () => {
     ui = await mount(path.join(server.root, "alpha"));
     await ui.type("fail please");
