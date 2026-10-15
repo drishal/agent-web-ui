@@ -581,6 +581,43 @@ export interface ProjectSearch {
   truncated: boolean;
 }
 
+/** Search every chat: the words to find (all of them, in one message), and optionally one harness. */
+export const chatSearchSchema = z.object({
+  q: z.string().trim().min(2).max(200),
+  harnessId: z.string().min(1).max(64).optional(),
+});
+
+/** Where in a chat the words were found. */
+export type ChatSearchKind = "title" | "prompt" | "answer" | "tool";
+
+export interface ChatSearchHit {
+  kind: ChatSearchKind;
+  /** The prompt it belongs to, 1-based; null for the title. */
+  turn: number | null;
+  /** The text around the match, whitespace collapsed, cut to a couple of hundred characters. */
+  snippet: string;
+  /** Each matched word in the snippet, as [start, end) offsets. */
+  ranges: Array<[number, number]>;
+}
+
+export interface ChatSearchResult {
+  session: ProjectSession;
+  /** The first few hits, in the chat's order (the title first). */
+  hits: ChatSearchHit[];
+  /** Hits in this chat beyond those. */
+  more: number;
+}
+
+export interface ChatSearch {
+  results: ChatSearchResult[];
+  /** The projects the results' sessions belong to. */
+  workspaces: WorkspaceInfo[];
+  /** Sessions read, of those there are; a search that ran out of time or hits says so. */
+  scanned: number;
+  total: number;
+  truncated: boolean;
+}
+
 /** A chat's whole queue, to replace what the harness holds (an edited or removed queued message). */
 export const queueSchema = z.object({
   steering: z.array(z.string().min(1).max(MAX_MESSAGE_CHARS)).max(20),

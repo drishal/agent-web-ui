@@ -46,3 +46,33 @@ test("$ lists the harness's skills, which leave the / menu, and Tab puts one in"
   await box(page).fill("costs $5");
   await expect(page.getByRole("listbox", { name: "Skills" })).toHaveCount(0);
 });
+
+test("Search every chat finds what a chat said, and opens it with the word found", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "the quokka migration plan");
+  await newChat(page);
+  await sendAndWait(page, "nothing to see here");
+  // From the sidebar's search: its words, looked for in what the chats said.
+  await page.getByRole("searchbox", { name: "Search sessions" }).fill("quokka");
+  await page.getByRole("button", { name: /Search every chat for/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Search every chat" });
+  const found = dialog.getByRole("listbox", { name: "Chats found" }).getByRole("option");
+  await expect(found).toHaveCount(1);
+  await expect(found.first()).toContainText("the quokka migration plan");
+  await expect(found.first().locator("mark").first()).toHaveText("quokka");
+  // Every word must be in one message; the harness chips narrow it.
+  await dialog.getByRole("searchbox", { name: "Search every chat" }).fill("quokka nothing");
+  await expect(dialog.getByRole("status")).toContainText("Nothing found");
+  await dialog.getByRole("searchbox", { name: "Search every chat" }).fill("quokka plan");
+  await expect(found).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("the quokka migration plan");
+  await expect(page.getByRole("searchbox", { name: "Find in chat" })).toHaveValue("quokka");
+  await expect(page.getByTestId("find-count")).toContainText(/of [1-9]/);
+  // Ctrl+Shift+H opens it anywhere.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+Shift+H");
+  await expect(dialog).toBeVisible();
+});

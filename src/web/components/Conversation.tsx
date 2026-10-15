@@ -857,6 +857,7 @@ export function Conversation({
   models,
   onSend,
   asking = false,
+  findRequest = null,
 }: {
   chatId: string;
   items: ChatItem[];
@@ -874,6 +875,8 @@ export function Conversation({
   onSend?: (text: string) => void;
   /** The harness is asking something (an approval, a question): a plan's buttons wait. */
   asking?: boolean;
+  /** Open Find with this word (a chat opened from Search every chat); each new `nonce` asks again. */
+  findRequest?: { query: string; nonce: number; chatId: string } | null;
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -1111,6 +1114,10 @@ export function Conversation({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // Asked from outside (Search every chat): the bar opens holding the word, and its first place comes into view.
+  useEffect(() => {
+    if (findRequest && findRequest.chatId === chatId) setFind({ query: findRequest.query, current: -1 });
+  }, [findRequest?.nonce, chatId]);
   const query = find?.query.trim() ?? "";
   const [searched, setSearched] = useState("");
   useEffect(() => {
