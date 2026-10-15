@@ -9,6 +9,10 @@
 //    finalOutput, progress, sessionFile, transcriptPath) and live `progress[]`.
 //  - Claude Code's `Task`/`Agent`: { subagent_type, description, prompt }; the
 //    result text is its answer.
+//  - OpenCode's `task` ({ subagent_type, description, prompt }) and
+//    oh-my-opencode-slim's `subagent` ({ agent, description, prompt,
+//    background }): each runs a child session; the adapter reports its
+//    progress and result as rows keyed by that session's id.
 // Transcript paths stay on the server (keyed by tool call and run), so the
 // browser can ask for a run's transcript but never names a file.
 import type { SubagentRun, SubagentsInfo } from "../../shared/protocol.js";
@@ -61,11 +65,12 @@ export function runsFromArgs(args: unknown): SubagentsInfo | null {
   ] as const) {
     const list = args[key];
     if (Array.isArray(list) && list.length > 0) {
-      return { mode, runs: list.filter(isObj).map(one), ...(args.async === true ? { background: true } : {}) };
+      return { mode, runs: list.filter(isObj).map(one), ...(args.async === true || args.background === true ? { background: true } : {}) };
     }
   }
   if (str(args.agent) || str(args.subagent_type) || str(args.task) || str(args.prompt)) {
-    return { mode: "single", runs: [one(args, 0)], ...(args.async === true ? { background: true } : {}) };
+    // `background`: OpenCode's subagent tool (oh-my-opencode-slim) runs it on after the call returns.
+    return { mode: "single", runs: [one(args, 0)], ...(args.async === true || args.background === true ? { background: true } : {}) };
   }
   return null;
 }

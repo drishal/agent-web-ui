@@ -8,7 +8,7 @@
 //   "tool"   read a file first           "ask"       a shell call that needs approval
 //   "edit"   edit a file (with a patch)  "question"  a form with two options
 //   "slow"   stream many chunks          "fail"      the step fails with an error
-//   "todo"   write a todo list
+//   "todo"   write a todo list            "delegate"  a subagent call running a child session
 // A prompt sent while a run goes is held in the inbox: "steer" runs at the
 // next step, "queue" after the run.
 import { randomBytes } from "node:crypto";
@@ -189,6 +189,8 @@ async function turn(s, text) {
         },
       },
     ]);
+  if (/delegate/.test(text))
+    await step([{ tool: { name: "subagent", input: { agent: "explorer", description: "Look around", background: false, prompt: "List the files and read README.md" }, delegate: true } }]);
   if (/todo/.test(text)) await step([{ tool: { name: "todowrite", input: { todos: [{ content: "write tests", status: "in_progress" }, { content: "ship", status: "pending" }] }, output: "2 todos" } }]);
   if (/ask/.test(text)) await step([{ tool: { name: "shell", input: { command: "echo hi" }, output: "hi\n", metadata: { exit: 0 }, permission: true } }]);
   if (/question/.test(text)) {
@@ -224,6 +226,13 @@ async function tool(s, message, spec) {
   emit("session.tool.input.started", { sessionID: s.id, assistantMessageID: message.id, id: callId, name: spec.name }, loc);
   emit("session.tool.input.ended", { sessionID: s.id, assistantMessageID: message.id, id: callId, text: JSON.stringify(spec.input) }, loc);
   emit("session.tool.called", { sessionID: s.id, assistantMessageID: message.id, id: callId, input: spec.input, executed: false }, loc);
+  if (spec.delegate) {
+    const output = await subagent(s, callId, spec.input);
+    part.state = { status: "completed", input: spec.input, content: [{ type: "text", text: output.text }], metadata: { sessionID: output.child, status: "completed", truncated: false } };
+    part.time.completed = Date.now();
+    emit("session.tool.success", { sessionID: s.id, assistantMessageID: message.id, id: callId, content: part.state.content, metadata: part.state.metadata, executed: false }, loc);
+    return;
+  }
   if (spec.permission) {
     const pid = id("per");
     const request = { id: pid, sessionID: s.id, action: "shell", resources: [spec.input.command], save: ["echo *"], source: { type: "tool", messageID: message.id, id: callId } };
@@ -241,6 +250,44 @@ async function tool(s, message, spec) {
   part.state = { status: "completed", input: spec.input, content: [{ type: "text", text: spec.output }], metadata: { truncated: false, ...(spec.metadata ?? {}) } };
   part.time.completed = Date.now();
   emit("session.tool.success", { sessionID: s.id, assistantMessageID: message.id, id: callId, content: part.state.content, metadata: part.state.metadata, executed: false }, loc);
+}
+
+/** A child session run by a subagent call, as oh-my-opencode-slim's `subagent` does. */
+async function subagent(parent, callId, input) {
+  const loc = parent.location.directory;
+  const child = id("ses");
+  const now = Date.now();
+  const model = { providerID: "opencode-go", id: "mini", variant: "default" };
+  const s = { id: child, parentID: parent.id, agent: input.agent, title: input.description, location: parent.location, model, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, time: { created: now, updated: now }, messages: [] };
+  state.sessions[child] = s;
+  emit("session.created", { sessionID: child, parentID: parent.id, title: s.title, location: s.location });
+  emit("session.tool.progress", { sessionID: parent.id, id: callId, metadata: { sessionID: child, status: "running" } }, loc);
+  emit("session.execution.started", { sessionID: child });
+  s.messages.push({ id: id("msg"), type: "user", time: { created: Date.now() }, text: input.prompt });
+  const mid = id("msg");
+  emit("session.step.started", { sessionID: child, agent: input.agent, model, assistantMessageID: mid, started: Date.now() }, loc);
+  const readId = id("call");
+  emit("session.tool.input.started", { sessionID: child, assistantMessageID: mid, id: readId, name: "read" }, loc);
+  emit("session.tool.called", { sessionID: child, assistantMessageID: mid, id: readId, input: { path: "README.md" }, executed: false }, loc);
+  await sleep(delay * 4);
+  emit("session.tool.success", { sessionID: child, assistantMessageID: mid, id: readId, content: [{ type: "text", text: "1: # Fake" }], metadata: { truncated: false } }, loc);
+  const text = "Found README.md, a fake project.";
+  emit("session.text.started", { sessionID: child, assistantMessageID: mid, ordinal: 0 }, loc);
+  emit("session.text.ended", { sessionID: child, assistantMessageID: mid, ordinal: 0, text }, loc);
+  // Its tools in one step, its answer in the next, as OpenCode stores them.
+  const tokens = { input: 250, output: 20, reasoning: 0, cache: { read: 0, write: 0 } };
+  s.messages.push(
+    { id: mid, type: "assistant", time: { created: Date.now(), completed: Date.now() }, agent: input.agent, model, content: [{ type: "tool", id: readId, name: "read", state: { status: "completed", input: { path: "README.md" }, content: [{ type: "text", text: "1: # Fake" }] } }], tokens, cost: 0.0015 },
+    { id: id("msg"), type: "assistant", time: { created: Date.now(), completed: Date.now() }, agent: input.agent, model, content: [{ type: "text", text }], tokens, cost: 0.0015 },
+  );
+  emit("session.step.ended", { sessionID: child, assistantMessageID: mid, finish: "stop", cost: 0.003, tokens: { input: 500, output: 40, reasoning: 0, cache: { read: 0, write: 0 } } }, loc);
+  emit("session.usage.updated", { sessionID: child, cost: 0.003, tokens: { input: 500, output: 40, reasoning: 0, cache: { read: 0, write: 0 } } });
+  s.messages.push({ id: id("msg"), type: "idle", time: { created: Date.now() }, outcome: "succeeded" });
+  Object.assign(s, { cost: 0.003, tokens: { input: 500, output: 40, reasoning: 0, cache: { read: 0, write: 0 } } });
+  s.time.idle = Date.now();
+  emit("session.execution.succeeded", { sessionID: child });
+  save();
+  return { child, text };
 }
 
 async function form(s) {
