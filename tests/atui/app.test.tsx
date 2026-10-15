@@ -204,11 +204,14 @@ describe("atui", () => {
     ui.keys.pressEnter();
     await ui.until(() => ui?.app.chat()?.status === "running");
     await ui.until("Steer the agent");
+    // Where the answer is being written, a cursor blinks.
+    await ui.until("▍");
     await ui.escape();
     await ui.until("Esc again to stop");
     await ui.escape();
     await ui.until("■ Stopped", 15_000);
     await idle(ui);
+    expect(await ui.frame()).not.toContain("▍");
     ui.keys.pressKey("c", { ctrl: true });
     await ui.until("C-c again to quit");
     ui.keys.pressKey("c", { ctrl: true });
