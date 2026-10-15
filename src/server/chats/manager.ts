@@ -34,6 +34,8 @@ export class ChatManager {
   render?: { baseUrl: string };
   /** Any chat finished a run, failed, or asks for an answer. */
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string, request?: InteractionRequest) => void;
+  /** A chat's chain reached a handoff step (Chat.onChainHandoff). */
+  onChainHandoff?: Chat["onChainHandoff"];
 
   constructor(private readonly idleDisposeMs = IDLE_DISPOSE_MS) {
     this.reaper = setInterval(() => void this.reap(), REAP_INTERVAL_MS);
@@ -82,6 +84,10 @@ export class ChatManager {
     chat.onLimits = (account) => this.onLimits?.(account);
     chat.onNews = (c, kind, body, request) => this.onNews?.(c, kind, body, request);
     chat.onRunStart = (c) => this.onRunStart?.(c);
+    chat.onChainHandoff = async (c, step, rest) => {
+      if (!this.onChainHandoff) throw new Error("Handoffs cannot run here");
+      await this.onChainHandoff(c, step, rest);
+    };
     if (this.checkpoints) {
       chat.checkpoints = new ChatCheckpoints(this.checkpoints.service, chat, this.checkpoints.sessionsDir);
       void chat.checkpoints.start();

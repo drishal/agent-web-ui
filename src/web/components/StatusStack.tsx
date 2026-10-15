@@ -7,10 +7,12 @@
 // read as noise here. Hiding is per chat. Where the harness can take its queue
 // back, a queued message can be edited or removed before it runs (T3 Code's);
 // an edit whose message ran meanwhile goes to the composer instead of being lost.
+// Under the queue, the chain: what the server runs after this run (a message,
+// a handoff), each step removable, with Resume and Clear when it is paused.
 import { useEffect, useState } from "react";
-import type { QueueState, TodoItem } from "../../shared/protocol.js";
+import type { ChainStep, QueueState, TodoItem } from "../../shared/protocol.js";
 import { addToDraft } from "../draft-bus.js";
-import { IconCheck, IconChevronDown, IconCircle, IconClock, IconEdit, IconQueue, IconSteer, IconX, Spinner } from "../icons.js";
+import { IconCheck, IconChevronDown, IconCircle, IconClock, IconEdit, IconQueue, IconSteer, IconSwap, IconWarning, IconX, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
 
 function TodoIcon({ status }: { status: string }) {
@@ -49,6 +51,10 @@ export function StatusStack({
   todos,
   notice,
   onEditQueue,
+  chain = [],
+  chainPaused = null,
+  harnessName = (id) => id,
+  onChain,
   base,
 }: {
   chatId: string;
@@ -58,6 +64,12 @@ export function StatusStack({
   onEditQueue?: (queue: QueueState) => Promise<boolean>;
   queue: QueueState;
   todos: TodoItem[];
+  /** What runs after this run (the server's chain), and why it waits, if it does. */
+  chain?: ChainStep[];
+  chainPaused?: string | null;
+  harnessName?: (id: string) => string;
+  /** Put a changed chain in place; `resume` lets a paused one go on. */
+  onChain?: (steps: ChainStep[], resume?: boolean) => Promise<boolean>;
   /** Always shown under the rest, even when it is hidden (the git row). */
   base?: React.ReactNode;
 }) {
@@ -93,7 +105,7 @@ export function StatusStack({
     }
     setEditing(null);
   }, [queue, editing]);
-  const count = (notice ? 1 : 0) + queued.length + (todos.length > 0 ? 1 : 0) + (lost ? 1 : 0);
+  const count = (notice ? 1 : 0) + queued.length + (todos.length > 0 ? 1 : 0) + (lost ? 1 : 0) + chain.length;
   if (count === 0) return base ? <div className="status-stack is-base-only">{base}</div> : null;
   const done = todos.filter((t) => /done|complete/.test(t.status)).length;
 
@@ -173,6 +185,42 @@ export function StatusStack({
                 );
               })}
             </ul>
+          ) : null}
+          {chain.length > 0 ? (
+            <div className={`stack-chain${chainPaused ? " is-paused" : ""}`} data-testid="chain">
+              {chainPaused ? (
+                <div className="stack-row stack-paused" role="status">
+                  <span className="stack-icon">
+                    <IconWarning size={13} />
+                  </span>
+                  <span className="stack-text">Paused: {chainPaused}</span>
+                  <span className="stack-actions is-shown">
+                    <button type="button" className="btn btn-small" onClick={() => void onChain?.(chain, true)}>
+                      Resume
+                    </button>
+                    <button type="button" className="btn btn-small btn-ghost" onClick={() => void onChain?.([])}>
+                      Clear
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+              <ol className="stack-queue" aria-label="Then">
+                {chain.map((step, n) => (
+                  <li key={step.id} className="stack-row chain-row" data-testid="chain-row">
+                    <span className="stack-icon">{step.kind === "send" ? <IconQueue size={13} /> : <IconSwap size={13} />}</span>
+                    <span className="stack-kind">{n === 0 ? "Then" : "and then"}</span>
+                    <span className="stack-text">{step.kind === "send" ? step.text : `Hand off to ${harnessName(step.harness)}${step.prompt?.trim() ? `: ${step.prompt}` : ""}`}</span>
+                    {onChain ? (
+                      <span className="stack-actions">
+                        <button type="button" className="icon-btn" aria-label={`Remove step ${n + 1} of the chain`} onClick={() => void onChain(chain.filter((s) => s.id !== step.id))}>
+                          <IconX size={12} />
+                        </button>
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            </div>
           ) : null}
           {todos.length > 0 ? (
             <Group title="Todos" meta={`${done}/${todos.length}`} defaultOpen>
