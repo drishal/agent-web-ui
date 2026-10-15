@@ -1,5 +1,6 @@
 // atui's motion and small graphics, worked out apart from the drawing so they
-// can be tested: colour mixing for the "Working" shimmer, the pace streamed
+// can be tested: colour mixing for the "Working" shimmer and for ramps (the
+// context going from green to amber to red), the pace streamed
 // text is revealed at, sparklines, meters, and diff stat bars drawn with
 // block characters, eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
 // session opens behind, a slow breath for what waits on you, and each
@@ -19,6 +20,22 @@ export function mix(a: string, b: string, t: number): string {
   const [br, bg, bb] = rgb(b);
   const c = (x: number, y: number) => Math.round(x + (y - x) * k).toString(16).padStart(2, "0");
   return `#${c(ar, br)}${c(ag, bg)}${c(ab, bb)}`;
+}
+
+/**
+ * The colour at `value` along a ramp of stops (`[at, colour]`, in order of
+ * `at`): the nearest stops mixed, the ends held beyond them.
+ */
+export function ramp(value: number, stops: Array<[number, string]>): string {
+  const first = stops[0];
+  if (!first) return "#000000";
+  if (value <= first[0]) return first[1];
+  for (let i = 1; i < stops.length; i++) {
+    const [at, color] = stops[i] as [number, string];
+    const [from, base] = stops[i - 1] as [number, string];
+    if (value <= at) return mix(base, color, at === from ? 1 : (value - from) / (at - from));
+  }
+  return (stops[stops.length - 1] as [number, string])[1];
 }
 
 /**

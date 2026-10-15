@@ -1,8 +1,10 @@
 // atui's colours: the same tokens the web UI uses, read from the server's
 // /api/theme (the shared theme.yml scheme when there is one), else the web
 // UI's built-in dark palette. The terminal's own background shows through
-// everywhere but the panels that are drawn on a surface.
+// everywhere but the panels that are drawn on a surface. The context's
+// colour ramps from green to amber to red as it fills.
 import type { ThemeInfo } from "../shared/protocol.js";
+import { ramp } from "./fx.js";
 
 export interface Theme {
   bg: string;
@@ -81,6 +83,18 @@ export function themeFrom(info: Pick<ThemeInfo, "vars"> | null): Theme {
 }
 
 /** A harness's colour: the theme token it declares (`link`, `thinking`, …). */
+/**
+ * The context's colour at `percent` full: green while there is room, amber
+ * from where compacting starts to be offered, red as it runs out.
+ */
+export function contextTone(theme: Theme, percent: number): string {
+  return ramp(percent, [
+    [40, theme.ok],
+    [65, theme.warn],
+    [90, theme.danger],
+  ]);
+}
+
 export function accentOf(theme: Theme, token: string | undefined): string {
   return token && token in theme ? theme[token as keyof Theme] : theme.accent;
 }

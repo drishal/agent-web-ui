@@ -6,8 +6,9 @@
 // paths) attach too: numbered thumbnails above the box, Backspace in an
 // empty box takes the last one off. The line under it names the
 // harness, model and thinking level, the context used (with its recent
-// history as a sparkline), and whether the next message compacts first.
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+// history as a sparkline, green to amber to red as it fills, and a sweep while
+// it compacts), and whether the next message compacts first.
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show } from "solid-js";
 import { createHostClipboard, decodePasteBytes, type HostClipboardService, type TextareaRenderable } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/solid";
 import { IMAGE_MIME_TYPES, MAX_IMAGES, type SlashCommand } from "../../shared/protocol.js";
@@ -15,15 +16,27 @@ import { APP_COMMANDS, matchCommands, mergeCommands } from "../../web/commands.j
 import { modelName } from "../../web/turns.js";
 import { applyMention, ghostCompletion, mentionAt } from "../assist.js";
 import { tokens } from "../format.js";
-import { sparkline } from "../fx.js";
+import { mix, shimmer, sparkline } from "../fx.js";
 import { attachmentFrom, attachmentFromFile, byteSize, clipboardImageByTool, imagePathsFromPaste, type PendingImage } from "../images.js";
 import { harnessGlyph } from "../neat.js";
-import { accentOf } from "../theme.js";
+import { accentOf, contextTone } from "../theme.js";
 import { useAtui, useTheme } from "./context.js";
+import { Shimmer } from "./fx.js";
+import { tick } from "./ticker.js";
 
 /** From this share of the context the composer offers to compact first, and from this one it starts on. */
 export const COMPACT_OFFER = 50;
 export const COMPACT_DEFAULT = 80;
+
+/** Cells in the sweep drawn while the context compacts. */
+const SWEEP_CELLS = 8;
+
+/** While compacting: a band of light running right to left over a bar, as the history is pressed down. */
+function CompactSweep() {
+  const t = useTheme();
+  const colors = () => shimmer(SWEEP_CELLS, tick(), mix(t().bg, t().border, 0.8), t().accent, 3).reverse();
+  return <Index each={colors()}>{(c) => <span style={{ fg: c() }}>━</span>}</Index>;
+}
 
 /** The host clipboard (Wayland, X11, macOS), opened on the first C-v. */
 let clipboard: HostClipboardService | null = null;
@@ -216,7 +229,7 @@ export function Composer(p: {
     return "Message the agent…";
   };
 
-  const mixTone = () => ((percent() ?? 0) >= 80 ? t().warn : accentOf(t(), app.harness()?.accent));
+  const tone = () => contextTone(t(), percent() ?? 0);
 
   const model = () => {
     const c = app.chat();
@@ -372,11 +385,21 @@ export function Composer(p: {
           <Show when={offer()}>
             <span style={{ fg: compactFirst() ? t().warn : t().muted }}>{`${compactFirst() ? "compact first" : "full history"} ${tokens(app.chat()?.context?.tokens ?? 0)} (C-x f)  `}</span>
           </Show>
-          <Show when={app.contextHistory().length > 1}>
-            <span style={{ fg: mixTone() }}>{`${sparkline(app.contextHistory(), 100)} `}</span>
-          </Show>
-          <Show when={percent() !== null}>
-            <span style={{ fg: (percent() ?? 0) >= 80 ? t().warn : t().muted }}>{`ctx ${Math.round(percent() ?? 0)}%`}</span>
+          <Show
+            when={app.chat()?.status === "compacting"}
+            fallback={
+              <>
+                <Show when={app.contextHistory().length > 1}>
+                  <span style={{ fg: tone() }}>{`${sparkline(app.contextHistory(), 100)} `}</span>
+                </Show>
+                <Show when={percent() !== null}>
+                  <span style={{ fg: tone() }}>{`ctx ${Math.round(percent() ?? 0)}%`}</span>
+                </Show>
+              </>
+            }
+          >
+            <Shimmer text="compacting " />
+            <CompactSweep />
           </Show>
         </text>
       </box>
