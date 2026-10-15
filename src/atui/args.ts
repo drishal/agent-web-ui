@@ -14,6 +14,8 @@ Usage: atui [options]
                       (default: as last set with C-x v, or $ATUI_VIM=1)
   --images <mode>     how prompt images are drawn: auto (ask the terminal), kitty
                       (kitty, Ghostty), sixel, blocks, or off (default $ATUI_IMAGES, auto)
+  --no-herdr          in a herdr pane, do not report the chats' state to herdr
+                      (the server's herdr setting turns it off for every atui)
   -h, --help          this help
 
 Starts in the current folder's project. Keys, in Emacs notation (C- is Ctrl,
@@ -21,8 +23,10 @@ M- is Alt): C-k commands, C-x then a letter for the rest (C-x lists them),
 Enter sends, S-Enter or C-j adds a line, C-v pastes an image (or drop image
 files on the terminal), Esc Esc stops the agent, C-c C-c quits.`;
 
+export const DEFAULT_URL = "http://127.0.0.1:4783";
+
 export function parseArgs(argv: string[], env: Record<string, string | undefined>): (AtuiOptions & { url: string }) | { help: true } | { error: string } {
-  const out: AtuiOptions & { url: string } = { cwd: process.cwd(), url: env.AWUI_URL || "http://127.0.0.1:4783" };
+  const out: AtuiOptions & { url: string } = { cwd: process.cwd(), url: env.AWUI_URL || DEFAULT_URL };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] as string;
     const value = () => {
@@ -51,6 +55,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
       out.images = mode;
     } else if (arg === "--vim") out.vim = true;
     else if (arg === "--no-vim") out.vim = false;
+    else if (arg === "--no-herdr") out.herdr = false;
     else return { error: `Unknown option ${arg}` };
   }
   out.url = out.url.replace(/\/+$/, "");
