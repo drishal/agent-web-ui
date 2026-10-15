@@ -34,6 +34,8 @@ import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
 import { ProjectSearch } from "./components/ProjectSearch.js";
 import { ShortcutSheet } from "./components/ShortcutSheet.js";
 import { ChatSearch } from "./components/ChatSearch.js";
+import { FileViewer } from "./components/FileViewer.js";
+import { useFileRequests, type FileRequest } from "./file-bus.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
 import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
@@ -110,6 +112,9 @@ export function App() {
   });
   /** Search every chat: open, with what it starts holding (the sidebar's query, or nothing). */
   const [chatSearch, setChatSearch] = useState<string | null>(null);
+  /** The file viewer: open, on a file (and a line) or on its "Go to file" box. */
+  const [viewer, setViewer] = useState<{ request: FileRequest | null } | null>(null);
+  useFileRequests((request) => setViewer({ request }));
   /** A chat opened from that search: Find opens in it holding the word, once it is shown. */
   const [findAsk, setFindAsk] = useState<{ query: string; nonce: number; sessionId: string; chatId: string | null } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -247,7 +252,8 @@ export function App() {
     };
   }, [attention]);
 
-  const changedFiles = useMemo(() => (chat ? collectChanges(chat.items, chat.workspace.path).length : 0), [chat?.items, chat?.workspace.path]);
+  const changes = useMemo(() => (chat ? collectChanges(chat.items, chat.workspace.path) : []), [chat?.items, chat?.workspace.path]);
+  const changedFiles = changes.length;
 
   // Runs the shown chat finished: the limits meter re-reads after each.
   const [settledRuns, setSettledRuns] = useState(0);
@@ -882,6 +888,7 @@ export function App() {
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
+    items.push({ id: "open-file", section: "Actions", label: "Open a file…", hint: searchWorkspace?.name, keywords: "view read go to", disabled: searchWorkspace ? undefined : "Choose a project first", run: () => setViewer({ request: null }) });
     items.push({ id: "search-all", section: "Actions", label: "Search every chat", hint: shortcutHint("history-search"), keywords: "history find", run: () => setChatSearch("") });
     items.push({
       id: "search",
@@ -1420,6 +1427,7 @@ export function App() {
       ) : null}
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
       {shortcutsOpen ? <ShortcutSheet onClose={() => setShortcutsOpen(false)} /> : null}
+      {viewer && searchWorkspace ? <FileViewer workspace={searchWorkspace} request={viewer.request} changes={chat ? changes : []} onClose={() => setViewer(null)} /> : null}
       {chatSearch !== null ? (
         <ChatSearch
           harnesses={boot.harnesses.filter((h) => h.available)}

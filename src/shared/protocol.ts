@@ -581,6 +581,23 @@ export interface ProjectSearch {
   truncated: boolean;
 }
 
+/** A project file for the file viewer: relative to the project (or absolute inside it). */
+export const fileViewSchema = z.object({ path: z.string().min(1).max(4096) });
+
+export interface FileView {
+  /** Relative to the project, with forward slashes. */
+  path: string;
+  /** Bytes on disk. */
+  size: number;
+  /** Its text, or null for a binary file. */
+  text: string | null;
+  binary: boolean;
+  /** Only the first part was read (the viewer says so). */
+  truncated: boolean;
+  /** Lines in `text`. */
+  lines: number;
+}
+
 /** Search every chat: the words to find (all of them, in one message), and optionally one harness. */
 export const chatSearchSchema = z.object({
   q: z.string().trim().min(2).max(200),

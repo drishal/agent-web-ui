@@ -6,6 +6,7 @@ import type { ChatItem, DiffLine } from "../../shared/protocol.js";
 import { IconX } from "../icons.js";
 import { collectChanges, commentable, commentKey, reviewPrompt, type ReviewComment } from "../review.js";
 import { load, save } from "../storage.js";
+import { FileLink } from "./FileLink.js";
 import { DiffBadge, DiffView } from "./ToolBody.js";
 
 interface Editing {
@@ -141,7 +142,9 @@ export function ReviewPanel({
           {files.map((f) => (
             <section key={f.path} className="review-file" data-testid="review-file">
               <h3 className="review-path">
-                <code>{f.path}</code>
+                <FileLink path={f.path}>
+                  <code>{f.path}</code>
+                </FileLink>
                 <DiffBadge added={f.added} removed={f.removed} />
               </h3>
               {f.edits.map(({ tool, turn }) => {

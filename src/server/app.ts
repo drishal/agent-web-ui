@@ -11,6 +11,7 @@ import {
   chatSearchSchema,
   compactSchema,
   createChatSchema,
+  fileViewSchema,
   forkChatSchema,
   handoffSchema,
   MAX_IMAGE_BYTES,
@@ -63,6 +64,7 @@ import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
+import { viewFile } from "./file-view.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
 import { runCommand } from "./run-command.js";
@@ -322,6 +324,13 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(req.params.id);
     const { q } = fileSearchSchema.parse(req.query);
     res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
+  // The file viewer: one of the project's own files, read-only and bounded (file-view.ts).
+  app.get("/api/workspaces/:id/file", async (req, res) => {
+    const ws = await workspaces.get(req.params.id);
+    const { path: wanted } = fileViewSchema.parse(req.query);
+    res.json(await viewFile(ws.path, wanted));
   });
 
   // Search in project: lines holding a fixed string (never a pattern), bounded

@@ -53,6 +53,13 @@ export function projectFiles(root: string, now = Date.now()): Promise<string[]> 
   return files;
 }
 
+/** Whether the project lists `rel` (a path relative to it); a miss re-reads the list once, since the agent may have just made the file. */
+export async function knownFile(root: string, rel: string): Promise<boolean> {
+  if ((await projectFiles(root)).includes(rel)) return true;
+  cache.delete(root);
+  return (await projectFiles(root)).includes(rel);
+}
+
 /** How well `file` matches `q`: lower is better, null for no match (the name first, then the path, then letters in order). */
 function score(file: string, q: string): number | null {
   const f = file.toLowerCase();
