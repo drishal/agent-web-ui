@@ -11,6 +11,7 @@ import { appendFileSync } from "node:fs";
 import { createEffect, createMemo, createRoot, createSignal, on, untrack } from "solid-js";
 import { span, ui, html, type Key, type Node, type Session, type Surface } from "@stencil-hq/tern";
 import type { HarnessStatus, InteractionRequest, ProjectSession, SavedPrompt, SlashCommand } from "../shared/protocol.js";
+import type { ChatState } from "../web/chat-state.js";
 import { buildTurns, ago as agoMs } from "../web/turns.js";
 import { isBusy } from "../web/session-groups.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../web/commands.js";
@@ -88,6 +89,9 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     let quit: () => void = () => undefined;
 
     const say = (text: string, tone: "success" | "info" | "error" = "info") => setNotice({ n: ++noticeN, text, tone });
+
+    // AWUI_TERN_LOG=<file> keeps every key and event the client reads, Tern's errors, and any view that failed, one JSON line each.
+    const log = process.env.AWUI_TERN_LOG ? (line: unknown) => appendFileSync(process.env.AWUI_TERN_LOG as string, `${JSON.stringify(line)}\n`) : null;
 
     // Timers' ages, kept per key (see ConversationCx.age); started over for each chat.
     const ages = new Map<string, number>();
@@ -515,8 +519,26 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     );
 
     // ---- the view ---------------------------------------------------------------------------
-    const view = () => {
+    /**
+     * The shown chat with the fields a server older than this client may not send (the chain,
+     * checkpoints, todos) filled in empty, so a client newer than its server draws what there is.
+     */
+    const shownChat = createMemo((): ChatState | null => {
       const c = app.chat();
+      if (!c) return null;
+      return {
+        ...c,
+        queue: c.queue ?? { steering: [], followUp: [] },
+        pending: c.pending ?? [],
+        todos: c.todos ?? [],
+        checkpoints: c.checkpoints ?? [],
+        chain: c.chain ?? [],
+        chainPaused: c.chainPaused ?? null,
+      };
+    });
+
+    const view = () => {
+      const c = shownChat();
       const h = harness();
       const tabs = app.tabs();
       const main: (Node | null)[] = [];
@@ -704,7 +726,18 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     let focused: string | null = null;
     createEffect(() => {
       if (closed) return;
-      surface.render(view());
+      try {
+        surface.render(view());
+      } catch (error) {
+        // A view that cannot be drawn says why, in place of the chat, and the keys still work (C-c C-c quits);
+        // one failure must not take the pane and its terminal modes down with it.
+        const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
+        log?.({ t: Date.now(), renderError: text });
+        surface.render({
+          main: ui.col(ui.card({ key: "broken", tone: "error", head: [span("awui tern could not draw this chat", "error")] }, ui.code({ key: "e", text }))),
+          dock: ui.col(ui.text({ key: "keys" }, span("C-c C-c quits · C-x s opens another session", "muted"))),
+        });
+      }
       const want = focus() === "answer" && app.chat()?.pending[0] ? ANSWER_ID : EDITOR_ID;
       if (want !== focused) {
         focused = want;
@@ -855,8 +888,6 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       }
     };
 
-    // AWUI_TERN_LOG=<file> keeps every key and event the client reads, and Tern's errors, one JSON line each.
-    const log = process.env.AWUI_TERN_LOG ? (line: unknown) => appendFileSync(process.env.AWUI_TERN_LOG as string, `${JSON.stringify(line)}\n`) : null;
 
     /** Read keys and events until the client quits; resolves then. */
     const run = async (): Promise<void> => {
