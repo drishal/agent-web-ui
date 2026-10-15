@@ -14,7 +14,7 @@ import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opent
 import { useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
-import { clip, foldLabel, unifiedDiff } from "../format.js";
+import { clip, fileUrl, foldLabel, unifiedDiff } from "../format.js";
 import { mix } from "../fx.js";
 import { filetypeOf, taskBoxes } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
@@ -307,12 +307,7 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
   // A running command moves to its own wrapped `└ $` lines, so you can read what is executing.
   const wraps = () => running() && p.item.category === "command" && Boolean(row().detail);
   // A path in the row is a link to the file (where the terminal supports links).
-  const href = () => {
-    const file = p.item.paths[0];
-    if (!file) return null;
-    const abs = file.startsWith("/") ? file : `${p.workspace.replace(/\/+$/, "")}/${file}`;
-    return `file://${encodeURI(abs)}`;
-  };
+  const href = () => (p.item.paths[0] ? fileUrl(p.item.paths[0], p.workspace) : null);
   return (
     <box flexDirection="column">
       <Show when={row().note}>
@@ -583,6 +578,7 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
   const segments = createMemo(() => workSegments(p.turn()));
   const split = () => segments().some((s) => s.reply);
   const files = () => p.turn().changedFiles.map((f) => relativePath(f, p.workspace));
+  const FILES_SHOWN = 4;
   return (
     <box flexDirection="column" width="100%" maxWidth={MAX_COLUMN}>
       <Show when={p.switchedTo}>
@@ -612,7 +608,20 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         <box marginTop={1}>
           <text fg={t().muted} wrapMode="word">
             {`✎ Changed ${files().length} ${files().length === 1 ? "file" : "files"} · `}
-            <span style={{ fg: t().text2 }}>{files().slice(0, 4).join(", ") + (files().length > 4 ? ` +${files().length - 4}` : "")}</span>
+            {/* Each name is a link to its file, where the terminal has links. */}
+            <Index each={files().slice(0, FILES_SHOWN)}>
+              {(f, i) => (
+                <>
+                  <Show when={i > 0}>{", "}</Show>
+                  <a href={fileUrl(f(), p.workspace)} style={{ fg: t().text2 }}>
+                    {f()}
+                  </a>
+                </>
+              )}
+            </Index>
+            <Show when={files().length > FILES_SHOWN}>
+              <span style={{ fg: t().text2 }}>{` +${files().length - FILES_SHOWN}`}</span>
+            </Show>
           </text>
         </box>
       </Show>

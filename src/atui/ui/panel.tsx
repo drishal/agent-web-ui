@@ -4,7 +4,7 @@
 // the context and each limit window drawn as a meter. C-x i shows it.
 import { createMemo, For, Show } from "solid-js";
 import { collectChanges } from "../../web/review.js";
-import { accountName, clip, tokens, windowLabel } from "../format.js";
+import { accountName, clip, fileUrl, tokens, windowLabel } from "../format.js";
 import { meter } from "../fx.js";
 import { useAtui, useTheme } from "./context.js";
 
@@ -125,7 +125,7 @@ export function InfoBody(p: { width: number }) {
           {(f) => (
             <box flexDirection="row">
               <text flexGrow={1} fg={t().text2} wrapMode="none" truncate>
-                {f.path}
+                <a href={fileUrl(f.path, c()?.workspace.path ?? "")}>{f.path}</a>
               </text>
               <text flexShrink={0}>
                 <span style={{ fg: t().ok }}>{` +${f.added}`}</span>

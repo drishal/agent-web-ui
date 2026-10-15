@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem, InteractionRequest, LimitAccount, ToolItem } from "../../src/shared/protocol.js";
 import { parseArgs } from "../../src/atui/args.js";
-import { accountName, ago, clip, foldLabel, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
+import { accountName, ago, clip, fileUrl, foldLabel, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
 import { isApproval, optionsOf } from "../../src/atui/requests.js";
 import { DARK, themeFrom } from "../../src/atui/theme.js";
 import { buildTurns } from "../../src/web/turns.js";
@@ -57,6 +57,12 @@ describe("atui formatting", () => {
     expect(done && foldLabel(done, 0, { counts: { read: 2, edit: 1 }, place: "middle" })).toBe("2 reads, 1 edit");
     expect(done && foldLabel(done, 0, { counts: {}, place: "middle" })).toBe("Worked");
     expect(live && foldLabel(live, 4000, { counts: {}, place: "last" })).toBe("Working · 3s");
+  });
+
+  it("links a file by a file:// URL, relative paths from the project, names encoded", () => {
+    expect(fileUrl("src/app.ts", "/home/me/proj/")).toBe("file:///home/me/proj/src/app.ts");
+    expect(fileUrl("/etc/hosts", "/home/me/proj")).toBe("file:///etc/hosts");
+    expect(fileUrl("notes #1?.md", "/p")).toBe("file:///p/notes%20%231%3F.md");
   });
 
   it("says how long ago a session was active", () => {
