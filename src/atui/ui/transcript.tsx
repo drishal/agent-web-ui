@@ -14,7 +14,7 @@ import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opent
 import { useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
-import { clip, fileUrl, foldLabel, unifiedDiff } from "../format.js";
+import { clip, fileUrl, foldLabel, outputTail, unifiedDiff } from "../format.js";
 import { easeOut, flashAt, mix, unrollCounts } from "../fx.js";
 import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
@@ -27,6 +27,8 @@ import { syntaxFor } from "./syntax.js";
 import { tick } from "./ticker.js";
 
 const OUTPUT_LINES = 14;
+/** A running command's last lines, shown under its row while it works. */
+const LIVE_LINES = 3;
 /** The transcript's widest column: past it, lines get too long to read. */
 export const MAX_COLUMN = 104;
 /** From this terminal width an edit's frame shows its diff side by side. */
@@ -317,6 +319,8 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
   const factColor = (f: string) => (bad(f) ? t().danger : t().ok);
   // A running command moves to its own wrapped `└ $` lines, so you can read what is executing.
   const wraps = () => running() && p.item.category === "command" && Boolean(row().detail);
+  // What it prints meanwhile shows under it, a few lines, until the outcome takes their place.
+  const tail = createMemo(() => (running() && p.item.category === "command" ? outputTail(p.item.output, LIVE_LINES) : []));
   // A path in the row is a link to the file (where the terminal supports links).
   const href = () => (p.item.paths[0] ? fileUrl(p.item.paths[0], p.workspace) : null);
   return (
@@ -360,6 +364,19 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
               </text>
             </box>
           )}
+        </Show>
+        <Show when={tail().length > 0}>
+          <box flexDirection="column" paddingLeft={4}>
+            <box flexDirection="column" border={["left"]} borderColor={t().border} paddingLeft={1}>
+              <Index each={tail()}>
+                {(line) => (
+                  <text fg={t().muted} wrapMode="none" truncate>
+                    {line()}
+                  </text>
+                )}
+              </Index>
+            </box>
+          </box>
         </Show>
         <Show when={!running() && row().facts.length > 0}>
           <box paddingLeft={2}>

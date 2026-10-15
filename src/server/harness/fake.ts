@@ -9,6 +9,7 @@
 //   "planned" hand a ten-step plan over for review (an ExitPlanMode call)
 //   "ratelimit" stop on a usage limit that resets in an hour
 //   "interleaved" reply, run a command, then answer (a reply between tool calls)
+//   "ticking" run a command whose output arrives a line at a time
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -43,6 +44,8 @@ interface FakeCall {
   args: Record<string, unknown>;
   output: string;
   details?: Record<string, unknown>;
+  /** The output as it arrives while the call runs, one update per entry (else one "partial output…"). */
+  updates?: string[];
 }
 
 const FAKE_MODELS: ModelInfo[] = [
@@ -471,6 +474,12 @@ class FakeLiveChat implements LiveChat {
         await this.reply("this is reply block 1", signal);
         await this.call({ name: "bash", args: { command: "sleep 1" }, output: "" }, signal);
       }
+      if (/\bticking\b/i.test(text)) {
+        // A test run printing a line a file, as a long command does while you watch it.
+        const lines = Array.from({ length: 6 }, (_, i) => ` ✓ tests/unit/step-${i + 1}.test.ts`);
+        const updates = lines.map((_, i) => lines.slice(0, i + 1).join("\n"));
+        await this.call({ name: "bash", args: { command: "npm test" }, output: `${updates[updates.length - 1]}\n\n Tests  6 passed (6)`, updates }, signal);
+      }
       if (/\bplanned\b/i.test(text)) {
         // A plan handed over for review, as Claude Code's ExitPlanMode does it.
         const plan = "## Plan\n\n1. Read `src/app.ts`\n2. Split the handler\n3. Add a test\n4. Run the suite\n5. Update the README\n6. Check the build\n7. Tidy the imports\n8. Write the commit\n9. Push it\n10. Tell the user";
@@ -657,8 +666,10 @@ class FakeLiveChat implements LiveChat {
     this.emit({ type: "assistant_end", text: "", thinking: "" });
     this.emit({ type: "tool_start", toolCallId, name: call.name, args: call.args });
     await this.pause(signal, 2);
-    this.emit({ type: "tool_update", toolCallId, output: "partial output…" });
-    await this.pause(signal, 2);
+    for (const output of call.updates ?? ["partial output…"]) {
+      this.emit({ type: "tool_update", toolCallId, output });
+      await this.pause(signal, call.updates ? 10 : 2);
+    }
     const details = call.details ? { details: call.details } : {};
     this.record({ role: "toolResult", toolCallId, toolName: call.name, content: [{ type: "text", text: call.output }], isError: false, ...details });
     this.emit({ type: "tool_end", toolCallId, output: call.output, isError: false, ...details });

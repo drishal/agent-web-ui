@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem, InteractionRequest, LimitAccount, ToolItem } from "../../src/shared/protocol.js";
 import { parseArgs } from "../../src/atui/args.js";
-import { accountName, ago, clip, fileUrl, foldLabel, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
+import { accountName, ago, clip, fileUrl, foldLabel, outputTail, tokens, toolTarget, unifiedDiff, windowLabel } from "../../src/atui/format.js";
 import { isApproval, optionsOf } from "../../src/atui/requests.js";
 import { DARK, themeFrom } from "../../src/atui/theme.js";
 import { buildTurns } from "../../src/web/turns.js";
@@ -63,6 +63,14 @@ describe("atui formatting", () => {
     expect(fileUrl("src/app.ts", "/home/me/proj/")).toBe("file:///home/me/proj/src/app.ts");
     expect(fileUrl("/etc/hosts", "/home/me/proj")).toBe("file:///etc/hosts");
     expect(fileUrl("notes #1?.md", "/p")).toBe("file:///p/notes%20%231%3F.md");
+  });
+
+  it("keeps a running command's last lines, plain, as they read now", () => {
+    expect(outputTail("one\ntwo\n\nthree\nfour\n", 3)).toEqual(["two", "three", "four"]);
+    // Colour codes out; a progress bar redrawn with \r reads as its last state; Windows line ends kept whole.
+    expect(outputTail("\x1b[32m✓ ok\x1b[0m\r\n 10%\r 55%\r 90%", 3)).toEqual(["✓ ok", " 90%"]);
+    expect(outputTail("\x1b]8;;file:///x\x07link\x1b]8;;\x07 \x07bell", 1)).toEqual(["link bell"]);
+    expect(outputTail("", 3)).toEqual([]);
   });
 
   it("says how long ago a session was active", () => {

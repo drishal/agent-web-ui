@@ -103,6 +103,19 @@ describe("atui", () => {
     await idle(ui);
   }, 30_000);
 
+  it("shows a running command's last lines under it, until its outcome takes their place", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { height: 40 });
+    await ui.type("ticking please");
+    ui.keys.pressEnter();
+    const live = await ui.until("step-4.test.ts");
+    // Three lines at a time, the newest last.
+    expect(live).toContain("│  ✓ tests/unit/step-2.test.ts");
+    expect(live).not.toContain("step-1.test.ts");
+    expect(live).toContain("● Bash · running…");
+    await idle(ui);
+    expect(await ui.frame()).not.toContain("step-6.test.ts");
+  }, 30_000);
+
   it("underlines a failure as well as colouring it", async () => {
     ui = await mount(path.join(server.root, "alpha"));
     await ui.type("fail please");
