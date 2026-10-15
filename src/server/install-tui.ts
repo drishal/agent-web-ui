@@ -15,6 +15,7 @@ declare const AWUI_COMMIT: string | undefined;
 
 const DEFAULT_REPO = "github.com/drishal/agent-web-ui";
 const ATUI_MAIN = path.join("src", "atui", "main.tsx");
+const TERN_MAIN = path.join("src", "tern", "main.ts");
 const ATUI_PRELOAD = path.join("node_modules", "@opentui", "solid", "scripts", "preload.js");
 
 export async function installTui(stateDir: string): Promise<void> {
@@ -26,7 +27,8 @@ export async function installTui(stateDir: string): Promise<void> {
   }
   const atuiDir = path.join(stateDir, "atui");
   const mainFile = path.join(atuiDir, ATUI_MAIN);
-  if (!existsSync(mainFile)) {
+  // A copy fetched before the Tern client existed is fetched again, so `awui tern` finds it (and its packages).
+  if (!existsSync(mainFile) || !existsSync(path.join(atuiDir, TERN_MAIN))) {
     await fs.mkdir(atuiDir, { recursive: true, mode: 0o700 });
     const ref = typeof AWUI_COMMIT !== "undefined" ? AWUI_COMMIT : "main";
     const repo = typeof AWUI_REPO !== "undefined" && AWUI_REPO ? AWUI_REPO : DEFAULT_REPO;

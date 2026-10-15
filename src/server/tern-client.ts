@@ -55,6 +55,12 @@ export function runTern(args: string[], stateDir: string, embedded: { binary: bo
     console.error("awui tern: the Tern client is not installed; run `awui install tui` first (it fetches atui and the Tern client)");
     process.exit(1);
   }
+  // A checkout before `npm ci` (or an atui copy whose install failed) has the client but not its packages.
+  const root = path.dirname(path.dirname(path.dirname(entry)));
+  if (!existsSync(path.join(root, "node_modules", "@stencil-hq", "tern"))) {
+    console.error(`awui tern: ${root} has no node_modules/@stencil-hq/tern; run \`npm ci\` there (for the binary's copy, \`awui install tui\`)`);
+    process.exit(1);
+  }
   const bun = spawnSync("bun", ["--version"], { stdio: "ignore" });
   if (bun.error || bun.status !== 0) {
     console.error("awui tern needs Bun (1.3.14 or later): https://bun.sh");
