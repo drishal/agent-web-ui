@@ -310,6 +310,31 @@ describe("atui", () => {
     await ui.until("Sessions │ Info");
   }, 30_000);
 
+  it("shows a ghost of the thread, named, while a session takes its time to open", async () => {
+    ui = await mount(path.join(server.root, "beta"), { width: 150 });
+    await ui.type("ghost session here");
+    ui.keys.pressEnter();
+    await idle(ui);
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("n");
+    await ui.until(() => ui?.app.overview().sessions.some((s) => s.title === "ghost session here") ?? false);
+    const target = ui.app.overview().sessions.find((s) => s.title === "ghost session here");
+    // A slow server: the chat arrives a second after it is asked for.
+    const api = ui.app.server;
+    const call = api.call.bind(api);
+    api.call = (async (url: string, init?: unknown) => {
+      if (url.startsWith("/api/chats/")) await wait(1000);
+      return call(url, init as never);
+    }) as typeof api.call;
+    const opened = ui.app.openSession(target as NonNullable<typeof target>);
+    const ghost = await ui.until("Opening ghost session here");
+    expect(ghost).toContain("━━━━");
+    expect(ghost).toContain("Fake");
+    await opened;
+    const thread = await ui.until("│ ghost session here");
+    expect(thread).not.toContain("Opening");
+  }, 30_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");

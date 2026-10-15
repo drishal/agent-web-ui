@@ -1,8 +1,8 @@
 // atui's motion and small graphics, worked out apart from the drawing so they
 // can be tested: colour mixing for the "Working" shimmer, the pace streamed
 // text is revealed at, sparklines and meters drawn with block characters,
-// eased scrolling, a fold unrolling, a one-off flash, and each harness's
-// spinner.
+// eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
+// session opens behind, and each harness's spinner.
 
 /** `#rrggbb` → [r, g, b]; anything else is black. */
 function rgb(hex: string): [number, number, number] {
@@ -92,6 +92,15 @@ export function unrollCounts(n: number, frames: number): number[] {
 export function flashAt(t: number): number {
   const k = Math.min(1, Math.max(0, t));
   return k < 0.15 ? k / 0.15 : (1 - (k - 0.15) / 0.85) ** 2;
+}
+
+/** The ghost thread's lines under its prompt card, as fractions of the column: a fold, then an answer's lines (0 is a gap between paragraphs). */
+const GHOST = [0.3, 0, 0.94, 0.88, 0.97, 0.62, 0, 0.9, 0.71];
+
+/** The ghost thread for a column `width` wide: the prompt's bar inside its card, then each line's bar, in cells. */
+export function ghostLines(width: number): { prompt: number; lines: number[] } {
+  const w = Math.max(12, Math.floor(width));
+  return { prompt: Math.round((w - 4) * 0.55), lines: GHOST.map((f) => Math.round(w * f)) };
 }
 
 const SPINNERS: Record<string, string[]> = {

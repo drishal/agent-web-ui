@@ -72,7 +72,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   const [limits, setLimits] = createSignal<UsageLimits | null>(null);
   const [git, setGit] = createSignal<GitStatus | null>(null);
   const [banner, setBanner] = createSignal<Banner>(null);
-  const [opening, setOpening] = createSignal(false);
+  /** A session being opened (or a chat being handed off), for the screen shown until it arrives. */
+  const [opening, setOpening] = createSignal<{ title: string; harnessId: string } | null>(null);
   const [toasts, setToasts] = createSignal<Toast[]>([]);
   const [contextHistory, setContextHistory] = createSignal<number[]>([]);
   const [glass, setGlass] = createSignal(opts.glass ?? false);
@@ -288,7 +289,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
 
   const openSession = async (s: ProjectSession) => {
     const target = overview().workspaces.find((w) => w.id === s.workspaceId);
-    setOpening(true);
+    setOpening({ title: s.title || "New chat", harnessId: s.harnessId });
     try {
       if (s.liveChatId) {
         show(await server.call<ChatSnapshot>(`/api/chats/${s.liveChatId}`));
@@ -301,7 +302,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     } catch (error) {
       fail(error);
     } finally {
-      setOpening(false);
+      setOpening(null);
     }
   };
 
@@ -421,7 +422,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   const handoff = async (id: string) => {
     const c = chat();
     if (!c) return chooseHarness(id);
-    setOpening(true);
+    setOpening({ title: c.title || "New chat", harnessId: id });
     try {
       const moved = await server.call<ChatSnapshot>(`/api/chats/${c.chatId}/handoff`, { body: { harness: id } });
       setHarnessId(id);
@@ -430,7 +431,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     } catch (error) {
       fail(error);
     } finally {
-      setOpening(false);
+      setOpening(null);
     }
   };
 
