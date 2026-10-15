@@ -257,23 +257,28 @@ export class ChatCheckpoints {
     this.known.add(p.tree);
     for (const n of [...this.turns.keys()].sort((a, b) => a - b).slice(0, -MAX_TURNS_KEPT)) this.turns.delete(n);
     this.publish();
-    void this.persist();
+    this.persistSoon();
   }
 
   /** Turns from `turn` on were replaced (a rewind): their checkpoints no longer belong to them. */
   forgetFrom(turn: number): void {
     for (const n of [...this.turns.keys()]) if (n >= turn) this.turns.delete(n);
     this.publish();
-    void this.persist();
+    this.persistSoon();
   }
 
   /** The session got its id: what was taken before it can now be kept. */
   sessionAssigned(): void {
-    void this.persist();
+    this.persistSoon();
   }
 
   private publish(): void {
     this.host.setCheckpointTurns([...this.turns.keys()].sort((a, b) => a - b));
+  }
+
+  /** Save without waiting; a failed write is logged, never an unhandled rejection (Node exits on one). */
+  private persistSoon(): void {
+    this.persist().catch((error: unknown) => console.error(`awui: could not save checkpoints: ${error instanceof Error ? error.message : String(error)}`));
   }
 
   private persist(): Promise<void> {

@@ -88,7 +88,8 @@ export class SessionMarks {
     const mark = this.marks.get(sessionId);
     if (!mark || (!mark.settled && !mark.snoozedUntil)) return;
     const { settled: _s, snoozedUntil: _z, ...rest } = mark;
-    void this.store(sessionId, rest);
+    // Fire and forget: a failed write must not become an unhandled rejection (Node exits on one).
+    this.store(sessionId, rest).catch((error: unknown) => console.error(`awui: could not save session marks: ${error instanceof Error ? error.message : String(error)}`));
   }
 
   private store(sessionId: string, mark: SessionMark): Promise<SessionMark> {

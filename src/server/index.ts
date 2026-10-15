@@ -229,6 +229,11 @@ async function main(): Promise<void> {
     console.log(`awui: stopped (omp children left: ${left})`);
     process.exit(0);
   };
+  // A stray rejection (a write that failed, a child's pipe that broke) is logged, not fatal: one failure
+  // in a side feature must not take every live chat down with the server.
+  process.on("unhandledRejection", (reason) => {
+    console.error(`awui: unhandled rejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`);
+  });
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
