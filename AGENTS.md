@@ -8,13 +8,13 @@ disagree, the code is the truth: fix whichever is stale.
 ## What this is
 
 **awui** (agent web UI) is a local, private web UI for the **Pi**, **omp**
-(oh-my-pi), **Hermes** (hermes-agent), and **Claude Code** coding-agent
+(oh-my-pi), **Hermes** (hermes-agent), **Claude Code**, and **OpenCode** coding-agent
 harnesses. **atui** is its terminal client, and **awui tern** draws it natively in a
 Tern pane. All are thin clients of one Node server:
 
 ```
 browser (src/web, React)  ─┐
-                            ├─ HTTP + SSE ─▶ server (src/server, Express 5) ─▶ HarnessAdapter ─▶ pi / omp / hermes / claude
+                            ├─ HTTP + SSE ─▶ server (src/server, Express 5) ─▶ HarnessAdapter ─▶ pi / omp / hermes / claude / opencode
 atui    (src/atui, Solid) ─┤                 127.0.0.1:4783 by default             (one child process per live chat)
 tern    (src/tern, TSP)   ─┘
 ```
@@ -66,7 +66,9 @@ src/server/
   chats/manager.ts            Chat registry; one live writer per native session; idle reaping.
   harness/types.ts            HarnessAdapter / LiveChat contract and the normalized HarnessEvent union.
   harness/registry.ts         One factory per harness; AWUI_HARNESSES selects them.
-  harness/{pi,omp,hermes,claude}.ts   The four adapters. fake.ts is the deterministic test adapter.
+  harness/{pi,omp,hermes,claude,opencode}.ts   The five adapters. fake.ts is the deterministic test adapter.
+  harness/opencode-server.ts  OpenCode's one shared `opencode serve`: started when needed, awui's password, events by session.
+  harness/opencode-messages.ts  OpenCode's messages, models, forms, permissions as awui's (pure, against recorded shapes).
   harness/awui.ts              The Awui chat harness: a read-only `pi` child (subclass), own agent dir, write/exec tools denied; loads render_html + eval_python, not rewind. Web-only.
   awui-settings.ts             The Awui harness's provider settings: edit its isolated agent dir's models.json (keys never echoed).
   harness/agent-events.ts     Pi-family event and transcript normalization (Pi and omp share it); historyToItems.
@@ -229,7 +231,8 @@ if every test passes.
   `agents.json` in `$AWUI_E2E_HERDR` (calls land in `calls.jsonl`); the atui test
   server runs with `AWUI_HERDR=0`. Never point a test at the developer's herdr.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
-  `fake-claude.mjs`) speak each harness's real wire protocol. Adapter changes
+  `fake-claude.mjs`, `fake-opencode.mjs`) speak each harness's real wire protocol
+  (the last is an HTTP server with OpenCode 2's routes and event stream). Adapter changes
   get a test against one of them; record new frames from the real CLI rather
   than inventing them.
 - **Unit tests** build a real server with `makeTestApp()` (tests/helpers/app.ts)

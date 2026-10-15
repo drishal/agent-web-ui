@@ -1,0 +1,300 @@
+import { chmodSync, mkdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Chat } from "../../src/server/chats/chat.js";
+import { OpenCodeAdapter } from "../../src/server/harness/opencode.js";
+import { liveOpenCodeServers } from "../../src/server/harness/opencode-server.js";
+import { formQuestions, formValue, permissionCard, permissionReply, toModelInfo, transcriptOf, usageOf } from "../../src/server/harness/opencode-messages.js";
+import { historyToItems } from "../../src/server/harness/agent-events.js";
+import type { LiveChat } from "../../src/server/harness/types.js";
+import type { WorkspaceInfo } from "../../src/shared/protocol.js";
+import { tempDir } from "../helpers/app.js";
+
+const script = path.join(import.meta.dirname, "..", "fixtures", "fake-opencode.mjs");
+chmodSync(script, 0o755);
+
+let home: string;
+let project: string;
+let state: string;
+let adapter: OpenCodeAdapter;
+const open: LiveChat[] = [];
+
+beforeEach(() => {
+  home = tempDir("awui-opencode-");
+  project = path.join(home, "proj");
+  mkdirSync(project);
+  state = path.join(home, "state.json");
+  adapter = new OpenCodeAdapter({ command: script, env: { ...process.env, FAKE_OPENCODE_STATE: state } });
+});
+
+afterEach(async () => {
+  for (const chat of open.splice(0)) await chat.dispose();
+  await adapter.shutdown();
+  expect(liveOpenCodeServers()).toBe(0);
+});
+
+const ws = (): WorkspaceInfo => ({ id: "w", path: project, name: "proj" });
+
+async function openChat(resumeNativeId?: string) {
+  const live = await adapter.openChat({ cwd: project, ...(resumeNativeId ? { resumeNativeId } : {}) });
+  open.push(live);
+  return { live, chat: await Chat.open(`c${open.length}`, adapter, ws(), live) };
+}
+
+async function until(predicate: () => boolean, ms = 8000) {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > ms) throw new Error("timeout");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+const replies = (): Array<Record<string, unknown>> => {
+  try {
+    return (JSON.parse(readFileSync(state, "utf8")) as { replies: Array<Record<string, unknown>> }).replies;
+  } catch {
+    return [];
+  }
+};
+const answered = (chat: Chat, text: string) => chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.includes(text));
+const prompts = (chat: Chat) => chat.snapshot().items.flatMap((i) => (i.kind === "user" ? [i.text] : []));
+
+describe("opencode adapter (scripted server)", () => {
+  it("finds OpenCode 2, and lists its models with their variants as levels, never their settings", async () => {
+    expect(await adapter.discover()).toMatchObject({ available: true, version: "2.0.27" });
+    const models = await adapter.listModels(project);
+    expect(models).toEqual([
+      { key: "opencode/fast-free", provider: "opencode", id: "fast-free", name: "Fast Free", reasoning: true, levels: ["low", "high"], vision: true },
+      { key: "acme/plain", provider: "acme", id: "plain", name: "Plain", vision: false },
+    ]);
+    expect(JSON.stringify(models)).not.toContain("sk-fake");
+  });
+
+  it("makes the session on the first message, then streams a turn with thinking and usage", async () => {
+    const { chat, live } = await openChat();
+    expect(live.nativeId).toBeNull();
+    expect(chat.snapshot().config).toMatchObject({ model: "opencode/fast-free", thinkingLevel: null, thinkingLevels: ["low", "high"] });
+    await chat.send("hello there", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: hello there"));
+    expect(live.nativeId).toMatch(/^ses_/);
+    const snap = chat.snapshot();
+    expect(snap.items.map((i) => i.kind)).toEqual(["user", "assistant"]);
+    expect(snap.items[1]).toMatchObject({ text: "Echo: hello there", thinking: "thinking about it", streaming: false });
+    expect(await live.getUsage()).toMatchObject({ turns: 1, steps: 1, input: 100, cachedInput: 1000, output: 25, cost: 0.002 });
+    expect(await live.getContextUsage()).toEqual({ tokens: 1125, window: 100000, percent: 1.125 });
+    // OpenCode titled it from the prompt.
+    expect(snap.title).toBe("hello there");
+  });
+
+  it("takes a short reply that arrives whole, with no deltas", async () => {
+    const { chat } = await openChat();
+    await chat.send("short one", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: short one"));
+  });
+
+  it("folds a read and an edit under the turn, the edit as its diff", async () => {
+    const { chat } = await openChat();
+    await chat.send("tool and edit", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: tool and edit"));
+    const tools = chat.snapshot().items.filter((i) => i.kind === "tool");
+    expect(tools.map((t) => (t.kind === "tool" ? [t.name, t.category, t.status] : []))).toEqual([
+      ["read", "read", "done"],
+      ["edit", "edit", "done"],
+    ]);
+    expect(tools[1]).toMatchObject({ diffStat: { added: 1, removed: 1 }, paths: ["note.txt"] });
+  });
+
+  it("asks for permission, and answers OpenCode once or not at all", async () => {
+    const { chat } = await openChat();
+    await chat.send("ask first", "normal");
+    await until(() => chat.snapshot().pending.length === 1);
+    expect(chat.snapshot().pending[0]).toMatchObject({ title: "Allow shell?", message: "echo hi", options: ["Allow once", "Always allow (echo *)", "Deny"] });
+    chat.answer(chat.snapshot().pending[0]?.id as string, { kind: "select", value: "Allow once" });
+    await until(() => chat.status === "idle" && answered(chat, "Echo: ask first"));
+    expect(chat.snapshot().items.find((i) => i.kind === "tool")).toMatchObject({ name: "shell", category: "command", status: "done", output: "hi\n" });
+    await chat.send("ask again", "normal");
+    await until(() => chat.snapshot().pending.length === 1);
+    chat.answer(chat.snapshot().pending[0]?.id as string, { kind: "select", value: "Deny" });
+    await until(() => chat.status === "idle" && answered(chat, "Echo: ask again"));
+    expect(replies().filter((r) => r.kind === "permission")).toEqual([
+      { kind: "permission", decision: "once", message: null },
+      { kind: "permission", decision: "reject", message: "Denied in awui" },
+    ]);
+    expect(chat.snapshot().items.filter((i) => i.kind === "tool")[1]).toMatchObject({ status: "error" });
+  });
+
+  it("asks a form's question as a card and sends the option's value back", async () => {
+    const { chat } = await openChat();
+    await chat.send("question please", "normal");
+    await until(() => chat.snapshot().pending.length === 1);
+    expect(chat.snapshot().pending[0]).toMatchObject({ kind: "select", title: "Indentation", message: "Tabs or spaces?", options: ["Tabs", "Spaces"], optionDetails: ["Indent with tabs", "Indent with spaces"] });
+    chat.answer(chat.snapshot().pending[0]?.id as string, { kind: "select", value: "Spaces" });
+    await until(() => chat.status === "idle" && answered(chat, "You chose Spaces"));
+    expect(replies().filter((r) => r.kind === "form")).toEqual([{ kind: "form", answer: { q0: "Spaces" } }]);
+  });
+
+  it("steers into the running turn and queues follow-ups for after it", async () => {
+    const { chat } = await openChat();
+    await chat.send("slow please", "normal");
+    await until(() => chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.length > 0));
+    await chat.send("also this", "steer");
+    await chat.send("and then that", "followUp");
+    await until(() => chat.snapshot().queue.steering.length + chat.snapshot().queue.followUp.length === 2);
+    expect(chat.snapshot().queue).toEqual({ steering: ["also this"], followUp: ["and then that"] });
+    await until(() => chat.status === "idle" && answered(chat, "Echo: and then that"), 15_000);
+    expect(prompts(chat)).toEqual(["slow please", "also this", "and then that"]);
+    expect(answered(chat, "Steered: also this")).toBe(true);
+    expect(chat.snapshot().queue).toEqual({ steering: [], followUp: [] });
+  });
+
+  it("stops a run, dropping what was queued behind it", async () => {
+    const { chat } = await openChat();
+    await chat.send("slow please", "normal");
+    await until(() => chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.length > 0));
+    await chat.send("never run", "followUp");
+    await chat.abort();
+    await until(() => chat.status === "idle");
+    expect(prompts(chat)).toEqual(["slow please"]);
+    const answer = chat.snapshot().items.find((i) => i.kind === "assistant");
+    expect(answer && answer.kind === "assistant" && answer.text.split(" ").length).toBeLessThan(31);
+  });
+
+  it("reports a failed step as an error and still settles", async () => {
+    const { chat } = await openChat();
+    await chat.send("fail now", "normal");
+    await until(() => chat.status === "idle" && chat.snapshot().items.some((i) => i.kind === "notice" || (i.kind === "assistant" && i.error)));
+    expect(JSON.stringify(chat.snapshot().items)).toContain("The provider refused the request");
+  });
+
+  it("keeps OpenCode's todo list as the chat's todos", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("todo list", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: todo list"));
+    expect(await live.getTodos()).toEqual([
+      { text: "write tests", status: "in_progress" },
+      { text: "ship", status: "pending" },
+    ]);
+  });
+
+  it("changes model and level for this session, before and after it exists", async () => {
+    const { chat, live } = await openChat();
+    await chat.setConfig({ thinkingLevel: "high" });
+    expect(chat.snapshot().config).toMatchObject({ model: "opencode/fast-free", thinkingLevel: "high" });
+    await chat.send("hello", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: hello"));
+    await chat.setConfig({ model: "acme/plain" });
+    expect(chat.snapshot().config).toMatchObject({ model: "acme/plain", thinkingLevel: null });
+    const info = await adapter.sessionInfo(live.nativeId as string);
+    expect(info?.model).toEqual({ providerID: "acme", id: "plain", variant: "default" });
+    expect((await live.listCommands())[0]).toEqual({ name: "review", description: "review changes", source: "command" });
+  });
+
+  it("renames, lists, resumes, replaces a past prompt in place, and forks before one", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("first prompt", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: first prompt"));
+    await chat.send("second tool prompt", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: second tool prompt"));
+    await chat.rename("Named session");
+    const nativeId = live.nativeId as string;
+    expect((await adapter.listSessions(project)).map((s) => [s.nativeId, s.title])).toEqual([[nativeId, "Named session"]]);
+    expect((await adapter.listSessions(home)).length).toBe(0);
+    expect((await adapter.listRecentSessions(10)).map((s) => s.cwd)).toEqual([project]);
+    expect(await adapter.readTranscript({ cwd: home, nativeId })).toBeNull();
+    expect((await adapter.readTranscript({ cwd: project, nativeId }))?.items.map((i) => i.kind)).toEqual(["user", "assistant", "user", "assistant", "tool", "assistant"]);
+    expect((await adapter.readUsage({ cwd: project, nativeId }))?.length).toBe(3);
+
+    await chat.rewind(2, "second, said again");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: second, said again"));
+    expect(prompts(chat)).toEqual(["first prompt", "second, said again"]);
+    expect((await live.history()).flatMap((i) => (i.kind === "user" ? [i.text] : []))).toEqual(["first prompt", "second, said again"]);
+    await chat.dispose("done");
+
+    const { chat: resumed, live: again } = await openChat(nativeId);
+    expect(again.title).toBe("Named session");
+    expect(resumed.snapshot().items.map((i) => i.kind)).toEqual(["user", "assistant", "user", "assistant"]);
+
+    const fork = await adapter.forkSession({ cwd: project, nativeId, throughTurns: 1 });
+    const { chat: copy } = await openChat(fork.nativeId);
+    expect(copy.snapshot().items.map((i) => (i.kind === "user" || i.kind === "assistant" ? i.text : i.kind))).toEqual(["first prompt", "Echo: first prompt"]);
+  });
+
+  it("compacts and waits for OpenCode to finish", async () => {
+    const { chat } = await openChat();
+    await chat.send("first prompt", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo"));
+    await chat.compact();
+    expect(chat.status).toBe("idle");
+    expect(chat.snapshot().items.some((i) => i.kind === "notice" && i.text === "Compacted conversation")).toBe(true);
+    expect((await open[0]?.history())?.map((i) => i.kind)).toEqual(["user", "assistant", "notice"]);
+  });
+
+  it("refuses a session that is not this project's", async () => {
+    await expect(adapter.openChat({ cwd: project, resumeNativeId: "ses_doesnotexist" })).rejects.toThrow(/not found/);
+  });
+});
+
+describe("OpenCode's shapes", () => {
+  it("reads stored messages as history: thinking, text, calls with their results, an interrupted step, a compaction", () => {
+    const messages = [
+      { id: "u1", type: "user", time: { created: 1 }, text: "Read README.md" },
+      {
+        id: "a1",
+        type: "assistant",
+        time: { created: 2 },
+        model: { providerID: "opencode", id: "m" },
+        content: [
+          { type: "reasoning", text: "read it" },
+          { type: "tool", id: "c1", name: "read", state: { status: "completed", input: { path: "README.md" }, content: [{ type: "text", text: "1: # Probe" }] }, time: { completed: 3 } },
+          { type: "tool", id: "c2", name: "shell", state: { status: "error", input: { command: "false" }, error: { message: "Denied" } } },
+        ],
+        tokens: { input: 10, output: 2, reasoning: 1, cache: { read: 5, write: 0 } },
+        cost: 0,
+      },
+      { id: "a2", type: "assistant", time: { created: 4 }, content: [{ type: "text", text: "partial" }], error: { type: "aborted", message: "Step interrupted" } },
+      { id: "i1", type: "idle", time: { created: 5 }, outcome: "interrupted" },
+      { id: "k1", type: "compaction", time: { created: 6 }, status: "completed", summary: "## Objective" },
+    ];
+    const items = historyToItems(transcriptOf(messages));
+    expect(items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "tool", "assistant", "notice"]);
+    expect(items[1]).toMatchObject({ thinking: "read it", model: "opencode/m" });
+    expect(items[2]).toMatchObject({ name: "read", status: "done", output: "1: # Probe" });
+    expect(items[3]).toMatchObject({ name: "shell", status: "error", output: "Denied" });
+    expect(items[4]).toMatchObject({ text: "partial", error: "Stopped" });
+    expect(usageOf(messages)).toEqual([{ at: 2, model: "opencode/m", input: 10, cachedInput: 5, cacheWrite: 0, output: 3, cost: 0 }]);
+  });
+
+  it("reads a model without passing its settings on", () => {
+    const info = toModelInfo({ id: "x", providerID: "p", name: "X", variants: [{ id: "none" }, { id: "default" }, { id: "max" }], settings: { apiKey: "secret" } });
+    expect(info).toEqual({ key: "p/x", provider: "p", id: "x", name: "X", reasoning: true, levels: ["max"] });
+    expect(toModelInfo({ id: "x", providerID: "p", enabled: false })).toBeNull();
+  });
+
+  it("asks a permission with its saved pattern, and maps each card's answer", () => {
+    const card = permissionCard({ id: "per_1", action: "shell", resources: ["rm -rf build"], save: ["rm *"] }, 7);
+    expect(card).toEqual({ id: "per_1", kind: "select", title: "Allow shell?", message: "rm -rf build", options: ["Allow once", "Always allow (rm *)", "Deny"], createdAt: 7 });
+    expect([permissionReply("Allow once"), permissionReply("Always allow (rm *)"), permissionReply("Deny"), permissionReply(null)]).toEqual(["once", "always", "reject", "reject"]);
+  });
+
+  it("asks each form field in its own way and answers in its type", () => {
+    const form = {
+      id: "frm_1",
+      title: "Questions",
+      fields: [
+        { key: "pick", title: "Pick", type: "multiselect", options: [{ value: "a", label: "Alpha" }] },
+        { key: "ok", title: "OK?", type: "boolean" },
+        { key: "n", title: "How many", type: "integer" },
+        { key: "why", type: "string" },
+      ],
+    };
+    const qs = formQuestions(form, 1);
+    expect(qs.map((q) => [q.key, q.request.kind, q.shape])).toEqual([
+      ["pick", "select", "list"],
+      ["ok", "confirm", "boolean"],
+      ["n", "input", "number"],
+      ["why", "input", "text"],
+    ]);
+    expect(qs[3]?.request.title).toBe("Questions");
+    expect([formValue(qs[0]!, form, "Alpha"), formValue(qs[1]!, form, true), formValue(qs[2]!, form, "3"), formValue(qs[3]!, form, "because")]).toEqual([["a"], true, 3, "because"]);
+  });
+});
