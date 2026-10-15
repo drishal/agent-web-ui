@@ -23,6 +23,19 @@ export interface UiSettings {
 
 export class UserConfigError extends Error {}
 
+const commandSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(4096)
+  .refine((v) => !/[\u0000-\u001f]/.test(v), "must not hold control characters");
+const launchSchema = z
+  .object({
+    command: commandSchema.optional(),
+    args: z.array(z.string().max(4096).refine((v) => !v.includes("\u0000"), "must not hold a NUL")).max(64).optional(),
+  })
+  .strict();
+
 const schema = z
   .object({
     port: z.number().int().optional(),
@@ -35,6 +48,17 @@ const schema = z
     autocollapse_sidebar: z.boolean().optional(),
     /** Shared chat text size (a scale on the 14.5px base); null when unset. */
     text_scale: z.number().min(0.5).max(2).optional(),
+    /** How each harness's CLI starts: its executable, and arguments for every chat child. File-only (see HarnessLaunch). */
+    harnesses: z
+      .object({
+        pi: launchSchema.optional(),
+        omp: launchSchema.optional(),
+        claude: launchSchema.optional(),
+        // Hermes's chats run its gateway from its Python package: there is no command line to add to.
+        hermes: z.object({ command: commandSchema.optional() }).strict().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -109,6 +133,27 @@ export function configEnv(c: UserConfig): Record<string, string> {
   if (c.allowed_hosts?.length) env.ALLOWED_HOSTS = c.allowed_hosts.join(",");
   if (c.allowed_tailscale_users?.length) env.ALLOWED_TAILSCALE_USERS = c.allowed_tailscale_users.join(",");
   return env;
+}
+
+/** Environment variables that name a harness's executable; they win over config.yml, as every variable does. */
+const BIN_ENV = { pi: "PI_BIN", omp: "OMP_BIN", hermes: "HERMES_BIN", claude: "CLAUDE_BIN" } as const;
+
+/**
+ * Each harness's launch settings: config.yml's `harnesses:` block, its
+ * command overridden by PI_BIN, OMP_BIN, HERMES_BIN, or CLAUDE_BIN, and `~/`
+ * expanded. A harness with neither is left out (its name on PATH, as before).
+ */
+export function launchSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv, home: string): Partial<Record<keyof typeof BIN_ENV, { command?: string; args: string[] }>> {
+  const out: Partial<Record<keyof typeof BIN_ENV, { command?: string; args: string[] }>> = {};
+  for (const id of Object.keys(BIN_ENV) as Array<keyof typeof BIN_ENV>) {
+    const file = c?.harnesses?.[id];
+    const raw = env[BIN_ENV[id]]?.trim() || file?.command;
+    const args = file && "args" in file ? (file.args ?? []) : [];
+    if (!raw && args.length === 0) continue;
+    const command = raw ? (raw === "~" || raw.startsWith("~/") ? path.join(home, raw.slice(1)) : raw) : undefined;
+    out[id] = { ...(command ? { command } : {}), args };
+  }
+  return out;
 }
 
 export function uiSettings(c: UserConfig | undefined): UiSettings {

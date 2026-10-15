@@ -85,6 +85,8 @@ const ACP_SESSION_PAGE = 50;
 
 export interface OmpOptions {
   command?: string;
+  /** config.yml's extra arguments for every chat child. */
+  args?: string[];
   agentDir: string | null;
   sessionDir: string | null;
   home: string;
@@ -742,7 +744,7 @@ export class OmpAdapter implements HarnessAdapter {
     const tmp = `${file}.${process.pid}.tmp`;
     await fs.writeFile(tmp, body, { mode: 0o600, flag: "wx" });
     await fs.link(tmp, file).finally(() => fs.unlink(tmp).catch(() => undefined));
-    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd);
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, undefined, this.options.args);
     await chat.start(id);
     if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
     return chat;
@@ -780,7 +782,7 @@ export class OmpAdapter implements HarnessAdapter {
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
     const problem = this.workspaceProblem(req.cwd);
     if (problem) throw new Error(problem);
-    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.renderEnv);
+    const chat = new OmpLiveChat(this.cliCommand, () => this.env(), req.cwd, req.renderEnv, this.options.args);
     await chat.start(req.resumeNativeId ?? null);
     return chat;
   }
@@ -816,6 +818,7 @@ class OmpLiveChat implements LiveChat {
     private readonly env: () => NodeJS.ProcessEnv,
     private readonly cwd: string,
     private readonly renderEnv?: NodeJS.ProcessEnv,
+    private readonly extraArgs: string[] = [],
   ) {}
 
   get nativeId(): string | null {
@@ -834,7 +837,7 @@ class OmpLiveChat implements LiveChat {
   /** Spawn the omp child with its normal tool set (no --tools); stale-child events are ignored. */
   async start(resumeId: string | null): Promise<void> {
     const generation = ++this.generation;
-    const args = ["--mode", "rpc-ui", ...rewindExtensionArgs(), ...renderHtmlExtensionArgs(), "--cwd", this.cwd];
+    const args = ["--mode", "rpc-ui", ...rewindExtensionArgs(), ...renderHtmlExtensionArgs(), ...this.extraArgs, "--cwd", this.cwd];
     if (resumeId) args.push("--resume", resumeId);
     const rpc = new OmpRpc(
       this.command,

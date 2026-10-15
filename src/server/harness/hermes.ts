@@ -965,7 +965,7 @@ export class HermesAdapter implements HarnessAdapter {
   readonly id = asHarnessId("hermes");
   readonly displayName = "Hermes";
   readonly accent = "orange";
-  readonly cliCommand = process.env.HERMES_BIN?.trim() || "hermes";
+  readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,
     supportsFollowUp: true,
@@ -985,7 +985,14 @@ export class HermesAdapter implements HarnessAdapter {
   private probes = new Map<string, { at: number; models: ModelInfo[]; userDefined: Set<string> }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;
 
-  constructor(private readonly options: { command?: string; args?: string[] } = {}) {}
+  /**
+   * `launcher`: the hermes command (config's, after HERMES_BIN). `command` and
+   * `args` start a gateway directly instead of finding it through the
+   * launcher (tests point them at a script).
+   */
+  constructor(private readonly options: { launcher?: string; command?: string; args?: string[] } = {}) {
+    this.cliCommand = options.launcher ?? (process.env.HERMES_BIN?.trim() || "hermes");
+  }
 
   /** Hermes has no session-fork API; the capability is false and the UI hides it. */
   async forkSession(): Promise<{ nativeId: string }> {

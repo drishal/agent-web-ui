@@ -57,8 +57,16 @@ export class AwuiAdapter extends PiAdapter {
   // A distinct accent so the harness menu tells it apart from Pi.
   protected override accentToken = "thinking";
 
-  constructor(private readonly stateDir: string) {
-    super();
+  /** Pi's command from config.yml, but never its extra arguments: those could loosen this child's read-only lock. */
+  constructor(
+    private readonly stateDir: string,
+    piCommand?: string,
+  ) {
+    super(piCommand ? { command: piCommand } : {});
+  }
+
+  protected override launchArgs(): string[] {
+    return [];
   }
 
   /** The isolated agent dir: awui's own, under its state folder. */

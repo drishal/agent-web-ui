@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { configDir, configEnv, migrateConfigDir, readUserConfig, uiSettings, UserConfigError } from "../../src/server/user-config.js";
+import { configDir, configEnv, launchSettings, migrateConfigDir, readUserConfig, uiSettings, UserConfigError } from "../../src/server/user-config.js";
 import { tempDir } from "../helpers/app.js";
 
 function folder(yaml?: string, mode = 0o644): string {
@@ -68,6 +68,30 @@ autocollapse_sidebar: false
     expect(readUserConfig(dir)?.tightened).toBe(true);
     expect(statSync(path.join(dir, "config.yml")).mode & 0o777).toBe(0o600);
     expect(readUserConfig(folder("port: 4800\n"))?.tightened).toBe(false);
+  });
+
+  it("starts each harness as its harnesses: block says, a *_BIN variable winning over it", () => {
+    const yaml = ["harnesses:", "  pi:", "    command: ~/bin/pi-dev", "    args: [--no-skills, --verbose]", "  claude:", "    args: [--add-dir, /srv/docs]", "  hermes:", "    command: /opt/hermes/bin/hermes", ""].join("\n");
+    const read = readUserConfig(folder(yaml));
+    expect(launchSettings(read?.config, {}, "/home/me")).toEqual({
+      pi: { command: "/home/me/bin/pi-dev", args: ["--no-skills", "--verbose"] },
+      claude: { args: ["--add-dir", "/srv/docs"] },
+      hermes: { command: "/opt/hermes/bin/hermes", args: [] },
+    });
+    expect(launchSettings(read?.config, { CLAUDE_BIN: "/usr/local/bin/claude", OMP_BIN: "omp-next" }, "/home/me")).toMatchObject({
+      claude: { command: "/usr/local/bin/claude", args: ["--add-dir", "/srv/docs"] },
+      omp: { command: "omp-next", args: [] },
+    });
+    expect(launchSettings(undefined, {}, "/home/me")).toEqual({});
+  });
+
+  it("refuses launch settings it cannot honour", () => {
+    // Hermes's gateway has no command line to add to; a typo'd harness or key is named.
+    expect(() => readUserConfig(folder("harnesses:\n  hermes:\n    args: [-v]\n"))).toThrow(/harnesses\.hermes/);
+    expect(() => readUserConfig(folder("harnesses:\n  codex:\n    command: codex\n"))).toThrow(/harnesses/);
+    expect(() => readUserConfig(folder("harnesses:\n  pi:\n    comand: pi\n"))).toThrow(/harnesses\.pi/);
+    expect(() => readUserConfig(folder('harnesses:\n  pi:\n    command: "pi\\nrm"\n'))).toThrow(/control characters/);
+    expect(() => readUserConfig(folder("harnesses:\n  pi:\n    command: ''\n"))).toThrow(/harnesses\.pi\.command/);
   });
 
   it("names the bad key instead of guessing", () => {

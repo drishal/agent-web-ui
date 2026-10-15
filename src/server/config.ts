@@ -2,7 +2,7 @@ import { existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { configDir, THEME_FILE } from "./user-config.js";
+import { configDir, launchSettings, THEME_FILE, type UserConfig } from "./user-config.js";
 
 export const DEFAULT_PORT = 4783;
 
@@ -26,6 +26,8 @@ export interface ServerConfig {
   ompSessionDir: string | null;
   /** Comma list selecting adapters; tests use `fake`. Default: pi,omp,hermes,claude. */
   harnesses: string[];
+  /** Each harness's executable and extra chat arguments (launchSettings); empty: names on PATH. */
+  launch: ReturnType<typeof launchSettings>;
   home: string;
 }
 
@@ -100,7 +102,8 @@ export function migrateStateDir(stateDir: string): "moved" | null {
   }
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
+/** `file`: config.yml's settings that are not environment variables (the harnesses' launch). */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, file?: UserConfig): ServerConfig {
   const home = homedir();
   let port = DEFAULT_PORT;
   if (env.PORT !== undefined && env.PORT !== "") {
@@ -140,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ompAgentDir: env.OMP_AGENT_DIR ? path.resolve(expandHome(env.OMP_AGENT_DIR, home)) : null,
     ompSessionDir: env.OMP_SESSION_DIR ? path.resolve(expandHome(env.OMP_SESSION_DIR, home)) : null,
     harnesses: list(env.AWUI_HARNESSES).length > 0 ? list(env.AWUI_HARNESSES) : ["pi", "omp", "hermes", "claude", "awui"],
+    launch: launchSettings(file, env, home),
     home,
   };
 }

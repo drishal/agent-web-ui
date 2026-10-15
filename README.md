@@ -79,7 +79,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 
 **`config.yml`** (YAML, so it can carry comments; every key optional). It is read at startup; `theme`, `text_scale`, and `autocollapse_sidebar` are re-read on every page load. An unknown key or a wrong type stops the server with the key named (exit 78, which the autostart unit does not retry), rather than being guessed at.
 
-The **Settings** dialog (gear left of the collapse button) edits the same file: the shared look (theme, chat text size), pairing and sign-out, and every key below. The server checks a save exactly as startup checks the file, so it can never leave a server that will not start; port, host, login, roots, and allowed hosts/users wait for a restart (with a Restart button when systemd supervises). Any signed-in device may change them, except a change that would shut that device out once it applies (a LAN phone switching `host` to `127.0.0.1`, a Tailscale Serve device dropping its own host name or login from the allow lists): that one is refused and has to be made on the machine running the server. A setting an environment variable overrides is shown as such and cannot be changed from the file.
+The **Settings** dialog (gear left of the collapse button) edits the same file: the shared look (theme, chat text size), pairing and sign-out, and every key below but `harnesses`. The server checks a save exactly as startup checks the file, so it can never leave a server that will not start; port, host, login, roots, and allowed hosts/users wait for a restart (with a Restart button when systemd supervises). Any signed-in device may change them, except a change that would shut that device out once it applies (a LAN phone switching `host` to `127.0.0.1`, a Tailscale Serve device dropping its own host name or login from the allow lists): that one is refused and has to be made on the machine running the server. A setting an environment variable overrides is shown as such and cannot be changed from the file.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -92,6 +92,8 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 | `theme` | — | Shared look on every device: `system`, `light`, `dark`, or `base16` (`theme.yml`; `custom` is accepted as the old name). Unset: `theme.yml` when there is one, else `system`. |
 | `text_scale` | `1` | Shared chat text size (a scale on the 14.5px base, 0.5–2). |
 | `autocollapse_sidebar` | `true` | Fold the sidebar away below 1200 px wide (phones use the drawer anyway); a sidebar collapsed with its button stays collapsed at any width. |
+| `harnesses.<pi\|omp\|claude\|hermes>.command` | the name on `PATH` | The harness's executable (`~/` is expanded), e.g. a dev build. The Awui harness runs Pi's. |
+| `harnesses.<pi\|omp\|claude>.args` | — | Arguments added to each chat's command line, before the ones awui must set last (`--session-dir`, `--cwd`, `--resume`): `[--add-dir, /srv/docs]` for Claude Code. Model probes and listings do not get them, and the Awui harness never does (they could loosen its read-only lock). Hermes takes no `args`: its chats run its gateway from its Python package. This block is file-only, read at startup: the Settings dialog does not show it, because a command is a program the server runs and any signed-in device can save settings. |
 
 **`theme.yml`**: a base16/base24 scheme (see [Theme](#theme)); the dotfiles' stylix module writes it.
 
@@ -103,7 +105,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 | `WORKSPACE_ROOTS`, `ALLOWED_HOSTS`, `ALLOWED_TAILSCALE_USERS` | As the lists above (`:`-separated roots, comma-separated hosts and users). |
 | `AWUI_CONFIG_DIR` | Another settings folder; empty ignores `config.yml` (the tests do this). |
 | `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes,claude` (the tests use `fake`). |
-| `CLAUDE_BIN` | The Claude Code executable; default `claude` on `PATH`. |
+| `PI_BIN`, `OMP_BIN`, `HERMES_BIN`, `CLAUDE_BIN` | A harness's executable, over `harnesses.<id>.command`; default its name on `PATH`. |
 | `AWUI_WEB_DIR` | Serve the built UI from here instead of `dist/web`. |
 | `AWUI_HEARTBEAT_MS` | Keep-alive interval for open event streams; default `20000`. |
 | `THEME_FILE` | Another theme file. |

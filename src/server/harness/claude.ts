@@ -87,6 +87,8 @@ const STREAM_ARGS = [
 export interface ClaudeOptions {
   /** The executable (tests point this at a script). */
   command?: string;
+  /** config.yml's extra arguments for every chat child (after the stream protocol's, which must stay). */
+  args?: string[];
   home: string;
   env?: NodeJS.ProcessEnv;
 }
@@ -319,7 +321,7 @@ class ClaudeLiveChat implements LiveChat {
       this.usage = usageBaseline(entries);
       this.todos = toTodos(latestTodos(entries));
     }
-    const args = [...STREAM_ARGS, ...(this.resumeId ? ["--resume", this.resumeId] : ["--session-id", this.sessionId])];
+    const args = [...STREAM_ARGS, ...this.adapter.extraArgs, ...(this.resumeId ? ["--resume", this.resumeId] : ["--session-id", this.sessionId])];
     const rpc = new ClaudeRpc(this.adapter.cliCommand, args, this.adapter.childEnv(), this.cwd, (frame) => this.onFrame(frame));
     this.rpc = rpc;
     rpc.onExit((message) => {
@@ -785,6 +787,10 @@ export class ClaudeAdapter implements HarnessAdapter {
 
   constructor(private readonly options: ClaudeOptions) {
     this.cliCommand = options.command ?? (process.env.CLAUDE_BIN?.trim() || "claude");
+  }
+
+  get extraArgs(): string[] {
+    return this.options.args ?? [];
   }
 
   /** The CLI's environment, minus the markers a parent Claude Code session sets. */

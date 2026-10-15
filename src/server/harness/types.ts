@@ -62,6 +62,17 @@ export interface RecentNativeSession extends NativeSessionSummary {
   cwd: string;
 }
 
+/**
+ * How a harness's CLI is started, from config.yml's `harnesses:` block: the
+ * executable (else its name on PATH) and arguments added to each live chat's
+ * command line. A file setting, never the browser's: a command path is a
+ * program the server runs.
+ */
+export interface HarnessLaunch {
+  command?: string;
+  args?: string[];
+}
+
 export interface OpenChatRequest {
   cwd: string;
   /** Native id from this adapter's own listSessions(). */

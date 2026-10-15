@@ -93,6 +93,15 @@ describe("omp adapter (scripted omp)", () => {
     await until(() => chat.snapshot().extensionStatus.plan === "ready");
   });
 
+  it("adds config.yml's arguments to each chat child, before the --cwd awui sets", async () => {
+    adapter = new OmpAdapter({ command: script, args: ["--no-skills", "--verbose"], agentDir: null, sessionDir: null, home, env: { ...process.env, FAKE_OMP_STATE: state } });
+    await openChat();
+    const args = readState().spawns[0]?.args ?? [];
+    expect(args.slice(0, 2)).toEqual(["--mode", "rpc-ui"]);
+    expect(args.indexOf("--verbose")).toBe(args.indexOf("--no-skills") + 1);
+    expect(args.indexOf("--no-skills")).toBeLessThan(args.indexOf("--cwd"));
+  });
+
   it("replaces a past prompt in place through the rewind-to extension it starts omp with", async () => {
     const { chat, live } = await openChat();
     expect(readState().spawns[0]?.args.some((a: string) => a.endsWith("extensions/rewind-to.ts"))).toBe(true);

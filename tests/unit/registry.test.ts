@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { assignAccents } from "../../src/server/harness/registry.js";
+import { loadConfig } from "../../src/server/config.js";
+import { AwuiAdapter } from "../../src/server/harness/awui.js";
+import { assignAccents, HarnessRegistry } from "../../src/server/harness/registry.js";
 import type { HarnessAdapter } from "../../src/server/harness/types.js";
 import { HARNESS_ACCENTS } from "../../src/shared/protocol.js";
 
 const adapter = (id: string, accent?: string) => ({ id, ...(accent ? { accent } : {}) }) as unknown as HarnessAdapter;
+
+describe("harness launch settings", () => {
+  it("reach each adapter, and the Awui harness takes Pi's command but never its arguments", () => {
+    const file = { harnesses: { pi: { command: "/opt/pi", args: ["--tools", "bash"] }, claude: { command: "/opt/claude" }, hermes: { command: "/opt/hermes" } } };
+    const config = loadConfig({ AWUI_HARNESSES: "pi,claude,hermes,awui", AWUI_CONFIG_DIR: "" }, file);
+    const registry = HarnessRegistry.fromConfig(config);
+    const command = (id: string) => (registry.get(id) as unknown as { cliCommand: string }).cliCommand;
+    expect([command("pi"), command("claude"), command("hermes"), command("awui")]).toEqual(["/opt/pi", "/opt/claude", "/opt/hermes", "/opt/pi"]);
+    const awui = registry.get("awui") as AwuiAdapter;
+    expect((awui as unknown as { launchArgs: () => string[] }).launchArgs()).toEqual([]);
+    expect((registry.get("pi") as unknown as { launchArgs: () => string[] }).launchArgs()).toEqual(["--tools", "bash"]);
+  });
+});
 
 describe("harness accents", () => {
   it("keeps declared accents and gives the rest the colours nobody claimed", () => {
