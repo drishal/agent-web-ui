@@ -81,6 +81,8 @@ function apply(state: ChatState | null, event: ChatEvent, index: Map<string, num
       return { ...state, todos: event.todos };
     case "checkpoints":
       return { ...state, checkpoints: event.turns };
+    case "chain":
+      return { ...state, chain: event.chain, chainPaused: event.paused };
     case "disposed":
       return { ...state, status: "disposed", gone: event.reason };
     default:

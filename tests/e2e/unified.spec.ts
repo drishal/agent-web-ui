@@ -227,3 +227,33 @@ test("the file timeline compares any two points of a chat's checkpoints, and off
   await expect(timeline).toBeHidden();
   await expect(page.getByRole("dialog").filter({ hasText: "notes.md" })).toBeVisible();
 });
+
+test("Then queues a message on the server for after the run, and a stop pauses the chain until Resume", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await box(page).fill("slow first, for the chain");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByTestId("chat-status")).toHaveText("Working");
+  await box(page).fill("the second, by itself");
+  await page.getByRole("button", { name: "Then", exact: true }).click();
+  await expect(box(page)).toHaveValue("");
+  const chain = page.getByTestId("chain");
+  await expect(chain.getByTestId("chain-row")).toHaveText([/Then\s*the second, by itself/]);
+  // With the page reloaded mid-run, the server still holds it, and runs it once the run is over.
+  await page.reload();
+  await expect(page.getByTestId("turn")).toHaveCount(2, { timeout: 20_000 });
+  await expect(page.getByTestId("turn").last()).toContainText("the second, by itself");
+  await expect(page.getByTestId("chain")).toHaveCount(0);
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  // A stop pauses what is left.
+  await box(page).fill("slow again");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByTestId("chat-status")).toHaveText("Working");
+  await box(page).fill("not yet");
+  await page.keyboard.press("Control+Shift+Enter");
+  await expect(page.getByTestId("chain-row")).toHaveCount(1);
+  await page.getByRole("button", { name: "Stop the agent" }).click();
+  await expect(page.getByTestId("chain")).toContainText("Paused: Stopped");
+  await page.getByTestId("chain").getByRole("button", { name: "Resume" }).click();
+  await expect(page.getByTestId("turn").last()).toContainText("not yet", { timeout: 20_000 });
+});

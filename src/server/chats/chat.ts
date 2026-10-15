@@ -4,6 +4,7 @@
 // are collaborators; Chat itself keeps the LiveChat binding and the commands.
 import type {
   AssistantItem,
+  ChainStep,
   ChatConfig,
   ChatEvent,
   ChatItem,
@@ -618,11 +619,17 @@ export class Chat implements CheckpointHost {
   onNews?: (chat: Chat, kind: PushNote["kind"], body: string, request?: InteractionRequest) => void;
   /** A run started. */
   onRunStart?: (chat: Chat) => void;
+  /** A chain's handoff step: the app moves this chat to another harness, `rest` of the chain with it. */
+  onChainHandoff?: (chat: Chat, step: Extract<ChainStep, { kind: "handoff" }>, rest: ChainStep[]) => Promise<void>;
   /** Set while a status change is not news (a prompt the harness refused). */
   private quiet = false;
   /** File checkpoints before each prompt, where the project is in a git repository. */
   checkpoints?: ChatCheckpoints;
   private checkpointTurns: number[] = [];
+  /** What runs after this run settles on its own, step by step; kept here, so it goes on with no browser open (not across a restart). */
+  private chain: ChainStep[] = [];
+  /** Why the chain waits: a run was stopped, or failed, or a step could not start. */
+  private chainPaused: string | null = null;
   /**
    * Where this chat's render_html/MCP tool publishes pages. Set by the manager once,
    * before the harness child is spawned; carries the random token this chat's child
@@ -746,6 +753,8 @@ export class Chat implements CheckpointHost {
       usage: this.usage,
       todos: [...this.todos],
       checkpoints: [...this.checkpointTurns],
+      chain: this.chain.map((s) => ({ ...s })),
+      chainPaused: this.chainPaused,
       generation: this.generation,
       lastEventId: this.log.lastEventId,
     };
@@ -810,6 +819,9 @@ export class Chat implements CheckpointHost {
     this.status = status;
     this.reducer.emit({ type: "status", status });
     if (status === "running") this.onRunStart?.(this);
+    // A run that ends on its own moves the chain on; one that fails stops it until you say.
+    if (!this.quiet && before === "running" && status === "idle") this.chainSoon();
+    else if (status === "error" && before !== "starting") this.pauseChain("The run failed");
     // A run that ends on its own is news; one stopped from here is not.
     if (!this.quiet && before === "running" && status === "idle") this.onNews?.(this, "done", this.lastLine("assistant") ?? "Finished");
     else if (!this.quiet && status === "error" && before !== "starting") this.onNews?.(this, "error", this.lastLine("notice") ?? "Failed");
@@ -947,6 +959,62 @@ export class Chat implements CheckpointHost {
     }
   }
 
+  // ---- the chain: what runs after this run, kept by the server ------------------------
+
+  /** Replace the chain; `resume` lets a paused one go on. On an idle chat its first step runs at once. */
+  setChain(steps: ChainStep[], resume = false): void {
+    this.assertOpen();
+    this.chain = steps;
+    if (resume || steps.length === 0) this.chainPaused = null;
+    this.emitChain();
+    this.chainSoon();
+  }
+
+  private emitChain(): void {
+    this.reducer.emit({ type: "chain", chain: this.chain.map((s) => ({ ...s })), paused: this.chainPaused });
+  }
+
+  private pauseChain(reason: string): void {
+    if (this.chain.length === 0 || this.chainPaused) return;
+    this.chainPaused = reason;
+    this.emitChain();
+  }
+
+  /** The next step, once the events of the run that ended have gone out. */
+  private chainSoon(): void {
+    setTimeout(() => void this.advanceChain(), 0);
+  }
+
+  private async advanceChain(): Promise<void> {
+    if (this.chainPaused || this.status !== "idle") return;
+    const [step, ...rest] = this.chain;
+    if (!step) return;
+    if (step.kind === "send") {
+      this.chain = rest;
+      this.emitChain();
+      try {
+        await this.send(step.text, "normal");
+      } catch (error) {
+        this.chain = [step, ...this.chain];
+        this.chainPaused = `Could not send the next message: ${errorMessage(error)}`;
+        this.emitChain();
+      }
+      return;
+    }
+    // A handoff ends the chain here: the rest goes with the chat to the other harness.
+    this.chain = [];
+    this.emitChain();
+    try {
+      if (!this.onChainHandoff) throw new Error("Handoffs cannot run here");
+      await this.onChainHandoff(this, step, rest);
+      this.reducer.notice("info", `The chain handed this chat off to ${step.harness}`);
+    } catch (error) {
+      this.chain = [step, ...rest];
+      this.chainPaused = `Could not hand off: ${errorMessage(error)}`;
+      this.emitChain();
+    }
+  }
+
   /** Replace user turn `turn` and everything after it with `text`, in this same session (capabilities.supportsRewind). */
   async rewind(turn: number, text: string, images: ImageAttachment[] = []): Promise<void> {
     this.assertOpen();
@@ -989,6 +1057,7 @@ export class Chat implements CheckpointHost {
   async abort(): Promise<void> {
     this.assertOpen();
     if (this.status !== "running" && this.status !== "compacting" && this.status !== "stopping") return;
+    this.pauseChain("Stopped");
     this.setStatus("stopping");
     for (const id of this.reducer.pendingIds()) this.reducer.resolveRequest(id, "Cancelled");
     try {

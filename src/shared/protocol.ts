@@ -520,6 +520,10 @@ export interface ChatSnapshot {
   todos: TodoItem[];
   /** User turns (fork's 1-based count) whose files can be put back as they were before the prompt. */
   checkpoints: number[];
+  /** What runs after the current run, step by step (see ChainStep). */
+  chain: ChainStep[];
+  /** Why the chain waits (a run stopped or failed); null when it goes on by itself. */
+  chainPaused: string | null;
   generation: number;
   lastEventId: number;
 }
@@ -539,6 +543,7 @@ export type ChatEvent =
   | { type: "usage"; usage: SessionUsage | null }
   | { type: "todos"; todos: TodoItem[] }
   | { type: "checkpoints"; turns: number[] }
+  | { type: "chain"; chain: ChainStep[]; paused: string | null }
   | { type: "disposed"; reason: string };
 
 export interface ThemeInfo {
@@ -756,6 +761,27 @@ export const forkChatSchema = z.object({
 });
 /** Replace user turn `turn` (1-based, as fork counts) and everything after it with a new prompt, in place. */
 /** Continue this chat in another harness: transcript seed plus an optional first prompt. */
+/** A chain runs at most this many steps. */
+export const MAX_CHAIN_STEPS = 10;
+
+/**
+ * A step a chat runs once its run settles on its own, kept by the server so
+ * it happens with no browser open: send a message (a new run), or hand the
+ * chat off to another harness (the rest of the chain goes with it).
+ */
+export type ChainStep = { id: string } & ({ kind: "send"; text: string } | { kind: "handoff"; harness: string; prompt?: string });
+
+const chainStepSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("send"), text: z.string().trim().min(1).max(MAX_MESSAGE_CHARS) }),
+  z.object({ kind: z.literal("handoff"), harness: z.string().min(1).max(64), prompt: z.string().max(MAX_MESSAGE_CHARS).optional() }),
+]);
+
+/** A chat's whole chain, replaced; `resume` lets a paused one go on. */
+export const chainSchema = z.object({
+  steps: z.array(chainStepSchema).max(MAX_CHAIN_STEPS),
+  resume: z.boolean().optional(),
+});
+
 export const handoffSchema = z.object({
   harness: z.string().min(1).max(64),
   through: z.number().int().min(1).max(10_000).optional(),

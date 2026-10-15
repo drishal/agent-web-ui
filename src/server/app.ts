@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
@@ -7,6 +8,7 @@ import { embeddedWeb } from "./embedded.js";
 import {
   answerSchema,
   type Bootstrap,
+  chainSchema,
   type ChatEvent,
   chatSearchSchema,
   checkpointCompareSchema,
@@ -842,9 +844,8 @@ export function createApp(deps: AppDeps) {
     res.status(201).json((await manager.resume(chat.adapter, chat.workspace, forked.nativeId)).snapshot());
   });
 
-  app.post("/api/chats/:id/handoff", async (req, res) => {
-    const { harness, through, prompt } = body(handoffSchema, req);
-    const chat = manager.get(req.params.id);
+  /** Continue `chat` in `harness`: a copy of its turns where the harness keeps them, else a fresh chat briefed with a summary. */
+  const handoffChat = async (chat: Chat, harness: string, { through, prompt }: { through?: number; prompt?: string } = {}): Promise<Chat> => {
     const target = availableAdapter(harness);
     if (target.id === chat.adapter.id) throw new ChatError(400, "same_harness", "That chat is already in this harness");
     if (!chat.nativeId) throw new ChatError(409, "not_started", "This chat has no session to hand off yet");
@@ -867,8 +868,7 @@ export function createApp(deps: AppDeps) {
       await moved.send(brief, "normal").catch(() => undefined);
       // After the send: some harnesses only have a session to name once the first prompt is in.
       if (seed.title && target.capabilities.supportsRename) await moved.rename(seed.title).catch(() => undefined);
-      res.status(201).json(moved.snapshot());
-      return;
+      return moved;
     }
     let live;
     try {
@@ -880,7 +880,32 @@ export function createApp(deps: AppDeps) {
     // The draft is the target's first real turn: sent, not just recorded.
     // A rejected send leaves its notice in the new chat, which still opens.
     if (draft) await moved.send(draft, "normal").catch(() => undefined);
-    res.status(201).json(moved.snapshot());
+    return moved;
+  };
+  app.post("/api/chats/:id/handoff", async (req, res) => {
+    const { harness, through, prompt } = body(handoffSchema, req);
+    res.status(201).json((await handoffChat(manager.get(req.params.id), harness, { ...(through ? { through } : {}), ...(prompt ? { prompt } : {}) })).snapshot());
+  });
+
+  // The chain: what a chat runs after its run settles, kept here so it goes on with no browser open.
+  manager.onChainHandoff = async (chat, step, rest) => {
+    const moved = await handoffChat(chat, step.harness, step.prompt ? { prompt: step.prompt } : {});
+    if (rest.length > 0) moved.setChain(rest, true);
+  };
+  app.put("/api/chats/:id/chain", (req, res) => {
+    const { steps, resume } = body(chainSchema, req);
+    const chat = manager.get(req.params.id);
+    for (const step of steps) {
+      if (step.kind !== "handoff") continue;
+      availableAdapter(step.harness);
+      if (step.harness === chat.adapter.id) throw new ChatError(400, "same_harness", "A handoff goes to another harness");
+    }
+    chat.setChain(
+      steps.map((s) => ({ ...s, id: randomUUID() })),
+      resume ?? false,
+    );
+    const snap = chat.snapshot();
+    res.json({ chain: snap.chain, paused: snap.chainPaused });
   });
 
   app.post("/api/chats/:id/requests/:requestId", async (req, res) => {

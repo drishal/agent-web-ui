@@ -37,6 +37,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { id: "send", keys: ["Enter"], label: "Send (while the agent works: steer)" },
       { id: "newline", keys: ["Shift+Enter"], label: "New line (in a list: the next item)" },
       { id: "send-new", keys: ["Mod+Alt+Enter"], label: "Send, then start a new chat in a tab" },
+      { id: "then", keys: ["Mod+Shift+Enter"], label: "While a run goes: send this once it is over (the chain)" },
       { id: "indent", keys: ["Tab", "Shift+Tab"], label: "Indent or outdent a list item" },
       { id: "recall", keys: ["↑", "↓"], label: "Recall the prompts sent in this chat" },
       { id: "stash", keys: ["Alt+S"], label: "Stash the draft for later" },

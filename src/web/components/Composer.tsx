@@ -5,13 +5,13 @@
 // link's text arrives with a note to read it, and a run stopped on a usage
 // limit offers to continue when the limit resets.
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
+import { type ChainStep, IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
 import { blanks, matchPrompts, nextBlank, promptGist } from "../prompt-blanks.js";
 import { managePrompts, useSavedPrompts } from "../saved-prompts.js";
-import { IconArrowUp, IconImage, IconLink, IconPlan, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
@@ -292,6 +292,31 @@ export function Composer({
   };
 
   // An edited or removed queued message (StatusStack): the whole queue goes back to the harness.
+  // The chain (the server's): steps that run once this run is over, even with the page closed.
+  const name = (id: string) => harnesses.find((h) => h.id === id)?.displayName ?? id;
+  const setChain = async (steps: ChainStep[], resume = false): Promise<boolean> => {
+    try {
+      const plain = steps.map((s) => (s.kind === "send" ? { kind: s.kind, text: s.text } : { kind: s.kind, harness: s.harness, ...(s.prompt ? { prompt: s.prompt } : {}) }));
+      await api(`/api/chats/${chat.chatId}/chain`, { method: "PUT", body: { steps: plain, ...(resume ? { resume: true } : {}) } });
+      return true;
+    } catch (error) {
+      setImageError(errorText(error));
+      return false;
+    }
+  };
+  const [thenMenu, setThenMenu] = useState(false);
+  /** The draft as the chain's next step: sent when the run before it is over (or, with `harness`, a handoff carrying it). */
+  const addThen = async (harness?: string) => {
+    const draft = text.trim();
+    if (!harness && !draft) return;
+    const step = harness ? { id: "", kind: "handoff" as const, harness, ...(draft ? { prompt: draft } : {}) } : { id: "", kind: "send" as const, text: draft };
+    if (await setChain([...chat.chain, step])) {
+      // Only what went into the step: anything typed while it was on its way stays.
+      setText((current) => (current.trim() === draft ? "" : current));
+      setThenMenu(false);
+    }
+  };
+
   const editQueue = caps.supportsQueueEdit
     ? async (queue: QueueState): Promise<boolean> => {
         try {
@@ -448,6 +473,12 @@ export function Composer({
       }
       return;
     }
+    // While a run goes: the draft as the chain's next step, sent once the run is over.
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && busy) {
+      e.preventDefault();
+      void addThen();
+      return;
+    }
     // A new line (Shift+Enter, or Enter on a touch screen) inside a list item starts the next item.
     if (e.key === "Enter" && plain && (e.shiftKey || coarsePointer()) && el.selectionStart === el.selectionEnd) {
       const next = continueList(text, el.selectionStart);
@@ -496,6 +527,10 @@ export function Composer({
         todos={chat.todos}
         notice={chat.extensionStatus[`${chat.harnessId}:status`] ?? null}
         onEditQueue={editQueue}
+        chain={chat.chain}
+        chainPaused={chat.chainPaused}
+        harnessName={name}
+        onChain={setChain}
         base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
@@ -836,6 +871,40 @@ export function Composer({
                       Stop and send
                     </button>
                   ) : null}
+                  <span className="then-split">
+                    <button
+                      type="button"
+                      className="pill-btn then-btn"
+                      disabled={empty || tooLong}
+                      title="Send this once the run is over, even with this page closed (Ctrl+Shift+Enter)"
+                      onClick={() => void addThen()}
+                    >
+                      Then
+                    </button>
+                    <button type="button" className="pill-btn then-more" aria-label="Then hand off to…" aria-expanded={thenMenu} onClick={() => setThenMenu((v) => !v)}>
+                      <IconChevronDown size={12} />
+                    </button>
+                    {thenMenu ? (
+                      <>
+                        <div className="menu-backdrop" onClick={() => setThenMenu(false)} aria-hidden="true" />
+                        <ul className="menu-list then-menu" role="menu" aria-label="Then hand off to" onKeyDown={(e) => e.key === "Escape" && setThenMenu(false)}>
+                          <li className="then-menu-head muted" role="none">
+                            Once the run is over, hand off to…
+                          </li>
+                          {harnesses
+                            .filter((h) => h.available && h.id !== chat.harnessId && h.id !== "awui")
+                            .map((h, i) => (
+                              <li key={h.id} role="none">
+                                <button type="button" role="menuitem" autoFocus={i === 0} onClick={() => void addThen(h.id)}>
+                                  {h.displayName}
+                                  {text.trim() ? <span className="muted"> with this message</span> : null}
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </span>
                   <button type="button" className="round-btn is-stop" onClick={onStop} disabled={stopping} aria-label="Stop the agent">
                     {stopping ? <Spinner size={14} /> : <IconStop size={14} />}
                   </button>
