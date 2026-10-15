@@ -2,7 +2,8 @@
 // can be tested: colour mixing for the "Working" shimmer, the pace streamed
 // text is revealed at, sparklines and meters drawn with block characters,
 // eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
-// session opens behind, and each harness's spinner.
+// session opens behind, a slow breath for what waits on you, and each
+// harness's spinner.
 
 /** `#rrggbb` → [r, g, b]; anything else is black. */
 function rgb(hex: string): [number, number, number] {
@@ -92,6 +93,11 @@ export function unrollCounts(n: number, frames: number): number[] {
 export function flashAt(t: number): number {
   const k = Math.min(1, Math.max(0, t));
   return k < 0.15 ? k / 0.15 : (1 - (k - 0.15) / 0.85) ** 2;
+}
+
+/** A slow breath, 0 to 1 and back, `period` ticks long: what waits on you, without the urgency of a blink. */
+export function breathe(tick: number, period: number): number {
+  return (1 - Math.cos((2 * Math.PI * tick) / period)) / 2;
 }
 
 /** The ghost thread's lines under its prompt card, as fractions of the column: a fold, then an answer's lines (0 is a gap between paragraphs). */

@@ -9,12 +9,14 @@ import { useKeyboard } from "@opentui/solid";
 import type { ProjectSession } from "../../shared/protocol.js";
 import { groupByProject, isBusy, sidebarSections } from "../../web/session-groups.js";
 import { clip } from "../format.js";
-import { spinnerFor } from "../fx.js";
+import { breathe, mix, spinnerFor } from "../fx.js";
 import { accentOf } from "../theme.js";
 import { useAtui, useTheme } from "./context.js";
 import { InfoBody } from "./panel.js";
 import { tick } from "./ticker.js";
 
+/** A session asking for you breathes over this many ticks of 100 ms. */
+const BREATH_TICKS = 24;
 const PER_PROJECT = 6;
 const PER_OTHER = 3;
 /** The folded panel: a rail just wide enough for its » button. */
@@ -113,6 +115,9 @@ export function Sidebar(p: {
   const selectedRow = () => sessionRows()[sel()] ?? -1;
   /** Inside the borders and padding, after the two-column mark. */
   const width = () => p.width - 5;
+  // Every session asking for you breathes together, in the warn colour, from dim to full.
+  const breath = () => breathe(tick(), BREATH_TICKS);
+  const askingTone = () => mix(mix(t().bg, t().warn, 0.35), t().warn, breath());
   const meta = (row: Extract<Row, { kind: "session" }>) => ` ${row.project ? `${clip(row.project, 10)} ` : ""}${age(row.s.updatedAt)}`;
 
   const Tab = (q: { id: SidebarTab; label: string }) => (
@@ -171,10 +176,10 @@ export function Sidebar(p: {
                   backgroundColor={i() === selectedRow() && p.active ? t().selection : isActive(row.s) ? t().surface2 : undefined}
                   onMouseDown={() => void app.openSession(row.s).then(p.onOpened)}
                 >
-                  <text flexShrink={0} fg={row.s.asking ? t().warn : isBusy(row.s.status) ? t().accent : row.s.liveChatId ? t().ok : t().muted}>
+                  <text flexShrink={0} fg={row.s.asking ? askingTone() : isBusy(row.s.status) ? t().accent : row.s.liveChatId ? t().ok : t().muted}>
                     {row.s.asking ? "▲ " : isBusy(row.s.status) ? `${spinnerFor(row.s.harnessId)[tick() % spinnerFor(row.s.harnessId).length]} ` : row.s.liveChatId ? "● " : "· "}
                   </text>
-                  <text flexGrow={1} fg={isActive(row.s) ? t().text : t().text2} wrapMode="none">
+                  <text flexGrow={1} fg={row.s.asking ? mix(t().text2, t().warn, 0.4 * breath()) : isActive(row.s) ? t().text : t().text2} wrapMode="none">
                     {clip(row.s.title || "New chat", width() - meta(row).length)}
                   </text>
                   <text flexShrink={0} fg={t().muted}>

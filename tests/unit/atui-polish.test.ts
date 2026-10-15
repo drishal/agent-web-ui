@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
 import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
-import { flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, unrollCounts } from "../../src/atui/fx.js";
+import { breathe, flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, unrollCounts } from "../../src/atui/fx.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
 import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
@@ -71,6 +71,13 @@ describe("fx", () => {
     expect(flashAt(0.5)).toBeGreaterThan(0.1);
     expect(flashAt(0.5)).toBeLessThan(flashAt(0.3));
     expect(flashAt(1)).toBe(0);
+  });
+
+  it("breathes from nothing to full and back over its period", () => {
+    expect(breathe(0, 20)).toBe(0);
+    expect(breathe(10, 20)).toBeCloseTo(1);
+    expect(breathe(5, 20)).toBeCloseTo(0.5);
+    expect(breathe(20, 20)).toBeCloseTo(0);
   });
 
   it("gives each harness its own spinner", () => {
