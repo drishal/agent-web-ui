@@ -27,6 +27,7 @@ curl -fsSL https://github.com/drishal/agent-web-ui/releases/latest/download/awui
 chmod +x ~/.local/bin/awui
 awui                 # web UI + API on http://127.0.0.1:4783
 awui install tui     # also drop the atui terminal client on your PATH (~/.local/bin/atui)
+awui tern            # in a Tern pane: awui drawn natively by Tern (after awui install tui)
 ```
 
 State goes to `$XDG_STATE_HOME/awui` as usual, so a binary and a source run share one config and one set of sessions.
@@ -225,6 +226,17 @@ It starts in the current folder's project (one inside `WORKSPACE_ROOTS`), on an 
 - **Keys.** **Ctrl+K** (or Ctrl+P) is the palette: actions, every project's sessions, models, thinking levels, and harnesses. **Ctrl+X** then a letter does the rest: `b` fold or unfold the side panel, `s` browse sessions with the keys (↑/↓ or j/k, Enter, Esc), `r` history, `i` the Info tab, `n` new chat, `a` new chat in a new tab, `]`/`[` next/previous tab, `w` close tab, `m` model, `t` thinking, `h` harness, `c` compact, `z` put undone files back, `d` review changes, `x` run a command from the answer, `f` compact first / full history for the next message, `e` show the work of every turn, `v` vim mode, `g` glass, `q` quit. After Ctrl+X a which-key panel, as in Emacs, lists every key in columns (with what each toggle is set to) until you press one; Esc or C-g cancels. atui writes its keys the Emacs way: `C-x` is Ctrl+X, `M-m` is Alt+M. **Esc Esc** stops the agent, **Ctrl+C** clears the composer, stops a run, or (twice) quits. Page Up/Down scroll, and the mouse scrolls and clicks.
 
 atui does not sign in yet, so it is for a server on this machine, which needs no sign-in. Web only for now: a chat beside, the file viewer and the file timeline, usage across chats, Search every chat, and setting a chain (one set in the browser still runs).
+
+## In Tern: awui tern
+
+[Tern](https://stencil.so/tern), Stencil's terminal, lets a program describe its UI as components that Tern draws itself (the Tern Surface Protocol). `awui tern` uses it to draw awui natively in a Tern pane, laid out the way the web UI is: a centred reading column, each prompt a pill on the right, the work between a prompt and its answer folded to one quiet "Worked for 27s · 3 commands" line, answers streaming as Markdown, and the composer card pinned to the bottom with its chips (harness, model, thinking, the context ring, Send or Stop) over a git row, with a status strip under it. Tern's own components do the rest: inside a fold, each tool call is a native tool row (an edit as a real diff with word-level marks, a command with its output live under it, a read, a search, a fetch), subagents are agent rows, todos a checklist pill, an approval or a question a card answered with its number key, and the command palette, the sessions (grouped by project), the model, thinking, and harness pickers are Tern's picker sheets, with the `/`, `$`, `#`, and `@` menus at the caret. Tern clocks every spinner and timer itself, follows its light and dark appearance (a theme file's colours are used in its own appearance), and keeps the chat in the pane, so it moves between windows, tabs, and devices with Tern's session.
+
+```bash
+cd ~/code/some-project && awui tern     # or awui --tern
+awui tern --harness omp --resume        # atui's options: --url, --harness, --resume [id], --chat <id>
+```
+
+It is a client of the running server like the browser and atui (the same sessions, approvals, and settings), shares atui's state code, and needs Bun as atui does: from a checkout it runs `src/tern/main.ts`, from the binary the copy `awui install tui` fetched. The keys are atui's: **Enter** sends (a steer while the agent works), **Shift+Enter** adds a line, **↑/↓** in an empty composer recall sent prompts, **Tab** moves between a saved prompt's blanks, **Ctrl+K** is the palette, **Ctrl+X** then a letter does the rest (`s` sessions, `n` new chat, `a` new chat in a tab, `]`/`[`/`w` tabs, `m` model, `t` thinking, `h` harness or hand off, `c` compact, `z` put undone files back, `e` open or fold all work, `y` copy the last answer, `q` quit; Ctrl+X alone shows them), **Esc Esc** stops a run, and **Ctrl+C Ctrl+C** quits (the chat keeps running on the server). A click on a prompt offers Retry, Edit, Fork, Undo files, and Copy. Tern runs no scripts, so an agent's HTML page is a card that opens in the web UI. Outside Tern, or inside tmux, screen, or zellij (which swallow the protocol), it says so: atui is the client for any terminal. `AWUI_TERN_LOG=<file>` logs every key and event it reads, and `TERN_TSP_RECORD=<file>` records every message for Tern's `surface-play`.
 
 ## Architecture
 

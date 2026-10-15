@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src/atui/**/*.ts", "src/atui/**/*.tsx", "tests/atui/**/*.tsx", "tests/atui/**/*.ts"]
+  "include": ["src/atui/**/*.ts", "src/atui/**/*.tsx", "src/tern/**/*.ts", "tests/atui/**/*.tsx", "tests/atui/**/*.ts"]
 }

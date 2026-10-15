@@ -16,6 +16,7 @@ import { embeddedVersion, extractEmbeddedExtensions, isEmbedded } from "./embedd
 import "./assets.gen.js";
 import { installTui } from "./install-tui.js";
 import { installService } from "./install-service.js";
+import { runTern } from "./tern-client.js";
 import { SessionMarks } from "./session-marks.js";
 import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
@@ -238,7 +239,8 @@ const HELP = `awui ${embeddedVersion ?? ""} — local web UI for coding agents
 
 Usage:
   awui [flags]           Run the web UI + API (default)
-  awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui)
+  awui tern [options]    awui drawn natively in a Tern pane (also awui --tern; awui tern --help)
+  awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui) and the Tern client
   awui install service   Install the binary to ~/.local/bin and enable the systemd user service
                          [--link symlinks it instead of copying, for a dev checkout]
 
@@ -279,7 +281,12 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
 
 /** `awui install tui|service`, or flags that run the web server; anything else is a usage error. */
 const args = process.argv.slice(2);
-if (args[0] === "install" && args[1] !== "tui" && args[1] !== "service") {
+if (args[0] === "tern" || args.includes("--tern")) {
+  // The Tern client takes its own options (--url, --harness, --resume, --chat), not the server's.
+  const rest = args[0] === "tern" ? args.slice(1) : args.filter((a) => a !== "--tern");
+  const config = loadConfig({});
+  runTern(rest, config.stateDir, { binary: isEmbedded, version: embeddedVersion });
+} else if (args[0] === "install" && args[1] !== "tui" && args[1] !== "service") {
   console.error(`awui install: expected \`tui\` or \`service\`${args[1] ? `, not \`${args[1]}\`` : ""}\n\n${HELP}`);
   process.exit(64);
 } else if (args[0] === "install") {

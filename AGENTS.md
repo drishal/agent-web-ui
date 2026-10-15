@@ -9,13 +9,14 @@ disagree, the code is the truth: fix whichever is stale.
 
 **awui** (agent web UI) is a local, private web UI for the **Pi**, **omp**
 (oh-my-pi), **Hermes** (hermes-agent), and **Claude Code** coding-agent
-harnesses. **atui** is its terminal client. Both are thin clients of one Node
-server:
+harnesses. **atui** is its terminal client, and **awui tern** draws it natively in a
+Tern pane. All are thin clients of one Node server:
 
 ```
 browser (src/web, React)  ─┐
                             ├─ HTTP + SSE ─▶ server (src/server, Express 5) ─▶ HarnessAdapter ─▶ pi / omp / hermes / claude
-atui    (src/atui, Solid) ─┘                 127.0.0.1:4783 by default             (one child process per live chat)
+atui    (src/atui, Solid) ─┤                 127.0.0.1:4783 by default             (one child process per live chat)
+tern    (src/tern, TSP)   ─┘
 ```
 
 The harness is always the agent and the source of truth: its own models, auth,
@@ -35,13 +36,14 @@ comments, notifications), each kept in awui's own state folder.
 | `npm run typecheck` | Four projects: server, web, tests, atui. **Run it before every commit.** |
 | `npm test` | Vitest: `tests/unit/**` (and `tests/smoke/**`, which skips itself unless `SMOKE=1`). |
 | `npm run test:e2e` | Build, then Playwright (`tests/e2e`) against the built server with fake harnesses on port 4791. ~2.5 min. |
-| `npm run test:atui` | Build, then `bun test tests/atui` (atui in OpenTUI's test renderer against a real server). |
+| `npm run test:atui` | Build, then `bun test tests/atui` (atui in OpenTUI's test renderer, and the Tern client against a stand-in Tern, both against a real server). |
+| `awui tern` | The Tern client in a Tern pane (`bun --conditions=browser src/tern/main.ts`; Solid's default Bun build is its server one, where effects never run). |
 | `npm run smoke` | Opt-in tests against the real installed harnesses. No model is called unless `SMOKE_MODEL` (and `SMOKE_CLAUDE_MODEL`) name one. |
 | `npm run set-password` | Store an scrypt login for other devices. |
 | `npm run service -- install\|uninstall\|print` | The systemd user unit (`contrib/systemd/awui.service`). |
 
 A change is done when `npm run typecheck`, `npm test`, and the relevant one of
-`npm run test:e2e` (web changes) or `npm run test:atui` (atui changes) pass.
+`npm run test:e2e` (web changes) or `npm run test:atui` (atui or Tern client changes) pass.
 Server changes that the browser sees need e2e too.
 
 ## Map of the code
@@ -55,6 +57,7 @@ src/server/
   app.ts                      Every route (Express 5), SSE, error mapping. All /api routes but health/login/logout need auth.
   embedded.ts                 The binary's baked-in assets: embedded web bundle, extension sources, version; materializes extensions into state dir for `-e`.
   install-tui.ts              `awui install tui`: fetch the atui source and drop a `~/.local/bin/atui` wrapper.
+  tern-client.ts              `awui tern` / `awui --tern`: find the Tern client (checkout, else the install tui copy) and run it under Bun.
   assets.gen.ts               Checked-in stub replaced by the generated embed map at binary-build time.
   config.ts, user-config.ts   Environment + ~/.config/awui/config.yml → ServerConfig. settings.ts edits config.yml for the Settings dialog.
   security.ts, auth.ts        Host/Origin/Tailscale checks, local vs remote, scrypt logins, signed cookies, lockout.
@@ -110,6 +113,11 @@ src/atui/                     The terminal client (Bun + OpenTUI + Solid). state
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced
                               streaming, meters, eased scrolls, the turn gutter, word-level diffs, task boxes,
                               @mentions, ghost text, toasts, desktop notifications, image protocol and drops.
+src/tern/                     The Tern client (`awui tern`): atui's state (atui/state.ts) drawn as one inline Tern surface
+                              through the Tern Surface Protocol (@stencil-hq/tern). app.ts: the controller (effect → view,
+                              keys, menus); view.ts the conversation (web/turns.ts as Tern nodes); dock.ts the composer card,
+                              requests, status strip; overlays.ts the picker sheets and caret menus; draft.ts the composer's
+                              text (pure, Tern never edits it); look.ts the palette and the one stylesheet (awui.* roles).
 extensions/rewind-to.ts       A Pi/omp extension the server loads into its children (-e) for in-place Edit/Retry.
 extensions/render-html.ts     A Pi/omp extension registering render_html, which publishes an HTML page into the chat.
 extensions/render-html-mcp.mjs  The same tool as an MCP server (stdio JSON-RPC, no dependencies), for Claude Code.
@@ -118,7 +126,8 @@ contrib/                      systemd unit and home-manager modules (templates; 
 tests/unit                    Vitest. tests/helpers/app.ts builds a real app with fake adapters (makeTestApp).
 tests/fixtures                Scripted stand-ins: fake-omp.mjs, fake-hermes.mjs, fake-claude.mjs, themes/.
 tests/e2e                     Playwright. global-setup.ts starts the built server with AWUI_HARNESSES=fake,fake-b.
-tests/atui                    bun:test against a real server; helpers.tsx mounts atui in the test renderer.
+tests/atui                    bun:test against a real server; helpers.tsx mounts atui in the test renderer;
+                              tern-fake.tsx is a stand-in Tern (handshake, frames applied to a document, acks).
 design/                       App icon drafts. .todo/ is gitignored: private notes, never committed.
 ```
 
@@ -188,7 +197,8 @@ if every test passes.
   stay mostly layout.
 - **No new runtime dependencies** without a strong reason. The server needs
   only express, helmet, yaml, and zod; the clients add React, react-markdown,
-  and remark-gfm (web) and OpenTUI with Solid (atui). Prefer `node:` built-ins.
+  and remark-gfm (web), OpenTUI with Solid (atui), and Stencil's
+  `@stencil-hq/tern` SDK, pinned (the Tern client). Prefer `node:` built-ins.
 - **Web UI:** colours are CSS custom properties on `:root`; a base16 theme
   overrides the base tokens and everything else derives from them with
   `color-mix`, so never hard-code a colour. Motion is short and eased out, and
@@ -228,7 +238,11 @@ if every test passes.
   only. Never open the session the current agent is itself running in.
 - **Screenshots** for visual work: `AWUI_SCREENSHOTS=<dir> npx playwright test
   screenshots` writes frames; for atui, render frames in `tests/atui` and read
-  them. Delete throwaway specs before committing.
+  them; for the Tern client, run a headless `tern serve --control <port>` (in
+  tmux) and drive it in real time with `tern ctl --control <port> run|type|key|shot`
+  (a `tern shot` scenario's `wait` is virtual time, too short for the server's
+  replies; ctl's Ctrl chords arrive as ⌘, which the client reads as Ctrl).
+  Delete throwaway specs before committing.
 - A flaky test is a bug to find (a race in the code or the test), not something
   to retry until green.
 
