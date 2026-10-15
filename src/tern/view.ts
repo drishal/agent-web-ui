@@ -240,9 +240,13 @@ function promptNode(turn: Turn, prompt: UserItem, cx: ConversationCx): Node {
   );
 }
 
-/** The live turn's last line: what the agent is doing, shimmering, with Tern's own timer. */
-function workingNode(turn: Turn, cx: ConversationCx): Node {
-  const thought = latestThought(turn);
+/**
+ * The live turn's last line: what the agent is doing, shimmering, with Tern's own timer. Its latest
+ * thought stands in for the work only while that fold is closed (the web UI's rule); open, the
+ * thought is already a row in it.
+ */
+function workingNode(turn: Turn, cx: ConversationCx, foldOpen: boolean): Node {
+  const thought = foldOpen ? null : latestThought(turn);
   const words = cx.chat.status === "compacting" ? "Compacting the context" : cx.chat.status === "stopping" ? "Stopping" : (thought ?? "Working");
   return ui.row(
     { key: "working", role: "awui.working", gap: "sm", align: "center" },
@@ -257,6 +261,7 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
   const parts: (Node | null)[] = [];
   if (turn.prompt) parts.push(promptNode(turn, turn.prompt, cx));
   const segments = workSegments(turn);
+  let liveOpen = false;
   segments.forEach((segment, i) => {
     const place = segments.length === 1 ? "only" : i === 0 ? "first" : i === segments.length - 1 ? "last" : "middle";
     const live = turn.live && (place === "last" || place === "only");
@@ -265,6 +270,7 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
     if (work.length > 0 || answerThought) {
       const key = segment.key;
       const open = cx.folds.get(key) ?? live;
+      if (live) liveOpen = open;
       const children = work.flatMap((item) => {
         const n = workItem(item, cx);
         return n === null ? [] : Array.isArray(n) ? n : [n];
@@ -306,7 +312,7 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
   if (answer?.error) parts.push(ui.card({ key: "failed", tone: "error", head: [span("The run failed", "error")] }, ui.text({ key: "e", text: answer.error })));
   for (const e of turn.errors) parts.push(ui.text({ key: e.id, role: "awui.note" }, span(e.text, "error")));
 
-  if (turn.live) parts.push(workingNode(turn, cx));
+  if (turn.live) parts.push(workingNode(turn, cx, liveOpen));
   else if (answer?.text.trim()) {
     parts.push(
       ui.row(

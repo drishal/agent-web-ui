@@ -213,6 +213,20 @@ describe("awui tern", () => {
     }
   });
 
+  it("names the latest thought on the working line only while the live fold is closed", async () => {
+    client = await start();
+    const { tern, until } = client;
+    tern.type("slow please\r");
+    const shimmer = () => tern.find("shimmer")[0]?.p.text as string | undefined;
+    const liveFold = () => tern.find("section").find((n) => n.p.role === "awui.fold-live");
+    await until(() => liveFold() !== undefined && shimmer() !== undefined, "the live fold", 8000);
+    // Open (as a live fold starts), the thought is a row in it: the line just says Working.
+    expect(liveFold()?.p.collapsed).toBe(false);
+    expect(shimmer()).toBe("Working");
+    tern.event({ ev: "toggle", id: liveFold()?.id, collapsed: true });
+    await until(() => shimmer()?.startsWith("Considering") === true, "the thought on the working line");
+  }, 20_000);
+
   it("quits with C-c C-c, and leaves the chat on the server", async () => {
     client = await start();
     const { tern, app, running, until } = client;
