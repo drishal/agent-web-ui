@@ -2,8 +2,8 @@
 // Surface Protocol, a client of the same server as the browser and atui. It
 // runs under Bun with Solid's reactive build (`--conditions=browser`; the
 // default build Bun picks is Solid's server one, where effects never run).
-// Outside a Tern pane (another terminal, or tmux, screen, or zellij, which
-// swallow the protocol) it says so and points to atui.
+// Outside a Tern pane (another terminal, or tmux, screen, zellij, or herdr,
+// which swallow the protocol) it says so and points to atui.
 import { createMemo, createRoot, createSignal } from "solid-js";
 import { connect } from "@stencil-hq/tern";
 import type { ThemeInfo } from "../shared/protocol.js";
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   const session = await connect({ app: "awui", version: parsed.version, features: ["edit", "undo", "send"] });
   if (!session) {
     app.dispose();
-    const why = process.env.TMUX || process.env.STY || process.env.ZELLIJ ? "a multiplexer (tmux, screen, zellij) is in the way" : "this terminal is not Tern";
+    const why = process.env.TMUX || process.env.STY || process.env.ZELLIJ || process.env.HERDR_ENV ? "a multiplexer (tmux, screen, zellij, herdr) is in the way" : "this terminal is not Tern";
     console.error(`awui tern draws in a Tern pane, and ${why}. In any terminal, atui is awui's terminal client.`);
     process.exit(1);
   }
