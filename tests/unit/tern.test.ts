@@ -3,12 +3,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Key } from "@stencil-hq/tern";
-import type { ToolItem } from "../../src/shared/protocol.js";
+import type { ChatItem, ToolItem } from "../../src/shared/protocol.js";
+import type { ChatState } from "../../src/web/chat-state.js";
+import type { Node } from "@stencil-hq/tern";
 import { applyEdit, draftState, editKey, lineStep, redo, setText, undo, wordStep, type DraftState } from "../../src/tern/draft.js";
 import { filterItems, matchRanges, moveSelection } from "../../src/tern/overlays.js";
 import { decorations, placeholder } from "../../src/tern/dock.js";
 import { paletteFor } from "../../src/tern/look.js";
-import { foldHead, toolNode } from "../../src/tern/view.js";
+import { conversation, foldHead, toolNode, type ConversationCx } from "../../src/tern/view.js";
 import { parseTernArgs } from "../../src/tern/args.js";
 import { ternEntry } from "../../src/server/tern-client.js";
 import { DARK } from "../../src/atui/theme.js";
@@ -158,6 +160,21 @@ describe("the Tern conversation", () => {
     expect(node.props).toMatchObject({ title: "Update", target: "src/a.ts", targetKind: "path", meta: ["+1", "−1"] });
     expect(node.children[0]?.kind).toBe("diff");
     expect(String(node.children[0]?.props.text)).toContain("-a\n+b");
+  });
+
+  it("draws what a compaction kept as plain rows with its reply, not a fold", () => {
+    const items: ChatItem[] = [
+      { kind: "notice", id: "n1", level: "info", text: "Earlier conversation was compacted" },
+      { kind: "assistant", id: "a1", text: "The build passes now.\n\n- one\n- two", thinking: "", streaming: false },
+    ];
+    const chat = { chatId: "c", workspace: { id: "w", path: "/w", name: "w" }, status: "idle", items, capabilities: {}, checkpoints: [] } as unknown as ChatState;
+    const noop = () => undefined;
+    const cx: ConversationCx = { chat, harness: null, webUrl: "http://x", age: () => undefined, shown: 30, folds: new Map(), picked: null, blob: () => null, on: { fold: noop, pick: noop, showEarlier: noop, retry: noop, edit: noop, fork: noop, undo: noop, copy: noop } };
+    const [turn] = conversation(cx);
+    const kinds = (n: Node): string[] => [n.kind, ...n.children.flatMap(kinds)];
+    expect(kinds(turn as Node)).not.toContain("section");
+    expect(JSON.stringify(turn)).toContain("Earlier conversation was compacted");
+    expect(JSON.stringify(turn)).toContain("The build passes now.");
   });
 
   it("words a fold the web UI's way", () => {

@@ -256,8 +256,29 @@ function workingNode(turn: Turn, cx: ConversationCx, foldOpen: boolean): Node {
   );
 }
 
+/**
+ * What comes before any prompt (startup notices, or what a compaction kept), as the web UI draws it: plain rows,
+ * not a fold (the "Earlier conversation was compacted" notice must show), and the reply among them in its place.
+ */
+function preambleNode(turn: Turn, cx: ConversationCx): Node {
+  const rows = (items: ChatItem[]) =>
+    items.flatMap((item) => {
+      const n = workItem(item, cx);
+      return n === null ? [] : Array.isArray(n) ? n : [n];
+    });
+  const answer = turn.answer;
+  return ui.col(
+    { key: turn.id, role: "awui.turn", gap: "md" },
+    rows(turn.process.slice(0, turn.answerAt)),
+    answer?.text.trim() ? ui.md({ key: "answer", role: "awui.reply", stream: answer.streaming }, answer.text) : null,
+    rows([...turn.process.slice(turn.answerAt), ...turn.errors, ...turn.after]),
+    turn.live ? workingNode(turn, cx, true) : null,
+  );
+}
+
 /** One turn: its prompt, then each stretch of work and the reply after it, then what it changed. */
 function turnNode(turn: Turn, cx: ConversationCx): Node {
+  if (!turn.prompt) return preambleNode(turn, cx);
   const parts: (Node | null)[] = [];
   if (turn.prompt) parts.push(promptNode(turn, turn.prompt, cx));
   const segments = workSegments(turn);
