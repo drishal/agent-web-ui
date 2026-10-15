@@ -1003,7 +1003,8 @@ test("subagents show live, then their answers, and open their own transcripts", 
   // Seen working, the delegation is open: one agent running, the other queued.
   const row = page.locator('[data-testid="tool-row"][data-tool="subagent"]');
   await expect(row.locator(".run-status.is-running")).toHaveCount(1);
-  await expect(row.locator(".run-activity")).toContainText("bash rg -n listen src");
+  // The running agent's latest command, whichever of the two runs when this looks (the scout first, then the worker).
+  await expect(row.locator(".run-activity")).toContainText(/bash (rg -n listen src|sed -n 1,40p src\/server\.ts)/);
   await expect(page.locator(".answer-actions")).toBeVisible({ timeout: 20000 });
   await openFold(page);
   // Settled, it opens like any other row.
