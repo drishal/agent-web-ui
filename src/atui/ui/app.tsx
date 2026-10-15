@@ -14,6 +14,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
+import type { UserItem } from "../../shared/protocol.js";
 import type { PaletteItem } from "../../web/palette.js";
 import { isBusy } from "../../web/session-groups.js";
 import { ago, STATUS_LABEL } from "../format.js";
@@ -31,6 +32,7 @@ import { RequestCard } from "./request.js";
 import { Sidebar, SidebarRail, type SidebarTab } from "./sidebar.js";
 import { Splash } from "./splash.js";
 import { TabBar } from "./tabbar.js";
+import { UndoDialog } from "./undo.js";
 import { Toasts } from "./toasts.js";
 import { Transcript } from "./transcript.js";
 import { WhichKey } from "./whichkey.js";
@@ -210,6 +212,9 @@ export function App(p: {
         return setDialog("thinking");
       case "c":
         return void app.compact();
+      case "z":
+        if (!app.putBackable()) return flash("Nothing to put back: no files were undone here");
+        return void app.putBack();
       case "f":
         setCompactChoice((v) => !(v ?? (app.chat()?.context?.percent ?? 0) >= 80));
         return;
@@ -236,7 +241,7 @@ export function App(p: {
   };
 
   useKeyboard((key) => {
-    if (dialog()) return;
+    if (dialog() || app.undoTurn() !== null) return;
     // After C-x: the next key is a command; Esc or C-g (or C-x again) cancels, as in Emacs.
     if (leaderOn()) {
       key.preventDefault();
@@ -275,6 +280,13 @@ export function App(p: {
         key.preventDefault();
         return setDialog(target);
       }
+    }
+    // Esc while editing a past prompt: the edit is dropped, the prompt stays as it was (before vim takes Esc for NORMAL).
+    if (key.name === "escape" && app.editing() && !key.ctrl && !key.meta) {
+      key.preventDefault();
+      app.setEditing(null);
+      composer?.clear();
+      return flash("Edit cancelled");
     }
     // Vim: Esc leaves the composer for NORMAL (a second one still stops a run);
     // in NORMAL the keys move around, and anything else falls through.
@@ -348,6 +360,19 @@ export function App(p: {
       items.push({ id: `tab:${tab.key}`, section: "Tabs", label: tab.title || "New chat", hint: i < 9 ? `M-${i + 1}` : "", current: i === open.active, searchOnly: open.tabs.length < 2, run: () => void app.switchTab(i) });
     });
     if (c && app.busy()) add({ id: "stop", label: "Stop the agent", hint: "Esc Esc", run: app.stop });
+    // The last prompt's actions (a click on any prompt offers the same for it).
+    const prompts = c ? c.items.filter((i): i is UserItem => i.kind === "user" && !i.command) : [];
+    const last = prompts[prompts.length - 1];
+    if (c && last) {
+      const through = prompts.length;
+      const branch = idle && (c.capabilities.supportsRewind || through === 1 || c.capabilities.supportsFork);
+      const why = idle ? "This harness cannot replace or branch from it" : "Wait until the agent is idle";
+      add({ id: "retry", label: "Retry the last message", disabled: branch ? undefined : why, run: () => void app.rerun(through, last, last.text) });
+      add({ id: "edit", label: "Edit the last message", disabled: branch ? undefined : why, run: () => app.setEditing({ through, item: last }) });
+      if (c.checkpoints.includes(through)) add({ id: "undo", label: "Undo file changes from the last message…", disabled: idle ? undefined : "Wait until the agent is idle", run: () => app.setUndoTurn(through) });
+      if (c.capabilities.supportsFork) add({ id: "fork", label: "Fork this chat into a new tab", searchOnly: true, disabled: idle ? undefined : "Wait until the agent is idle", run: () => void app.fork(through) });
+    }
+    if (app.putBackable()) add({ id: "put-back", label: "Put the undone files back", hint: leader("z"), run: () => void app.putBack() });
     add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
     add({ id: "sessions", label: "Browse sessions", hint: leader("s"), run: () => runLeader("s") });
     add({ id: "sidebar", label: sidebar() ? "Fold the side panel" : "Unfold the side panel", hint: leader("b"), run: () => runLeader("b") });
@@ -563,7 +588,7 @@ export function App(p: {
               fallback={
                 <Composer
                   status={{ mode: vim() ? (normal() ? "normal" : "insert") : null, leader: leaderOn(), note: hint() }}
-                  focused={focus() === "composer" && !dialog() && !normal()}
+                  focused={focus() === "composer" && !dialog() && !normal() && app.undoTurn() === null}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
                   onPick={setDialog}
@@ -599,6 +624,7 @@ export function App(p: {
         <Show when={dialog() === "history"}>
           <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading preview={historyPreview} />
         </Show>
+        <Show when={app.undoTurn()}>{(turn) => <UndoDialog turn={turn()} onClose={() => app.setUndoTurn(null)} />}</Show>
         <Toasts />
       </box>
     </AtuiContext.Provider>

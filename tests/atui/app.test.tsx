@@ -1,7 +1,8 @@
 // atui end to end: the built server with fake harnesses, atui in OpenTUI's
 // test renderer, driven by keys and clicks as a person would.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { RGBA, TextAttributes } from "@opentui/core";
 import path from "node:path";
 import { contextTone } from "../../src/atui/theme.js";
@@ -423,6 +424,59 @@ describe("atui", () => {
     await ui.until(() => ui?.app.chat()?.title === "first tab chat");
     // One tab left: the bar goes.
     expect(await ui.frame()).not.toContain("1 F first tab chat");
+  }, 40_000);
+
+  it("offers a prompt's actions on a click: Edit replaces it in place, Esc drops an edit", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { height: 40 });
+    await ui.type("first try");
+    ui.keys.pressEnter();
+    await idle(ui);
+    await ui.click("│ first try");
+    await ui.until("↻ Retry");
+    await ui.click("✎ Edit");
+    await ui.until("editing message 1");
+    // Esc drops it.
+    await ui.escape();
+    await ui.until("Edit cancelled");
+    expect(await ui.frame()).not.toContain("editing message 1");
+    await ui.click("│ first try");
+    await ui.click("✎ Edit");
+    await ui.until("editing message 1");
+    // (Not C-c: the test renderer quits on it.)
+    for (const _ of "first try") ui.keys.pressBackspace();
+    await ui.type("second try");
+    ui.keys.pressEnter();
+    await ui.until("Echo: second try", 15_000);
+    await idle(ui);
+    expect(ui.app.chat()?.items.filter((i) => i.kind === "user").map((i) => (i as { text: string }).text)).toEqual(["second try"]);
+  }, 40_000);
+
+  it("undoes a prompt's file changes from the chosen files, and C-x z puts them back", async () => {
+    const repo = path.join(server.root, "repo");
+    mkdirSync(repo, { recursive: true });
+    writeFileSync(path.join(repo, "app.ts"), "const a = 1;\n");
+    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
+    git("init", "-q");
+    git("add", ".");
+    git("commit", "-qm", "init");
+    ui = await mount(repo, { height: 40 });
+    await ui.type("change the app");
+    ui.keys.pressEnter();
+    await idle(ui);
+    await ui.until(() => (ui?.app.chat()?.checkpoints ?? []).includes(1));
+    writeFileSync(path.join(repo, "app.ts"), "const a = 2;\n");
+    await ui.click("│ change the app");
+    await ui.click("↶ Undo files");
+    const dialog = await ui.until("Undo file changes from message 1 on");
+    expect(dialog).toContain("[x] app.ts");
+    expect(dialog).toContain("put back");
+    ui.keys.pressEnter();
+    await ui.until("C-x z puts them back");
+    expect(readFileSync(path.join(repo, "app.ts"), "utf8")).toBe("const a = 1;\n");
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("z");
+    await ui.until("Put 1 file back as they were");
+    expect(readFileSync(path.join(repo, "app.ts"), "utf8")).toBe("const a = 2;\n");
   }, 40_000);
 
   it("browses sessions from the sidebar and opens one", async () => {

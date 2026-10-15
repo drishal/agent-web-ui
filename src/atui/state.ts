@@ -10,6 +10,8 @@ import type {
   Bootstrap,
   ChatEvent,
   ChatSnapshot,
+  CheckpointPreview,
+  CheckpointRestored,
   GitStatus,
   ImageAttachment,
   InteractionAnswer,
@@ -19,8 +21,10 @@ import type {
   SessionsOverview,
   ThemeInfo,
   UsageLimits,
+  UserItem,
   WorkspaceInfo,
 } from "../shared/protocol.js";
+import { IMAGE_MIME_TYPES } from "../shared/protocol.js";
 import { applyEvents, type ChatState } from "../web/chat-state.js";
 import { closeTab as closeTabIn, findTab, markUnread, NO_TABS, placeChat, placeTab, runningChats, syncActive, type Tab, type TabState } from "../web/tabs.js";
 import { appCommand } from "../web/commands.js";
@@ -545,6 +549,115 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     }
   };
 
+  // ---- a past prompt: retry, edit, fork from it, put its files back ---------------------
+
+  /** A prompt being edited in the composer: Enter replaces it (as the web UI's Edit does). */
+  const [editing, setEditing] = createSignal<{ through: number; item: UserItem } | null>(null);
+  /** The prompt whose files the Undo dialog offers to put back. */
+  const [undoTurn, setUndoTurn] = createSignal<number | null>(null);
+  /** The files a restore put back, to put back as they were again (C-x z). */
+  const [putBackable, setPutBackable] = createSignal<{ chatId: string; tree: string; paths: string[] } | null>(null);
+
+  /** A prompt's images, to go with it again. */
+  const imagesOf = async (item: UserItem): Promise<ImageAttachment[]> => {
+    const out: ImageAttachment[] = [];
+    for (const ref of item.images ?? []) {
+      if (!(IMAGE_MIME_TYPES as readonly string[]).includes(ref.mimeType)) continue;
+      const bytes = await image(ref.id);
+      if (bytes) out.push({ mimeType: ref.mimeType as ImageAttachment["mimeType"], data: Buffer.from(bytes).toString("base64") });
+    }
+    return out;
+  };
+
+  /**
+   * Retry or edit prompt `through`: replaced in place where the harness can
+   * (supportsRewind), else run in a branch from before it (a fork, or a fresh
+   * chat for the first prompt) on the same model and thinking level, shown in
+   * the same tab. The web UI's rerun, without the file undo.
+   */
+  const rerun = async (through: number, item: UserItem, text: string): Promise<boolean> => {
+    const from = chat();
+    if (!from) return false;
+    try {
+      const images = await imagesOf(item);
+      const withImages = images.length > 0 ? { images } : {};
+      if (from.capabilities.supportsRewind) {
+        await server.call(`/api/chats/${from.chatId}/rewind`, { body: { turn: through, text, ...withImages } });
+        return true;
+      }
+      const next =
+        through > 1
+          ? await server.call<ChatSnapshot>(`/api/chats/${from.chatId}/fork`, { body: { through: through - 1 } })
+          : await server.call<ChatSnapshot>("/api/chats", { body: { harnessId: from.harnessId, workspaceId: from.workspace.id } });
+      const patch: { model?: string; thinkingLevel?: string } = {};
+      if (from.capabilities.supportsModelSelection && from.config.model && next.config.model !== from.config.model && next.config.models.some((m) => m.key === from.config.model)) patch.model = from.config.model;
+      if (from.capabilities.supportsThinkingLevel && from.config.thinkingLevel && next.config.thinkingLevel !== from.config.thinkingLevel) patch.thinkingLevel = from.config.thinkingLevel;
+      if (patch.model || patch.thinkingLevel) await server.call(`/api/chats/${next.chatId}/config`, { method: "PATCH", body: patch }).catch(() => undefined);
+      show(next);
+      await server.call(`/api/chats/${next.chatId}/messages`, { body: { text, mode: "normal", ...withImages } });
+      setBanner({ level: "info", text: `Branched from before message ${through}; the original chat is still in the session list` });
+      void refreshSessions();
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  };
+
+  /** A new session holding the chat through prompt `through`, opened in a tab of its own. */
+  const fork = async (through: number) => {
+    const c = chat();
+    if (!c) return;
+    try {
+      show(await server.call<ChatSnapshot>(`/api/chats/${c.chatId}/fork`, { body: { through } }), { newTab: true });
+      void refreshSessions();
+    } catch (error) {
+      fail(error);
+    }
+  };
+
+  /** What putting the files back as they were before prompt `turn` would do. */
+  const checkpointPreview = async (turn: number): Promise<CheckpointPreview | null> => {
+    const c = chat();
+    if (!c) return null;
+    try {
+      return await server.call<CheckpointPreview>(`/api/chats/${c.chatId}/checkpoints/${turn}`);
+    } catch (error) {
+      fail(error);
+      return null;
+    }
+  };
+
+  /** Put `paths` back as they were before prompt `turn`; C-x z can undo it. */
+  const restoreFiles = async (turn: number, paths: string[]): Promise<boolean> => {
+    const c = chat();
+    if (!c || paths.length === 0) return false;
+    try {
+      const done = await server.call<CheckpointRestored>(`/api/chats/${c.chatId}/checkpoints/${turn}/restore`, { body: { paths } });
+      setPutBackable({ chatId: c.chatId, tree: done.undo, paths: done.files.map((f) => f.path) });
+      const n = done.files.length;
+      setBanner({ level: "info", text: `Undid changes to ${n} ${n === 1 ? "file" : "files"} from message ${turn} on; the agent was not told · C-x z puts them back` });
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  };
+
+  const putBack = async () => {
+    const p = putBackable();
+    if (!p) return false;
+    try {
+      await server.call(`/api/chats/${p.chatId}/checkpoints/put-back`, { body: { tree: p.tree, paths: p.paths } });
+      setPutBackable(null);
+      setBanner({ level: "info", text: `Put ${p.paths.length} ${p.paths.length === 1 ? "file" : "files"} back as they were` });
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  };
+
   const dispose = () => {
     stopStream?.();
     for (const timer of timers.splice(0)) clearInterval(timer);
@@ -565,6 +678,16 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     switchTab,
     closeTab,
     stepTab,
+    editing,
+    setEditing,
+    undoTurn,
+    setUndoTurn,
+    rerun,
+    fork,
+    checkpointPreview,
+    restoreFiles,
+    putBackable,
+    putBack,
     overview,
     chat,
     conn,
