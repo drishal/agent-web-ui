@@ -1,7 +1,8 @@
 // atui's motion and small graphics, worked out apart from the drawing so they
 // can be tested: colour mixing for the "Working" shimmer, the pace streamed
 // text is revealed at, sparklines and meters drawn with block characters,
-// eased scrolling, a fold unrolling, and each harness's spinner.
+// eased scrolling, a fold unrolling, a one-off flash, and each harness's
+// spinner.
 
 /** `#rrggbb` → [r, g, b]; anything else is black. */
 function rgb(hex: string): [number, number, number] {
@@ -85,6 +86,12 @@ export function scrollPath(from: number, to: number, frames: number): number[] {
 export function unrollCounts(n: number, frames: number): number[] {
   const k = Math.max(1, Math.round(frames));
   return Array.from({ length: k }, (_, i) => Math.min(n, Math.max(1, Math.ceil(n * easeOut((i + 1) / k)))));
+}
+
+/** A one-off flash's strength at `t` (0 to 1 of its length): up quickly, then fading out slowly. */
+export function flashAt(t: number): number {
+  const k = Math.min(1, Math.max(0, t));
+  return k < 0.15 ? k / 0.15 : (1 - (k - 0.15) / 0.85) ** 2;
 }
 
 const SPINNERS: Record<string, string[]> = {

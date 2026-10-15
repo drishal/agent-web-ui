@@ -2,7 +2,7 @@
 // test renderer, driven by keys and clicks as a person would.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { TextAttributes } from "@opentui/core";
+import { RGBA, TextAttributes } from "@opentui/core";
 import path from "node:path";
 import { mount, startServer, wait, type Mounted } from "./helpers.js";
 
@@ -63,6 +63,25 @@ describe("atui", () => {
     const open = await ui.until("● Bash");
     // (The fake's thought quotes the reply, after "Considering:".)
     expect(open.match(/(?<!Considering: )this is reply block 1/g)).toHaveLength(1);
+  }, 30_000);
+
+  it("flashes the prompt's edge once when a run ends", async () => {
+    ui = await mount(path.join(server.root, "alpha"));
+    await ui.type("tool please");
+    ui.keys.pressEnter();
+    await idle(ui);
+    const ok = RGBA.fromHex(ui.app.theme().ok).toInts().join();
+    const edge = async () => {
+      const row = (await ui?.spans())?.find((l) => l.map((s) => s.text).join("").includes("╭─F"));
+      return row?.find((s) => s.text.includes("╭"))?.fg.toInts().join();
+    };
+    // A tenth of a second in, the flash is near its height.
+    await wait(100);
+    const lit = await edge();
+    expect(lit).toBeDefined();
+    expect(lit).not.toBe(ok);
+    await wait(1100);
+    expect(await edge()).toBe(ok);
   }, 30_000);
 
   it("underlines a failure as well as colouring it", async () => {
