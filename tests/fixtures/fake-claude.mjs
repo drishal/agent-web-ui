@@ -8,15 +8,22 @@
 //   "slow"  stream many chunks       "fail"      end the turn with an error
 //   "todo"  write a TodoWrite list   "question"  an AskUserQuestion call
 //   "/compact"  compact the conversation
+//   "render"    call render_html through the MCP server --mcp-config names, as the CLI does
 // A message sent while a turn runs is queued: priority "next" lands after the
 // current tool call, anything else runs once the turn ends. Every permission
 // answer is recorded in $FAKE_CLAUDE_STATE.
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 
 const argv = process.argv.slice(2);
+// As the CLI answers it, so discovery finds a version.
+if (argv.includes("--version")) {
+  console.log("2.1.289 (Claude Code)");
+  process.exit(0);
+}
 const flag = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
@@ -156,6 +163,32 @@ function consume(m, injected, record = true) {
   return text;
 }
 
+/** Call `tool` on the MCP server --mcp-config names `awui`: start it, initialize, call, stop (what the CLI does, in short). */
+async function callMcp(tool, args) {
+  const config = JSON.parse(flag("--mcp-config") ?? "{}");
+  const server = config.mcpServers?.awui;
+  if (!server) return [{ type: "text", text: "No such tool available: mcp__awui__render_html" }];
+  record("mcp", { command: server.command, args: server.args, allowed: flag("--allowedTools") ?? null, hasToken: Boolean(server.env?.AWUI_RENDER_TOKEN) });
+  const child = spawn(server.command, server.args, { env: { ...process.env, ...server.env }, stdio: ["pipe", "pipe", "inherit"] });
+  const replies = new Map();
+  readline.createInterface({ input: child.stdout }).on("line", (line) => {
+    const message = JSON.parse(line);
+    replies.get(message.id)?.(message);
+  });
+  let next = 0;
+  const call = (method, params) =>
+    new Promise((resolve) => {
+      const id = ++next;
+      replies.set(id, resolve);
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+    });
+  await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake-claude", version: "1" } });
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+  const reply = await call("tools/call", { name: tool, arguments: args });
+  child.kill();
+  return reply.result?.content ?? [{ type: "text", text: reply.error?.message ?? "MCP error" }];
+}
+
 async function runTurn(m) {
   busy = true;
   aborted = false;
@@ -181,6 +214,12 @@ async function runTurn(m) {
       await modelCall("", { tool: { id, name: "Read", input: { file_path: "README.md" } } });
       toolResult(id, "file.txt");
       drainSteering();
+    }
+    if (/\brender\b/.test(text)) {
+      const id = `toolu_${randomUUID().slice(0, 8)}`;
+      const input = { html: "<!doctype html><h1>Fake chart</h1>", title: "Fake chart", height: 200 };
+      await modelCall("", { tool: { id, name: "mcp__awui__render_html", input } });
+      toolResult(id, await callMcp("render_html", input));
     }
     if (/\btodo\b/.test(text)) {
       const id = `toolu_${randomUUID().slice(0, 8)}`;

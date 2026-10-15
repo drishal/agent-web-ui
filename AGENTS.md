@@ -112,6 +112,7 @@ src/atui/                     The terminal client (Bun + OpenTUI + Solid). state
                               @mentions, ghost text, toasts, desktop notifications, image protocol and drops.
 extensions/rewind-to.ts       A Pi/omp extension the server loads into its children (-e) for in-place Edit/Retry.
 extensions/render-html.ts     A Pi/omp extension registering render_html, which publishes an HTML page into the chat.
+extensions/render-html-mcp.mjs  The same tool as an MCP server (stdio JSON-RPC, no dependencies), for Claude Code.
 extensions/eval-python.ts     An awui-harness extension registering eval_python: runs a snippet in a scratch tmp dir (no workspace).
 contrib/                      systemd unit and home-manager modules (templates; users copy them).
 tests/unit                    Vitest. tests/helpers/app.ts builds a real app with fake adapters (makeTestApp).

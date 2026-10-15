@@ -203,6 +203,12 @@ export function formatDuration(ms: number): string {
   return `${h}h ${m % 60}m`;
 }
 
+/** A tool's name as a row shows it: an MCP tool's `mcp__server__tool` as "tool · server", any other as it is. */
+export function toolLabel(name: string): string {
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(name);
+  return mcp ? `${mcp[2]} · ${mcp[1]}` : name;
+}
+
 /** Show workspace-relative paths when the file is inside the project. */
 export function relativePath(path: string, workspace: string): string {
   const base = workspace.endsWith("/") ? workspace : `${workspace}/`;

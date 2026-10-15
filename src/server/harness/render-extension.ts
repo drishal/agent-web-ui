@@ -34,6 +34,21 @@ export function renderHtmlExtensionArgs(): string[] {
   return file ? ["-e", file] : [];
 }
 
+let foundMcp: string | null | undefined;
+
+/** The render_html MCP server (for Claude Code): embedded copy in the binary, else the repo path. */
+export function renderHtmlMcpServer(): string | null {
+  if (foundMcp !== undefined) return foundMcp;
+  const embedded = extractedExtensionPath("render-html-mcp.mjs");
+  if (embedded !== null) return (foundMcp = embedded);
+  foundMcp = null;
+  for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
+    const file = path.join(dir, "extensions", "render-html-mcp.mjs");
+    if (existsSync(file)) return (foundMcp = file);
+    if (path.dirname(dir) === dir) return foundMcp;
+  }
+}
+
 let foundEval: string | null | undefined;
 
 /** The eval_python extension file (scratch-dir Python for the awui chat surface): embedded copy in the binary, else the repo path. */
