@@ -2,6 +2,7 @@
 // test renderer, driven by keys and clicks as a person would.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { TextAttributes } from "@opentui/core";
 import path from "node:path";
 import { mount, startServer, wait, type Mounted } from "./helpers.js";
 
@@ -62,6 +63,16 @@ describe("atui", () => {
     const open = await ui.until("● Bash");
     // (The fake's thought quotes the reply, after "Considering:".)
     expect(open.match(/(?<!Considering: )this is reply block 1/g)).toHaveLength(1);
+  }, 30_000);
+
+  it("underlines a failure as well as colouring it", async () => {
+    ui = await mount(path.join(server.root, "alpha"));
+    await ui.type("fail please");
+    ui.keys.pressEnter();
+    await ui.until("✗ Fake failure");
+    const failure = (await ui.spans()).flat().find((s) => s.text.includes("Fake failure"));
+    expect(failure && failure.attributes & TextAttributes.UNDERLINE).toBeTruthy();
+    expect(failure?.text).not.toContain("✗");
   }, 30_000);
 
   it("changes thinking, model, and harness directly, hands the chat off, and opens history", async () => {
