@@ -11,6 +11,7 @@ import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js
 import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
 import { highlightPreview, wordDiff } from "../../src/atui/words.js";
 import { attachmentFrom, byteSize, clipboardTool, imageModeFrom, imagePathsFromPaste, imageProtocol, pickImageType } from "../../src/atui/images.js";
+import { progressSequence, speaksProgress, terminalState } from "../../src/atui/terminal.js";
 
 // A 2×2 PNG.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64");
@@ -231,5 +232,27 @@ describe("keys", () => {
     expect(whichKeyGrid(14, 100, 34)).toEqual({ columns: 2, rows: 7 });
     expect(whichKeyColumns([1, 2, 3, 4, 5], 100, 34)).toEqual([[1, 2, 3], [4, 5]]);
     expect(whichKeyColumns([1, 2], 10, 34)).toEqual([[1, 2]]);
+  });
+});
+
+describe("the terminal's title and progress", () => {
+  it("names the chat, marks a run, and counts the sessions that ask", () => {
+    expect(terminalState({ title: "Fix the build", busy: false, asking: 0 })).toEqual({ title: "Fix the build · atui", progress: null });
+    expect(terminalState({ title: "Fix the build", busy: true, asking: 0 })).toEqual({ title: "● Fix the build · atui", progress: "busy" });
+    expect(terminalState({ title: "Fix", busy: true, asking: 2 })).toEqual({ title: "(2) ● Fix · atui", progress: "asking" });
+    // An agent's title cannot end the sequence and start another.
+    expect(terminalState({ title: "a\x07\x1b]0;evil", busy: false, asking: 0 }).title).toBe("a  ]0;evil · atui");
+  });
+
+  it("speaks OSC 9;4 only where the terminal draws it", () => {
+    expect(speaksProgress({ TERM_PROGRAM: "ghostty" })).toBe(true);
+    expect(speaksProgress({ WT_SESSION: "x" })).toBe(true);
+    expect(speaksProgress({ TERM_PROGRAM: "ghostty", TMUX: "/tmp/tmux" })).toBe(false);
+    expect(speaksProgress({ TERM: "xterm-kitty" })).toBe(false);
+    expect(speaksProgress({ TERM: "xterm-kitty", ATUI_PROGRESS: "1" })).toBe(true);
+    expect(speaksProgress({ TERM_PROGRAM: "ghostty", ATUI_PROGRESS: "0" })).toBe(false);
+    expect(progressSequence("busy")).toBe("\x1b]9;4;3\x1b\\");
+    expect(progressSequence("asking")).toBe("\x1b]9;4;4;100\x1b\\");
+    expect(progressSequence(null)).toBe("\x1b]9;4;0\x1b\\");
   });
 });

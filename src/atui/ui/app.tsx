@@ -10,7 +10,7 @@
 // composer for NORMAL, where src/atui/vim.ts's keys move around; i goes back
 // to typing. Jumps of more than a line glide; C-x g is glass mode (no fills, the
 // terminal's background shows through); background sessions' news toasts in
-// the corner.
+// the corner, and the terminal's title and tab progress follow the chat.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
@@ -20,6 +20,7 @@ import { ago, STATUS_LABEL } from "../format.js";
 import { leader, LEADER_KEYS, VIM_HELP } from "../keys.js";
 import { harnessGlyph } from "../neat.js";
 import type { Atui } from "../state.js";
+import { terminalState, type TerminalState } from "../terminal.js";
 import { accentOf } from "../theme.js";
 import { Composer } from "./composer.js";
 import { AtuiContext } from "./context.js";
@@ -37,7 +38,15 @@ type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
 
 const TWICE_MS = 1200;
 
-export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (on: boolean) => void; onGlass?: (on: boolean) => void }) {
+export function App(p: {
+  app: Atui;
+  onExit: () => void;
+  vim?: boolean;
+  onVim?: (on: boolean) => void;
+  onGlass?: (on: boolean) => void;
+  /** The terminal's title and progress indicator changed (none in tests). */
+  onTerminal?: (state: TerminalState) => void;
+}) {
   const app = p.app;
   const t = app.theme;
   const size = useTerminalDimensions();
@@ -425,6 +434,12 @@ export function App(p: { app: Atui; onExit: () => void; vim?: boolean; onVim?: (
     if (!c) return app.workspace()?.name ?? "atui";
     return c.title.replace(/\s+/g, " ").trim() || "New chat";
   };
+
+  // The terminal's own title and tab progress follow the shown chat and the sessions that ask for you.
+  const terminal = createMemo(() => terminalState({ title: title(), busy: app.busy(), asking: app.overview().sessions.filter((s) => s.asking).length }), undefined, {
+    equals: (a, b) => a.title === b.title && a.progress === b.progress,
+  });
+  createEffect(() => p.onTerminal?.(terminal()));
 
   return (
     <AtuiContext.Provider value={app}>
