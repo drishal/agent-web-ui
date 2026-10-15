@@ -8,6 +8,7 @@
 // only the fields named here are ever read from them.
 import type { InteractionRequest, ModelInfo, TodoItem } from "../../shared/protocol.js";
 import { isObj, type Obj } from "./agent-events.js";
+import { isAgentTool } from "./subagents.js";
 import type { UsageEntry } from "./types.js";
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -63,6 +64,29 @@ function toolText(state: Obj): string {
     .join("\n");
 }
 
+/** The child session a delegation call ran (OpenCode says `sessionID`; older versions `sessionId`). */
+export function childSession(metadata: unknown): string | null {
+  if (!isObj(metadata)) return null;
+  const id = str(metadata.sessionID) || str(metadata.sessionId);
+  return /^ses_[A-Za-z0-9]+$/.test(id) ? id : null;
+}
+
+/** The agent a delegation call names: oh-my-opencode-slim's `agent`, OpenCode's own `subagent_type`. */
+export function delegateAgent(input: unknown): string {
+  return isObj(input) ? str(input.agent) || str(input.subagent_type) || "agent" : "agent";
+}
+
+/** A finished delegation as the result row subagents.ts folds in: its child session is the run. */
+export function delegationResult(input: unknown, metadata: unknown, output: string, failed: boolean): Obj | null {
+  const child = childSession(metadata);
+  if (!child) return null;
+  const meta = isObj(metadata) ? metadata : {};
+  const model = isObj(meta.model) && str(meta.model.providerID) && (str(meta.model.modelID) || str(meta.model.id)) ? `${str(meta.model.providerID)}/${str(meta.model.modelID) || str(meta.model.id)}` : undefined;
+  const state = str(meta.status);
+  const status = failed ? "failed" : state && !/complete/.test(state) ? state : "done";
+  return { id: child, index: 0, agent: delegateAgent(input), status, ...(model ? { model } : {}), ...(output.trim() ? { output } : {}) };
+}
+
 /** A finished call's structured side: an edit's patches as one unified diff (resultDiff reads `diff`). */
 export function toolDetails(metadata: unknown): Obj | undefined {
   if (!isObj(metadata)) return undefined;
@@ -108,7 +132,8 @@ export function transcriptOf(messages: unknown[]): Obj[] {
             content.push({ type: "toolCall", id: str(part.id), name: str(part.name) || "tool", arguments: state.input ?? {} });
             if (state.status === "completed" || state.status === "error") {
               const ended = isObj(part.time) ? num(part.time.completed) : 0;
-              const details = state.status === "completed" ? toolDetails(state.metadata) : undefined;
+              const result = isAgentTool(str(part.name)) ? delegationResult(state.input, state.metadata, toolText(state), state.status === "error") : null;
+              const details = result ? { ...toolDetails(state.metadata), results: [result] } : state.status === "completed" ? toolDetails(state.metadata) : undefined;
               const exit = isObj(state.metadata) ? state.metadata.exit : undefined;
               results.push({
                 role: "toolResult",

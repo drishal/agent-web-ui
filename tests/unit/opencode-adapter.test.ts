@@ -166,6 +166,28 @@ describe("opencode adapter (scripted server)", () => {
     expect(JSON.stringify(chat.snapshot().items)).toContain("The provider refused the request");
   });
 
+  it("follows a subagent's child session live, and opens its transcript from the run", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("delegate this", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "Echo: delegate this"));
+    const tool = chat.snapshot().items.find((i) => i.kind === "tool");
+    expect(tool).toMatchObject({ name: "subagent", category: "agent", status: "done", output: "Found README.md, a fake project." });
+    const run = tool && tool.kind === "tool" ? tool.subagents?.runs[0] : undefined;
+    expect(run).toMatchObject({ agent: "explorer", status: "done", model: "opencode-go/mini", toolCount: 1, tokens: 540, cost: 0.003, transcript: true, output: "Found README.md, a fake project." });
+    expect(run?.id).toMatch(/^ses_/);
+    expect(run?.task).toBe("List the files and read README.md");
+    const transcript = await chat.subagentTranscript(tool?.id as string, run?.id as string);
+    expect(transcript.items.map((i) => (i.kind === "tool" ? `tool:${i.name}` : i.kind))).toEqual(["user", "tool:read", "assistant"]);
+    // The child is no session of the project's own.
+    expect((await adapter.listSessions(project)).map((s) => s.nativeId)).toEqual([live.nativeId]);
+    // Reopened, the run keeps its child: its model, its answer, and its transcript.
+    const items = await live.history();
+    const again = items.find((i) => i.kind === "tool");
+    expect(again && again.kind === "tool" ? again.subagents?.runs[0] : null).toMatchObject({ id: run?.id, agent: "explorer", status: "done", model: "opencode-go/mini", cost: 0.003, transcript: true });
+    // Another chat's run is not this chat's to read.
+    await expect(adapter.subagentTranscript({ nativeId: "ses_other", cwd: project }, run as never)).resolves.toBeNull();
+  });
+
   it("keeps OpenCode's todo list as the chat's todos", async () => {
     const { chat, live } = await openChat();
     await chat.send("todo list", "normal");

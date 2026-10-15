@@ -226,5 +226,7 @@ export interface HarnessAdapter {
   /** Kill helper processes; called on server shutdown. */
   /** Where a subagent's transcript lives when its result did not say (omp's runs; pi-subagents' background ones), or null. */
   subagentTranscriptFile?(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<string | null>;
+  /** A subagent's conversation where it lives behind the harness rather than in a file (OpenCode's child sessions), or null. */
+  subagentTranscript?(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<ChatItem[] | null>;
   shutdown(): Promise<void>;
 }

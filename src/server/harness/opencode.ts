@@ -26,12 +26,17 @@ import {
   type ModelInfo,
   type QueueState,
   type SlashCommand,
+  type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { historyToItems, isObj, type Obj } from "./agent-events.js";
+import { historyToItems, isObj, toolSummary, type Obj } from "./agent-events.js";
+import { isAgentTool } from "./subagents.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import {
+  childSession,
   contextWindow,
+  delegateAgent,
+  delegationResult,
   formQuestions,
   formValue,
   latestTodos,
@@ -95,6 +100,33 @@ function filesOf(images: ImageAttachment[] | undefined): Obj[] {
   return (images ?? []).map((image, i) => ({ uri: `data:${image.mimeType};base64,${image.data}`, name: `image-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}` }));
 }
 
+/** A subagent's child session, followed while it runs. */
+interface Child {
+  callId: string;
+  agent: string;
+  model: string | null;
+  tools: Map<string, string>;
+  toolCount: number;
+  activity: string[];
+  tokens: number;
+  cost: number;
+  started: number;
+  ended: number | null;
+  answer: string;
+  status: "running" | "done" | "failed" | "stopped";
+  error?: string;
+  unsubscribe: () => void;
+}
+
+/** A delegation call (OpenCode's `task`, oh-my-opencode-slim's `subagent`) and the child it ran. */
+interface Delegation {
+  agent: string;
+  input: unknown;
+  child: string | null;
+  /** The call's result text, once it returned (a background run goes on after). */
+  output: string | null;
+}
+
 interface Step {
   model: string | null;
   text: string;
@@ -117,6 +149,8 @@ class OpenCodeChat implements LiveChat {
   /** Prompts OpenCode holds for later, by inbox id. */
   private readonly inbox = new Map<string, { text: string; delivery: string; images: number }>();
   private readonly tools = new Map<string, string>();
+  private readonly delegations = new Map<string, Delegation>();
+  private readonly children = new Map<string, Child>();
   private shownQueue = JSON.stringify({ steering: [], followUp: [] });
   private step: Step | null = null;
   private running = false;
@@ -263,12 +297,44 @@ class OpenCodeChat implements LiveChat {
         const name = this.tools.get(str(d.id)) ?? "tool";
         if (/todo/i.test(name) && isObj(d.input) && Array.isArray(d.input.todos)) this.todos = todosOf(d.input.todos);
         this.emit({ type: "tool_start", toolCallId: str(d.id), name, args: d.input ?? {} });
+        if (isAgentTool(name)) this.delegations.set(str(d.id), { agent: delegateAgent(d.input), input: d.input, child: null, output: null });
+        return;
+      }
+      case "session.tool.progress": {
+        // A delegation's call names its child session as soon as it starts.
+        const child = childSession(d.metadata);
+        if (child && this.delegations.has(str(d.id))) this.adopt(str(d.id), child);
+        return;
+      }
+      case "session.created": {
+        // A child session of this one: a subagent. Its call names it too; this covers a call that does not.
+        if (str(d.parentID) !== this.sessionId) return;
+        const waiting = [...this.delegations].filter(([, x]) => x.child === null);
+        const only = waiting.length === 1 ? waiting[0] : undefined;
+        if (only) this.adopt(only[0], str(d.sessionID));
         return;
       }
       case "session.tool.success":
       case "session.tool.failed": {
-        const result = toolResult(d, event.type === "session.tool.failed");
-        this.emit({ type: "tool_end", toolCallId: str(d.id), output: result.output, isError: result.isError, ...(result.details ? { details: result.details } : {}) });
+        const failed = event.type === "session.tool.failed";
+        const result = toolResult(d, failed);
+        const delegation = this.delegations.get(str(d.id));
+        let details = result.details;
+        if (delegation) {
+          delegation.output = result.output;
+          const child = childSession(d.metadata) ?? delegation.child;
+          if (child && !delegation.child) this.adopt(str(d.id), child);
+          const known = child ? this.children.get(child) : undefined;
+          const row = delegationResult(delegation.input, { ...(isObj(d.metadata) ? d.metadata : {}), ...(child ? { sessionID: child } : {}) }, result.output, failed);
+          // A background run goes on after its call returns: it is still running, and reports on.
+          const background = isObj(delegation.input) && delegation.input.background === true;
+          if (row) details = { ...(details ?? {}), results: [{ ...(known ? this.runRow(known) : {}), ...row, ...(background && known?.status === "running" ? { status: "running" } : {}) }] };
+          if (!background || known?.status !== "running") {
+            this.delegations.delete(str(d.id));
+            if (child && known?.status !== "running") this.children.delete(child);
+          }
+        }
+        this.emit({ type: "tool_end", toolCallId: str(d.id), output: result.output, isError: result.isError, ...(details ? { details } : {}) });
         return;
       }
       case "session.step.ended": {
@@ -392,6 +458,105 @@ class OpenCodeChat implements LiveChat {
     this.emit({ type: "queue", queue });
   }
 
+  // ---- subagents (child sessions) -----------------------------------------------------
+
+  /** Follow the child session a delegation call runs, reporting it as the call's run. */
+  private adopt(callId: string, childId: string): void {
+    const delegation = this.delegations.get(callId);
+    if (!delegation || !childId || this.children.has(childId)) return;
+    delegation.child = childId;
+    const child: Child = {
+      callId,
+      agent: delegation.agent,
+      model: null,
+      tools: new Map(),
+      toolCount: 0,
+      activity: [],
+      tokens: 0,
+      cost: 0,
+      started: Date.now(),
+      ended: null,
+      answer: "",
+      status: "running",
+      unsubscribe: () => undefined,
+    };
+    child.unsubscribe = this.server.subscribe(childId, (event) => this.onChild(childId, event));
+    this.children.set(childId, child);
+    this.report(childId);
+  }
+
+  private onChild(childId: string, event: OpenCodeEvent): void {
+    const child = this.children.get(childId);
+    if (!child) return;
+    const d = event.data;
+    switch (event.type) {
+      case "session.step.started":
+        child.model = modelKey(d.model) ?? child.model;
+        return;
+      case "session.tool.input.started":
+        child.tools.set(str(d.id), str(d.name) || "tool");
+        return;
+      case "session.tool.called": {
+        const name = child.tools.get(str(d.id)) ?? "tool";
+        child.toolCount += 1;
+        const summary = toolSummary(d.input);
+        child.activity = [...child.activity, `${name}${summary ? ` ${summary}` : ""}`].slice(-4);
+        return this.report(childId);
+      }
+      case "session.text.ended":
+        if (str(d.text).trim()) child.answer = str(d.text);
+        return;
+      case "session.usage.updated": {
+        const t = isObj(d.tokens) ? d.tokens : {};
+        child.tokens = num(t.input) + num(t.output) + num(t.reasoning);
+        child.cost = num(d.cost);
+        return this.report(childId);
+      }
+      case "session.execution.succeeded":
+      case "session.execution.failed":
+      case "session.execution.interrupted":
+        child.status = event.type === "session.execution.succeeded" ? "done" : event.type === "session.execution.failed" ? "failed" : "stopped";
+        if (event.type === "session.execution.failed") child.error = str(isObj(d.error) ? d.error.message : d.error) || "The subagent failed";
+        child.ended = Date.now();
+        child.unsubscribe();
+        this.report(childId);
+        // Kept for its call's result (its totals), unless that call returned already (a background run).
+        if (this.delegations.get(child.callId)?.output !== null) {
+          this.children.delete(childId);
+          this.delegations.delete(child.callId);
+        }
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** The child as a progress row (subagents.ts reads these). */
+  private runRow(child: Child): Obj {
+    return {
+      index: 0,
+      agent: child.agent,
+      status: child.status,
+      ...(child.model ? { model: child.model } : {}),
+      toolCount: child.toolCount,
+      ...(child.tokens ? { tokens: child.tokens } : {}),
+      ...(child.cost ? { cost: child.cost } : {}),
+      durationMs: (child.ended ?? Date.now()) - child.started,
+      ...(child.status === "running" && child.activity.length > 0 ? { recentTools: child.activity } : {}),
+      ...(child.answer && child.status !== "running" ? { output: child.answer } : {}),
+      ...(child.error ? { error: child.error } : {}),
+    };
+  }
+
+  private report(childId: string): void {
+    const child = this.children.get(childId);
+    // A call that has settled keeps its result; a late word from its child changes nothing.
+    const delegation = child ? this.delegations.get(child.callId) : undefined;
+    if (!child || !delegation) return;
+    const output = delegation.output ?? "";
+    this.emit({ type: "tool_update", toolCallId: child.callId, output, details: { progress: [{ id: childId, ...this.runRow(child) }] } });
+  }
+
   // ---- OpenCode's requests -----------------------------------------------------------
 
   private withdraw(id: string): void {
@@ -444,7 +609,7 @@ class OpenCodeChat implements LiveChat {
 
   async history(): Promise<ChatItem[]> {
     if (!this.sessionId) return [];
-    return historyToItems(transcriptOf(await this.adapter.messages(this.sessionId)));
+    return this.adapter.items(await this.adapter.messages(this.sessionId));
   }
 
   private async currentModel(): Promise<ModelRef | null> {
@@ -591,6 +756,8 @@ class OpenCodeChat implements LiveChat {
     // As the other harnesses' children do when their chat closes: the run stops with it.
     if (this.running && this.sessionId) await this.server.call("POST", `/api/session/${this.sessionId}/interrupt`).catch(() => undefined);
     for (const resolve of this.settledWaiters.splice(0)) resolve();
+    for (const child of this.children.values()) child.unsubscribe();
+    this.children.clear();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.stopWatchingExit?.();
@@ -744,6 +911,13 @@ export class OpenCodeAdapter implements HarnessAdapter {
     throw new Error("OpenCode cannot take a handoff yet");
   }
 
+  /** A subagent's conversation: its child session, when it is this chat's own. */
+  async subagentTranscript(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<ChatItem[] | null> {
+    const info = await this.sessionInfo(run.id);
+    if (!info || str(info.parentID) !== chat.nativeId) return null;
+    return historyToItems(transcriptOf(await this.messages(run.id)));
+  }
+
   /** The session's messages for this project, or null when it is another project's (or gone). */
   private async projectMessages(req: { cwd: string; nativeId: string }): Promise<{ info: Obj; messages: unknown[] } | null> {
     const info = await this.sessionInfo(req.nativeId);
@@ -753,7 +927,32 @@ export class OpenCodeAdapter implements HarnessAdapter {
 
   async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
     const found = await this.projectMessages(req);
-    return found ? { items: historyToItems(transcriptOf(found.messages)), title: str(found.info.title) || null } : null;
+    return found ? { items: await this.items(found.messages), title: str(found.info.title) || null } : null;
+  }
+
+  /**
+   * A session's messages as items, each subagent run filled in from its child
+   * session (model, tokens, cost, time), which the call's own result does not
+   * keep. At most 50 children are asked about, all at once.
+   */
+  async items(messages: unknown[]): Promise<ChatItem[]> {
+    const transcript = transcriptOf(messages);
+    const rows = transcript.flatMap((m) => (m.role === "toolResult" && isObj(m.details) && Array.isArray(m.details.results) ? m.details.results.filter(isObj) : [])).slice(0, 50);
+    await Promise.all(
+      rows.map(async (row) => {
+        const info = await this.sessionInfo(str(row.id));
+        if (!info) return;
+        const t = isObj(info.tokens) ? info.tokens : {};
+        const time = isObj(info.time) ? info.time : {};
+        const model = modelKey(info.model);
+        if (model && !row.model) row.model = model;
+        const tokens = num(t.input) + num(t.output) + num(t.reasoning);
+        if (tokens) row.tokens = tokens;
+        if (num(info.cost)) row.cost = num(info.cost);
+        if (num(time.created) && (num(time.idle) || num(time.updated))) row.durationMs = (num(time.idle) || num(time.updated)) - num(time.created);
+      }),
+    );
+    return historyToItems(transcript);
   }
 
   async readUsage(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null> {

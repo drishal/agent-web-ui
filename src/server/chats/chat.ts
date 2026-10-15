@@ -1143,6 +1143,10 @@ export class Chat implements CheckpointHost {
     const run = tool?.kind === "tool" ? tool.subagents?.runs.find((r) => r.id === runId) : undefined;
     if (!tool || tool.kind !== "tool" || !run) throw new ChatError(404, "no_subagent", "No such subagent in this chat");
     const callId = toolId.replace(/^t:/, "");
+    if (this.nativeId && this.adapter.subagentTranscript) {
+      const items = await this.adapter.subagentTranscript({ nativeId: this.nativeId, cwd: this.workspace.path }, run).catch(() => null);
+      if (items) return { run, items };
+    }
     const file =
       transcriptFile(callId, runId) ??
       (this.nativeId && this.adapter.subagentTranscriptFile ? await this.adapter.subagentTranscriptFile({ nativeId: this.nativeId, cwd: this.workspace.path }, run) : null);

@@ -186,6 +186,9 @@ export class OpenCodeServer {
   private dispatch(event: OpenCodeEvent): void {
     const session = eventSession(event);
     for (const listener of this.listeners.get(session) ?? []) listener(event);
+    // A subagent's session is born under its parent: the parent's chat hears of it.
+    const parent = event.type === "session.created" && typeof event.data.parentID === "string" ? event.data.parentID : "";
+    if (parent && parent !== session) for (const listener of this.listeners.get(parent) ?? []) listener(event);
   }
 
   /** Events about `sessionId`, until the returned function is called. */
