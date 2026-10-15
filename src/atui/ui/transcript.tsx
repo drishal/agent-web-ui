@@ -9,13 +9,13 @@
 // outcome in the bottom edge). The column is capped at a readable width and
 // centred; a gutter on the right maps every turn and scrolls on a click, and
 // the prompt of the turn you are reading stays pinned at the top.
-import { createEffect, createMemo, createResource, createSignal, For, Index, Match, on, Show, Switch, type Accessor } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, Index, Match, on, onCleanup, Show, Switch, type Accessor } from "solid-js";
 import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, fileUrl, foldLabel, unifiedDiff } from "../format.js";
-import { mix } from "../fx.js";
+import { mix, unrollCounts } from "../fx.js";
 import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
 import { harnessGlyph, neatRow, thoughtTitle, thoughtTokens } from "../neat.js";
@@ -508,16 +508,43 @@ function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { cou
   );
 }
 
-/** Some work's items, the answer's own thought at `answerAt` (where the answer came, before any work that followed it). */
+/** Frames a fold takes to unroll, and how long each lasts. */
+const UNROLL_FRAMES = 4;
+const UNROLL_MS = 35;
+
+/**
+ * Some work's items, the answer's own thought at `answerAt` (where the answer
+ * came, before any work that followed it). Opened, they unroll over a few
+ * frames rather than appear at once; rows that arrive later, as a run goes on,
+ * just appear.
+ */
 function WorkItems(p: { items: ChatItem[]; answerAt: number; answer: AssistantItem | null; workspace: string; thoughtOnly?: boolean }) {
-  const cut = () => (p.answerAt < 0 ? p.items.length : p.answerAt);
+  const rows = createMemo(() => {
+    const cut = p.answerAt < 0 ? p.items.length : p.answerAt;
+    const thought = p.answerAt >= 0 && p.answer?.thinking.trim() ? [{ thought: p.answer }] : [];
+    const rows: Array<{ item: ChatItem } | { thought: AssistantItem }> = [...p.items.slice(0, cut).map((item) => ({ item })), ...thought, ...p.items.slice(cut).map((item) => ({ item }))];
+    return rows;
+  });
+  const steps = unrollCounts(rows().length, UNROLL_FRAMES);
+  const [shown, setShown] = createSignal(steps[0] ?? 0);
+  let step = 0;
+  const timer = setInterval(() => {
+    if (++step >= steps.length) {
+      clearInterval(timer);
+      setShown(Number.POSITIVE_INFINITY);
+    } else setShown(steps[step] as number);
+  }, UNROLL_MS);
+  onCleanup(() => clearInterval(timer));
   return (
     <box flexDirection="column" paddingLeft={2} marginTop={1}>
-      <Index each={p.items.slice(0, cut())}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Index>
-      <Show when={p.answerAt >= 0 && p.answer?.thinking.trim()}>
-        <Thought item={p.answer as AssistantItem} />
-      </Show>
-      <Index each={p.items.slice(cut())}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Index>
+      <Index each={rows().slice(0, shown())}>
+        {(row) => (
+          <Switch>
+            <Match when={"thought" in row() && (row() as { thought: AssistantItem }).thought}>{(answer) => <Thought item={answer()} />}</Match>
+            <Match when={"item" in row() && (row() as { item: ChatItem }).item}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Match>
+          </Switch>
+        )}
+      </Index>
     </box>
   );
 }
