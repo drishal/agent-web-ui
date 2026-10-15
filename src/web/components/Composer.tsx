@@ -55,6 +55,7 @@ export function Composer({
   onHandoff,
   onNewChat,
   limits,
+  side = false,
 }: {
   chat: ChatState;
   harnesses: HarnessStatus[];
@@ -71,6 +72,8 @@ export function Composer({
   onNewChat?: () => void;
   /** The subscriptions' limits: where a stop on a usage limit learns when it resets. */
   limits?: UsageLimits | null;
+  /** The chat beside the main one: text sent to "the draft" from elsewhere (a quote, a mention) goes to the main composer, not here too. */
+  side?: boolean;
 }) {
   const draftKey = `draft.${chat.chatId}`;
   const [text, setText] = useState(() => load<string>(draftKey, ""));
@@ -134,7 +137,7 @@ export function Composer({
     setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${prompt.text}` : prompt.text));
     setLinked({ hidden: prompt.hidden });
     window.requestAnimationFrame(() => area.current?.focus());
-  });
+  }, !side);
 
   useAddToDraft((added) => {
     setText((current) => (current.trim() ? `${current.replace(/\s*$/, "")}\n\n${added}` : added));
@@ -144,7 +147,7 @@ export function Composer({
       el.focus();
       el.setSelectionRange(el.value.length, el.value.length);
     });
-  });
+  }, !side);
 
   // Compact before send (T3 Code's chip): offered once the context is half full, on by
   // default from COMPACT_DEFAULT; the choice lasts until a message goes.
@@ -238,7 +241,7 @@ export function Composer({
     area.current?.focus();
   };
   // Images from elsewhere: what another app shared to awui.
-  useAddImagesToDraft((files) => void addImages(files));
+  useAddImagesToDraft((files) => void addImages(files), !side);
 
   // The stash (stash.ts): park this draft, or take one back (what is here then goes in its place).
   const [stash, setStash] = useState<StashEntry[]>(loadStash);

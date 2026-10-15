@@ -165,3 +165,32 @@ test("Usage across chats adds up the calls by day, harness, and model, and opens
   await expect(usage).toBeHidden();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 });
+
+test("a chat opens beside the main one, streams and takes messages there, and swaps with Make main", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "the left one");
+  await newChat(page);
+  await sendAndWait(page, "the right one");
+  await page.getByRole("button", { name: "Open a chat beside", exact: true }).click();
+  const side = page.getByRole("region", { name: "Chat beside" });
+  // The shown chat cannot open beside itself.
+  await expect(side.getByRole("button", { name: /the right one/ })).toBeDisabled();
+  await side.getByRole("button", { name: /the left one/ }).click();
+  await expect(side.getByRole("heading", { level: 2 })).toHaveText("the left one");
+  await side.getByRole("textbox", { name: "Message" }).fill("slow reply beside");
+  await side.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(side.getByTestId("side-status")).toHaveText("Working");
+  await expect(side.getByTestId("turn")).toHaveCount(2);
+  await expect(side.getByTestId("side-status")).toHaveText("Idle", { timeout: 20_000 });
+  // The main chat did not move, and its URL still names it.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("the right one");
+  const hash = await page.evaluate(() => location.hash);
+  await side.getByRole("button", { name: "Make main" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("the left one");
+  await expect(side.getByRole("heading", { level: 2 })).toHaveText("the right one");
+  expect(await page.evaluate(() => location.hash)).not.toBe(hash);
+  await side.getByRole("button", { name: "Close the chat beside" }).click();
+  await expect(side).toHaveCount(0);
+});
