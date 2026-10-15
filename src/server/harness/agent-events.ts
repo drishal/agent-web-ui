@@ -270,8 +270,9 @@ export function toolSummary(args: unknown): string {
     return oneLine(where ? `${args[key] as string} in ${where}` : (args[key] as string));
   }
   if (paths.length > 0) return paths.length > 1 ? `${paths[0]} +${paths.length - 1}` : (paths[0] as string);
-  for (const key of ["url", "prompt", "description"]) {
-    if (typeof args[key] === "string") return (args[key] as string).replace(/\s+/g, " ").trim().slice(0, 160);
+  // A page or a document by its name (render_html's title), never its whole body flattened into the line.
+  for (const key of ["url", "prompt", "description", "title"]) {
+    if (typeof args[key] === "string" && (args[key] as string).trim()) return (args[key] as string).replace(/\s+/g, " ").trim().slice(0, 160);
   }
   try {
     return formatArgObject(args).slice(0, 160);

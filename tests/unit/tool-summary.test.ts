@@ -16,6 +16,10 @@ describe("toolSummary", () => {
     expect(toolSummary({ path: "src/app.ts" })).toBe("src/app.ts");
   });
 
+  it("names a page by its title, not its HTML (render_html)", () => {
+    expect(toolSummary({ html: "<!doctype html><html><body>hi</body></html>", title: "Fake report", height: 320 })).toBe("Fake report");
+  });
+
   it("bounds a long value to the one-line budget", () => {
     const long = toolSummary({ body: "x".repeat(500) });
     expect(long.length).toBeLessThanOrEqual(160);
