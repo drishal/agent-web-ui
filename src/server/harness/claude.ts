@@ -41,6 +41,8 @@ import {
   type UsageBaseline,
 } from "./claude-sessions.js";
 import { claudeLimits, claudeUsageLimits } from "./limits.js";
+import { renderHtmlMcpServer } from "./render-extension.js";
+import { HTML_RENDER_MCP_SERVER, HTML_RENDER_MCP_TOOL, splitRenderMarker } from "./render-token.js";
 import { versionLabel } from "./version.js";
 import { DialogTracker, EventHub } from "./event-hub.js";
 import type {
@@ -73,6 +75,21 @@ const USAGE_PROBE_ARGS = ["--no-session-persistence", "--strict-mcp-config", "--
  * user messages echoed when the CLI takes them (that is when a queued one
  * starts), and permission prompts answered over stdio by this host.
  */
+/**
+ * The CLI arguments that give a chat render_html: awui's MCP server, started
+ * with the chat's render endpoint (the user's own MCP servers still load),
+ * and that one tool allowed without a prompt, since it only publishes a page
+ * into this chat. None without an endpoint or the server's file.
+ */
+function renderMcpArgs(renderEnv: NodeJS.ProcessEnv | undefined): string[] {
+  const server = renderHtmlMcpServer();
+  if (!server || !renderEnv?.AWUI_RENDER_URL || !renderEnv.AWUI_RENDER_TOKEN) return [];
+  // The CLI runs on Node; a compiled awui binary is not one, so then the Node on PATH runs the server.
+  const node = process.versions.bun ? "node" : process.execPath;
+  const config = { mcpServers: { [HTML_RENDER_MCP_SERVER]: { type: "stdio", command: node, args: [server], env: { AWUI_RENDER_URL: renderEnv.AWUI_RENDER_URL, AWUI_RENDER_TOKEN: renderEnv.AWUI_RENDER_TOKEN } } } };
+  return ["--mcp-config", JSON.stringify(config), "--allowedTools", HTML_RENDER_MCP_TOOL];
+}
+
 const STREAM_ARGS = [
   "-p",
   "--input-format",
@@ -292,6 +309,8 @@ class ClaudeLiveChat implements LiveChat {
     private readonly adapter: ClaudeAdapter,
     private readonly cwd: string,
     private readonly resumeId: string | null,
+    /** The chat's render endpoint (AWUI_RENDER_URL/TOKEN), for render_html's MCP server. */
+    private readonly renderEnv?: NodeJS.ProcessEnv,
   ) {
     this.sessionId = resumeId ?? randomUUID();
   }
@@ -323,7 +342,7 @@ class ClaudeLiveChat implements LiveChat {
       this.usage = usageBaseline(entries);
       this.todos = toTodos(latestTodos(entries));
     }
-    const args = [...STREAM_ARGS, ...this.adapter.extraArgs, ...(this.resumeId ? ["--resume", this.resumeId] : ["--session-id", this.sessionId])];
+    const args = [...STREAM_ARGS, ...renderMcpArgs(this.renderEnv), ...this.adapter.extraArgs, ...(this.resumeId ? ["--resume", this.resumeId] : ["--session-id", this.sessionId])];
     const rpc = new ClaudeRpc(this.adapter.cliCommand, args, this.adapter.childEnv(), this.cwd, (frame) => this.onFrame(frame));
     this.rpc = rpc;
     rpc.onExit((message) => {
@@ -468,9 +487,11 @@ class ClaudeLiveChat implements LiveChat {
     const results = (Array.isArray(message.content) ? message.content : []).filter((b): b is Obj => isObj(b) && b.type === "tool_result");
     for (const block of results) {
       const content = block.content;
-      const output = typeof content === "string" ? content : textOf(content);
+      // render_html's MCP result carries its page on its last line: into the details (read only for that tool).
+      const marked = splitRenderMarker(typeof content === "string" ? content : textOf(content));
+      const output = marked.text;
       // The CLI's structured result (an edit's structuredPatch) belongs to the frame; it carries one result per frame.
-      const details = results.length === 1 && frame.tool_use_result !== undefined ? { details: frame.tool_use_result } : {};
+      const details = marked.details ? { details: marked.details } : results.length === 1 && frame.tool_use_result !== undefined ? { details: frame.tool_use_result } : {};
       this.emit({ type: "tool_end", toolCallId: str(block.tool_use_id), output, isError: block.is_error === true, ...details });
     }
   }
@@ -780,7 +801,8 @@ export class ClaudeAdapter implements HarnessAdapter {
     supportsFork: true,
     supportsHandoff: false,
     supportsRewind: false,
-    supportsHtmlRender: false,
+    // Through awui's MCP server (extensions/render-html-mcp.mjs), which the CLI is given per chat.
+    supportsHtmlRender: renderHtmlMcpServer() !== null,
     supportsQueueEdit: true,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
@@ -967,7 +989,7 @@ export class ClaudeAdapter implements HarnessAdapter {
   }
 
   async openChat(req: OpenChatRequest): Promise<LiveChat> {
-    const chat = new ClaudeLiveChat(this, req.cwd, req.resumeNativeId ?? null);
+    const chat = new ClaudeLiveChat(this, req.cwd, req.resumeNativeId ?? null, req.renderEnv);
     await chat.start();
     return chat;
   }

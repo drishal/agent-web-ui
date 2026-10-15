@@ -7,6 +7,7 @@
 // historyToItems, the usage baseline, each call's usage, and a fork cut after
 // the Nth prompt.
 import { isObj, textOf, type Obj } from "./agent-events.js";
+import { splitRenderMarker } from "./render-token.js";
 import type { UsageEntry } from "./types.js";
 
 /** Claude Code's project folder name: every character but [A-Za-z0-9] becomes "-". */
@@ -209,9 +210,13 @@ export function transcriptMessages(entries: Obj[]): Obj[] {
     if (kind.kind === "tool_results") {
       for (const block of kind.results) {
         const callId = String(block.tool_use_id);
-        // An edit's structuredPatch rides on the entry, which holds one result.
-        const details = kind.results.length === 1 && isObj(entry.toolUseResult) ? { details: entry.toolUseResult } : {};
-        out.push({ role: "toolResult", toolCallId: callId, toolName: toolNames.get(callId) ?? "tool", content: toolResultContent(block), isError: block.is_error === true, ...details, ...stamp });
+        // An edit's structuredPatch rides on the entry, which holds one result; render_html's page, on its result's last line.
+        const content = toolResultContent(block);
+        const lastText = [...content].reverse().find((c) => c.type === "text" && typeof c.text === "string");
+        const marked = lastText ? splitRenderMarker(lastText.text as string) : null;
+        if (marked?.details && lastText) lastText.text = marked.text;
+        const details = marked?.details ? { details: marked.details } : kind.results.length === 1 && isObj(entry.toolUseResult) ? { details: entry.toolUseResult } : {};
+        out.push({ role: "toolResult", toolCallId: callId, toolName: toolNames.get(callId) ?? "tool", content, isError: block.is_error === true, ...details, ...stamp });
       }
     } else if (kind.kind === "command_output") {
       out.push({ role: "assistant", content: [{ type: "text", text: `\`\`\`text\n${kind.text}\n\`\`\`` }], ...stamp });

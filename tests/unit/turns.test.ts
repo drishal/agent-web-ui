@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workSegments } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workSegments, toolLabel } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -228,3 +228,11 @@ describe("the live turn's latest thought", () => {
   });
 });
 
+
+describe("tool labels", () => {
+  it("writes an MCP tool as its name and server, and leaves any other alone", () => {
+    expect(toolLabel("mcp__awui__render_html")).toBe("render_html · awui");
+    expect(toolLabel("mcp__github__create_issue")).toBe("create_issue · github");
+    expect(toolLabel("Bash")).toBe("Bash");
+  });
+});

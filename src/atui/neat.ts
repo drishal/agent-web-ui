@@ -10,7 +10,7 @@
 //
 // Worked out apart from the drawing so it can be tested.
 import type { ToolItem } from "../shared/protocol.js";
-import { relativePath } from "../web/turns.js";
+import { relativePath, toolLabel } from "../web/turns.js";
 
 export interface NeatRow {
   label: string;
@@ -165,7 +165,7 @@ export function neatRow(item: ToolItem, workspace: string): NeatRow {
       };
     }
     default:
-      return { label: item.name, glue: " ", detail: item.summary, facts: outcome(lines ? [plural(lines, "line")] : []) };
+      return { label: toolLabel(item.name), glue: " ", detail: item.summary, facts: outcome(lines ? [plural(lines, "line")] : []) };
   }
 }
 
