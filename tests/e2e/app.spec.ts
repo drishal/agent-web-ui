@@ -1023,3 +1023,19 @@ test("subagents show live, then their answers, and open their own transcripts", 
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
 });
+
+test("a chat's link opens it in its own project, in a browser that never chose one", async ({ page, browser }) => {
+  await signInAndOpen(page, "beta");
+  await newChat(page);
+  await sendAndWait(page, "hello from beta");
+  const hash = await page.evaluate(() => window.location.hash);
+  expect(hash).toMatch(/^#chat=/);
+  // A fresh browser (no remembered project), as when following the link atui or awui tern print on quitting.
+  const context = await browser.newContext();
+  const fresh = await context.newPage();
+  await fresh.goto(`/${hash}`);
+  await expect(fresh.getByTestId("answer").last()).toContainText("Echo: hello from beta");
+  await showSidebar(fresh);
+  await expect(fresh.locator(".workspace-btn")).toContainText("beta");
+  await context.close();
+});

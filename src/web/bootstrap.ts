@@ -6,7 +6,7 @@ import type { Bootstrap, ChatSnapshot, ThemeChoice, ThemeInfo, WorkspaceInfo } f
 import { api, ApiError, errorText, onUnauthorized } from "./api.js";
 import type { ChatState } from "./chat-state.js";
 import { chatIdFromHash, setHash } from "./chat-stream.js";
-import { forgetWorkspace, load } from "./storage.js";
+import { forgetWorkspace, load, rememberWorkspace } from "./storage.js";
 import { fetchTheme } from "./theme.js";
 
 export interface BootstrapTargets {
@@ -52,7 +52,12 @@ export function useBootstrap(targets: BootstrapTargets) {
         const fromHash = chatIdFromHash();
         if (fromHash) {
           try {
-            setChat(await api<ChatSnapshot>(`/api/chats/${fromHash}`));
+            const snapshot = await api<ChatSnapshot>(`/api/chats/${fromHash}`);
+            setChat(snapshot);
+            // A chat opened by its link (atui and awui tern print one) is in its own project: the sidebar shows that
+            // one, not whichever this browser last had (or "Choose a folder…" in a fresh one).
+            setWorkspace(snapshot.workspace);
+            setRecent(rememberWorkspace(snapshot.workspace.path));
           } catch {
             setHash(null);
           }
