@@ -37,6 +37,7 @@ import { ChatSearch } from "./components/ChatSearch.js";
 import { FileViewer } from "./components/FileViewer.js";
 import { SavedPromptsDialog } from "./components/SavedPromptsDialog.js";
 import { UsageDialog } from "./components/UsageDialog.js";
+import { SidePane } from "./components/SidePane.js";
 import { useManagePrompts } from "./saved-prompts.js";
 import { useFileRequests, type FileRequest } from "./file-bus.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
@@ -50,7 +51,7 @@ import { RestoreDialog } from "./components/RestoreDialog.js";
 import { collectChanges } from "./review.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
-import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
+import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar, IconSplit } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
@@ -121,6 +122,19 @@ export function App() {
   /** The saved prompts' manager: open, perhaps starting a new prompt from a draft. */
   const [promptsOpen, setPromptsOpen] = useState<{ draft?: string } | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
+  /** A chat beside the main one (SidePane): what it starts on (null: its picker); `n` remounts it for a new one. */
+  const [side, setSide] = useState<{ initial: ChatSnapshot | null; n: number } | null>(null);
+  // Two chats side by side need the room: below this the pane is not offered (and one open closes).
+  const [wide, setWide] = useState(() => window.matchMedia(SPLIT_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(SPLIT_QUERY);
+    const on = () => setWide(query.matches);
+    query.addEventListener("change", on);
+    return () => query.removeEventListener("change", on);
+  }, []);
+  useEffect(() => {
+    if (!wide) setSide(null);
+  }, [wide]);
   useManagePrompts((draft) => setPromptsOpen(draft ? { draft } : {}));
   /** A chat opened from that search: Find opens in it holding the word, once it is shown. */
   const [findAsk, setFindAsk] = useState<{ query: string; nonce: number; sessionId: string; chatId: string | null } | null>(null);
@@ -557,6 +571,26 @@ export function App() {
     if (tab && !chatIdFromHash()) void loadTab(tab);
   }, [boot]);
 
+  /** Open a chat beside the main one: `s` at once, or the pane's picker. */
+  const openBeside = async (s?: ProjectSession) => {
+    if (!s) return setSide((v) => ({ initial: null, n: (v?.n ?? 0) + 1 }));
+    const target = overview.workspaces.find((w) => w.id === s.workspaceId);
+    if (!target) return;
+    try {
+      const { snapshot } = await fetchSession(s, target);
+      setSide((v) => ({ initial: snapshot, n: (v?.n ?? 0) + 1 }));
+    } catch (e) {
+      fail(e);
+    }
+  };
+  /** Swap the two: the chat beside comes to the main pane, and the main one goes beside. */
+  const makeMain = (beside: ChatState) => {
+    const was = chat;
+    setSide((v) => ({ initial: was && was.status !== "disposed" ? was : null, n: (v?.n ?? 0) + 1 }));
+    setWorkspace(beside.workspace);
+    showChat(beside);
+  };
+
   /** `workspace`: the session's project, when the caller knows it (a search reaches sessions the sidebar's list may not hold). */
   const openSession = async (s: ProjectSession, { newTab = false, workspace: known }: { newTab?: boolean; workspace?: WorkspaceInfo } = {}) => {
     const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
@@ -895,6 +929,15 @@ export function App() {
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
+    items.push({
+      id: "beside",
+      section: "Actions",
+      label: side ? "Close the chat beside" : "Open a chat beside this one",
+      hint: "split",
+      keywords: "split side by side compare two",
+      disabled: wide ? undefined : "Needs a wider window",
+      run: () => (side ? setSide(null) : void openBeside()),
+    });
     items.push({ id: "usage", section: "Actions", label: "Usage across chats", hint: "tokens, cost", keywords: "spend dashboard stats", run: () => setUsageOpen(true) });
     items.push({ id: "prompts", section: "Actions", label: "Saved prompts…", hint: "#", keywords: "templates snippets", run: () => setPromptsOpen({}) });
     items.push({ id: "open-file", section: "Actions", label: "Open a file…", hint: searchWorkspace?.name, keywords: "view read go to", disabled: searchWorkspace ? undefined : "Choose a project first", run: () => setViewer({ request: null }) });
@@ -1104,6 +1147,7 @@ export function App() {
         activeStatus={heading ? null : (chat?.status ?? null)}
         onOpenSession={(s, newTab) => void openSession(s, { newTab })}
         onWarmSession={warmSession}
+        onOpenBeside={wide ? (s) => void openBeside(s) : undefined}
         onMarkSession={(s, change) => void markSessionAs(s, change)}
         onRefresh={() => void refreshSessions()}
         onSettings={() => {
@@ -1193,6 +1237,18 @@ export function App() {
               <IconEdit size={14} /> <span className="review-label">Review</span> <span className="review-count">{changedFiles}</span>
             </button>
           ) : null}
+          {wide && (chat || side) ? (
+            <button
+              type="button"
+              className={`icon-btn split-toggle${side ? " is-on" : ""}`}
+              aria-label={side ? "Close the chat beside" : "Open a chat beside"}
+              aria-pressed={side !== null}
+              title={side ? "Close the chat beside" : "Open a chat beside this one"}
+              onClick={() => (side ? setSide(null) : void openBeside())}
+            >
+              <IconSplit size={16} />
+            </button>
+          ) : null}
           <button type="button" className="icon-btn palette-open" aria-label="Commands" title={`Commands (${shortcutHint("palette")})`} onClick={() => setPaletteOpen(true)}>
             <IconSearch size={16} />
           </button>
@@ -1279,39 +1335,80 @@ export function App() {
           </div>
         ) : null}
 
-        <div className="chat-body">
-          {chat && !hasPrompt ? (
-            <div className="hero">
-              <div className="hero-inner">
-                {chat.items.length > 0 ? (
-                  <div className="hero-notices">
-                    {chat.items.map((item) =>
-                      item.kind === "notice" ? (
-                        <div key={item.id} className={`notice-row notice-${item.level}`}>
-                          <span className="notice-text">{item.text}</span>
-                        </div>
-                      ) : null,
+        <div className={`chat-split${side ? " is-split" : ""}`}>
+          <div className="chat-body" data-pane="main">
+            {chat && !hasPrompt ? (
+              <div className="hero">
+                <div className="hero-inner">
+                  {chat.items.length > 0 ? (
+                    <div className="hero-notices">
+                      {chat.items.map((item) =>
+                        item.kind === "notice" ? (
+                          <div key={item.id} className={`notice-row notice-${item.level}`}>
+                            <span className="notice-text">{item.text}</span>
+                          </div>
+                        ) : null,
+                      )}
+                    </div>
+                  ) : null}
+                  <h2 className="hero-title">
+                    {chat.harnessId === "awui" ? (
+                      <>Ask anything</>
+                    ) : (
+                      <>
+                        What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
+                      </>
                     )}
-                  </div>
-                ) : null}
-                <h2 className="hero-title">
-                  {chat.harnessId === "awui" ? (
-                    <>Ask anything</>
-                  ) : (
-                    <>
-                      What should {chatHarness?.displayName ?? "the agent"} do in <span className="hero-project">{chat.workspace.name}</span>?
-                    </>
-                  )}
-                </h2>
-                <p className="hero-sub muted">{chat.harnessId === "awui" ? "It reads, searches, and computes — it never edits your files." : "It runs with its normal tools, as you, in this folder."}</p>
+                  </h2>
+                  <p className="hero-sub muted">{chat.harnessId === "awui" ? "It reads, searches, and computes — it never edits your files." : "It runs with its normal tools, as you, in this folder."}</p>
+                  {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
+                  <Composer
+                    key={chat.chatId}
+                    hero
+                    chat={chat}
+                    harnesses={boot.harnesses}
+                    maxChars={boot.limits.maxMessageChars}
+                    placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
+                    onSend={send}
+                    onRefreshModels={refreshModels}
+                    onStop={stop}
+                    onAnswer={answer}
+                    onConfig={configure}
+                    onHandoff={(id, draft) => handoffChat(id, draft)}
+                    onNewChat={() => void newChat(chat.workspace, { newTab: true })}
+                    limits={limits}
+                  />
+                </div>
+              </div>
+            ) : chat ? (
+              <>
+                <Conversation
+                  chatId={chat.chatId}
+                  items={chat.items}
+                  status={chat.status}
+                  workspace={chat.workspace.path}
+                  canFork={chat.capabilities.supportsFork}
+                  onFork={forkChat}
+                  models={chat.config.models}
+                  checkpoints={chat.checkpoints ?? []}
+                  onRestore={setRestoreTurn}
+                  onSend={(text) => void send(text, "normal")}
+                  asking={chat.pending.length > 0}
+                  findRequest={
+                    findAsk && (chat.sessionId === findAsk.sessionId || chat.chatId === findAsk.chatId) ? { query: findAsk.query, nonce: findAsk.nonce, chatId: chat.chatId } : null
+                  }
+                  promptActions={{
+                    inPlace: chat.capabilities.supportsRewind,
+                    retry: (through, item) => void rerun(through, item, item.text, false),
+                    edit: (through, item, text, undoFiles) => rerun(through, item, text, undoFiles),
+                  }}
+                />
                 {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
                 <Composer
                   key={chat.chatId}
-                  hero
                   chat={chat}
                   harnesses={boot.harnesses}
                   maxChars={boot.limits.maxMessageChars}
-                  placeholder={`Ask ${chatHarness?.displayName ?? "the agent"} to…`}
                   onSend={send}
                   onRefreshModels={refreshModels}
                   onStop={stop}
@@ -1321,78 +1418,58 @@ export function App() {
                   onNewChat={() => void newChat(chat.workspace, { newTab: true })}
                   limits={limits}
                 />
+              </>
+            ) : (
+              <div className="empty empty-main">
+                {!workspace && harnessId !== "awui" ? (
+                  <>
+                    <h2>Choose a project</h2>
+                    <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
+                    <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+                      Choose folder
+                    </button>
+                  </>
+                ) : available.length === 0 ? (
+                  <>
+                    <h2>No harness installed</h2>
+                    <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
+                  </>
+                ) : (
+                  <>
+                    <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
+                    <p className="muted">Start a new chat or resume one from the list.</p>
+                    <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
+                      New {currentHarness?.displayName ?? ""} chat
+                    </button>
+                    {newChatDisabled && newChatDisabled !== "Opening…" ? <p className="muted">{newChatDisabled}</p> : null}
+                    <button type="button" className="btn btn-ghost drawer-open-inline" onClick={() => setDrawerOpen(true)}>
+                      Show sessions
+                    </button>
+                  </>
+                )}
               </div>
-            </div>
-          ) : chat ? (
-            <>
-              <Conversation
-                chatId={chat.chatId}
-                items={chat.items}
-                status={chat.status}
-                workspace={chat.workspace.path}
-                canFork={chat.capabilities.supportsFork}
-                onFork={forkChat}
-                models={chat.config.models}
-                checkpoints={chat.checkpoints ?? []}
-                onRestore={setRestoreTurn}
-                onSend={(text) => void send(text, "normal")}
-                asking={chat.pending.length > 0}
-                findRequest={
-                  findAsk && (chat.sessionId === findAsk.sessionId || chat.chatId === findAsk.chatId) ? { query: findAsk.query, nonce: findAsk.nonce, chatId: chat.chatId } : null
-                }
-                promptActions={{
-                  inPlace: chat.capabilities.supportsRewind,
-                  retry: (through, item) => void rerun(through, item, item.text, false),
-                  edit: (through, item, text, undoFiles) => rerun(through, item, text, undoFiles),
-                }}
-              />
-              {chat.gone ? <div className="banner banner-info">{chat.gone}</div> : null}
-              <Composer
-                key={chat.chatId}
-                chat={chat}
-                harnesses={boot.harnesses}
-                maxChars={boot.limits.maxMessageChars}
-                onSend={send}
-                onRefreshModels={refreshModels}
-                onStop={stop}
-                onAnswer={answer}
-                onConfig={configure}
-                onHandoff={(id, draft) => handoffChat(id, draft)}
-                onNewChat={() => void newChat(chat.workspace, { newTab: true })}
-                limits={limits}
-              />
-            </>
-          ) : (
-            <div className="empty empty-main">
-              {!workspace && harnessId !== "awui" ? (
-                <>
-                  <h2>Choose a project</h2>
-                  <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
-                  <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-                    Choose folder
-                  </button>
-                </>
-              ) : available.length === 0 ? (
-                <>
-                  <h2>No harness installed</h2>
-                  <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
-                </>
-              ) : (
-                <>
-                  <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
-                  <p className="muted">Start a new chat or resume one from the list.</p>
-                  <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
-                    New {currentHarness?.displayName ?? ""} chat
-                  </button>
-                  {newChatDisabled && newChatDisabled !== "Opening…" ? <p className="muted">{newChatDisabled}</p> : null}
-                  <button type="button" className="btn btn-ghost drawer-open-inline" onClick={() => setDrawerOpen(true)}>
-                    Show sessions
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {splash ? <SwitchSplash target={splash.target} leaving={splash.leaving} /> : null}
+            )}
+            {splash ? <SwitchSplash target={splash.target} leaving={splash.leaving} /> : null}
+          </div>
+          {side ? (
+            <SidePane
+              key={side.n}
+              initial={side.initial}
+              overview={overview}
+              harnesses={boot.harnesses}
+              maxChars={boot.limits.maxMessageChars}
+              limits={limits}
+              main={{ chatId: chat?.chatId ?? null, sessionId: chat?.sessionId ?? null }}
+              openSnapshot={async (s) => {
+                const target = overview.workspaces.find((w) => w.id === s.workspaceId);
+                if (!target) throw new Error("That chat's project is not open on the server");
+                return (await fetchSession(s, target)).snapshot;
+              }}
+              onMakeMain={makeMain}
+              onClose={() => setSide(null)}
+              onSignedOut={() => setSignedOut(true)}
+            />
+          ) : null}
         </div>
       </main>
       {toast ? (
@@ -1471,6 +1548,9 @@ export function App() {
     </div>
   );
 }
+
+/** Wide enough for a chat beside the main one. */
+const SPLIT_QUERY = "(min-width: 1180px)";
 
 /** What a mark change did, for its toast. */
 function markToast(change: MarkChange, title: string): string {

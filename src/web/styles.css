@@ -8742,3 +8742,216 @@ body {
     grid-template-columns: 1fr auto auto;
   }
 }
+
+/* ---- a chat beside the main one ---------------------------------------------------------- */
+
+.chat-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-split > .chat-body {
+  min-width: 0;
+}
+
+.split-toggle.is-on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+/* Beside: half the room, a hairline between, its own header in the pane's colour. */
+.side-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--hairline-strong);
+  background: var(--bg);
+  animation: side-in 0.22s var(--ease-out);
+}
+
+@keyframes side-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 57px;
+  padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.side-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.side-title h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-head .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.side-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.side-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-opening {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.side-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 28px 22px 16px;
+}
+
+.side-picker h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.side-picker > p {
+  margin: 4px 0 14px;
+  font-size: 13px;
+}
+
+.side-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.side-picker-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline-strong));
+}
+
+.side-picker-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.side-picker-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.side-picker-list {
+  flex: 1;
+  min-height: 0;
+  margin: 10px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.side-picker-list button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-picker-list button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.side-picker-list button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.side-pick-dot {
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hairline-strong);
+}
+
+.side-pick-dot.is-live {
+  background: var(--ok);
+}
+
+.side-pick-dot.is-busy {
+  background: var(--harness, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--harness, var(--accent)) 25%, transparent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.side-pick-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-pick-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.side-picker-none {
+  padding: 12px 10px;
+  font-size: 13px;
+}

@@ -266,6 +266,21 @@ export const IconCircle = (p: IconProps) => (
     <circle cx="8" cy="8" r="4.75" strokeDasharray="2 2.2" />
   </Svg>
 );
+/** Two panes side by side: a chat beside the main one. */
+export const IconSplit = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.75" />
+    <path d="M8 2.75v10.5" />
+  </Svg>
+);
+
+/** Two arrows passing: swap the two panes. */
+export const IconSwap = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13" />
+  </Svg>
+);
+
 export const IconDot = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />

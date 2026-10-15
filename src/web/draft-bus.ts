@@ -3,7 +3,8 @@
 // prompt link's text, or a project search's @path:line.
 // The composer appends it and takes the focus. What arrives while no composer
 // is mounted (a share opens the app before its chat exists) waits for the
-// next one.
+// next one. Only the main chat's composer listens (`enabled`): the one beside
+// it would take a second copy.
 import { useEffect, useRef } from "react";
 
 const EVENT = "awui:add-to-draft";
@@ -28,10 +29,11 @@ export function addLinkedPrompt(prompt: LinkedPrompt): void {
   else window.dispatchEvent(new CustomEvent<LinkedPrompt>(LINKED, { detail: prompt }));
 }
 
-export function useLinkedPrompt(handler: (prompt: LinkedPrompt) => void): void {
+export function useLinkedPrompt(handler: (prompt: LinkedPrompt) => void, enabled = true): void {
   const ref = useRef(handler);
   ref.current = handler;
   useEffect(() => {
+    if (!enabled) return;
     const listener = (e: Event) => ref.current((e as CustomEvent<LinkedPrompt>).detail);
     window.addEventListener(LINKED, listener);
     linkedListeners++;
@@ -40,7 +42,7 @@ export function useLinkedPrompt(handler: (prompt: LinkedPrompt) => void): void {
       window.removeEventListener(LINKED, listener);
       linkedListeners--;
     };
-  }, []);
+  }, [enabled]);
 }
 
 export function addToDraft(text: string): void {
@@ -55,10 +57,11 @@ export function addImagesToDraft(files: File[]): void {
   else window.dispatchEvent(new CustomEvent<File[]>(IMAGES, { detail: files }));
 }
 
-export function useAddToDraft(handler: (text: string) => void): void {
+export function useAddToDraft(handler: (text: string) => void, enabled = true): void {
   const ref = useRef(handler);
   ref.current = handler;
   useEffect(() => {
+    if (!enabled) return;
     const listener = (e: Event) => ref.current((e as CustomEvent<string>).detail);
     window.addEventListener(EVENT, listener);
     textListeners++;
@@ -67,13 +70,14 @@ export function useAddToDraft(handler: (text: string) => void): void {
       window.removeEventListener(EVENT, listener);
       textListeners--;
     };
-  }, []);
+  }, [enabled]);
 }
 
-export function useAddImagesToDraft(handler: (files: File[]) => void): void {
+export function useAddImagesToDraft(handler: (files: File[]) => void, enabled = true): void {
   const ref = useRef(handler);
   ref.current = handler;
   useEffect(() => {
+    if (!enabled) return;
     const listener = (e: Event) => ref.current((e as CustomEvent<File[]>).detail);
     window.addEventListener(IMAGES, listener);
     imageListeners++;
@@ -83,7 +87,7 @@ export function useAddImagesToDraft(handler: (files: File[]) => void): void {
       window.removeEventListener(IMAGES, listener);
       imageListeners--;
     };
-  }, []);
+  }, [enabled]);
 }
 
 /** A passage as a Markdown quote, one "> " per line. */

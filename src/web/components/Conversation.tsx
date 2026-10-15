@@ -861,6 +861,7 @@ export function Conversation({
   onSend,
   asking = false,
   findRequest = null,
+  pane = "main",
 }: {
   chatId: string;
   items: ChatItem[];
@@ -880,6 +881,8 @@ export function Conversation({
   asking?: boolean;
   /** Open Find with this word (a chat opened from Search every chat); each new `nonce` asks again. */
   findRequest?: { query: string; nonce: number; chatId: string } | null;
+  /** Which pane it is in, with a chat beside the main one: Ctrl+F finds in the pane that has the focus (the main one otherwise). */
+  pane?: "main" | "side";
 }) {
   const [arrivals] = useState(() => new Arrivals());
   arrivals.update(chatId, items);
@@ -1106,6 +1109,8 @@ export function Conversation({
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.code !== "KeyF") return;
       if (document.activeElement === findInput.current || (e.target as HTMLElement | null)?.closest("dialog")) return;
+      const focused = (document.activeElement as HTMLElement | null)?.closest("[data-pane]")?.getAttribute("data-pane") ?? "main";
+      if (focused !== pane) return;
       e.preventDefault();
       const picked = window.getSelection()?.toString().trim() ?? "";
       setFind((f) => f ?? { query: picked.includes("\n") ? "" : picked.slice(0, 100), current: -1 });
@@ -1116,7 +1121,7 @@ export function Conversation({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [pane]);
   // Asked from outside (Search every chat): the bar opens holding the word, and its first place comes into view.
   useEffect(() => {
     if (findRequest && findRequest.chatId === chatId) setFind({ query: findRequest.query, current: -1 });

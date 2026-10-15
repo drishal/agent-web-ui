@@ -37,7 +37,8 @@ export const CONN_BANNER: Record<ConnectionState, string> = {
  * animation frame. `onSignedOut` fires when the server reports 401 (the flag
  * itself lives in useBootstrap).
  */
-export function useChatStream({ onSignedOut }: { onSignedOut: () => void }) {
+/** `hash`: the chat names the page's URL (the main chat does; the one beside it does not). */
+export function useChatStream({ onSignedOut, hash = true }: { onSignedOut: () => void; hash?: boolean }) {
   const [chat, setChat] = useState<ChatState | null>(null);
   const [conn, setConn] = useState<ConnectionState>("disconnected");
   // The caller's closure may be rebuilt per render; the latest one wins.
@@ -53,7 +54,7 @@ export function useChatStream({ onSignedOut }: { onSignedOut: () => void }) {
       setConn("disconnected");
       return;
     }
-    setHash(chatId);
+    if (hash) setHash(chatId);
     let queue: ChatEvent[] = [];
     let frame: number | null = null;
     const flush = () => {

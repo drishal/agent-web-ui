@@ -101,6 +101,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   limit-stop.ts               A run stopped on a usage limit, and when the limit resets.
   attention.ts                What needs you: the title and favicon count, and the chime.
   saved-prompts.ts, prompt-blanks.ts   The # menu's list (the server's, kept in step) and its {{blanks}} (pure; atui uses them).
+  chat-actions.ts             A pane's chat actions (send, stop, answer, configure, handoff), for the chat beside the main one.
   usage.ts                    Usage across chats, for drawing: short numbers, the cache's share, day labels, bars by harness.
   highlight.ts, file-bus.ts   The file viewer's colours (a small tokenizer, no dependency); opening it from any path on the page.
   shortcuts.ts                Every key the app answers: the shortcut sheet's table, and the palette's hints.

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning, IconSplit } from "../icons.js";
 import { dateBucket, groupByProject, historySections, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
@@ -41,7 +41,8 @@ export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boole
  * chats) or a mouse press, so the click finds it loaded. A context, so the
  * rows in every list get it without threading it through each one.
  */
-const WarmSession = createContext<(s: ProjectSession, why: "hover" | "press") => void>(() => {});
+/** What a row can do besides opening: warm its session, and open it beside the shown chat (where the window has the room). */
+const RowActions = createContext<{ warm: (s: ProjectSession, why: "hover" | "press") => void; beside?: (s: ProjectSession) => void }>({ warm: () => {} });
 const HOVER_WARM_MS = 90;
 /** How long the mouse rests on a row before its hover card shows. */
 const HOVER_CARD_MS = 500;
@@ -74,6 +75,7 @@ function RowMenu({
     ...across,
     ...(below ? { top: anchor.bottom + 4 } : { bottom: window.innerHeight - anchor.top + 4 }),
   };
+  const { beside } = useContext(RowActions);
   const pick = (change: MarkChange) => {
     onClose();
     onMark(change);
@@ -95,6 +97,20 @@ function RowMenu({
             <IconNewTab size={14} /> Open in new tab
           </button>
         </li>
+        {beside ? (
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onClose();
+                beside(s);
+              }}
+            >
+              <IconSplit size={14} /> Open beside
+            </button>
+          </li>
+        ) : null}
         {markable ? (
           <>
             <li role="none">
@@ -157,7 +173,7 @@ function SessionRow({
   const moreRef = useRef<HTMLButtonElement>(null);
   // A session not saved yet has nothing to mark.
   const markable = !s.id.includes(":live-");
-  const warm = useContext(WarmSession);
+  const { warm } = useContext(RowActions);
   const hover = useRef(0);
   const cardTimer = useRef(0);
   const [cardAt, setCardAt] = useState<DOMRect | null>(null);
@@ -418,6 +434,7 @@ export function Sidebar(props: {
   onOpenSession: (s: ProjectSession, newTab: boolean) => void;
   /** Start fetching a session the pointer is on, before its click. */
   onWarmSession: (s: ProjectSession, why: "hover" | "press") => void;
+  onOpenBeside?: (s: ProjectSession) => void;
   /** Pin or archive a session. */
   onMarkSession: (s: ProjectSession, change: MarkChange) => void;
   onRefresh: () => void;
@@ -495,7 +512,7 @@ export function Sidebar(props: {
   );
 
   return (
-    <WarmSession.Provider value={props.onWarmSession}>
+    <RowActions.Provider value={{ warm: props.onWarmSession, ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}) }}>
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">
@@ -662,6 +679,6 @@ export function Sidebar(props: {
         {props.footer}
         {props.resizer}
       </aside>
-    </WarmSession.Provider>
+    </RowActions.Provider>
   );
 }
