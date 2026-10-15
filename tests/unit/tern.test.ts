@@ -201,8 +201,14 @@ describe("awui tern's command line", () => {
     mkdirSync(path.join(state, "atui", "src", "tern"), { recursive: true });
     writeFileSync(path.join(state, "atui", "src", "tern", "main.ts"), "");
     expect(ternEntry(state, true, "/usr/bin/env")).toBe(path.join(state, "atui", "src", "tern", "main.ts"));
-    // A binary built into a checkout's dist/bin (install service --link) runs the checkout's client.
-    const bin = path.join(process.cwd(), "dist", "bin", "linux-x64", "awui");
-    expect(ternEntry(state, true, bin)).toBe(path.join(process.cwd(), "src", "tern", "main.ts"));
+    // A binary built into a checkout's dist/bin (install service --link) runs the checkout's client:
+    // a checkout of its own, since this one has a built binary only after `npm run build:binary`.
+    const repo = mkdtempSync(path.join(tmpdir(), "awui-checkout-"));
+    mkdirSync(path.join(repo, "src", "tern"), { recursive: true });
+    mkdirSync(path.join(repo, "dist", "bin", "linux-x64"), { recursive: true });
+    writeFileSync(path.join(repo, "package.json"), "{}");
+    writeFileSync(path.join(repo, "src", "tern", "main.ts"), "");
+    writeFileSync(path.join(repo, "dist", "bin", "linux-x64", "awui"), "");
+    expect(ternEntry(state, true, path.join(repo, "dist", "bin", "linux-x64", "awui"))).toBe(path.join(repo, "src", "tern", "main.ts"));
   });
 });
