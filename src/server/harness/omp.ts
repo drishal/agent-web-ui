@@ -84,6 +84,31 @@ const LAST_MESSAGE_BYTES = 64 * 1024;
 /** omp's ACP `session/list` page size. */
 const ACP_SESSION_PAGE = 50;
 
+/** The session a session file was copied from (its header's `parentSession`: an id, or a path), or null. */
+async function parentSessionOf(file: string): Promise<string | null> {
+  const head = await fs
+    .open(file, "r")
+    .then(async (h) => {
+      try {
+        const buf = Buffer.alloc(16 * 1024);
+        const { bytesRead } = await h.read(buf, 0, buf.length, 0);
+        return buf.subarray(0, bytesRead).toString("utf8");
+      } finally {
+        await h.close();
+      }
+    })
+    .catch(() => "");
+  for (const line of head.split("\n").slice(0, 8)) {
+    try {
+      const entry = JSON.parse(line) as { type?: unknown; parentSession?: unknown };
+      if (entry.type === "session") return typeof entry.parentSession === "string" && entry.parentSession ? entry.parentSession : null;
+    } catch {
+      // A line cut at the read's end, or not JSON.
+    }
+  }
+  return null;
+}
+
 export interface OmpOptions {
   command?: string;
   /** config.yml's extra arguments for every chat child. */
@@ -648,9 +673,8 @@ export class OmpAdapter implements HarnessAdapter {
   async subagentTranscriptFile(chat: { nativeId: string; cwd: string }, run: SubagentRun): Promise<string | null> {
     const runId = run.id;
     if (!/^[\w.-]{1,128}$/.test(runId)) return null;
-    const file = await this.sessionFile(chat.nativeId);
+    let file = await this.sessionFile(chat.nativeId);
     if (!file) return null;
-    const root = file.slice(0, -".jsonl".length);
     const search = async (dir: string, depth: number): Promise<string | null> => {
       const names = await fs.readdir(dir).catch(() => [] as string[]);
       const hit = names.find((n) => n === `${runId}.jsonl` || n.endsWith(`.${runId}.jsonl`));
@@ -663,7 +687,15 @@ export class OmpAdapter implements HarnessAdapter {
       }
       return null;
     };
-    return search(root, 3);
+    // A session omp copied (its parentSession) keeps the delegation calls but not their
+    // transcripts, which stay in the original's folder: follow the copies back a few steps.
+    for (let hop = 0; file && hop < 4; hop += 1) {
+      const found = await search(file.slice(0, -".jsonl".length), 3);
+      if (found) return found;
+      const parent = await parentSessionOf(file);
+      file = parent ? ((path.isAbsolute(parent) ? parent : await this.sessionFile(parent)) ?? null) : null;
+    }
+    return null;
   }
 
   /** The .jsonl of a session, across the store's per-project buckets. */

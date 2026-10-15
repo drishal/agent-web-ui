@@ -208,6 +208,12 @@ describe("omp adapter (scripted omp)", () => {
     expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("CrookedThrush"))).toBe(path.join(stem, "CrookedThrush.jsonl"));
     expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("GleamingTortoise"))).toBe(path.join(stem, "CrookedThrush", "CrookedThrush.GleamingTortoise.jsonl"));
     expect(await adapter.subagentTranscriptFile({ nativeId: parent, cwd: project }, run("../escape"))).toBeNull();
+    // A copy omp wrote of that session (parentSession) keeps the calls; the transcripts stay with the original.
+    const copy = "01a0eeee-0000-7000-8000-000000000000";
+    writeFileSync(path.join(dir, `2026-10-05T08-00-00-000Z_${copy}.jsonl`), `${JSON.stringify({ type: "session", id: copy, cwd: project, parentSession: parent })}\n`);
+    mkdirSync(path.join(dir, `2026-10-05T08-00-00-000Z_${copy}`));
+    expect(await adapter.subagentTranscriptFile({ nativeId: copy, cwd: project }, run("CrookedThrush"))).toBe(path.join(stem, "CrookedThrush.jsonl"));
+    expect(await adapter.subagentTranscriptFile({ nativeId: copy, cwd: project }, run("NobodyAtAll"))).toBeNull();
   });
 
   it("orders sessions by their last message, not omp's exit records", async () => {
