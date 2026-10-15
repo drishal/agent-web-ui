@@ -66,6 +66,17 @@ describe("claude session files", () => {
     ]);
   });
 
+  it("shows a background task's notification as a notice, not a prompt or a turn", () => {
+    const notification = "<task-notification>\n<task-id>b8</task-id>\n<status>completed</status>\n<summary>Background command \"Build\" completed (exit code 0)</summary>\n</task-notification>";
+    const entries = [...session(), entry({ type: "attachment", attachment: { type: "queued_command", prompt: notification } })];
+    const items = historyToItems(transcriptMessages(entries));
+    expect(items.at(-1)).toMatchObject({ kind: "notice", level: "info", title: "Background task", text: 'Background command "Build" completed (exit code 0)' });
+    expect(items.some((i) => i.kind === "user" && i.text.includes("task-notification"))).toBe(false);
+    // The same prompts and turns as without it: titles, forks, and usage count only what was sent.
+    expect(sessionMeta(entries, "x")?.prompts).toBe(3);
+    expect(usageBaseline(entries).turns).toBe(3);
+  });
+
   it("titles a session by its custom title, then Claude's, then the first prompt", () => {
     const meta = sessionMeta(session(), "fallback");
     expect(meta).toMatchObject({ sessionId: "s1", cwd: "/work/proj", title: "My title", firstPrompt: "hello", prompts: 3 });

@@ -118,11 +118,31 @@ export function classifyUser(entry: Obj): UserEntryKind {
   return { kind: "prompt", text, content };
 }
 
-/** A message the user sent mid-turn (steer or follow-up) is stored as a queued_command attachment. */
-function queuedPrompt(entry: Obj): string | null {
+/** A queued_command attachment's text: what was put in the turn while it ran. */
+function queuedText(entry: Obj): string | null {
   if (entry.type !== "attachment" || !isObj(entry.attachment) || entry.attachment.type !== "queued_command") return null;
   const prompt = entry.attachment.prompt;
   return typeof prompt === "string" && prompt.trim() ? prompt : null;
+}
+
+const TASK_NOTIFICATION = /^\s*<task-notification>/;
+
+/**
+ * A message the user sent mid-turn (steer or follow-up) is stored as a
+ * queued_command attachment. So is Claude Code telling the model that a
+ * background task finished (`<task-notification>`), which is no prompt: it
+ * neither shows as one nor counts as a turn (see taskNotice).
+ */
+function queuedPrompt(entry: Obj): string | null {
+  const text = queuedText(entry);
+  return text === null || TASK_NOTIFICATION.test(text) ? null : text;
+}
+
+/** A background task's notification, as the line Claude Code shows for it: its summary. */
+function taskNotice(entry: Obj): string | null {
+  const text = queuedText(entry);
+  if (text === null || !TASK_NOTIFICATION.test(text)) return null;
+  return tag(text, "summary") || "A background task finished";
 }
 
 /** The text of a prompt the user sent (typed, a command, or injected mid-turn), or null. */
@@ -201,6 +221,12 @@ export function transcriptMessages(entries: Obj[]): Obj[] {
     if (queued !== null) {
       assistant = null;
       out.push({ role: "user", content: queued, ...stamp });
+      continue;
+    }
+    const notice = taskNotice(entry);
+    if (notice !== null) {
+      // A displayed custom message is a notice row in historyToItems, inside the turn it arrived in.
+      out.push({ role: "custom", customType: "background-task", display: true, content: notice, ...stamp });
       continue;
     }
     if (entry.type !== "user") continue;
