@@ -33,6 +33,8 @@ import { Sidebar, SidebarRail, type SidebarTab } from "./sidebar.js";
 import { Splash } from "./splash.js";
 import { TabBar } from "./tabbar.js";
 import { UndoDialog } from "./undo.js";
+import { ReviewView } from "./review.js";
+import { collectChanges } from "../../web/review.js";
 import { Toasts } from "./toasts.js";
 import { Transcript } from "./transcript.js";
 import { WhichKey } from "./whichkey.js";
@@ -62,6 +64,7 @@ export function App(p: {
   const [dialog, setDialog] = createSignal<Dialog>(null);
   const [showWork, setShowWork] = createSignal(false);
   const [compactChoice, setCompactChoice] = createSignal<boolean | null>(null);
+  const [reviewing, setReviewing] = createSignal(false);
   const [hint, setHint] = createSignal<string | null>(null);
   /** C-x was pressed: the which-key panel is open and the next key is a command. */
   const [leaderOn, setLeaderOn] = createSignal(false);
@@ -212,6 +215,9 @@ export function App(p: {
         return setDialog("thinking");
       case "c":
         return void app.compact();
+      case "d":
+        if (!app.chat()) return flash("No chat to review");
+        return setReviewing(true);
       case "z":
         if (!app.putBackable()) return flash("Nothing to put back: no files were undone here");
         return void app.putBack();
@@ -241,7 +247,7 @@ export function App(p: {
   };
 
   useKeyboard((key) => {
-    if (dialog() || app.undoTurn() !== null) return;
+    if (dialog() || app.undoTurn() !== null || reviewing()) return;
     // After C-x: the next key is a command; Esc or C-g (or C-x again) cancels, as in Emacs.
     if (leaderOn()) {
       key.preventDefault();
@@ -371,6 +377,17 @@ export function App(p: {
       add({ id: "edit", label: "Edit the last message", disabled: branch ? undefined : why, run: () => app.setEditing({ through, item: last }) });
       if (c.checkpoints.includes(through)) add({ id: "undo", label: "Undo file changes from the last message…", disabled: idle ? undefined : "Wait until the agent is idle", run: () => app.setUndoTurn(through) });
       if (c.capabilities.supportsFork) add({ id: "fork", label: "Fork this chat into a new tab", searchOnly: true, disabled: idle ? undefined : "Wait until the agent is idle", run: () => void app.fork(through) });
+    }
+    if (c) {
+      const changed = collectChanges(c.items, c.workspace.path).length;
+      const noted = app.reviewComments(c.chatId).length;
+      add({
+        id: "review",
+        label: "Review changes",
+        hint: noted > 0 ? `${noted} ${noted === 1 ? "comment" : "comments"}` : leader("d"),
+        disabled: changed > 0 ? undefined : "No files changed yet",
+        run: () => setReviewing(true),
+      });
     }
     if (app.putBackable()) add({ id: "put-back", label: "Put the undone files back", hint: leader("z"), run: () => void app.putBack() });
     add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
@@ -588,7 +605,7 @@ export function App(p: {
               fallback={
                 <Composer
                   status={{ mode: vim() ? (normal() ? "normal" : "insert") : null, leader: leaderOn(), note: hint() }}
-                  focused={focus() === "composer" && !dialog() && !normal() && app.undoTurn() === null}
+                  focused={focus() === "composer" && !dialog() && !normal() && app.undoTurn() === null && !reviewing()}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
                   onPick={setDialog}
@@ -623,6 +640,9 @@ export function App(p: {
         </Show>
         <Show when={dialog() === "history"}>
           <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading preview={historyPreview} />
+        </Show>
+        <Show when={reviewing()}>
+          <ReviewView onClose={() => setReviewing(false)} />
         </Show>
         <Show when={app.undoTurn()}>{(turn) => <UndoDialog turn={turn()} onClose={() => app.setUndoTurn(null)} />}</Show>
         <Toasts />

@@ -479,6 +479,29 @@ describe("atui", () => {
     expect(readFileSync(path.join(repo, "app.ts"), "utf8")).toBe("const a = 2;\n");
   }, 40_000);
 
+  it("reviews the chat's changes: a comment on a line, and all of them sent as one prompt", async () => {
+    ui = await mount(path.join(server.root, "beta"), { height: 40 });
+    await ui.type("edit please");
+    ui.keys.pressEnter();
+    await idle(ui);
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("d");
+    const view = await ui.until("Review changes  1 file · 0 comments");
+    expect(view).toContain("src/app.ts");
+    expect(view).toMatch(/▌\s+\d*\s*- a/);
+    ui.keys.pressEnter();
+    await ui.until("What should change here?");
+    await ui.type("keep a");
+    ui.keys.pressEnter();
+    await ui.until("✎ keep a");
+    expect(await ui.frame()).toContain("1 comment");
+    ui.keys.pressKey("s", { shift: true });
+    await ui.until(() => ui?.app.chat()?.items.some((i) => i.kind === "user" && i.text.startsWith("Review comments on your changes")) ?? false, 15_000);
+    const sent = ui.app.chat()?.items.filter((i) => i.kind === "user").pop() as { text: string };
+    expect(sent.text).toContain("keep a");
+    expect(await ui.frame()).not.toContain("Esc close");
+  }, 40_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");

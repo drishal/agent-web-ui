@@ -27,6 +27,7 @@ export const LEADER_KEYS: PrefixKey[] = [
   { key: "h", label: "+harness", menu: true },
   { key: "c", label: "compact context" },
   { key: "z", label: "put undone files back" },
+  { key: "d", label: "review changes" },
   { key: "f", label: "compact first / full history" },
   { key: "e", label: "show all work" },
   { key: "v", label: "vim navigation" },
