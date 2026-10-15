@@ -81,6 +81,7 @@ src/server/
   image-store.ts, notify.ts, limits.ts, session-marks.ts, run-command.ts, state-file.ts   Side features (see their header comments).
   project-files.ts            A project's files for @mention pickers (git ls-files, else a bounded walk).
   project-search.ts           Search in project: bounded `git grep -F` (else a scan of project-files' walk).
+  file-view.ts                The file viewer: one of the project's own files (project-files' list), realpath-confined, bounded.
   chat-search.ts              Search every chat: the sidebar's sessions read (never started), matched, bounded, cached per version.
   harness/plans.ts            A plan call's plan (ExitPlanMode, plan_mode_complete) onto its tool item, bounded.
 src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css one stylesheet.
@@ -97,6 +98,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   stash.ts                    The prompt stash: drafts parked in browser storage, images within a budget.
   limit-stop.ts               A run stopped on a usage limit, and when the limit resets.
   attention.ts                What needs you: the title and favicon count, and the chime.
+  highlight.ts, file-bus.ts   The file viewer's colours (a small tokenizer, no dependency); opening it from any path on the page.
   shortcuts.ts                Every key the app answers: the shortcut sheet's table, and the palette's hints.
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.

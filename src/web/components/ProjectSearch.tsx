@@ -1,12 +1,14 @@
 // Search in project (T3 Code's content search): the project's lines holding a
 // text, grouped by file, from the server's bounded `git grep` (fixed strings,
 // never a pattern). A result goes into the message as `@path:line`, so the
-// agent can be pointed at it. Ctrl+Shift+F or the palette opens it. Results
+// agent can be pointed at it; Alt+Enter (or a file's name) opens it in the
+// file viewer instead. Ctrl+Shift+F or the palette opens it. Results
 // render a window at a time: a long list of matches would stall the page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSearch as SearchResult, SearchMatch, WorkspaceInfo } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { addToDraft } from "../draft-bus.js";
+import { openFile } from "../file-bus.js";
 import { findOffsets } from "../find.js";
 import { Dialog } from "./Dialog.js";
 
@@ -116,7 +118,10 @@ export function ProjectSearch({ workspace, onClose }: { workspace: WorkspaceInfo
               const m = visible[active];
               if (m) {
                 e.preventDefault();
-                pick(m);
+                if (e.altKey) {
+                  openFile({ path: m.path, line: m.line });
+                  onClose();
+                } else pick(m);
               }
             }
           }}
@@ -129,7 +134,7 @@ export function ProjectSearch({ workspace, onClose }: { workspace: WorkspaceInfo
         {error
           ? error
           : query.trim().length < 2
-            ? "Type two characters or more. Enter puts the line into your message as @path:line."
+            ? "Type two characters or more. Enter puts the line into your message as @path:line; Alt+Enter opens it."
             : busy || stale
               ? "Searching…"
               : matches.length === 0
@@ -139,7 +144,19 @@ export function ProjectSearch({ workspace, onClose }: { workspace: WorkspaceInfo
       <div className={`search-results${stale ? " is-stale" : ""}`} ref={list} role="listbox" aria-label="Matches">
         {groups.map((g) => (
           <div key={g.path} className="search-file" role="group" aria-label={g.path}>
-            <div className="search-path">{g.path}</div>
+            <div className="search-path">
+              <button
+                type="button"
+                className="file-link"
+                title={`Open ${g.path}`}
+                onClick={() => {
+                  openFile({ path: g.path, line: g.rows[0]?.m.line ?? 1 });
+                  onClose();
+                }}
+              >
+                {g.path}
+              </button>
+            </div>
             {g.rows.map(({ m, i }) => (
               <div
                 key={`${m.path}:${m.line}`}

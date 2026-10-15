@@ -7,6 +7,7 @@ import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { DiffLine, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { IconCheck, IconCircle, IconDot, IconFile, IconGlobe, IconSearch, IconTerminal, IconX } from "../icons.js";
 import { relativePath } from "../turns.js";
+import { FileLink } from "./FileLink.js";
 
 type Args = Record<string, unknown>;
 
@@ -311,7 +312,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
     const settledNote = item.output && item.status !== "running" && (failed || item.output.length < 400);
     return card(
       <CardHead icon={<IconFile size={13} />} meta={<DiffBadge added={item.diff.added} removed={item.diff.removed} />}>
-        {path ?? item.name}
+        {path ? <FileLink path={path} /> : item.name}
       </CardHead>,
       <>
         <DiffView diff={item.diff} />
@@ -353,7 +354,12 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
   }
 
   if (item.category === "read" && path) {
-    return card(<CardHead icon={<IconFile size={13} />} meta={lineRange(args)}>{path}</CardHead>, <Output item={item} label={null} />);
+    return card(
+      <CardHead icon={<IconFile size={13} />} meta={lineRange(args)}>
+        <FileLink path={path} />
+      </CardHead>,
+      <Output item={item} label={null} />,
+    );
   }
 
   const pattern = item.category === "search" ? str(args, ["pattern", "query", "glob", "regex", "q"]) : null;

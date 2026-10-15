@@ -17,6 +17,7 @@ import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
 import { useLongPress } from "../gestures.js";
 import { ActionSheet, type SheetAction } from "./ActionSheet.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
+import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
@@ -594,7 +595,9 @@ function ChangedFiles({ files, workspace }: { files: string[]; workspace: string
         <ul className="changed-list">
           {rel.map((f) => (
             <li key={f}>
-              <code>{f}</code>
+              <FileLink path={f}>
+                <code>{f}</code>
+              </FileLink>
             </li>
           ))}
         </ul>
