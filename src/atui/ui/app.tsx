@@ -30,6 +30,7 @@ import { Picker, type PreviewText } from "./picker.js";
 import { RequestCard } from "./request.js";
 import { Sidebar, SidebarRail, type SidebarTab } from "./sidebar.js";
 import { Splash } from "./splash.js";
+import { TabBar } from "./tabbar.js";
 import { Toasts } from "./toasts.js";
 import { Transcript } from "./transcript.js";
 import { WhichKey } from "./whichkey.js";
@@ -186,6 +187,19 @@ export function App(p: {
       case "n":
         app.newChat();
         return leave();
+      case "a":
+        app.newChat({ newTab: true });
+        return leave();
+      case "]":
+        return app.stepTab(1);
+      case "[":
+        return app.stepTab(-1);
+      case "w": {
+        const { tabs, active } = app.tabs();
+        if (active < 0 || tabs.length === 0) return flash("No tab to close");
+        app.closeTab(active);
+        return leave();
+      }
       case "r":
         return setDialog("history");
       case "m":
@@ -244,6 +258,15 @@ export function App(p: {
     if (key.ctrl && key.name === "r") {
       key.preventDefault();
       return setDialog("history");
+    }
+    // M-1 to M-9: that tab.
+    if (key.meta && !key.ctrl && /^[1-9]$/.test(key.name)) {
+      const index = Number(key.name) - 1;
+      if (index < app.tabs().tabs.length) {
+        key.preventDefault();
+        void app.switchTab(index);
+        return;
+      }
     }
     if (key.meta && !key.ctrl) {
       const direct: Record<string, Dialog> = { h: "harness", m: "models", t: "thinking", r: "history" };
@@ -314,6 +337,16 @@ export function App(p: {
     const idle = c ? c.status === "idle" || c.status === "error" : true;
     const add = (item: Omit<PaletteItem, "section"> & { section?: string }) => items.push({ section: "Actions", ...item });
     add({ id: "new", label: "New chat", hint: leader("n"), run: () => runLeader("n") });
+    add({ id: "new-tab", label: "New chat in a new tab", hint: leader("a"), run: () => runLeader("a") });
+    const open = app.tabs();
+    if (open.tabs.length >= 2) {
+      add({ id: "next-tab", label: "Next tab", hint: leader("]"), run: () => runLeader("]") });
+      add({ id: "prev-tab", label: "Previous tab", hint: leader("["), searchOnly: true, run: () => runLeader("[") });
+    }
+    if (open.tabs.length > 0) add({ id: "close-tab", label: "Close this tab", hint: leader("w"), searchOnly: open.tabs.length < 2, run: () => runLeader("w") });
+    open.tabs.forEach((tab, i) => {
+      items.push({ id: `tab:${tab.key}`, section: "Tabs", label: tab.title || "New chat", hint: i < 9 ? `M-${i + 1}` : "", current: i === open.active, searchOnly: open.tabs.length < 2, run: () => void app.switchTab(i) });
+    });
     if (c && app.busy()) add({ id: "stop", label: "Stop the agent", hint: "Esc Esc", run: app.stop });
     add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
     add({ id: "sessions", label: "Browse sessions", hint: leader("s"), run: () => runLeader("s") });
@@ -477,6 +510,7 @@ export function App(p: {
             />
           </Show>
           <box flexDirection="column" flexGrow={1}>
+            <TabBar />
             <box flexDirection="row" flexShrink={0} paddingLeft={2} paddingRight={2}>
               <text flexGrow={1} fg={t().text} wrapMode="none" truncate>
                 <b>{title()}</b>

@@ -105,10 +105,11 @@ export function Sidebar(p: {
     } else if ((key.name === "up" || key.name === "k") && n > 0) {
       key.preventDefault();
       setSel((i) => Math.max(0, i - 1));
-    } else if (key.name === "return" && p.tab === "sessions") {
+    } else if ((key.name === "return" || key.name === "t") && p.tab === "sessions") {
+      // Enter opens it in the shown tab; t, in a tab of its own.
       key.preventDefault();
       const row = rows()[sessionRows()[sel()] ?? -1];
-      if (row?.kind === "session") void app.openSession(row.s).then(p.onOpened);
+      if (row?.kind === "session") void app.openSession(row.s, { newTab: key.name === "t" }).then(p.onOpened);
     }
   });
 
@@ -194,7 +195,7 @@ export function Sidebar(p: {
           </Show>
         </scrollbox>
         <text fg={t().muted} flexShrink={0}>
-          {p.active ? "↑↓ Enter · Tab · Esc back" : "C-x s to browse"}
+          {p.active ? "↑↓ Enter · t tab · Esc back" : "C-x s to browse"}
         </text>
       </Show>
     </box>
