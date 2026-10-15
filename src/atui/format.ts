@@ -1,6 +1,6 @@
 // What atui prints, worked out apart from the drawing so it can be tested:
-// tool lines, the fold line, diffs in unified form for OpenTUI's <diff>,
-// token counts, limit labels, and the status words.
+// tool lines, the fold line, a running command's last lines, diffs in unified
+// form for OpenTUI's <diff>, token counts, limit labels, and the status words.
 import type { ChatStatus, LimitAccount, ToolDiff, ToolItem } from "../shared/protocol.js";
 import { countSummary, formatDuration, relativePath, type Turn } from "../web/turns.js";
 
@@ -36,6 +36,23 @@ export function foldLabel(turn: Turn, now = Date.now(), part?: { counts: Turn["c
   const duration = turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
   const head = live ? (duration ? `Working · ${duration}` : "Working") : duration ? `Worked for ${duration}` : "Worked";
   return counts ? `${head} · ${counts}` : head;
+}
+
+/**
+ * The last `n` lines a running command printed, for watching it live: colour
+ * and cursor codes taken out, blank lines skipped, and a line redrawn in place
+ * (a progress bar's `\r`) shown as it reads now.
+ */
+export function outputTail(output: string, n: number): string[] {
+  const plain = output
+    .replace(/\r\n/g, "\n")
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+  const lines = plain
+    .split("\n")
+    .map((line) => line.slice(line.lastIndexOf("\r") + 1).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ""))
+    .filter((line) => line.trim() !== "");
+  return lines.slice(-n);
 }
 
 /**

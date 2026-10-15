@@ -198,7 +198,8 @@ if every test passes.
   transcripts), `recall`, `todo`, `bloat`, `slow` (many small chunks, to act
   mid-run), `fail`, `planned` (an ExitPlanMode plan), `ratelimit` (a stop on a
   usage limit), `wait` (a provider wait on the harness's status line),
-  `interleaved` (a reply, a command, then the answer). Add a word there when a
+  `interleaved` (a reply, a command, then the answer), `ticking` (a command
+  whose output arrives a line at a time). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
