@@ -12,8 +12,9 @@
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show } from "solid-js";
 import { createHostClipboard, decodePasteBytes, type HostClipboardService, type TextareaRenderable } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/solid";
-import { IMAGE_MIME_TYPES, MAX_IMAGES, type SlashCommand } from "../../shared/protocol.js";
-import { APP_COMMANDS, matchCommands, mergeCommands } from "../../web/commands.js";
+import { IMAGE_MIME_TYPES, MAX_IMAGES, type SavedPrompt, type SlashCommand } from "../../shared/protocol.js";
+import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../../web/commands.js";
+import { blanks, matchPrompts, nextBlank, promptGist } from "../../web/prompt-blanks.js";
 import { modelName } from "../../web/turns.js";
 import { applyMention, ghostCompletion, mentionAt } from "../assist.js";
 import { streamedChars, tokens } from "../format.js";
@@ -97,16 +98,48 @@ export function Composer(p: {
   };
 
   // The "/" menu: open while the first word is typed; ↑/↓ move, Tab completes, Esc closes.
+  // "$" is the skills' own (where the harness has any), "#" the saved prompts (the server's, shared with the browser).
   const [text, setText] = createSignal("");
   const [commands, setCommands] = createSignal<SlashCommand[] | null>(null);
+  const [saved, setSaved] = createSignal<SavedPrompt[] | null>(null);
   const [menuIndex, setMenuIndex] = createSignal(0);
   const [dismissed, setDismissed] = createSignal(false);
   const slash = () => /^\/(\S*)$/.exec(text())?.[1];
-  const menuOpen = () => p.focused && slash() !== undefined && !dismissed();
-  const menu = createMemo(() => (menuOpen() ? matchCommands(commands() ?? APP_COMMANDS, slash() ?? "").slice(0, 8) : []));
+  const skillQuery = () => /^\$(\S*)$/.exec(text())?.[1];
+  const promptQuery = () => /^#(\S*)$/.exec(text())?.[1];
+  const kind = (): "slash" | "skill" | "prompt" | null => {
+    if (!p.focused || dismissed()) return null;
+    if (slash() !== undefined) return "slash";
+    if (skillQuery() !== undefined && (commands() ?? []).some(isSkill)) return "skill";
+    if (promptQuery() !== undefined && (saved()?.length ?? 0) > 0) return "prompt";
+    return null;
+  };
+  const menuOpen = () => kind() !== null;
+  const promptMatches = createMemo(() => (kind() === "prompt" ? matchPrompts(saved() ?? [], promptQuery() ?? "").slice(0, 8) : []));
+  const menu = createMemo(() => {
+    const k = kind();
+    if (k === "slash") return slashMenu(commands() ?? APP_COMMANDS, slash() ?? "").slice(0, 8);
+    if (k === "skill") return skillMenu(commands() ?? [], skillQuery() ?? "").slice(0, 8);
+    if (k === "prompt") return promptMatches().map((sp): SlashCommand => ({ name: sp.name, description: promptGist(sp), source: "saved" }));
+    return [];
+  });
   createEffect(on(() => app.chat()?.chatId, () => setCommands(null)));
+  // Asked for once each is first wanted: the commands (and skills), and the saved prompts.
+  const wantsCommands = () => p.focused && (slash() !== undefined || skillQuery() !== undefined);
   createEffect(
-    on(menuOpen, (open) => {
+    on(
+      () => p.focused && promptQuery() !== undefined,
+      (want) => {
+        if (!want || saved() !== null) return;
+        app.server
+          .call<{ prompts: SavedPrompt[] }>("/api/prompts")
+          .then((r) => setSaved(r.prompts))
+          .catch(() => setSaved([]));
+      },
+    ),
+  );
+  createEffect(
+    on(wantsCommands, (open) => {
       const c = app.chat();
       if (!open || commands() !== null) return;
       if (!c) return setCommands(mergeCommands([]));
@@ -117,16 +150,29 @@ export function Composer(p: {
     }),
   );
   createEffect(
-    on(slash, (q) => {
+    on([slash, skillQuery, promptQuery], ([a, b, c]) => {
       setMenuIndex(0);
-      if (q === undefined) setDismissed(false);
+      if (a === undefined && b === undefined && c === undefined) setDismissed(false);
     }),
   );
+  /** A saved prompt in place of the draft, its first blank selected to type over. */
+  const insertPrompt = (value: string) => {
+    area?.setText(value);
+    const first = blanks(value)[0];
+    if (first) area?.setSelection(first.start, first.end);
+    else area?.gotoBufferEnd();
+  };
   const complete = (c: SlashCommand) => {
+    if (kind() === "prompt") {
+      const sp = promptMatches().find((x) => x.name === c.name);
+      if (sp) insertPrompt(sp.text);
+      return;
+    }
     area?.setText(`/${c.name} `);
     area?.gotoLineTextEnd();
   };
-  const ghost = () => (menu().length > 0 && !text().includes("\n") ? ghostCompletion(text(), menu()[menuIndex()]) : "");
+  const menuName = (c: SlashCommand) => (kind() === "skill" ? `$${skillName(c)}` : kind() === "prompt" ? `#${c.name}` : `/${c.name}`);
+  const ghost = () => (kind() === "slash" && menu().length > 0 && !text().includes("\n") ? ghostCompletion(text(), menu()[menuIndex()]) : "");
 
   // The "@" menu: the project's files matching what follows the @, asked for as you type.
   const mention = () => (p.focused ? mentionAt(text()) : null);
@@ -200,11 +246,22 @@ export function Composer(p: {
     } else if (key.name === "return" && !key.shift) {
       const c = menu()[menuIndex()];
       // A command typed in full that takes nothing runs on Enter; otherwise Enter completes it.
-      if (c && !(c.name === slash() && !c.hint)) {
+      if (c && !(kind() === "slash" && c.name === slash() && !c.hint)) {
         key.preventDefault();
         complete(c);
       }
     }
+  });
+
+  // A saved prompt's blanks: Tab to the next, Shift+Tab back (unless the only one is already selected).
+  useKeyboard((key) => {
+    if (!p.focused || key.defaultPrevented || menuOpen() || key.name !== "tab" || !area) return;
+    const value = area.plainText;
+    const at = area.cursorOffset;
+    const blank = nextBlank(value, key.shift ? Math.max(0, at - 1) : at, key.shift);
+    if (!blank || (blank.end === at && blanks(value).length === 1)) return;
+    key.preventDefault();
+    area.setSelection(blank.start, blank.end);
   });
 
   const percent = () => app.chat()?.context?.percent ?? null;
@@ -294,11 +351,16 @@ export function Composer(p: {
     <box flexDirection="column" flexShrink={0} marginLeft={2} marginRight={2}>
       <Show when={menu().length > 0}>
         <box flexDirection="column" border borderStyle="rounded" borderColor={t().border} backgroundColor={t().surface} paddingLeft={1} paddingRight={1}>
+          <Show when={kind() !== "slash"}>
+            <text fg={kind() === "skill" ? t().thinking : t().accent}>
+              <b>{kind() === "skill" ? "Skills" : "Saved prompts"}</b>
+            </text>
+          </Show>
           <For each={menu()}>
             {(c, i) => (
               <box flexDirection="row" backgroundColor={i() === menuIndex() ? t().selection : undefined} onMouseDown={() => complete(c)}>
-                <text flexShrink={0} fg={i() === menuIndex() ? t().text : t().text2}>
-                  {`/${c.name}`}
+                <text flexShrink={0} fg={i() === menuIndex() ? t().text : kind() === "skill" ? t().thinking : kind() === "prompt" ? t().accent : t().text2}>
+                  {menuName(c)}
                   <span style={{ fg: t().muted }}>{c.hint ? ` ${c.hint}` : ""}</span>
                 </text>
                 <text flexGrow={1} fg={t().muted} wrapMode="none" truncate>
@@ -308,7 +370,12 @@ export function Composer(p: {
               </box>
             )}
           </For>
-          <text fg={t().muted}>↑↓ move · Tab completes · Esc closes</text>
+          <text fg={t().muted}>
+            {kind() === "prompt" ? "↑↓ move · Tab or Enter puts it in · Esc closes" : "↑↓ move · Tab completes · Esc closes"}
+            <Show when={kind() === "slash" && (commands() ?? []).some(isSkill) && !(slash() ?? "").startsWith("skill")}>
+              <span style={{ fg: t().thinking }}>{`  · ${(commands() ?? []).filter(isSkill).length} skills under $`}</span>
+            </Show>
+          </text>
         </box>
       </Show>
       <Show when={images().length > 0}>

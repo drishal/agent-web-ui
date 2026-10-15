@@ -527,6 +527,30 @@ describe("atui", () => {
     expect(await ui.frame()).toContain("> Echo: please run this");
   }, 40_000);
 
+  it("lists skills under $ and saved prompts under #, and fills a prompt's blanks with Tab", async () => {
+    ui = await mount(path.join(server.root, "beta"), { width: 150, height: 40 });
+    await ui.app.server.call("/api/prompts", { body: { name: "risky", text: "Review {{file}} for {{risk}}" } });
+    await ui.type("hello there");
+    ui.keys.pressEnter();
+    await idle(ui);
+    await ui.type("/");
+    await ui.until("1 skills under $");
+    ui.keys.pressBackspace();
+    await ui.type("$rev");
+    await ui.until("$review");
+    ui.keys.pressTab();
+    expect(await ui.until("/skill:review")).toContain("/skill:review");
+    for (const _ of "/skill:review ") ui.keys.pressBackspace();
+    await ui.type("#ris");
+    await ui.until("Saved prompts");
+    ui.keys.pressEnter();
+    await ui.until("Review {{file}} for {{risk}}");
+    await ui.type("app.ts");
+    ui.keys.pressTab();
+    await ui.type("races");
+    await ui.until("Review app.ts for races");
+  }, 40_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");
