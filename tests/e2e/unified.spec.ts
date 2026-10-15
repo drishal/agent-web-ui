@@ -28,3 +28,21 @@ test("? opens the keyboard shortcuts, which a word narrows, and Escape closes th
   await page.keyboard.press("Control+/");
   await expect(sheet).toBeVisible();
 });
+
+test("$ lists the harness's skills, which leave the / menu, and Tab puts one in", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await box(page).fill("/");
+  const commands = page.getByRole("listbox", { name: "Commands" });
+  await expect(commands.getByRole("option", { name: /fake-status/ })).toBeVisible();
+  await expect(commands.getByRole("option", { name: /skill:review/ })).toHaveCount(0);
+  await expect(commands).toContainText("1 skill under $");
+  await box(page).fill("$rev");
+  const skills = page.getByRole("listbox", { name: "Skills" });
+  await expect(skills.getByRole("option")).toHaveText([/\$review\s*Review the work so far/]);
+  await page.keyboard.press("Tab");
+  await expect(box(page)).toHaveValue("/skill:review ");
+  // A $ further in is only a character.
+  await box(page).fill("costs $5");
+  await expect(page.getByRole("listbox", { name: "Skills" })).toHaveCount(0);
+});

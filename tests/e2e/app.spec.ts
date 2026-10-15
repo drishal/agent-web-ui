@@ -722,7 +722,8 @@ test("/ opens the command menu: it filters, completes, runs, and closes", async 
   const box = page.getByRole("textbox", { name: "Message" });
   const menu = page.getByRole("listbox", { name: "Commands" });
   await box.fill("/");
-  await expect(menu.getByRole("option")).toHaveText([/^\/new/, /^\/compact/, /^\/rename/, /^\/fake-status/, /^\/skill:review/]);
+  // Skills wait under "$", not here.
+  await expect(menu.getByRole("option")).toHaveText([/^\/new/, /^\/compact/, /^\/rename/, /^\/fake-status/]);
   // Typing filters; Enter completes the highlighted command, a second Enter runs it.
   await box.pressSequentially("fake");
   await expect(menu.getByRole("option")).toHaveCount(1);

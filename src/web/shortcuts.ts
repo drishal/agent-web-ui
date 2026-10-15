@@ -40,6 +40,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { id: "recall", keys: ["↑", "↓"], label: "Recall the prompts sent in this chat" },
       { id: "stash", keys: ["Alt+S"], label: "Stash the draft for later" },
       { id: "commands", keys: ["/"], label: "The harness's commands (at the start)" },
+      { id: "skills", keys: ["$"], label: "The harness's skills (at the start)" },
       { id: "mention", keys: ["@"], label: "Mention a project file" },
     ],
   },

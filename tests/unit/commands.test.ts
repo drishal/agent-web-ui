@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SlashCommand } from "../../src/shared/protocol.js";
-import { appCommand, matchCommands, mergeCommands } from "../../src/web/commands.js";
+import { appCommand, isSkill, matchCommands, mergeCommands, skillMenu, skillName, slashMenu } from "../../src/web/commands.js";
 
 const harness: SlashCommand[] = [
   { name: "review", description: "Review the work so far", source: "skill" },
@@ -24,6 +24,22 @@ describe("the / menu", () => {
     expect(matchCommands(all, "token").map((c) => c.name)).toEqual(["usage"]);
     expect(matchCommands(all, "")).toHaveLength(all.length);
     expect(matchCommands(all, "zzz")).toEqual([]);
+  });
+
+  it("leaves skills to the $ menu, unless the / query asks for them", () => {
+    const all = mergeCommands([
+      ...harness,
+      { name: "skill:tidy", description: "Tidy the imports", source: "skill" },
+      { name: "skill:release-notes", description: "Write release notes", source: "extension" },
+    ]);
+    expect(all.filter(isSkill).map(skillName)).toEqual(["review", "tidy", "release-notes"]);
+    expect(slashMenu(all, "").some(isSkill)).toBe(false);
+    expect(slashMenu(all, "skill:t").map((c) => c.name)).toEqual(["skill:tidy"]);
+    // "$" matches the short name first, then words in the description.
+    expect(skillMenu(all, "").map(skillName)).toEqual(["review", "tidy", "release-notes"]);
+    expect(skillMenu(all, "re").map(skillName)).toEqual(["review", "release-notes"]);
+    expect(skillMenu(all, "imports").map((c) => c.name)).toEqual(["skill:tidy"]);
+    expect(skillMenu(harness.filter((c) => !isSkill(c)), "")).toEqual([]);
   });
 
   it("recognises the app's own commands, with their argument", () => {
