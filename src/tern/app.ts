@@ -119,10 +119,17 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       return null;
     };
 
+    // What these effects follow, as memos: `on()` runs again whenever its source's signals change, and the chat
+    // signal changes with every streamed event, so it must see a value that changes only when the thing does.
+    const chatId = createMemo(() => app.chat()?.chatId);
+    const requestId = createMemo(() => app.chat()?.pending[0]?.id);
+    const mentionQuery = createMemo(() => mentionAt(draft().draft.text)?.query);
+    const toastId = createMemo(() => app.toasts().at(-1)?.id);
+
     // A new chat starts its own folds, window, and timers.
     createEffect(
       on(
-        () => app.chat()?.chatId,
+        chatId,
         () => {
           ages.clear();
           setFolds(new Map());
@@ -161,6 +168,8 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       if (mentionAt(text) && files().length > 0) return "files";
       return null;
     });
+    // The menu's text: a caret move alone keeps the row selected.
+    const caretText = createMemo(() => caretKind() && draft().draft.text);
     // Commands and skills are asked for when / or $ is first typed; saved prompts on #.
     createEffect(() => {
       const text = draft().draft.text;
@@ -185,7 +194,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     let fileTimer: ReturnType<typeof setTimeout> | undefined;
     createEffect(
       on(
-        () => mentionAt(draft().draft.text)?.query,
+        mentionQuery,
         (q) => {
           clearTimeout(fileTimer);
           if (q === undefined) return setFiles([]);
@@ -195,7 +204,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     );
     createEffect(
       on(
-        () => caretKind() && draft().draft.text,
+        caretText,
         () => setCaretIndex(0),
       ),
     );
@@ -485,7 +494,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     // A question that wants text takes the keys while it is shown.
     createEffect(
       on(
-        () => app.chat()?.pending[0]?.id,
+        requestId,
         () => {
           const r = app.chat()?.pending[0];
           const wantsText = r && (r.kind === "input" || r.kind === "editor");
@@ -508,7 +517,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     // The server's toasts (a background session finished or asks) as Tern's own toast.
     createEffect(
       on(
-        () => app.toasts().at(-1)?.id,
+        toastId,
         () => {
           const t = app.toasts().at(-1);
           if (t) {
