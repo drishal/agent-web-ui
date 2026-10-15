@@ -1,7 +1,7 @@
 // atui's motion and small graphics, worked out apart from the drawing so they
 // can be tested: colour mixing for the "Working" shimmer, the pace streamed
-// text is revealed at, sparklines and meters drawn with block characters,
-// eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
+// text is revealed at, sparklines, meters, and diff stat bars drawn with
+// block characters, eased scrolling, a fold unrolling, a one-off flash, the ghost thread a
 // session opens behind, a slow breath for what waits on you, and each
 // harness's spinner.
 
@@ -70,6 +70,23 @@ export function meter(fraction: number, width: number): string {
   const full = Math.floor(eighths / 8);
   const part = eighths % 8;
   return ("█".repeat(full) + (part > 0 ? EIGHTHS[part] : "")).padEnd(width, " ").slice(0, width);
+}
+
+/**
+ * A diff stat bar, `git --stat` style: a file's added and removed lines as
+ * cells of a bar `width` wide, scaled to the largest change in the list
+ * (`max`), so files compare at a glance. A side that changed gets a cell even
+ * when it is small beside the other.
+ */
+export function statBar(added: number, removed: number, max: number, width: number): { add: number; del: number; rest: number } {
+  const total = added + removed;
+  if (total <= 0 || width <= 0) return { add: 0, del: 0, rest: Math.max(0, width) };
+  const cells = Math.min(width, Math.max(1, Math.round((total / Math.max(total, max)) * width)));
+  let add = Math.round((cells * added) / total);
+  if (added > 0 && add === 0) add = 1;
+  if (removed > 0 && add === cells && cells > 1) add = cells - 1;
+  const del = removed > 0 ? cells - add : 0;
+  return { add, del, rest: width - add - del };
 }
 
 /** Ease-out cubic: fast at first, settling at the end. */

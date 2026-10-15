@@ -310,15 +310,18 @@ describe("atui", () => {
 
   it("keeps sessions and info in one side panel, switched by tab, folding to a rail", async () => {
     ui = await mount(path.join(server.root, "alpha"), { width: 150, height: 40 });
-    await ui.type("tool please");
+    await ui.type("tool edit please");
     ui.keys.pressEnter();
-    await ui.until("Echo: tool please");
+    await ui.until("Echo: tool edit please");
     await idle(ui);
     expect(await ui.frame()).toContain("Sessions │ Info");
     // C-x i: the Info tab, where the right panel's context and usage now live.
     ui.keys.pressKey("x", { ctrl: true });
     await ui.type("i");
-    expect(await ui.until("Tool definitions")).toContain("Context");
+    const info = await ui.until("Tool definitions");
+    expect(info).toContain("Context");
+    // Each changed file with its stat bar.
+    expect(info).toMatch(/\+\d+ −\d+ ■{5}/);
     await ui.click("Sessions");
     await ui.until("C-x s to browse");
     // « folds it to a rail; » unfolds it.

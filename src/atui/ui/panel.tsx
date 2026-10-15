@@ -1,12 +1,29 @@
 // The side panel's Info tab (OpenCode's session sidebar, with the web UI's
 // pieces): context and what fills it, the session's tokens and cost, the
-// harness's todos, git, the files this chat changed, and subscription limits,
-// the context and each limit window drawn as a meter. C-x i shows it.
+// harness's todos, git, the files this chat changed (each with a stat bar),
+// and subscription limits, the context and each limit window drawn as a
+// meter. C-x i shows it.
 import { createMemo, For, Show } from "solid-js";
 import { collectChanges } from "../../web/review.js";
 import { accountName, clip, fileUrl, tokens, windowLabel } from "../format.js";
-import { meter } from "../fx.js";
+import { meter, statBar } from "../fx.js";
 import { useAtui, useTheme } from "./context.js";
+
+/** Cells in a changed file's stat bar. */
+const STAT_CELLS = 5;
+
+/** A changed file's stat bar: added cells green, removed red, the rest a quiet track (GitHub's squares). */
+function StatBar(p: { added: number; removed: number; max: number }) {
+  const t = useTheme();
+  const bar = () => statBar(p.added, p.removed, p.max, STAT_CELLS);
+  return (
+    <>
+      <span style={{ fg: t().ok }}>{"■".repeat(bar().add)}</span>
+      <span style={{ fg: t().danger }}>{"■".repeat(bar().del)}</span>
+      <span style={{ fg: t().border }}>{"■".repeat(bar().rest)}</span>
+    </>
+  );
+}
 
 /** A meter: the filled part in `tone`, the rest a thin track, so an empty bar is a line rather than a block. */
 function Meter(p: { fraction: number; width: number; tone: string }) {
@@ -39,6 +56,7 @@ export function InfoBody(p: { width: number }) {
     return chat ? collectChanges(chat.items, chat.workspace.path) : [];
   });
   const w = () => p.width - 4;
+  const largest = () => Math.max(0, ...files().map((f) => f.added + f.removed));
   const todoMark = (status: string) => (/done|complete/.test(status) ? "✓" : /progress|active|doing/.test(status) ? "◐" : "○");
 
   return (
@@ -129,7 +147,8 @@ export function InfoBody(p: { width: number }) {
               </text>
               <text flexShrink={0}>
                 <span style={{ fg: t().ok }}>{` +${f.added}`}</span>
-                <span style={{ fg: t().danger }}>{` −${f.removed}`}</span>
+                <span style={{ fg: t().danger }}>{` −${f.removed} `}</span>
+                <StatBar added={f.added} removed={f.removed} max={largest()} />
               </text>
             </box>
           )}
