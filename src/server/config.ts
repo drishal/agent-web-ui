@@ -24,7 +24,7 @@ export interface ServerConfig {
   stateDir: string;
   ompAgentDir: string | null;
   ompSessionDir: string | null;
-  /** Comma list selecting adapters; tests use `fake`. Default: pi,omp,hermes,claude. */
+  /** Comma list selecting adapters; tests use `fake`. Default: pi,omp,hermes,claude,opencode,awui. */
   harnesses: string[];
   /** Each harness's executable and extra chat arguments (launchSettings); empty: names on PATH. */
   launch: ReturnType<typeof launchSettings>;
@@ -142,7 +142,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, file?: UserConf
     stateDir,
     ompAgentDir: env.OMP_AGENT_DIR ? path.resolve(expandHome(env.OMP_AGENT_DIR, home)) : null,
     ompSessionDir: env.OMP_SESSION_DIR ? path.resolve(expandHome(env.OMP_SESSION_DIR, home)) : null,
-    harnesses: list(env.AWUI_HARNESSES).length > 0 ? list(env.AWUI_HARNESSES) : ["pi", "omp", "hermes", "claude", "awui"],
+    harnesses: list(env.AWUI_HARNESSES).length > 0 ? list(env.AWUI_HARNESSES) : ["pi", "omp", "hermes", "claude", "opencode", "awui"],
     launch: launchSettings(file, env, home),
     home,
   };
