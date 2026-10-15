@@ -25,6 +25,7 @@ import { accentOf } from "../theme.js";
 import { Composer } from "./composer.js";
 import { AtuiContext } from "./context.js";
 import { glideBy, glideTo, Shimmer } from "./fx.js";
+import { SwitchGhost } from "./ghost.js";
 import { Picker, type PreviewText } from "./picker.js";
 import { RequestCard } from "./request.js";
 import { Sidebar, SidebarRail, type SidebarTab } from "./sidebar.js";
@@ -37,6 +38,8 @@ import { turnOffset, vimKey } from "../vim.js";
 type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
 
 const TWICE_MS = 1200;
+/** A session that opens within this shows at once; one that takes longer gets the ghost thread meanwhile. */
+const GHOST_AFTER_MS = 50;
 
 export function App(p: {
   app: Atui;
@@ -76,6 +79,18 @@ export function App(p: {
     hintTimer = setTimeout(() => setHint(null), ms);
   };
   onCleanup(() => clearTimeout(hintTimer));
+
+  // The session being opened, once it has taken long enough to be worth a screen of its own.
+  const [ghost, setGhost] = createSignal<{ title: string; harnessId: string } | null>(null);
+  let ghostTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(
+    on(app.opening, (target) => {
+      clearTimeout(ghostTimer);
+      if (!target) return setGhost(null);
+      ghostTimer = setTimeout(() => setGhost(target), GHOST_AFTER_MS);
+    }),
+  );
+  onCleanup(() => clearTimeout(ghostTimer));
 
   const pending = createMemo(() => app.chat()?.pending[0] ?? null);
   const hasPrompt = createMemo(() => app.chat()?.items.some((i) => i.kind === "user") ?? false);
@@ -430,6 +445,8 @@ export function App(p: {
 
   // One line: a chat is titled from its first prompt, which can run to several.
   const title = () => {
+    const g = ghost();
+    if (g) return g.title.replace(/\s+/g, " ").trim();
     const c = app.chat();
     if (!c) return app.workspace()?.name ?? "atui";
     return c.title.replace(/\s+/g, " ").trim() || "New chat";
@@ -464,7 +481,7 @@ export function App(p: {
               <text flexGrow={1} fg={t().text} wrapMode="none" truncate>
                 <b>{title()}</b>
               </text>
-              <Show when={app.chat()}>
+              <Show when={!ghost() && app.chat()}>
                 {(c) => (
                   <text flexShrink={0}>
                     <span style={{ fg: accentOf(t(), app.harness()?.accent) }}>{`${harnessGlyph(c().harnessId)} ${app.harness()?.displayName ?? c().harnessId}`}</span>
@@ -478,10 +495,17 @@ export function App(p: {
               </Show>
             </box>
             <Show
-              when={hasPrompt()}
-              fallback={<Splash question={`What should ${app.harness()?.displayName ?? "the agent"} do in ${app.workspace()?.name ?? "this project"}?`} subtitle="It runs with its normal tools, as you, in this folder." />}
+              when={ghost()}
+              fallback={
+                <Show
+                  when={hasPrompt()}
+                  fallback={<Splash question={`What should ${app.harness()?.displayName ?? "the agent"} do in ${app.workspace()?.name ?? "this project"}?`} subtitle="It runs with its normal tools, as you, in this folder." />}
+                >
+                  <Transcript ref={(el) => (scroller = el as ScrollBoxRenderable)} showWork={showWork()} />
+                </Show>
+              }
             >
-              <Transcript ref={(el) => (scroller = el as ScrollBoxRenderable)} showWork={showWork()} />
+              {(g) => <SwitchGhost title={g().title} harnessId={g().harnessId} sidebar={sidebar() ? sideWidth() : 3} />}
             </Show>
             <Show when={app.banner()}>
               {(b) => (
