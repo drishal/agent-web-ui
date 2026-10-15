@@ -8461,12 +8461,30 @@ body {
   justify-content: center;
 }
 
+/* It scrolls in the dialog's right padding, a thin themed bar with its room kept (the conversation's),
+   so the bar sits beside the cards and columns rather than over their edge. */
 .usage-body {
   max-height: min(78dvh, 820px);
-  margin: 0 -4px;
-  padding: 2px 4px 4px;
+  margin: 0 -14px 0 -4px;
+  padding: 2px 6px 4px 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-gutter: stable;
+}
+
+.usage-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.usage-body::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 4px;
+}
+
+.usage-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .usage-report {
