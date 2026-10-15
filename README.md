@@ -375,6 +375,7 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 
 - **One writer per session.** A session that herdr says one of its panes runs is marked so in the session list, and the server refuses to resume it (409 `open_in_herdr`) unless the client says that was chosen: its harness already has the session file open there, so a resume here would be a second writer on it.
 - **In the browser** such a session is marked *herdr* in the sidebar, in the accent while that agent works and in the warn colour while it waits for you. Opening it asks first: **Show in herdr** (herdr switches to that pane; this machine only), **Open here anyway**, or Cancel.
+- **In atui and Tern** it is marked ◆ in atui's session list, and Tern's session picker says *in herdr*. The first open shows the pane in herdr; opening it again within ten seconds opens it here.
 - **atui in a herdr pane** reports its chats to herdr the way herdr's own hooks report an agent: working while a chat in its tabs runs, blocked (with the question) while one asks, idle otherwise, the shown chat's title in herdr's sidebar, and, when `atui` is on `PATH`, `atui --resume <session>` as the command herdr runs to bring the pane back after it restarts. So herdr's status dots, *Done* badges, and notifications, and clients such as [herdr-gpui](https://github.com/penso/herdr-gpui), follow awui's chats too. `atui --no-herdr` keeps one atui quiet.
 
 ## Security

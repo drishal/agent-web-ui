@@ -68,6 +68,8 @@ const CONTEXT_SAMPLES = 24;
 export type Banner = { level: "info" | "warning" | "error"; text: string } | null;
 
 const SESSIONS_MS = 4000;
+/** A session open in herdr opened a second time within this resumes here anyway. */
+const HERDR_AGAIN_MS = 10_000;
 const LIMITS_MS = 5 * 60_000;
 const GIT_WORKING_MS = 8000;
 
@@ -404,10 +406,29 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     void switchTab((active + by + list.length) % list.length);
   };
 
+  /** A session a herdr pane runs, opened once: opening it again soon after resumes it here anyway. */
+  let herdrAsked: { id: string; at: number } | null = null;
+
   const openSession = async (s: ProjectSession, { newTab = false }: { newTab?: boolean } = {}) => {
     const open = findTab(tabs(), { chatId: s.liveChatId ?? null, sessionId: s.id });
     if (open >= 0) return switchTab(open);
     const target = overview().workspaces.find((w) => w.id === s.workspaceId);
+    // Its harness runs in a herdr pane: show that pane, since a resume here would be a second writer on the session.
+    const again = herdrAsked !== null && herdrAsked.id === s.id && Date.now() - herdrAsked.at < HERDR_AGAIN_MS;
+    if (s.herdr && !s.liveChatId && !again) {
+      herdrAsked = { id: s.id, at: Date.now() };
+      const shown = await server.call("/api/herdr/focus", { body: { paneId: s.herdr.paneId } }).then(
+        () => true,
+        () => false,
+      );
+      const name = boot()?.harnesses.find((h) => h.id === s.harnessId)?.displayName ?? s.harnessId;
+      setBanner({
+        level: "warning",
+        text: `${shown ? "Shown" : "Open"} in herdr, pane ${s.herdr.paneId} (${s.herdr.status}). Open it again to run it here too: a second ${name} on the same session.`,
+      });
+      return;
+    }
+    herdrAsked = null;
     setOpening({ title: s.title || "New chat", harnessId: s.harnessId });
     try {
       if (s.liveChatId) {
@@ -415,7 +436,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
       } else {
         if (!target) throw new Error("That session's project is not open on the server");
         const ws = await enterWorkspace(target);
-        show(await server.call<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id } }), { newTab });
+        const body = { harnessId: s.harnessId, workspaceId: ws.id, sessionId: s.id, ...(again ? { ignoreHerdr: true } : {}) };
+        show(await server.call<ChatSnapshot>("/api/chats/resume", { body }), { newTab });
       }
       void refreshSessions();
     } catch (error) {
