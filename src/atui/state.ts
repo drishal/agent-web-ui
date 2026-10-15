@@ -26,6 +26,7 @@ import type {
 } from "../shared/protocol.js";
 import { IMAGE_MIME_TYPES } from "../shared/protocol.js";
 import { applyEvents, type ChatState } from "../web/chat-state.js";
+import type { ReviewComment } from "../web/review.js";
 import { closeTab as closeTabIn, findTab, markUnread, NO_TABS, placeChat, placeTab, runningChats, syncActive, type Tab, type TabState } from "../web/tabs.js";
 import { appCommand } from "../web/commands.js";
 import { isBusy } from "../web/session-groups.js";
@@ -553,6 +554,10 @@ export function createAtui(server: Server, opts: AtuiOptions) {
 
   /** A prompt being edited in the composer: Enter replaces it (as the web UI's Edit does). */
   const [editing, setEditing] = createSignal<{ through: number; item: UserItem } | null>(null);
+  /** Review comments by chat, kept while atui runs (the web UI keeps its own per browser). */
+  const [comments, setComments] = createSignal<Record<string, ReviewComment[]>>({});
+  const reviewComments = (chatId: string): ReviewComment[] => comments()[chatId] ?? [];
+  const setReviewComments = (chatId: string, list: ReviewComment[]) => setComments((all) => ({ ...all, [chatId]: list }));
   /** The prompt whose files the Undo dialog offers to put back. */
   const [undoTurn, setUndoTurn] = createSignal<number | null>(null);
   /** The files a restore put back, to put back as they were again (C-x z). */
@@ -682,6 +687,8 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     setEditing,
     undoTurn,
     setUndoTurn,
+    reviewComments,
+    setReviewComments,
     rerun,
     fork,
     checkpointPreview,
