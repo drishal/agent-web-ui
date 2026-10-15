@@ -84,6 +84,16 @@ export function accountName(a: LimitAccount): string {
 /** A limit window's short label: "5h", "7d". */
 export const windowLabel = (label: string): string => label.replace(" hours", "h").replace(" days", "d");
 
+/**
+ * A file's `file://` URL, for a terminal hyperlink (OSC 8): a path relative to
+ * the project resolves against it, and each segment is percent-encoded so a
+ * `#` or `?` in a name stays part of the path.
+ */
+export function fileUrl(file: string, workspace: string): string {
+  const abs = file.startsWith("/") ? file : `${workspace.replace(/\/+$/, "")}/${file}`;
+  return `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 /** A short line of text, cut with an ellipsis. */
 export function clip(text: string, width: number): string {
   const line = text.replace(/\s+/g, " ").trim();
