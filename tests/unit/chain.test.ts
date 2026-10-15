@@ -65,9 +65,11 @@ describe("the chain", () => {
     await until(() => live().status === "idle" && live().snapshot().items.some((i) => i.kind === "assistant"));
     await agent.put(`/api/chats/${chat.chatId}/chain`).send({ steps: [{ kind: "handoff", harness: "fake-b", prompt: "carry on" }, { kind: "send", text: "then this" }] });
     const other = () => (t as TestApp).manager.list().find((c) => c.adapter.id === "fake-b");
+    // Until the chain's last step has run there: the moved chat is idle for a moment between "carry on" and it.
     await until(() => {
       const moved = other();
-      return Boolean(moved && moved.status === "idle" && moved.snapshot().items.filter((i) => i.kind === "user").length >= 2);
+      const users = moved?.snapshot().items.filter((i) => i.kind === "user") ?? [];
+      return Boolean(moved && moved.status === "idle" && users.at(-1)?.kind === "user" && users.at(-1)?.text === "then this");
     }, 15_000);
     const texts = (other() as NonNullable<ReturnType<typeof other>>).snapshot().items.flatMap((i) => (i.kind === "user" ? [i.text] : []));
     expect(texts.slice(-2)).toEqual(["carry on", "then this"]);

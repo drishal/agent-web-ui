@@ -636,7 +636,8 @@ class FakeLiveChat implements LiveChat {
     };
     const progress = (status0: string, status1: string) => [
       { index: 0, agent: "scout", status: status0, task: "[prompt redacted]", recentTools: [{ tool: "bash", args: "rg -n listen src" }], toolCount: 1, tokens: 1800, durationMs: 1200 },
-      { index: 1, agent: "worker", status: status1, task: "[prompt redacted]", recentTools: [], toolCount: 0, tokens: 0, durationMs: 0 },
+      // Running, the worker has its own recent command too: whichever agent is running shows an activity line.
+      { index: 1, agent: "worker", status: status1, task: "[prompt redacted]", recentTools: status1 === "running" ? [{ tool: "bash", args: "sed -n 1,40p src/server.ts" }] : [], toolCount: status1 === "running" ? 1 : 0, tokens: 0, durationMs: 0 },
     ];
     this.emit({ type: "assistant_start", model: this.model });
     this.record({ role: "assistant", content: [{ type: "toolCall", id: toolCallId, name: "subagent", arguments: args }], stopReason: "toolUse" });
