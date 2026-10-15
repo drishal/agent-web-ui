@@ -408,6 +408,8 @@ export function Sidebar(props: {
   sessionsLoading: boolean;
   query: string;
   onQuery: (q: string) => void;
+  /** Look for the query in what the chats said, not only their titles. */
+  onSearchAll?: (q: string) => void;
   activeSessionId: string | null;
   activeChatId: string | null;
   /** The open chat's status (live over SSE), which beats the listing's. */
@@ -555,6 +557,14 @@ export function Sidebar(props: {
               ↻
             </button>
           </div>
+          {props.onSearchAll && props.query.trim().length >= 2 ? (
+            <button type="button" className="search-all" onClick={() => props.onSearchAll?.(props.query.trim())}>
+              <IconSearch size={13} />
+              <span className="search-all-label">
+                Search every chat for <q>{props.query.trim()}</q>
+              </span>
+            </button>
+          ) : null}
           {props.sessionsError ? <p className="sidebar-note is-warning">{props.sessionsError}</p> : null}
           <ul className="session-list" aria-busy={props.sessionsLoading} aria-label="Sessions by project">
             {props.sessionsLoading && groups.length === 0 ? (

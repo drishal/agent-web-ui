@@ -8,6 +8,7 @@ import {
   answerSchema,
   type Bootstrap,
   type ChatEvent,
+  chatSearchSchema,
   compactSchema,
   createChatSchema,
   forkChatSchema,
@@ -61,6 +62,7 @@ import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
+import { ChatSearcher, type SearchTarget } from "./chat-search.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
 import { runCommand } from "./run-command.js";
@@ -143,6 +145,7 @@ export function createApp(deps: AppDeps) {
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
+  const chatSearcher = new ChatSearcher();
   if (deps.checkpointsDir) manager.checkpoints = { service: new Checkpoints(deps.checkpointsDir), sessionsDir: path.join(deps.checkpointsDir, "sessions") };
   manager.onNews = (chat, kind, text, request) => {
     // An approval's note carries its two answers, so the notification's own buttons can send one.
@@ -415,7 +418,7 @@ export function createApp(deps: AppDeps) {
   // The sidebar's list: each harness's newest sessions across projects, every
   // session of the current project (`?path=`), and live chats not saved yet.
   // Projects outside WORKSPACE_ROOTS, or that a harness cannot open, are left out.
-  app.get("/api/sessions", async (req, res) => {
+  const listSessions = async (path: string | null): Promise<SessionsOverview> => {
     const resolved = new Map<string, Promise<WorkspaceInfo | null>>();
     const workspaceFor = (cwd: string) => {
       let ws = resolved.get(cwd);
@@ -425,7 +428,7 @@ export function createApp(deps: AppDeps) {
       }
       return ws;
     };
-    const current = typeof req.query.path === "string" && req.query.path ? await workspaceFor(req.query.path) : null;
+    const current = path ? await workspaceFor(path) : null;
     const projects = new Map<string, WorkspaceInfo>(current ? [[current.id, current]] : []);
     const sessions = new Map<string, ProjectSession>();
     const add = (adapter: HarnessAdapter, s: NativeSessionSummary, ws: WorkspaceInfo) => {
@@ -470,12 +473,37 @@ export function createApp(deps: AppDeps) {
       const mark = marks.get(id);
       if (mark) sessions.set(id, { ...s, ...mark });
     }
-    const overview: SessionsOverview = {
+    return {
       workspaces: [...projects.values()],
       sessions: [...sessions.values()].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
       errors,
     };
-    res.json(overview);
+  };
+  app.get("/api/sessions", async (req, res) => {
+    res.json(await listSessions(typeof req.query.path === "string" && req.query.path ? req.query.path : null));
+  });
+
+  // Search every chat (chat-search.ts): the sidebar's sessions, newest first,
+  // read from the live chat or the harness's own file; never starts a harness.
+  app.get("/api/sessions/search", async (req, res) => {
+    const input = chatSearchSchema.parse(req.query);
+    const overview = await listSessions(null);
+    const byId = new Map(overview.workspaces.map((w) => [w.id, w]));
+    const targets: SearchTarget[] = overview.sessions
+      .filter((s) => !input.harnessId || s.harnessId === input.harnessId)
+      .map((session) => ({
+        session,
+        read: async () => {
+          const live = session.liveChatId ? manager.list().find((c) => c.chatId === session.liveChatId) : undefined;
+          if (live) return live.snapshot().items;
+          const adapter = registry.get(session.harnessId);
+          const ws = byId.get(session.workspaceId);
+          const prefix = `${session.harnessId}:`;
+          if (!adapter?.readTranscript || !ws || !session.id.startsWith(prefix)) return null;
+          return (await adapter.readTranscript({ cwd: ws.path, nativeId: session.id.slice(prefix.length) }))?.items ?? null;
+        },
+      }));
+    res.json(await chatSearcher.search(input.q, targets, overview.workspaces));
   });
 
   // Notifications. A push only wakes the device's service worker, which then reads the notes here.

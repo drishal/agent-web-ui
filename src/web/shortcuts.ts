@@ -21,6 +21,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
     items: [
       { id: "palette", keys: ["Mod+K"], label: "Commands, sessions, models, and settings" },
       { id: "shortcuts", keys: ["?", "Mod+/"], label: "These shortcuts" },
+      { id: "history-search", keys: ["Mod+Shift+H"], label: "Search every chat" },
       { id: "search", keys: ["Mod+Shift+F"], label: "Search in project" },
       { id: "find", keys: ["Mod+F"], label: "Find in this chat" },
       { id: "back", keys: ["Mod+["], label: "Back to the previous chat" },

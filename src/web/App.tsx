@@ -33,6 +33,7 @@ import { TabStrip } from "./components/TabStrip.js";
 import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
 import { ProjectSearch } from "./components/ProjectSearch.js";
 import { ShortcutSheet } from "./components/ShortcutSheet.js";
+import { ChatSearch } from "./components/ChatSearch.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
 import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
@@ -100,7 +101,17 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** What the window-wide shortcuts call, kept current (the listener is added once). */
-  const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null; search: () => void }>({ step: () => {}, reopen: () => {}, undo: null, search: () => {} });
+  const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null; search: () => void; searchAll: () => void }>({
+    step: () => {},
+    reopen: () => {},
+    undo: null,
+    search: () => {},
+    searchAll: () => {},
+  });
+  /** Search every chat: open, with what it starts holding (the sidebar's query, or nothing). */
+  const [chatSearch, setChatSearch] = useState<string | null>(null);
+  /** A chat opened from that search: Find opens in it holding the word, once it is shown. */
+  const [findAsk, setFindAsk] = useState<{ query: string; nonce: number; sessionId: string; chatId: string | null } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   /** The turn whose checkpoint the restore dialog shows. */
@@ -128,6 +139,9 @@ export function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyF") {
         e.preventDefault();
         keysRef.current.search();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyH") {
+        e.preventDefault();
+        keysRef.current.searchAll();
       } else if (mod && e.code === "KeyZ" && keysRef.current.undo) {
         const target = e.target as HTMLElement | null;
         if (target?.closest("input, textarea, [contenteditable='true']")) return;
@@ -530,14 +544,15 @@ export function App() {
     if (tab && !chatIdFromHash()) void loadTab(tab);
   }, [boot]);
 
-  const openSession = async (s: ProjectSession, { newTab = false }: { newTab?: boolean } = {}) => {
+  /** `workspace`: the session's project, when the caller knows it (a search reaches sessions the sidebar's list may not hold). */
+  const openSession = async (s: ProjectSession, { newTab = false, workspace: known }: { newTab?: boolean; workspace?: WorkspaceInfo } = {}) => {
     const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
     if (open >= 0) {
       activateTab(open);
       setDrawerOpen(false);
       return;
     }
-    const target = overview.workspaces.find((w) => w.id === s.workspaceId);
+    const target = known ?? overview.workspaces.find((w) => w.id === s.workspaceId);
     if (!target) return;
     // Its tab and loading screen first; the snapshot fills the same tab in.
     const tab = { chatId: s.liveChatId ?? null, sessionId: s.id, harnessId: s.harnessId, workspacePath: target.path, title: s.title };
@@ -797,7 +812,13 @@ export function App() {
   };
 
   const searchWorkspace = chat?.workspace ?? workspace;
-  keysRef.current = { step: (step) => stepVisits(step), reopen: () => reopenClosedTab(), undo: toast ? toast.undo : null, search: () => searchWorkspace && setSearchOpen(true) };
+  keysRef.current = {
+    step: (step) => stepVisits(step),
+    reopen: () => reopenClosedTab(),
+    undo: toast ? toast.undo : null,
+    search: () => searchWorkspace && setSearchOpen(true),
+    searchAll: () => setChatSearch((q) => (q === null ? "" : null)),
+  };
 
   const markSessionAs = async (s: ProjectSession, change: MarkChange) => {
     const before: SessionMarkState = {
@@ -861,6 +882,7 @@ export function App() {
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
+    items.push({ id: "search-all", section: "Actions", label: "Search every chat", hint: shortcutHint("history-search"), keywords: "history find", run: () => setChatSearch("") });
     items.push({
       id: "search",
       section: "Actions",
@@ -1042,6 +1064,10 @@ export function App() {
         sessionsLoading={sessionsLoading}
         query={query}
         onQuery={setQuery}
+        onSearchAll={(q) => {
+          setChatSearch(q);
+          setDrawerOpen(false);
+        }}
         // While a chat opens, its row is the current one already (its tab is in place).
         activeSessionId={heading ? (tabState.tabs[tabState.active]?.sessionId ?? null) : (chat?.sessionId ?? null)}
         activeChatId={heading ? (tabState.tabs[tabState.active]?.chatId ?? null) : chatId}
@@ -1281,6 +1307,9 @@ export function App() {
                 onRestore={setRestoreTurn}
                 onSend={(text) => void send(text, "normal")}
                 asking={chat.pending.length > 0}
+                findRequest={
+                  findAsk && (chat.sessionId === findAsk.sessionId || chat.chatId === findAsk.chatId) ? { query: findAsk.query, nonce: findAsk.nonce, chatId: chat.chatId } : null
+                }
                 promptActions={{
                   inPlace: chat.capabilities.supportsRewind,
                   retry: (through, item) => void rerun(through, item, item.text, false),
@@ -1391,6 +1420,17 @@ export function App() {
       ) : null}
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
       {shortcutsOpen ? <ShortcutSheet onClose={() => setShortcutsOpen(false)} /> : null}
+      {chatSearch !== null ? (
+        <ChatSearch
+          harnesses={boot.harnesses.filter((h) => h.available)}
+          initialQuery={chatSearch}
+          onOpen={(r, word, ws) => {
+            setFindAsk({ query: word, nonce: Date.now(), sessionId: r.session.id, chatId: r.session.liveChatId ?? null });
+            void openSession(r.session, ws ? { workspace: ws } : {});
+          }}
+          onClose={() => setChatSearch(null)}
+        />
+      ) : null}
       {searchOpen && searchWorkspace ? <ProjectSearch workspace={searchWorkspace} onClose={() => setSearchOpen(false)} /> : null}
       {pairOpen ? <PairDialog urls={boot.pairing.urls} username={boot.auth.username} onClose={() => setPairOpen(false)} /> : null}
     </div>
