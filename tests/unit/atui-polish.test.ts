@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
 import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
-import { meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, unrollCounts } from "../../src/atui/fx.js";
+import { flashAt, meter, mix, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, unrollCounts } from "../../src/atui/fx.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll } from "../../src/atui/minimap.js";
 import { LEADER_HELP, LEADER_KEYS, whichKeyColumns, whichKeyGrid } from "../../src/atui/keys.js";
@@ -63,6 +63,14 @@ describe("fx", () => {
     expect(unrollCounts(30, 3)).toEqual([22, 29, 30]);
     expect(unrollCounts(1, 3)).toEqual([1, 1, 1]);
     expect(unrollCounts(0, 3)).toEqual([0, 0, 0]);
+  });
+
+  it("flashes once: up quickly, down slowly, and out", () => {
+    expect(flashAt(0)).toBe(0);
+    expect(flashAt(0.15)).toBe(1);
+    expect(flashAt(0.5)).toBeGreaterThan(0.1);
+    expect(flashAt(0.5)).toBeLessThan(flashAt(0.3));
+    expect(flashAt(1)).toBe(0);
   });
 
   it("gives each harness its own spinner", () => {

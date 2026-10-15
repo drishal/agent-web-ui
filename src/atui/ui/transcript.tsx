@@ -15,11 +15,11 @@ import { useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
 import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, fileUrl, foldLabel, unifiedDiff } from "../format.js";
-import { mix, unrollCounts } from "../fx.js";
+import { easeOut, flashAt, mix, unrollCounts } from "../fx.js";
 import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
 import { harnessGlyph, neatRow, thoughtTitle, thoughtTokens } from "../neat.js";
-import type { Theme } from "../theme.js";
+import { accentOf, type Theme } from "../theme.js";
 import { highlightPreview } from "../words.js";
 import { useAtui, useTheme } from "./context.js";
 import { glideTo, Shimmer, Spinner, usePaced } from "./fx.js";
@@ -131,15 +131,15 @@ function PromptImage(p: { image: ImageRef; n: number }) {
   );
 }
 
-/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. */
-function UserPrompt(p: { item: UserItem }) {
+/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. `glow` (0 to 1) lights its edge in the harness's colour. */
+function UserPrompt(p: { item: UserItem; glow: number }) {
   const t = useTheme();
   const app = useAtui();
   return (
     <box
       border
       borderStyle="rounded"
-      borderColor={t().ok}
+      borderColor={p.glow > 0 ? mix(t().ok, accentOf(t(), app.harness()?.accent), p.glow) : t().ok}
       title={harnessGlyph(app.chat()?.harnessId ?? "")}
       titleColor={t().danger}
       backgroundColor={app.glass() ? undefined : t().surface}
@@ -476,7 +476,8 @@ function ProcessItem(p: { item: ChatItem; workspace: string; thoughtOnly?: boole
 
 type Place = "first" | "middle" | "last";
 
-function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { counts: Turn["counts"]; place: Place } }) {
+/** The fold's line. `fade` (0 to 1), just after the turn ends: its words come up from the background. */
+function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { counts: Turn["counts"]; place: Place }; fade?: number }) {
   const t = useTheme();
   const live = () => p.turn.live && (!p.part || p.part.place === "last");
   const label = () => {
@@ -487,7 +488,7 @@ function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { cou
   return (
     <box flexDirection="column" marginTop={1}>
       <box flexDirection="row" onMouseDown={p.onToggle}>
-        <text fg={t().muted}>
+        <text fg={p.fade === undefined ? t().muted : mix(t().bg, t().muted, p.fade)}>
           <Show when={live()} fallback={`${p.open ? "▾ " : "▸ "}${label()}`}>
             <Spinner />
             {" "}
@@ -507,6 +508,10 @@ function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { cou
     </box>
   );
 }
+
+/** How long a finished turn's flash lasts, and a frame of it. */
+const FLASH_MS = 900;
+const FLASH_FRAME_MS = 40;
 
 /** Frames a fold takes to unroll, and how long each lasts. */
 const UNROLL_FRAMES = 4;
@@ -555,7 +560,7 @@ function WorkItems(p: { items: ChatItem[]; answerAt: number; answer: AssistantIt
  * sits inline), each reply after it, as the web UI draws it. While the turn
  * runs on after a reply, a live fold follows for what comes next.
  */
-function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: () => void; workspace: string }) {
+function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: () => void; workspace: string; fade?: number }) {
   const t = useTheme();
   const all = createMemo(() => {
     const ended = p.segments[p.segments.length - 1]?.reply != null;
@@ -578,7 +583,7 @@ function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; 
               <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
             </Match>
             <Match when={shape(n) === "fold"}>
-              <Fold turn={p.turn} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: place(n) }} />
+              <Fold turn={p.turn} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: place(n) }} fade={p.fade} />
               <Show when={p.open && segment().items.length > 0}>
                 <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
               </Show>
@@ -622,6 +627,31 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
   const hasProcess = () => p.turn().process.length > 0 || Boolean(p.turn().answer?.thinking.trim());
   const segments = createMemo(() => workSegments(p.turn()));
   const split = () => segments().some((s) => s.reply);
+  // A run that ends while you watch: the prompt's edge flashes in the harness's colour once, and "Worked for" comes up.
+  const [since, setSince] = createSignal<number | null>(null);
+  let flashTimer: ReturnType<typeof setInterval> | undefined;
+  createEffect(
+    on(
+      () => p.turn().live,
+      (live, was) => {
+        if (!was || live) return;
+        clearInterval(flashTimer);
+        const start = Date.now();
+        setSince(0);
+        flashTimer = setInterval(() => {
+          const k = (Date.now() - start) / FLASH_MS;
+          if (k >= 1) {
+            clearInterval(flashTimer);
+            setSince(null);
+          } else setSince(k);
+        }, FLASH_FRAME_MS);
+      },
+      { defer: true },
+    ),
+  );
+  onCleanup(() => clearInterval(flashTimer));
+  const glow = () => (since() === null ? 0 : flashAt(since() as number));
+  const fade = () => (since() === null ? undefined : easeOut(Math.min(1, (since() as number) * 2.5)));
   const files = () => p.turn().changedFiles.map((f) => relativePath(f, p.workspace));
   const FILES_SHOWN = 4;
   return (
@@ -633,19 +663,19 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
           </box>
         )}
       </Show>
-      <Show when={p.turn().prompt}>{(prompt) => <UserPrompt item={prompt()} />}</Show>
+      <Show when={p.turn().prompt}>{(prompt) => <UserPrompt item={prompt()} glow={glow()} />}</Show>
       <Show
         when={split()}
         fallback={
           <Show when={hasProcess() || p.turn().live}>
-            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} />
+            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} fade={fade()} />
             <Show when={p.open}>
               <WorkItems items={p.turn().process} answerAt={p.turn().answerAt} answer={p.turn().answer} workspace={p.workspace} />
             </Show>
           </Show>
         }
       >
-        <SegmentedWork turn={p.turn()} segments={segments()} open={p.open} onToggle={p.onToggle} workspace={p.workspace} />
+        <SegmentedWork turn={p.turn()} segments={segments()} open={p.open} onToggle={p.onToggle} workspace={p.workspace} fade={fade()} />
       </Show>
       <Show when={p.turn().answer}>{(a) => <Answer item={a()} />}</Show>
       <For each={p.turn().errors}>{(item) => <Notice item={item} />}</For>
