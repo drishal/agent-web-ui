@@ -49,6 +49,7 @@ import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { ReviewPanel } from "./components/ReviewPanel.js";
 import { RestoreDialog } from "./components/RestoreDialog.js";
+import { HerdrDialog } from "./components/HerdrDialog.js";
 import { collectChanges } from "./review.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
@@ -105,6 +106,8 @@ export function App() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** A session open in a herdr pane, being opened here: the choice to make first. */
+  const [herdrAsk, setHerdrAsk] = useState<{ s: ProjectSession & { herdr: NonNullable<ProjectSession["herdr"]> }; newTab: boolean; workspace?: WorkspaceInfo } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** What the window-wide shortcuts call, kept current (the listener is added once). */
@@ -317,14 +320,15 @@ export function App() {
   }, [splash]);
 
   /** What opening a session needs: its project (registered with the server again if need be) and its chat, live or resumed from the file. */
-  const fetchSession = async (s: ProjectSession, target: WorkspaceInfo): Promise<{ ws: WorkspaceInfo; snapshot: ChatSnapshot }> => {
+  const fetchSession = async (s: ProjectSession, target: WorkspaceInfo, ignoreHerdr = false): Promise<{ ws: WorkspaceInfo; snapshot: ChatSnapshot }> => {
     const ws = target.id === workspace?.id ? Promise.resolve(target) : api<WorkspaceInfo>("/api/workspaces/open", { body: { path: target.path } });
     if (s.liveChatId) {
       const [opened, snapshot] = await Promise.all([ws, api<ChatSnapshot>(`/api/chats/${s.liveChatId}`)]);
       return { ws: opened, snapshot };
     }
     const opened = await ws;
-    return { ws: opened, snapshot: await api<ChatSnapshot>("/api/chats/resume", { body: { harnessId: s.harnessId, workspaceId: opened.id, sessionId: s.id } }) };
+    const body = { harnessId: s.harnessId, workspaceId: opened.id, sessionId: s.id, ...(ignoreHerdr ? { ignoreHerdr: true } : {}) };
+    return { ws: opened, snapshot: await api<ChatSnapshot>("/api/chats/resume", { body }) };
   };
 
   /**
@@ -336,6 +340,8 @@ export function App() {
   const EARLY_MS = 10_000;
   const warmSession = (s: ProjectSession, why: "hover" | "press") => {
     if (why === "hover" && !s.liveChatId) return;
+    // A herdr pane runs it: opening asks first, so nothing starts on the press.
+    if (s.herdr && !s.liveChatId) return;
     if (findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id }) >= 0) return;
     const known = early.current.get(s.id);
     if (known && Date.now() - known.at < EARLY_MS) return;
@@ -594,10 +600,19 @@ export function App() {
   };
 
   /** `workspace`: the session's project, when the caller knows it (a search reaches sessions the sidebar's list may not hold). */
-  const openSession = async (s: ProjectSession, { newTab = false, workspace: known }: { newTab?: boolean; workspace?: WorkspaceInfo } = {}) => {
+  const openSession = async (
+    s: ProjectSession,
+    { newTab = false, workspace: known, ignoreHerdr = false }: { newTab?: boolean; workspace?: WorkspaceInfo; ignoreHerdr?: boolean } = {},
+  ) => {
     const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
     if (open >= 0) {
       activateTab(open);
+      setDrawerOpen(false);
+      return;
+    }
+    // A herdr pane runs its harness: a resume here would be a second writer, so ask (HerdrDialog).
+    if (s.herdr && !s.liveChatId && !ignoreHerdr) {
+      setHerdrAsk({ s: { ...s, herdr: s.herdr }, newTab, ...(known ? { workspace: known } : {}) });
       setDrawerOpen(false);
       return;
     }
@@ -615,7 +630,7 @@ export function App() {
     setOpening(true);
     setBanner(null);
     try {
-      const { ws, snapshot } = await (takeEarly(s) ?? fetchSession(s, target));
+      const { ws, snapshot } = await (takeEarly(s) ?? fetchSession(s, target, ignoreHerdr));
       if (token !== nav.current) return;
       if (ws.id !== workspace?.id) {
         setWorkspace(ws);
@@ -1520,6 +1535,18 @@ export function App() {
               fail(e);
               setRenameOpen(false);
             }
+          }}
+        />
+      ) : null}
+      {herdrAsk ? (
+        <HerdrDialog
+          session={herdrAsk.s}
+          harnessName={boot.harnesses.find((h) => h.id === herdrAsk.s.harnessId)?.displayName ?? herdrAsk.s.harnessId}
+          local={boot.auth.mode === "local"}
+          onOpenHere={() => void openSession(herdrAsk.s, { newTab: herdrAsk.newTab, ignoreHerdr: true, ...(herdrAsk.workspace ? { workspace: herdrAsk.workspace } : {}) })}
+          onClose={() => {
+            setHerdrAsk(null);
+            void refreshSessions();
           }}
         />
       ) : null}

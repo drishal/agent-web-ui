@@ -1513,6 +1513,37 @@ body.is-resizing {
   font-weight: 600;
 }
 
+/* A session a herdr pane runs (not this server): its dot follows what herdr says the agent does. */
+.session-herdr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.session-herdr::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.session-herdr.is-working {
+  color: var(--accent);
+}
+
+.session-herdr.is-blocked {
+  color: var(--warn);
+}
+
+.herdr-dialog-text {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
 .session-wake {
   display: inline-flex;
   align-items: center;
