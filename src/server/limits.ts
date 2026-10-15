@@ -34,7 +34,8 @@ export class Limits {
   /** A harness heard its limits during a run. */
   report(account: LimitAccount): void {
     this.reported.set(account.id, account);
-    void writeJson(this.file, [...this.reported.values()]);
+    // Fire and forget: a failed write must not become an unhandled rejection (Node exits on one).
+    writeJson(this.file, [...this.reported.values()]).catch((error: unknown) => console.error(`awui: could not save limits: ${error instanceof Error ? error.message : String(error)}`));
   }
 
   async get(): Promise<UsageLimits> {
