@@ -15,8 +15,13 @@ describe("usage, drawn", () => {
     expect(cacheShare(totals())).toBeNull();
   });
 
-  it("labels every few days, a month's first, and the last", () => {
-    expect(dayLabels(["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"], 3)).toEqual(["Sep 29", null, "Oct 1", "Oct 2", "Oct 3"]);
+  it("labels the last day, each month's first, and every few days, never two close together", () => {
+    expect(dayLabels(["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"], 3)).toEqual(["Sep 29", null, "Oct 1", null, "Oct 3"]);
+    expect(dayLabels(["2026-10-01", "2026-10-02", "2026-10-03"], 1)).toEqual(["Oct 1", "Oct 2", "Oct 3"]);
+    // 90 days from Jul 19: the 15-day steps that fall next to a month's first (Aug 3, Sep 2, Oct 2) give way to it.
+    const start = Date.UTC(2026, 6, 19);
+    const days = Array.from({ length: 89 }, (_, i) => new Date(start + i * 86_400_000).toISOString().slice(0, 10));
+    expect(dayLabels(days, 15).filter(Boolean)).toEqual(["Jul 19", "Aug 1", "Aug 18", "Sep 1", "Sep 17", "Oct 1", "Oct 15"]);
   });
 
   it("splits each day's bar by harness, scaled to the tallest day", () => {

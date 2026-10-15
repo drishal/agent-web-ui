@@ -28,13 +28,26 @@ export function cacheShare(t: UsageTotals): number | null {
   return all > 0 ? t.cachedInput / all : null;
 }
 
-/** A day's label under the chart: "Oct 14"; the first of a month, and every `every`th day, get one. */
+/**
+ * The days labelled under the chart ("Oct 14"): the last, each month's first,
+ * then every `every`th, each kept only where it is far enough from the ones
+ * before it (most of `every` days), so two labels never run into each other.
+ */
 export function dayLabels(days: string[], every: number): Array<string | null> {
-  return days.map((d, i) => {
-    const date = new Date(`${d}T12:00:00Z`);
-    const first = date.getUTCDate() === 1;
-    return i === days.length - 1 || i % every === 0 || first ? date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : null;
+  const gap = Math.max(1, Math.round(every * 0.7));
+  const out: Array<string | null> = days.map(() => null);
+  const taken: number[] = [];
+  const put = (i: number) => {
+    if (out[i] !== null || taken.some((j) => Math.abs(i - j) < gap)) return;
+    taken.push(i);
+    out[i] = new Date(`${days[i]}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  };
+  if (days.length > 0) put(days.length - 1);
+  days.forEach((d, i) => {
+    if (d.endsWith("-01")) put(i);
   });
+  for (let i = 0; i < days.length; i += every) put(i);
+  return out;
 }
 
 /** Each day's bar as segments by harness (in the report's harness order), heights as shares of the tallest day. */

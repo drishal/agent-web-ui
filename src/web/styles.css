@@ -8589,14 +8589,25 @@ body {
   }
 }
 
+/* Wider than its day: a flex row centres it over the bar (text alone would start at the left edge
+   and hang off to the right); the first and last lean inward so neither leaves the chart. */
 .usage-day-label {
+  display: flex;
+  justify-content: center;
   height: 16px;
   margin-top: 5px;
   overflow: visible;
   color: var(--muted);
   font-size: 10.5px;
-  text-align: center;
   white-space: nowrap;
+}
+
+.usage-day:first-child .usage-day-label {
+  justify-content: flex-start;
+}
+
+.usage-day:last-child .usage-day-label {
+  justify-content: flex-end;
 }
 
 .usage-legend {
