@@ -10,6 +10,7 @@ import { hashPassword, PasswordAuth } from "../../src/server/auth.js";
 import { ChatManager } from "../../src/server/chats/manager.js";
 import { FakeAdapter } from "../../src/server/harness/fake.js";
 import { HarnessRegistry } from "../../src/server/harness/registry.js";
+import type { Herdr } from "../../src/server/herdr.js";
 import { Security } from "../../src/server/security.js";
 import { ThemeStore } from "../../src/server/theme.js";
 import { Workspaces } from "../../src/server/workspaces.js";
@@ -51,6 +52,8 @@ export async function makeTestApp(options: {
   withSettings?: boolean;
   /** Keep file checkpoints (in this test's own folder). */
   withCheckpoints?: boolean;
+  /** Herdr's panes (a stand-in socket's); none otherwise, whatever herdr runs on this machine. */
+  herdr?: Herdr;
 } = {}): Promise<TestApp> {
   const root = tempDir();
   const project = path.join(root, "proj");
@@ -86,6 +89,7 @@ export async function makeTestApp(options: {
     webDir: null,
     heartbeatMs: options.heartbeatMs ?? 20_000,
     stateDir,
+    ...(options.herdr ? { herdr: options.herdr } : {}),
     ...(options.withCheckpoints ? { checkpointsDir: path.join(root, ".state", "checkpoints") } : {}),
     ...(options.withSettings
       ? {

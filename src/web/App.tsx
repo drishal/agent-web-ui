@@ -901,7 +901,7 @@ export function App() {
   const chooseTheme = async (theme: ThemeChoice) => {
     try {
       const next = await api<ServerSettings>("/api/settings", { method: "PUT", body: { theme } });
-      setBoot((b) => (b ? { ...b, ui: { theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
+      setBoot((b) => (b ? { ...b, ui: { ...b.ui, theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
     } catch (e) {
       fail(e);
     }
@@ -1183,7 +1183,7 @@ export function App() {
           notify={notify}
           onToggleNotify={toggleNotify}
           onTestNotify={testNotify}
-          onUiSaved={(ui) => setBoot((b) => (b ? { ...b, ui } : b))}
+          onUiSaved={(ui) => setBoot((b) => (b ? { ...b, ui: { ...b.ui, ...ui } } : b))}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

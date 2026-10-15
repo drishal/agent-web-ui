@@ -1,8 +1,8 @@
 # awui settings: copy to ~/.config/awui/config.yml.
 # Every key is optional. Restart the server after changing port, host, auth,
 # or the lists (systemctl --user restart awui); theme, text_scale,
-# and autocollapse_sidebar apply on the next page load. Environment variables
-# (PORT, HOST, AUTH_USERNAME, ...) win over this file.
+# autocollapse_sidebar, and herdr apply on the next page load. Environment
+# variables (PORT, HOST, AUTH_USERNAME, ...) win over this file.
 
 # Port for the UI and API (1024-65535).
 port: 4783
@@ -37,6 +37,14 @@ theme: system
 # Fold the sidebar away in narrow windows (below 1200 px; phones use the
 # drawer anyway). A sidebar you collapsed yourself stays collapsed.
 autocollapse_sidebar: true
+
+# Work with herdr (herdr.dev) when it runs: mark the sessions open in its
+# panes, and let atui in a herdr pane report its chats there. Applies on the
+# next page load (atui on its next start).
+herdr: true
+# herdr's API socket, for a named herdr session (read at startup; the default
+# session's is found by itself).
+# herdr_socket: ~/.config/herdr/sessions/work/herdr.sock
 
 # How each harness's CLI starts (read at startup; the Settings dialog does not
 # show this, since a command is a program the server runs). command: its

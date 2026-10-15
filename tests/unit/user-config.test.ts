@@ -43,6 +43,8 @@ workspace_roots: [/home/x/code, /srv]
 allowed_hosts: [box.tail.ts.net]
 theme: base16
 autocollapse_sidebar: false
+herdr: false
+herdr_socket: ~/run/herdr.sock
 `);
     const read = readUserConfig(dir);
     expect(read && configEnv(read.config)).toEqual({
@@ -53,13 +55,16 @@ autocollapse_sidebar: false
       WORKSPACE_ROOTS: `/home/x/code${path.delimiter}/srv`,
       ALLOWED_HOSTS: "box.tail.ts.net",
     });
-    expect(uiSettings(read?.config)).toEqual({ theme: "base16", textScale: null, autocollapseSidebar: false });
+    expect(uiSettings(read?.config, {})).toEqual({ theme: "base16", textScale: null, autocollapseSidebar: false, herdr: false });
+    // AWUI_HERDR wins over the file, as every variable does.
+    expect(uiSettings(read?.config, { AWUI_HERDR: "1" }).herdr).toBe(true);
+    expect(read?.config.herdr_socket).toBe("~/run/herdr.sock");
     // The old name still works.
     expect(uiSettings(readUserConfig(folder("theme: custom\n"))?.config).theme).toBe("base16");
   });
 
   it("defaults the browser settings, and an empty file is no settings", () => {
-    expect(uiSettings(undefined)).toEqual({ theme: null, textScale: null, autocollapseSidebar: true });
+    expect(uiSettings(undefined, {})).toEqual({ theme: null, textScale: null, autocollapseSidebar: true, herdr: true });
     expect(readUserConfig(folder(""))?.config).toEqual({});
   });
 
