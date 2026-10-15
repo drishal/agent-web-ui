@@ -790,10 +790,15 @@ const TurnView = memo(function TurnView({
   onImplement: (() => void) | null;
 }) {
   if (!turn.prompt) {
-    // Startup notices before any prompt: plain rows, no fold.
+    // What comes before any prompt (startup notices, or what a compaction kept): plain rows, no fold, and the
+    // reply among them in its place (buildTurns takes it out of the process, so it is drawn here or not at all).
     return (
       <section className="turn turn-preamble">
-        {[...turn.process, ...turn.errors, ...turn.after].map((item) => (
+        {turn.process.slice(0, turn.answerAt).map((item) => (
+          <ProcessItem key={item.id} item={item} workspace={workspace} />
+        ))}
+        {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={false} onFork={onFork} canRestore={false} onRestore={onRestore} /> : null}
+        {[...turn.process.slice(turn.answerAt), ...turn.errors, ...turn.after].map((item) => (
           <ProcessItem key={item.id} item={item} workspace={workspace} />
         ))}
       </section>
