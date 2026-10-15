@@ -373,6 +373,7 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 [herdr](https://herdr.dev) is a terminal workspace manager for coding agents: workspaces, tabs, and panes, with each pane's agent and whether it is working, blocked on you, or done (herdr's own hooks for Pi, omp, Claude Code, and Hermes tell it, and `herdr integration install <harness>` sets them up). awui works with it both ways, through herdr's JSON socket, and does nothing where herdr does not run. `herdr: false` in `config.yml`, or the Settings dialog's checkbox, turns it off.
 
 - **One writer per session.** A session that herdr says one of its panes runs is marked so in the session list, and the server refuses to resume it (409 `open_in_herdr`) unless the client says that was chosen: its harness already has the session file open there, so a resume here would be a second writer on it.
+- **In the browser** such a session is marked *herdr* in the sidebar, in the accent while that agent works and in the warn colour while it waits for you. Opening it asks first: **Show in herdr** (herdr switches to that pane; this machine only), **Open here anyway**, or Cancel.
 
 ## Security
 

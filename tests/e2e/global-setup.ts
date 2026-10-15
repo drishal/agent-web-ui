@@ -1,8 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { E2E_PORT } from "../../playwright.config.js";
+import { startFakeHerdr } from "../helpers/fake-herdr.js";
 
 /** Start the built server with fake harnesses on 127.0.0.1 (local use: no sign-in). */
 export default async function globalSetup(): Promise<() => Promise<void>> {
@@ -11,9 +12,21 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   for (const name of ["alpha", "beta", ".hidden-proj"]) mkdirSync(path.join(root, name), { recursive: true });
   const themeFile = path.join(base, "theme.yaml");
   copyFileSync(path.join(import.meta.dirname, "..", "fixtures", "themes", "stylix.yaml"), themeFile);
+  // A stand-in herdr instead of the developer's: its panes are what a test writes to agents.json, and
+  // what it was asked lands in calls.jsonl (herdr.spec.ts).
+  const herdrDir = path.join(base, "herdr");
+  mkdirSync(herdrDir);
+  writeFileSync(path.join(herdrDir, "agents.json"), "[]");
+  const herdr = await startFakeHerdr(
+    path.join(herdrDir, "herdr.sock"),
+    () => JSON.parse(readFileSync(path.join(herdrDir, "agents.json"), "utf8")) as unknown[],
+    (call) => appendFileSync(path.join(herdrDir, "calls.jsonl"), `${JSON.stringify(call)}\n`),
+  );
   const server: ChildProcess = spawn(process.execPath, ["dist/server/server/index.js"], {
     env: {
       ...process.env,
+      HERDR_SOCKET_PATH: path.join(herdrDir, "herdr.sock"),
+      AWUI_HERDR: "1",
       // Never pick up the developer's own config.yml (host, login, theme).
       AWUI_CONFIG_DIR: "",
       PORT: String(E2E_PORT),
@@ -41,7 +54,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     server.once("exit", (code) => reject(new Error(`server exited (${code}):\n${output}`)));
   });
   process.env.AWUI_E2E_ROOT = root;
+  process.env.AWUI_E2E_HERDR = herdrDir;
   return async () => {
+    await herdr.close();
     if (server.exitCode !== null) return;
     const exited = new Promise((resolve) => server.once("exit", resolve));
     server.kill("SIGTERM");

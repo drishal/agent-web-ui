@@ -223,6 +223,10 @@ if every test passes.
   whose output arrives a line at a time). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
+- **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give
+  `makeTestApp({ herdr })` their own; the e2e server asks one whose panes are the
+  `agents.json` in `$AWUI_E2E_HERDR` (calls land in `calls.jsonl`); the atui test
+  server runs with `AWUI_HERDR=0`. Never point a test at the developer's herdr.
 - **Scripted CLIs** (`tests/fixtures/fake-omp.mjs`, `fake-hermes.mjs`,
   `fake-claude.mjs`) speak each harness's real wire protocol. Adapter changes
   get a test against one of them; record new frames from the real CLI rather

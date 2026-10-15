@@ -50,9 +50,10 @@ export function useSessions({ boot, workspace, chat }: { boot: Bootstrap | null;
     };
   }, [settleKey, refreshSessions]);
 
-  // Runs in other chats have no stream here: poll while any is working so its spinner stops on time.
+  // Runs in other chats have no stream here: poll while any is working so its spinner stops on time
+  // (a herdr pane's too, so its mark follows what herdr says).
   const chatId = chat?.chatId ?? null;
-  const backgroundBusy = overview.sessions.some((s) => isBusy(s.status) && s.liveChatId !== chatId);
+  const backgroundBusy = overview.sessions.some((s) => (isBusy(s.status) && s.liveChatId !== chatId) || s.herdr?.status === "working" || s.herdr?.status === "blocked");
   useEffect(() => {
     if (!backgroundBusy) return;
     const timer = window.setInterval(() => void refreshSessions(), BACKGROUND_POLL_MS);
