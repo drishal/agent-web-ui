@@ -111,3 +111,36 @@ test("a changed file opens in the viewer, coloured, its added lines marked, and 
   await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
   await expect(page.getByRole("dialog", { name: "File src/app.ts" })).toBeVisible();
 });
+
+test("a saved prompt goes in with # and its blanks are filled in with Tab; any device sees it", async ({ page, browser }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  // Saved from a draft, through the stash menu.
+  await box(page).fill("Review {{file}} for {{risk}}");
+  await page.getByRole("button", { name: /^Stash/ }).click();
+  await page.getByRole("menuitem", { name: "Save the draft as a prompt…" }).click();
+  const manager = page.getByRole("dialog", { name: "Saved prompts" });
+  await expect(manager.getByRole("textbox", { name: "Prompt" })).toHaveValue("Review {{file}} for {{risk}}");
+  await expect(manager.locator(".blank-chip")).toHaveText(["file", "risk"]);
+  await manager.getByRole("textbox", { name: "Name" }).fill("risky");
+  await manager.getByRole("button", { name: "Save prompt" }).click();
+  await expect(manager.getByRole("list", { name: "Your saved prompts" })).toContainText("#risky");
+  await page.keyboard.press("Escape");
+  await expect(manager).toBeHidden();
+  // # puts it in, the first blank selected: typing fills it, Tab goes to the next.
+  await box(page).fill("#ris");
+  await expect(page.getByRole("listbox", { name: "Saved prompts" }).getByRole("option")).toHaveText([/#risky\s*Review ‹file› for ‹risk›/]);
+  await page.keyboard.press("Enter");
+  await expect(box(page)).toHaveValue("Review {{file}} for {{risk}}");
+  await page.keyboard.type("app.ts");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("races");
+  await expect(box(page)).toHaveValue("Review app.ts for races");
+  // Another browser (another device) has it too.
+  const other = await browser.newPage();
+  await signInAndOpen(other);
+  await newChat(other);
+  await other.getByRole("textbox", { name: "Message" }).fill("#");
+  await expect(other.getByRole("listbox", { name: "Saved prompts" })).toContainText("#risky");
+  await other.close();
+});

@@ -9,7 +9,9 @@ import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type Intera
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
-import { IconArrowUp, IconImage, IconLink, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { blanks, matchPrompts, nextBlank, promptGist } from "../prompt-blanks.js";
+import { managePrompts, useSavedPrompts } from "../saved-prompts.js";
+import { IconArrowUp, IconImage, IconLink, IconPlan, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
@@ -325,10 +327,28 @@ export function Composer({
   const menuId = useId();
   const slashQuery = /^\/(\S*)$/.exec(text)?.[1];
   const skillQuery = /^\$(\S*)$/.exec(text)?.[1];
+  // "#" lists the saved prompts (the server's, for every device), where there are any.
+  const savedPrompts = useSavedPrompts();
+  const promptQuery = /^#(\S*)$/.exec(text)?.[1];
   const skillCount = commands ? commands.filter(isSkill).length : 0;
-  const menuKind = closed || menuDismissed ? null : slashQuery !== undefined ? "slash" : skillQuery !== undefined && skillCount > 0 ? "skill" : null;
+  const menuKind =
+    closed || menuDismissed
+      ? null
+      : slashQuery !== undefined
+        ? "slash"
+        : skillQuery !== undefined && skillCount > 0
+          ? "skill"
+          : promptQuery !== undefined && (savedPrompts?.length ?? 0) > 0
+            ? "prompt"
+            : null;
   const menuOpen = menuKind !== null;
-  const menuItems = menuKind === "slash" ? slashMenu(commands ?? APP_COMMANDS, slashQuery ?? "") : menuKind === "skill" ? skillMenu(commands ?? [], skillQuery ?? "") : [];
+  const promptMatches = menuKind === "prompt" ? matchPrompts(savedPrompts ?? [], promptQuery ?? "") : [];
+  const menuItems =
+    menuKind === "slash"
+      ? slashMenu(commands ?? APP_COMMANDS, slashQuery ?? "")
+      : menuKind === "skill"
+        ? skillMenu(commands ?? [], skillQuery ?? "")
+        : promptMatches.map((p): SlashCommand => ({ name: p.name, description: promptGist(p), source: "saved" }));
   const activeCommand = menuItems[Math.min(menuIndex, menuItems.length - 1)];
   const wantsCommands = (slashQuery !== undefined || skillQuery !== undefined) && !closed;
 
@@ -346,15 +366,26 @@ export function Composer({
 
   useEffect(() => {
     setMenuIndex(0);
-    if (slashQuery === undefined && skillQuery === undefined) setMenuDismissed(false);
-  }, [slashQuery, skillQuery]);
+    if (slashQuery === undefined && skillQuery === undefined && promptQuery === undefined) setMenuDismissed(false);
+  }, [slashQuery, skillQuery, promptQuery]);
 
   useEffect(() => {
     if (menuOpen) document.getElementById(`${menuId}-${menuIndex}`)?.scrollIntoView({ block: "nearest" });
   }, [menuOpen, menuIndex, menuId]);
 
   const completeCommand = (c: SlashCommand) => {
+    if (menuKind === "prompt") {
+      const p = promptMatches.find((x) => x.name === c.name);
+      if (p) insertPrompt(p.text);
+      return;
+    }
     setText(`/${c.name} `);
+    area.current?.focus();
+  };
+  /** A saved prompt replaces the draft, its first blank selected to type over. */
+  const insertPrompt = (value: string) => {
+    const first = blanks(value)[0];
+    setTextAt(value, first?.start ?? value.length, first?.end ?? value.length);
     area.current?.focus();
   };
 
@@ -400,6 +431,13 @@ export function Composer({
       return;
     }
     if (e.key === "Tab" && plain) {
+      // A saved prompt's blanks: Tab to the next, Shift+Tab back (unless the only one is already selected).
+      const blank = nextBlank(text, e.shiftKey ? el.selectionStart : el.selectionEnd, e.shiftKey);
+      if (blank && !(blank.start === el.selectionStart && blank.end === el.selectionEnd)) {
+        e.preventDefault();
+        el.setSelectionRange(blank.start, blank.end);
+        return;
+      }
       const next = indentList(text, el.selectionStart, el.selectionEnd, e.shiftKey);
       if (next) {
         e.preventDefault();
@@ -580,13 +618,24 @@ export function Composer({
             </p>
           ) : null}
           {menuOpen ? (
-            <div className={`command-menu${menuKind === "skill" ? " is-skills" : ""}`} id={menuId} role="listbox" aria-label={menuKind === "skill" ? "Skills" : "Commands"}>
+            <div
+              className={`command-menu${menuKind === "skill" ? " is-skills" : menuKind === "prompt" ? " is-prompts" : ""}`}
+              id={menuId}
+              role="listbox"
+              aria-label={menuKind === "skill" ? "Skills" : menuKind === "prompt" ? "Saved prompts" : "Commands"}
+            >
               <div className="command-menu-head" aria-hidden="true">
-                {menuKind === "skill" ? `Skills · ${skillCount}` : "Commands"}
+                {menuKind === "skill" ? `Skills · ${skillCount}` : menuKind === "prompt" ? `Saved prompts · ${savedPrompts?.length ?? 0}` : "Commands"}
               </div>
               {menuItems.length === 0 ? (
                 <div className="command-empty">
-                  {commands === null ? "Loading commands…" : menuKind === "skill" ? `No skill matches $${skillQuery}` : `No command matches /${slashQuery}`}
+                  {menuKind === "prompt"
+                    ? `No saved prompt matches #${promptQuery}`
+                    : commands === null
+                      ? "Loading commands…"
+                      : menuKind === "skill"
+                        ? `No skill matches $${skillQuery}`
+                        : `No command matches /${slashQuery}`}
                 </div>
               ) : (
                 menuItems.map((c, i) => (
@@ -604,13 +653,31 @@ export function Composer({
                       completeCommand(c);
                     }}
                   >
-                    {menuKind === "skill" ? <IconSpark size={14} className="command-icon-skill" /> : <IconTerminal size={14} />}
-                    <span className="command-name">{menuKind === "skill" ? `$${skillName(c)}` : `/${c.name}`}</span>
+                    {menuKind === "skill" ? (
+                      <IconSpark size={14} className="command-icon-skill" />
+                    ) : menuKind === "prompt" ? (
+                      <IconPlan size={14} className="command-icon-prompt" />
+                    ) : (
+                      <IconTerminal size={14} />
+                    )}
+                    <span className="command-name">{menuKind === "skill" ? `$${skillName(c)}` : menuKind === "prompt" ? `#${c.name}` : `/${c.name}`}</span>
                     {c.description ? <span className="command-desc">{c.description}</span> : null}
                     {menuKind === "slash" && (c.source === "skill" || c.source === "prompt" || c.source === "app") ? <span className="command-source">{c.source}</span> : null}
                   </div>
                 ))
               )}
+              {menuKind === "prompt" ? (
+                <button
+                  type="button"
+                  className="command-foot command-foot-btn"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    managePrompts();
+                  }}
+                >
+                  Manage saved prompts…
+                </button>
+              ) : null}
               {/* Where the skills went: under "$", unless the query already asks for them. */}
               {menuKind === "slash" && skillCount > 0 && !(slashQuery ?? "").toLowerCase().startsWith("skill") ? (
                 <div className="command-foot" aria-hidden="true">
@@ -691,6 +758,19 @@ export function Composer({
                     <li role="none">
                       <button type="button" role="menuitem" disabled={empty && images.length === 0} onClick={stashNow}>
                         <IconStash size={14} /> Stash this draft <kbd>Alt+S</kbd>
+                      </button>
+                    </li>
+                    <li role="none">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={empty}
+                        onClick={() => {
+                          setStashOpen(false);
+                          managePrompts(text);
+                        }}
+                      >
+                        <IconPlan size={14} /> Save the draft as a prompt…
                       </button>
                     </li>
                     {stash.length === 0 ? <li className="stash-empty muted">Nothing stashed</li> : null}

@@ -43,6 +43,8 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { id: "commands", keys: ["/"], label: "The harness's commands (at the start)" },
       { id: "skills", keys: ["$"], label: "The harness's skills (at the start)" },
       { id: "mention", keys: ["@"], label: "Mention a project file" },
+      { id: "prompts", keys: ["#"], label: "Put in a saved prompt (at the start)" },
+      { id: "blank", keys: ["Tab", "Shift+Tab"], label: "Next or previous blank of a saved prompt" },
     ],
   },
   {

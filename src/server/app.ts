@@ -24,6 +24,7 @@ import {
   resumeChatSchema,
   rewindSchema,
   runCommandSchema,
+  savedPromptSchema,
   sessionMarkSchema,
   pushSubscriptionSchema,
   pushTestSchema,
@@ -61,6 +62,7 @@ import { readSettings, writeSettings, type Requester, type SettingsContext } fro
 import { readAwuiConfig, writeAwuiConfig } from "./awui-settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import { SessionMarks } from "./session-marks.js";
+import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
@@ -90,6 +92,8 @@ export interface AppDeps {
   heartbeatMs?: number;
   /** Pinned and archived sessions; in memory when absent. */
   marks?: SessionMarks;
+  /** Saved prompts, for every device; in memory when absent (tests). */
+  prompts?: SavedPrompts;
   /** Subscription limits; in memory when absent. */
   limits?: Limits;
   /** Notes and Web Push for devices that turned notifications on; in memory when absent. */
@@ -144,6 +148,7 @@ function toSession(
 export function createApp(deps: AppDeps) {
   const { registry, manager, workspaces, security, theme } = deps;
   const marks = deps.marks ?? SessionMarks.inMemory();
+  const prompts = deps.prompts ?? SavedPrompts.inMemory();
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
@@ -324,6 +329,18 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(req.params.id);
     const { q } = fileSearchSchema.parse(req.query);
     res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
+  // Saved prompts (saved-prompts.ts): every device and atui share them.
+  app.get("/api/prompts", (_req, res) => {
+    res.json({ prompts: prompts.list() });
+  });
+  app.post("/api/prompts", async (req, res) => {
+    res.json(await prompts.save(body(savedPromptSchema, req)));
+  });
+  app.delete("/api/prompts/:id", async (req, res) => {
+    await prompts.remove(req.params.id);
+    res.json({ ok: true });
   });
 
   // The file viewer: one of the project's own files, read-only and bounded (file-view.ts).

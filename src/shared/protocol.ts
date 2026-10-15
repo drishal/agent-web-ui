@@ -581,6 +581,30 @@ export interface ProjectSearch {
   truncated: boolean;
 }
 
+/** Saved prompts are kept on the server, for every device: at most this many, each at most this long. */
+export const MAX_SAVED_PROMPTS = 200;
+export const MAX_SAVED_PROMPT_CHARS = 20_000;
+
+/** A prompt to save: a new one, or `id`'s new name and text. `{{blank}}`s in it are filled in when it is used. */
+export const savedPromptSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .refine((v) => !/[\u0000-\u001f]/.test(v), "must be one line"),
+  text: z.string().min(1).max(MAX_SAVED_PROMPT_CHARS),
+});
+
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  text: string;
+  /** Epoch ms. */
+  updatedAt: number;
+}
+
 /** A project file for the file viewer: relative to the project (or absolute inside it). */
 export const fileViewSchema = z.object({ path: z.string().min(1).max(4096) });
 
