@@ -36,6 +36,7 @@ import { ShortcutSheet } from "./components/ShortcutSheet.js";
 import { ChatSearch } from "./components/ChatSearch.js";
 import { FileViewer } from "./components/FileViewer.js";
 import { SavedPromptsDialog } from "./components/SavedPromptsDialog.js";
+import { UsageDialog } from "./components/UsageDialog.js";
 import { useManagePrompts } from "./saved-prompts.js";
 import { useFileRequests, type FileRequest } from "./file-bus.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
@@ -49,7 +50,7 @@ import { RestoreDialog } from "./components/RestoreDialog.js";
 import { collectChanges } from "./review.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
-import { IconEdit, IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
+import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
 import { closeTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
@@ -119,6 +120,7 @@ export function App() {
   useFileRequests((request) => setViewer({ request }));
   /** The saved prompts' manager: open, perhaps starting a new prompt from a draft. */
   const [promptsOpen, setPromptsOpen] = useState<{ draft?: string } | null>(null);
+  const [usageOpen, setUsageOpen] = useState(false);
   useManagePrompts((draft) => setPromptsOpen(draft ? { draft } : {}));
   /** A chat opened from that search: Find opens in it holding the word, once it is shown. */
   const [findAsk, setFindAsk] = useState<{ query: string; nonce: number; sessionId: string; chatId: string | null } | null>(null);
@@ -893,6 +895,7 @@ export function App() {
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
+    items.push({ id: "usage", section: "Actions", label: "Usage across chats", hint: "tokens, cost", keywords: "spend dashboard stats", run: () => setUsageOpen(true) });
     items.push({ id: "prompts", section: "Actions", label: "Saved prompts…", hint: "#", keywords: "templates snippets", run: () => setPromptsOpen({}) });
     items.push({ id: "open-file", section: "Actions", label: "Open a file…", hint: searchWorkspace?.name, keywords: "view read go to", disabled: searchWorkspace ? undefined : "Choose a project first", run: () => setViewer({ request: null }) });
     items.push({ id: "search-all", section: "Actions", label: "Search every chat", hint: shortcutHint("history-search"), keywords: "history find", run: () => setChatSearch("") });
@@ -1030,7 +1033,21 @@ export function App() {
     >
       <Sidebar
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
-        footer={<LimitsMeter limits={limits} />}
+        footer={
+          <>
+            <LimitsMeter limits={limits} />
+            <button
+              type="button"
+              className="usage-link"
+              onClick={() => {
+                setUsageOpen(true);
+                setDrawerOpen(false);
+              }}
+            >
+              <IconGauge size={13} /> Usage across chats
+            </button>
+          </>
+        }
         tabs={
           tabState.tabs.length >= 2 ? (
             <nav className="drawer-tabs" aria-label="Open tabs">
@@ -1434,6 +1451,9 @@ export function App() {
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
       {shortcutsOpen ? <ShortcutSheet onClose={() => setShortcutsOpen(false)} /> : null}
       {promptsOpen ? <SavedPromptsDialog {...promptsOpen} onClose={() => setPromptsOpen(null)} /> : null}
+      {usageOpen ? (
+        <UsageDialog harnesses={boot.harnesses} onOpenSession={(s, ws) => void openSession(s, ws ? { workspace: ws } : {})} onClose={() => setUsageOpen(false)} />
+      ) : null}
       {viewer && searchWorkspace ? <FileViewer workspace={searchWorkspace} request={viewer.request} changes={chat ? changes : []} onClose={() => setViewer(null)} /> : null}
       {chatSearch !== null ? (
         <ChatSearch

@@ -25,7 +25,7 @@ import {
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, extensionMessage, forkCutIndex, historyToItems } from "./agent-events.js";
+import { commandOutputEvents, extensionMessage, forkCutIndex, historyToItems, isObj, usageEntries } from "./agent-events.js";
 import { seedTranscript, toolRecordText, type HandoffSeed } from "./handoff.js";
 import type {
   HarnessAdapter,
@@ -37,6 +37,7 @@ import type {
   NativeSessionSummary,
   OpenChatRequest,
   RecentNativeSession,
+  UsageEntry,
 } from "./types.js";
 
 interface FakeCall {
@@ -189,6 +190,13 @@ export class FakeAdapter implements HarnessAdapter {
       }
     }
     return new FakeLiveChat(session, this.chunkDelayMs);
+  }
+
+  /** Like the file-backed harnesses: each call's usage, from the stored session. */
+  async readUsage(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null> {
+    const session = this.sessions.get(req.nativeId);
+    if (!session || session.cwd !== req.cwd) return null;
+    return usageEntries(session.messages.map((m) => ({ message: m, at: isObj(m) && typeof m.timestamp === "number" ? m.timestamp : 0 })));
   }
 
   /** Like the file-backed harnesses: the stored transcript, without "starting" anything. */
@@ -535,6 +543,9 @@ class FakeLiveChat implements LiveChat {
       this.partial += chunk;
       this.emit({ type: "assistant_delta", field: "text", delta: chunk });
     }
+    const usage = { input: 1200, output: Math.ceil(body.length / 4), cacheRead: 0, cacheWrite: 0 };
+    // Priced as pi-ai prices a call, so usage across sessions has a cost to add up.
+    const cost = { total: (usage.input * 1 + usage.output * 5) / 1_000_000 };
     this.record({
       role: "assistant",
       content: [
@@ -543,8 +554,9 @@ class FakeLiveChat implements LiveChat {
       ],
       stopReason: "stop",
       model: this.model,
+      usage: { ...usage, cost },
     });
-    this.emit({ type: "assistant_end", text: body, thinking, usage: { input: 1200, output: Math.ceil(body.length / 4), cacheRead: 0, cacheWrite: 0 } });
+    this.emit({ type: "assistant_end", text: body, thinking, usage });
   }
 
   private async tool(kind: "read" | "big" | "edit", signal: AbortSignal): Promise<void> {

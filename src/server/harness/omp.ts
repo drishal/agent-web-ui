@@ -30,9 +30,9 @@ import {
   type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
+import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
-import { branchMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { branchMessages, fileMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { ompLimits } from "./limits.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
 import { renderHtmlExtension, renderHtmlExtensionArgs } from "./render-extension.js";
@@ -48,6 +48,7 @@ import type {
   NativeSessionSummary,
   OpenChatRequest,
   RecentNativeSession,
+  UsageEntry,
 } from "./types.js";
 
 const run = promisify(execFile);
@@ -700,6 +701,20 @@ export class OmpAdapter implements HarnessAdapter {
    * omp leaves out model calls that failed or were aborted, so they are left
    * out here too (checked against omp on real sessions, item for item).
    */
+  async readUsage(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null> {
+    const file = await this.sessionFile(req.nativeId);
+    const text = file ? await fs.readFile(file, "utf8").catch(() => null) : null;
+    if (text === null) return null;
+    const head = text.slice(0, text.indexOf("\n") >= 0 ? text.indexOf("\n") : text.length);
+    try {
+      const parsed: unknown = JSON.parse(head);
+      if (isObj(parsed) && typeof parsed.cwd === "string" && path.resolve(parsed.cwd) !== path.resolve(req.cwd)) return null;
+    } catch {
+      // no header line
+    }
+    return usageEntries(fileMessages(text));
+  }
+
   async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
     const file = await this.sessionFile(req.nativeId);
     const text = file ? await fs.readFile(file, "utf8").catch(() => null) : null;

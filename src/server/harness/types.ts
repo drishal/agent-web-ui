@@ -62,6 +62,20 @@ export interface RecentNativeSession extends NativeSessionSummary {
   cwd: string;
 }
 
+/** One model call's tokens, from a session's file. */
+export interface UsageEntry {
+  /** Epoch ms. */
+  at: number;
+  model: string | null;
+  input: number;
+  /** Input read from the provider's cache. */
+  cachedInput: number;
+  cacheWrite: number;
+  output: number;
+  /** USD, where the harness priced the call; null where it did not. */
+  cost: number | null;
+}
+
 /**
  * How a harness's CLI is started, from config.yml's `harnesses:` block: the
  * executable (else its name on PATH) and arguments added to each live chat's
@@ -201,6 +215,12 @@ export interface HarnessAdapter {
    * yet). Harnesses whose history lives only behind their process omit it.
    */
   readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
+  /**
+   * Every model call a stored session made, with its tokens (side branches
+   * too: what they spent was spent), read without starting the harness; for
+   * usage across sessions. Null when the session cannot be read.
+   */
+  readUsage?(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null>;
   /** The subscription limits of every account the harness is signed in to (omp's `usage`). */
   usageLimits?(): Promise<LimitAccount[]>;
   /** Kill helper processes; called on server shutdown. */

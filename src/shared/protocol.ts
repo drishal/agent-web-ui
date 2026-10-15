@@ -581,6 +581,45 @@ export interface ProjectSearch {
   truncated: boolean;
 }
 
+/** Usage across sessions: the last `days` days, by day in the browser's time zone (`tz`, as getTimezoneOffset gives it). */
+export const usageReportSchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  tz: z.coerce.number().int().min(-840).max(840).default(0),
+});
+
+/** Tokens and cost over some calls. */
+export interface UsageTotals {
+  input: number;
+  cachedInput: number;
+  cacheWrite: number;
+  output: number;
+  /** USD over the calls the harness priced (see `unpriced`). */
+  cost: number;
+  calls: number;
+  /** Calls with no price (Claude Code's files price none). */
+  unpriced: number;
+}
+
+export interface UsageReport {
+  days: number;
+  /** Epoch ms the range starts at (a local midnight). */
+  since: number;
+  totals: UsageTotals & { sessions: number };
+  /** One per day, oldest first, every day of the range; tokens by harness too, for the chart. */
+  byDay: Array<{ day: string; totals: UsageTotals; tokensByHarness: Record<string, number> }>;
+  byHarness: Array<{ harnessId: string; totals: UsageTotals; sessions: number }>;
+  /** The most-used models, most tokens first. */
+  byModel: Array<{ model: string; harnessId: string; totals: UsageTotals }>;
+  /** The sessions that used the most, most first. */
+  top: Array<{ session: ProjectSession; totals: UsageTotals }>;
+  workspaces: WorkspaceInfo[];
+  /** Harnesses whose sessions cannot be read for usage (Hermes keeps no file). */
+  unreadable: string[];
+  scanned: number;
+  total: number;
+  truncated: boolean;
+}
+
 /** Saved prompts are kept on the server, for every device: at most this many, each at most this long. */
 export const MAX_SAVED_PROMPTS = 200;
 export const MAX_SAVED_PROMPT_CHARS = 20_000;

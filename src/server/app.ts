@@ -40,6 +40,7 @@ import {
   sessionPreviewSchema,
   type SessionPreview,
   uploadPasteSchema,
+  usageReportSchema,
   type SessionsOverview,
   type SessionSummary,
   type WorkspaceInfo,
@@ -67,6 +68,7 @@ import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
 import { viewFile } from "./file-view.js";
+import { UsageReader, type UsageTarget } from "./usage-report.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
 import { runCommand } from "./run-command.js";
@@ -153,6 +155,7 @@ export function createApp(deps: AppDeps) {
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
   const chatSearcher = new ChatSearcher();
+  const usageReader = new UsageReader();
   if (deps.checkpointsDir) manager.checkpoints = { service: new Checkpoints(deps.checkpointsDir), sessionsDir: path.join(deps.checkpointsDir, "sessions") };
   manager.onNews = (chat, kind, text, request) => {
     // An approval's note carries its two answers, so the notification's own buttons can send one.
@@ -329,6 +332,25 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(req.params.id);
     const { q } = fileSearchSchema.parse(req.query);
     res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
+  // Usage across sessions (usage-report.ts): the sidebar's sessions' calls, read from the harnesses' files.
+  app.get("/api/usage", async (req, res) => {
+    const { days, tz } = usageReportSchema.parse(req.query);
+    const overview = await listSessions(null);
+    const byId = new Map(overview.workspaces.map((w) => [w.id, w]));
+    const unreadable = new Set<string>();
+    const targets: UsageTarget[] = overview.sessions.map((session) => {
+      const adapter = registry.get(session.harnessId);
+      const ws = byId.get(session.workspaceId);
+      const prefix = `${session.harnessId}:`;
+      if (!adapter?.readUsage || !ws || !session.id.startsWith(prefix)) {
+        if (adapter && !adapter.readUsage) unreadable.add(adapter.displayName);
+        return { session, read: null };
+      }
+      return { session, read: () => adapter.readUsage?.({ cwd: ws.path, nativeId: session.id.slice(prefix.length) }) ?? Promise.resolve(null) };
+    });
+    res.json(await usageReader.report(targets, { days, tz, workspaces: overview.workspaces, unreadable: [...unreadable] }));
   });
 
   // Saved prompts (saved-prompts.ts): every device and atui share them.
