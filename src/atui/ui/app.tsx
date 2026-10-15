@@ -13,7 +13,11 @@
 // the corner, and the terminal's title and tab progress follow the chat.
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
+import type { RunResult } from "../../shared/protocol.js";
+import { runnable } from "../../web/code-blocks.js";
+import { codeBlocks, quoteText, runForMessage, runStatus } from "../assist.js";
+import { RunOutput } from "./runout.js";
 import type { UserItem } from "../../shared/protocol.js";
 import type { PaletteItem } from "../../web/palette.js";
 import { isBusy } from "../../web/session-groups.js";
@@ -40,7 +44,7 @@ import { Transcript } from "./transcript.js";
 import { WhichKey } from "./whichkey.js";
 import { turnOffset, vimKey } from "../vim.js";
 
-type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | null;
+type Dialog = "palette" | "models" | "harness" | "thinking" | "history" | "run" | null;
 
 const TWICE_MS = 1200;
 /** A session that opens within this shows at once; one that takes longer gets the ghost thread meanwhile. */
@@ -65,6 +69,9 @@ export function App(p: {
   const [showWork, setShowWork] = createSignal(false);
   const [compactChoice, setCompactChoice] = createSignal<boolean | null>(null);
   const [reviewing, setReviewing] = createSignal(false);
+  /** A command run from an answer (C-x x), and what it gave once done. */
+  const [running, setRunning] = createSignal<{ command: string; result: RunResult | null } | null>(null);
+  const renderer = useRenderer();
   const [hint, setHint] = createSignal<string | null>(null);
   /** C-x was pressed: the which-key panel is open and the next key is a command. */
   const [leaderOn, setLeaderOn] = createSignal(false);
@@ -121,6 +128,54 @@ export function App(p: {
       if (d === "history") void app.refreshSessions();
     }),
   );
+
+  /** Text for the message, after what is in the composer, which then has the focus. */
+  const appendToComposer = (text: string) => {
+    if (!composer) return;
+    const now = composer.plainText.trimEnd();
+    composer.setText(now ? `${now}\n\n${text}` : text);
+    composer.gotoBufferEnd();
+    leave();
+  };
+
+  /** M-q: the text selected with the mouse, into the message as a quote. */
+  const quoteSelection = () => {
+    const text = renderer.getSelection()?.getSelectedText().trim() ?? "";
+    if (!text) return flash("Select text with the mouse first, then M-q quotes it");
+    renderer.clearSelection();
+    appendToComposer(`${quoteText(text)}\n\n`);
+    flash("Quoted into your message");
+  };
+  // A selection made: say what it is good for.
+  const onSelection = () => {
+    if (renderer.getSelection()?.getSelectedText().trim()) flash("M-q quotes the selection into your message");
+  };
+  renderer.on("selection", onSelection);
+  onCleanup(() => renderer.off("selection", onSelection));
+
+  /** The one-line shell commands in the chat's recent answers, newest first, each once. */
+  const runnables = () => {
+    const c = app.chat();
+    const seen = new Set<string>();
+    const out: Array<{ command: string; shell: Parameters<typeof app.runCommand>[1] }> = [];
+    const answers = (c?.items ?? []).filter((i) => i.kind === "assistant" && i.text.includes("```")).slice(-6).reverse();
+    for (const a of answers) {
+      for (const block of codeBlocks((a as { text: string }).text)) {
+        const run = runnable(block.lang, block.code);
+        if (run && !seen.has(run.command)) {
+          seen.add(run.command);
+          out.push(run);
+        }
+      }
+    }
+    return out.slice(0, 20);
+  };
+  const runOne = async (command: string, shell: Parameters<typeof app.runCommand>[1]) => {
+    setRunning({ command, result: null });
+    const result = await app.runCommand(command, shell);
+    if (!result) return setRunning(null);
+    setRunning((r) => (r && r.command === command ? { command, result } : r));
+  };
 
   const leave = () => {
     setMode("insert");
@@ -215,6 +270,9 @@ export function App(p: {
         return setDialog("thinking");
       case "c":
         return void app.compact();
+      case "x":
+        if (runnables().length === 0) return flash("No one-line shell command in the recent answers to run");
+        return setDialog("run");
       case "d":
         if (!app.chat()) return flash("No chat to review");
         return setReviewing(true);
@@ -247,7 +305,11 @@ export function App(p: {
   };
 
   useKeyboard((key) => {
-    if (dialog() || app.undoTurn() !== null || reviewing()) return;
+    if (dialog() || app.undoTurn() !== null || reviewing() || running()) return;
+    if (key.meta && !key.ctrl && key.name === "q") {
+      key.preventDefault();
+      return quoteSelection();
+    }
     // After C-x: the next key is a command; Esc or C-g (or C-x again) cancels, as in Emacs.
     if (leaderOn()) {
       key.preventDefault();
@@ -389,6 +451,8 @@ export function App(p: {
         run: () => setReviewing(true),
       });
     }
+    if (c && runnables().length > 0) add({ id: "run", label: "Run a command from the answer…", hint: leader("x"), run: () => setDialog("run") });
+    add({ id: "quote", label: "Quote the selection into the message", hint: "M-q", searchOnly: true, run: quoteSelection });
     if (app.putBackable()) add({ id: "put-back", label: "Put the undone files back", hint: leader("z"), run: () => void app.putBack() });
     add({ id: "history", label: "History: every session, by project…", hint: "C-r", run: () => setDialog("history") });
     add({ id: "sessions", label: "Browse sessions", hint: leader("s"), run: () => runLeader("s") });
@@ -605,7 +669,7 @@ export function App(p: {
               fallback={
                 <Composer
                   status={{ mode: vim() ? (normal() ? "normal" : "insert") : null, leader: leaderOn(), note: hint() }}
-                  focused={focus() === "composer" && !dialog() && !normal() && app.undoTurn() === null && !reviewing()}
+                  focused={focus() === "composer" && !dialog() && !normal() && app.undoTurn() === null && !reviewing() && !running()}
                   compactChoice={compactChoice()}
                   onCompactChoice={setCompactChoice}
                   onPick={setDialog}
@@ -637,6 +701,34 @@ export function App(p: {
         </Show>
         <Show when={dialog() === "thinking"}>
           <Picker title="Thinking" placeholder="Search levels…" items={thinkingItems()} onClose={() => setDialog(null)} />
+        </Show>
+        <Show when={dialog() === "run"}>
+          <Picker
+            title="Run a command from the answer"
+            placeholder="Search commands…"
+            firstHeading
+            items={runnables().map((r, i) => ({
+              id: `run:${i}`,
+              section: `In ${app.chat()?.workspace.name ?? "the project"}, with ${r.shell}`,
+              label: `$ ${r.command}`,
+              run: () => void runOne(r.command, r.shell),
+            }))}
+            onClose={() => setDialog(null)}
+          />
+        </Show>
+        <Show when={running()}>
+          {(r) => (
+            <RunOutput
+              command={r().command}
+              result={r().result}
+              onAdd={() => {
+                const done = r().result;
+                if (done) appendToComposer(`${runForMessage(r().command, done.output, runStatus(done))}\n\n`);
+                setRunning(null);
+              }}
+              onClose={() => setRunning(null)}
+            />
+          )}
         </Show>
         <Show when={dialog() === "history"}>
           <Picker title="History" placeholder="Search sessions, projects, harnesses…" items={historyItems()} onClose={() => setDialog(null)} firstHeading preview={historyPreview} />
