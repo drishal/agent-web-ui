@@ -36,6 +36,7 @@ import {
   sessionMeta,
   transcriptMessages,
   usageBaseline,
+  usageOfEntries,
   type SessionMeta,
   type UsageBaseline,
 } from "./claude-sessions.js";
@@ -52,6 +53,7 @@ import type {
   OpenChatRequest,
   RecentNativeSession,
   StepUsage,
+  UsageEntry,
 } from "./types.js";
 
 const run = promisify(execFile);
@@ -941,6 +943,16 @@ export class ClaudeAdapter implements HarnessAdapter {
 
   async seedChat(): Promise<LiveChat> {
     throw new Error("Claude Code cannot take a handoff yet");
+  }
+
+  async readUsage(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null> {
+    const file = await this.sessionFile(req.cwd, req.nativeId);
+    const text = file ? await fs.readFile(file, "utf8").catch(() => null) : null;
+    if (text === null) return null;
+    const entries = parseEntries(text);
+    const meta = sessionMeta(entries, req.nativeId);
+    if (!meta || (meta.cwd && path.resolve(meta.cwd) !== path.resolve(req.cwd))) return null;
+    return usageOfEntries(entries);
   }
 
   async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {

@@ -144,3 +144,24 @@ test("a saved prompt goes in with # and its blanks are filled in with Tab; any d
   await expect(other.getByRole("listbox", { name: "Saved prompts" })).toContainText("#risky");
   await other.close();
 });
+
+test("Usage across chats adds up the calls by day, harness, and model, and opens a chat that used much", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "spend some tokens on the usage report");
+  await page.getByRole("button", { name: "Usage across chats" }).click();
+  const usage = page.getByRole("dialog", { name: "Usage" });
+  await expect(usage.locator(".usage-card").first()).toContainText(/Tokens\s*[\d.]+k?/);
+  await expect(usage.getByRole("region", { name: "Tokens by day" }).locator(".usage-day")).toHaveCount(30);
+  await usage.getByRole("button", { name: "7 days" }).click();
+  await expect(usage.getByRole("region", { name: "Tokens by day" }).locator(".usage-day")).toHaveCount(7);
+  await expect(usage.getByRole("region", { name: "By harness" })).toContainText("Fake");
+  await expect(usage.getByRole("region", { name: "By model" })).toContainText("echo");
+  await expect(usage.locator(".usage-card", { hasText: "Cost" })).toContainText("$");
+  // The chat that used the most (whichever it is, with the other tests' chats about) opens on a click.
+  const top = usage.getByRole("region", { name: "Chats that used the most" }).getByRole("button").first();
+  const title = (await top.locator(".usage-chat-title").textContent()) ?? "";
+  await top.click();
+  await expect(usage).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+});

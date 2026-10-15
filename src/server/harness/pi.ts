@@ -25,10 +25,10 @@ import {
   type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { historyToItems, isObj, normalizeAgentEvent, type Obj } from "./agent-events.js";
+import { historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
 import { PendingRequests, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
-import { branchMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
+import { branchMessages, fileMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
 import { renderHtmlExtension, renderHtmlExtensionArgs } from "./render-extension.js";
 import { versionLabel } from "./version.js";
@@ -43,6 +43,7 @@ import type {
   NativeSessionSummary,
   OpenChatRequest,
   RecentNativeSession,
+  UsageEntry,
 } from "./types.js";
 
 const run = promisify(execFile);
@@ -588,6 +589,14 @@ export class PiAdapter implements HarnessAdapter {
     const chat = await this.openChat({ cwd: req.cwd, resumeNativeId: id });
     if (req.seed.title) await chat.rename(req.seed.title).catch(() => undefined);
     return chat;
+  }
+
+  async readUsage(req: { cwd: string; nativeId: string }): Promise<UsageEntry[] | null> {
+    const dir = this.sessionDirFor(req.cwd, await this.resolveAgentDir());
+    const meta = (await listSessionFiles(dir)).find((m) => m.id === req.nativeId);
+    if (!meta || (meta.cwd && path.resolve(meta.cwd) !== path.resolve(req.cwd))) return null;
+    const text = await fs.readFile(meta.path, "utf8").catch(() => null);
+    return text === null ? null : usageEntries(fileMessages(text));
   }
 
   async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {

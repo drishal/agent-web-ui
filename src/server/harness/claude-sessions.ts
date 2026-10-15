@@ -4,8 +4,10 @@
 // messages sit entries the transcript never shows (attachments, hook output,
 // titles, cost snapshots). This module turns one file into what the adapter
 // needs: listing metadata, the transcript as Pi-family messages for
-// historyToItems, the usage baseline, and a fork cut after the Nth prompt.
+// historyToItems, the usage baseline, each call's usage, and a fork cut after
+// the Nth prompt.
 import { isObj, textOf, type Obj } from "./agent-events.js";
+import type { UsageEntry } from "./types.js";
 
 /** Claude Code's project folder name: every character but [A-Za-z0-9] becomes "-". */
 export function projectDirName(cwd: string): string {
@@ -299,6 +301,35 @@ export function usageBaseline(entries: Obj[]): UsageBaseline {
   base.steps = calls.size;
   for (const entry of visibleBranch(entries).chain) if (promptText(entry) !== null) base.turns += 1;
   return base;
+}
+
+/**
+ * Each model call's tokens, for usage across sessions: one per message id
+ * (a streamed message is written several times; the fullest copy counts), on
+ * any branch, without the synthetic ones. The files price no single call, so
+ * the cost is unknown.
+ */
+export function usageOfEntries(entries: Obj[]): UsageEntry[] {
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const calls = new Map<string, UsageEntry>();
+  for (const entry of entries) {
+    if (entry.type !== "assistant" || !isObj(entry.message)) continue;
+    const { id, usage, model } = entry.message;
+    if (typeof id !== "string" || !isObj(usage) || model === "<synthetic>") continue;
+    const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    const call: UsageEntry = {
+      at: Number.isFinite(at) ? at : 0,
+      model: typeof model === "string" ? model : null,
+      input: n(usage.input_tokens),
+      cachedInput: n(usage.cache_read_input_tokens),
+      cacheWrite: n(usage.cache_creation_input_tokens),
+      output: n(usage.output_tokens),
+      cost: null,
+    };
+    const seen = calls.get(id);
+    if (!seen || call.output >= seen.output) calls.set(id, call);
+  }
+  return [...calls.values()];
 }
 
 /** The newest TodoWrite list on the branch (Claude Code's own todos). */

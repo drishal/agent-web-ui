@@ -151,6 +151,24 @@ export function seedSessionText(options: { id: string; cwd: string; now: Date; e
   return `${lines.join("\n")}\n`;
 }
 
+/** Every message entry in a Pi-family session's file, on any branch, with the entry's time: for usage across sessions. */
+export function fileMessages(text: string): Array<{ message: unknown; at: number }> {
+  const out: Array<{ message: unknown; at: number }> = [];
+  for (const line of text.split("\n")) {
+    if (!line.includes('"message"')) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // a torn last line while the harness appends
+    }
+    if (!isObj(parsed) || parsed.type !== "message") continue;
+    const at = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : NaN;
+    out.push({ message: parsed.message, at: Number.isFinite(at) ? at : 0 });
+  }
+  return out;
+}
+
 /**
  * The messages a Pi-family session's file holds on its active branch, as the
  * harness's get_messages would list them, read without starting it: after

@@ -7,7 +7,7 @@ import { imageRefs } from "../image-store.js";
 import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
 import { htmlRenderRef, isHtmlRenderCall } from "./render-token.js";
 import { planFromArgs } from "./plans.js";
-import type { HarnessEvent, StepUsage } from "./types.js";
+import type { HarnessEvent, StepUsage, UsageEntry } from "./types.js";
 
 export const MAX_TOOL_OUTPUT_CHARS = 16_000;
 export const MAX_TOOL_ARGS_CHARS = 4_000;
@@ -86,6 +86,31 @@ export function commandOutputEvents(command: string, output: string): HarnessEve
     { type: "assistant_start" },
     { type: "assistant_end", text: `${fence}text\n${text}\n${fence}`, thinking: "" },
   ];
+}
+
+/**
+ * Every assistant message's usage (pi-ai's: Pi and omp share it), for usage
+ * across sessions: its time (the message's own, else the entry's), model, and
+ * tokens, and its cost where pi-ai priced it.
+ */
+export function usageEntries(messages: Array<{ message: unknown; at: number }>): UsageEntry[] {
+  const out: UsageEntry[] = [];
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  for (const { message, at } of messages) {
+    if (!isObj(message) || message.role !== "assistant" || !isObj(message.usage)) continue;
+    const u = message.usage;
+    const entry: UsageEntry = {
+      at: typeof message.timestamp === "number" ? message.timestamp : at,
+      model: typeof message.model === "string" && message.model ? message.model : null,
+      input: n(u.input),
+      cachedInput: n(u.cacheRead),
+      cacheWrite: n(u.cacheWrite),
+      output: n(u.output),
+      cost: isObj(u.cost) && typeof u.cost.total === "number" && Number.isFinite(u.cost.total) ? u.cost.total : null,
+    };
+    if (entry.input + entry.cachedInput + entry.cacheWrite + entry.output > 0) out.push(entry);
+  }
+  return out;
 }
 
 /** pi-ai's per-message `usage` (Pi and omp share it). */
