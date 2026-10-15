@@ -502,6 +502,31 @@ describe("atui", () => {
     expect(await ui.frame()).not.toContain("Esc close");
   }, 40_000);
 
+  it("runs a command from an answer and puts its output in the message; quotes a selection", async () => {
+    ui = await mount(path.join(server.root, "alpha"), { width: 150, height: 44 });
+    await ui.app.send("please run this\n```bash\necho run-from-atui\n```");
+    await ui.until("Echo: please run this");
+    await idle(ui);
+    ui.keys.pressKey("x", { ctrl: true });
+    await ui.type("x");
+    await ui.until("$ echo run-from-atui");
+    ui.keys.pressEnter();
+    const out = await ui.until("exit 0");
+    expect(out).toContain("run-from-atui");
+    ui.keys.pressEnter();
+    const draft = await ui.until("$ echo run-from-atui");
+    expect(draft).toContain("(exit 0)");
+    // A selection, dragged with the mouse over a line of the answer, goes in as a quote.
+    const rows = (await ui.frame()).split("\n");
+    const y = rows.findIndex((r) => r.includes("Echo: please run this"));
+    const x = (rows[y] as string).indexOf("Echo: please");
+    await ui.mouse.drag(x, y, x + "Echo: please run this".length, y);
+    await wait(80);
+    ui.keys.pressKey("q", { meta: true });
+    await ui.until("Quoted into your message");
+    expect(await ui.frame()).toContain("> Echo: please run this");
+  }, 40_000);
+
   it("browses sessions from the sidebar and opens one", async () => {
     ui = await mount(path.join(server.root, "beta"));
     await ui.type("first session here");

@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectSession } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
-import { applyMention, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, tipAt, TIPS } from "../../src/atui/assist.js";
+import { applyMention, codeBlocks, ghostCompletion, matchSpans, mentionAt, newsBetween, notifySequence, quoteText, runForMessage, runStatus, tipAt, TIPS } from "../../src/atui/assist.js";
 import { breathe, flashAt, meter, mix, ramp, revealCut, revealStep, scrollPath, shimmer, sparkline, spinnerFor, statBar, streamRate, unrollCounts } from "../../src/atui/fx.js";
 import { contextTone, DARK } from "../../src/atui/theme.js";
 import { CARET, filetypeOf, taskBoxes, withCaret } from "../../src/atui/markdown.js";
@@ -322,5 +322,28 @@ describe("the stream's cursor", () => {
     expect(withCaret("see:\n```ts")).toBe("see:\n```ts");
     expect(withCaret("| a | b |")).toBe("| a | b |");
     expect(withCaret("above\n---")).toBe("above\n---");
+  });
+});
+
+describe("quote and run in atui", () => {
+  it("quotes a selection line by line", () => {
+    expect(quoteText("  first line\n\nthird  \n")).toBe("> first line\n>\n> third");
+  });
+
+  it("finds an answer's fenced code blocks with their language", () => {
+    const md = "Run this:\n```bash\nnpm test\n```\nand\n~~~\nplain\n~~~\n````md\n```js\nnested\n```\n````";
+    expect(codeBlocks(md)).toEqual([
+      { lang: "bash", code: "npm test" },
+      { lang: null, code: "plain" },
+      { lang: "md", code: "```js\nnested\n```" },
+    ]);
+    expect(codeBlocks("no code")).toEqual([]);
+  });
+
+  it("words a run's end and puts it into a message as the browser does", () => {
+    expect(runStatus({ exitCode: 0, timedOut: false })).toBe("exit 0");
+    expect(runStatus({ exitCode: null, timedOut: true })).toBe("timed out");
+    expect(runStatus({ exitCode: null, timedOut: false })).toBe("stopped");
+    expect(runForMessage("ls", "a\nb\n", "exit 0")).toBe("```\n$ ls\na\nb\n```\n(exit 0)");
   });
 });

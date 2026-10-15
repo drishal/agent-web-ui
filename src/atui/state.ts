@@ -16,6 +16,8 @@ import type {
   ImageAttachment,
   InteractionAnswer,
   ProjectSession,
+  RunResult,
+  RunShell,
   SendMode,
   SessionPreview,
   SessionsOverview,
@@ -663,6 +665,18 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     }
   };
 
+  /** Run one command line from an answer in the chat's project (the web UI's Run on a code block). */
+  const runCommand = async (command: string, shell: RunShell): Promise<RunResult | null> => {
+    const c = chat();
+    if (!c) return null;
+    try {
+      return await server.call<RunResult>(`/api/chats/${c.chatId}/run`, { body: { command, shell } });
+    } catch (error) {
+      fail(error);
+      return null;
+    }
+  };
+
   const dispose = () => {
     stopStream?.();
     for (const timer of timers.splice(0)) clearInterval(timer);
@@ -689,6 +703,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     setUndoTurn,
     reviewComments,
     setReviewComments,
+    runCommand,
     rerun,
     fork,
     checkpointPreview,

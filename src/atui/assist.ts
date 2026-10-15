@@ -1,8 +1,8 @@
 // The small helpers behind atui's composer and pickers: `@file` mentions,
 // the ghost text that finishes a slash command, which letters of a picker
 // row matched the search, the toasts a session list change is worth (and
-// the terminal notification for one), and the empty screen's tips. Pure, so
-// they can be tested.
+// the terminal notification for one), the empty screen's tips, a selection
+// as a quote, and an answer's code blocks to run. Pure, so they can be tested.
 import type { ProjectSession, SlashCommand } from "../shared/protocol.js";
 import { isBusy } from "../web/session-groups.js";
 
@@ -101,4 +101,39 @@ export function notifySequence(env: Record<string, string | undefined>, title: s
   const term = `${env.TERM_PROGRAM ?? ""} ${env.TERM ?? ""}`.toLowerCase();
   if (/foot|wezterm|ghostty|rxvt/.test(term)) return `\x1b]777;notify;${clean(title)};${clean(body)}\x1b\\`;
   return `\x1b]9;${clean(title)}: ${clean(body)}\x1b\\`;
+}
+
+/** A passage as a Markdown quote, one "> " per line (the web UI's asQuote, for M-q on a selection). */
+export function quoteText(text: string): string {
+  return text
+    .trim()
+    .split("\n")
+    .map((line) => (line.trim() ? `> ${line.trimEnd()}` : ">"))
+    .join("\n");
+}
+
+/** The fenced code blocks in Markdown, in order, with their language (for C-x x: run one). */
+export function codeBlocks(markdown: string): Array<{ lang: string | null; code: string }> {
+  const out: Array<{ lang: string | null; code: string }> = [];
+  let open: { fence: string; lang: string | null; lines: string[] } | null = null;
+  for (const line of markdown.split("\n")) {
+    const fence = /^\s*(`{3,}|~{3,})\s*([\w+-]*)/.exec(line);
+    if (!open && fence) {
+      open = { fence: fence[1] as string, lang: fence[2] || null, lines: [] };
+    } else if (open && fence && (fence[1] as string).startsWith(open.fence[0] as string) && (fence[1] as string).length >= open.fence.length && !fence[2]) {
+      out.push({ lang: open.lang, code: open.lines.join("\n") });
+      open = null;
+    } else if (open) open.lines.push(line);
+  }
+  return out;
+}
+
+/** What a run's outcome says: "exit 0", "exit 2", "timed out", "stopped". */
+export function runStatus(result: { exitCode: number | null; timedOut: boolean }): string {
+  return result.timedOut ? "timed out" : result.exitCode === null ? "stopped" : `exit ${result.exitCode}`;
+}
+
+/** A run as the message gets it: the command and its output in a block, then how it ended (the web UI's wording). */
+export function runForMessage(command: string, output: string, status: string): string {
+  return `\`\`\`\n$ ${command}\n${output.replace(/\n$/, "")}\n\`\`\`\n(${status})`;
 }
