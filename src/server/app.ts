@@ -9,6 +9,8 @@ import {
   type Bootstrap,
   type ChatEvent,
   chatSearchSchema,
+  checkpointCompareSchema,
+  type CheckpointComparison,
   compactSchema,
   createChatSchema,
   fileViewSchema,
@@ -799,6 +801,17 @@ export function createApp(deps: AppDeps) {
   const checkpointFailure = (error: unknown): never => {
     throw error instanceof ChatError ? error : new ChatError(422, "checkpoint_failed", errorMessage(error));
   };
+  // The file timeline: each prompt's checkpoint, and what changed between any two of them (or now).
+  app.get("/api/chats/:id/checkpoints", async (req, res) => {
+    const cp = checkpointsOf(manager.get(req.params.id), false);
+    await cp.start();
+    res.json({ points: cp.points() });
+  });
+  app.get("/api/chats/:id/checkpoints/compare", async (req, res) => {
+    const cp = checkpointsOf(manager.get(req.params.id), false);
+    const { from, to } = checkpointCompareSchema.parse(req.query);
+    res.json((await cp.compare(from, to).catch(checkpointFailure)) satisfies CheckpointComparison);
+  });
   app.get("/api/chats/:id/checkpoints/:turn", async (req, res) => {
     const cp = checkpointsOf(manager.get(req.params.id), false);
     const { files } = await cp.preview(turnOf(req.params.turn)).catch(checkpointFailure);

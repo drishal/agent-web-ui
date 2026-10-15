@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ChatSnapshot, CheckpointPreview, CheckpointRestored } from "../../src/shared/protocol.js";
+import type { ChatSnapshot, CheckpointComparison, CheckpointPoint, CheckpointPreview, CheckpointRestored } from "../../src/shared/protocol.js";
 import { Checkpoints } from "../../src/server/checkpoints.js";
 import { makeTestApp, openSse, signedIn, tempDir, type TestApp } from "../helpers/app.js";
 
@@ -117,6 +117,46 @@ describe("file checkpoints", () => {
     // Only this chat's own trees, and only real turns.
     await agent.post(`/api/chats/${chat.chatId}/checkpoints/put-back`).send({ tree: "0".repeat(40), paths: ["app.ts"] }).expect(422);
     await agent.get(`/api/chats/${chat.chatId}/checkpoints/7`).expect(422);
+    sse.close();
+  });
+
+  it("lists the timeline's points and compares any two of them, or one with now, file by file", async () => {
+    t = await makeTestApp({ withCheckpoints: true });
+    repo(t.project);
+    const agent = await signedIn(t);
+    const ws = (await agent.post("/api/workspaces/open").send({ path: t.project })).body as { id: string };
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    let idles = 0;
+    const run = async (text: string) => {
+      await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text }).expect(202);
+      idles += 1;
+      await sse.waitFor(() => t?.manager.get(chat.chatId).status === "idle" && sse.chatEvents().filter((e) => e.type === "status" && e.status === "idle").length >= idles);
+    };
+    await run("first prompt");
+    writeFileSync(path.join(t.project, "app.ts"), "const a = 2;\nconst b = 3;\n");
+    await run("second prompt");
+    writeFileSync(path.join(t.project, "notes.md"), "new\n");
+    rmSync(path.join(t.project, ".gitignore"));
+    const points = ((await agent.get(`/api/chats/${chat.chatId}/checkpoints`).expect(200)).body as { points: CheckpointPoint[] }).points;
+    expect(points.map((p) => [p.turn, p.prompt])).toEqual([
+      [1, "first prompt"],
+      [2, "second prompt"],
+    ]);
+    expect(points.every((p) => p.at > 0)).toBe(true);
+    const compare = async (from: string, to: string) => (await agent.get(`/api/chats/${chat.chatId}/checkpoints/compare?from=${from}&to=${to}`).expect(200)).body as CheckpointComparison;
+    const first = await compare("1", "2");
+    expect(first.files.map((f) => [f.path, f.change])).toEqual([["app.ts", "modified"]]);
+    expect(first.files[0]?.diff?.added).toBe(2);
+    expect(first.files[0]?.diff?.removed).toBe(1);
+    expect((await compare("2", "now")).files.map((f) => [f.path, f.change])).toEqual([
+      [".gitignore", "deleted"],
+      ["notes.md", "added"],
+    ]);
+    expect((await compare("1", "now")).files).toHaveLength(3);
+    expect((await compare("now", "1")).files.find((f) => f.path === "notes.md")?.change).toBe("deleted");
+    await agent.get(`/api/chats/${chat.chatId}/checkpoints/compare?from=9&to=now`).expect(422);
+    await agent.get(`/api/chats/${chat.chatId}/checkpoints/compare?from=x&to=now`).expect(400);
     sse.close();
   });
 

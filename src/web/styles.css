@@ -8955,3 +8955,151 @@ body {
   padding: 12px 10px;
   font-size: 13px;
 }
+
+/* ---- the file timeline ------------------------------------------------------------------- */
+
+/* The rail: one stop per checkpoint and one for now, joined by a line; the stretch compared is lit. */
+.timeline-rail {
+  display: flex;
+  gap: 0;
+  margin: 0;
+  padding: 14px 16px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.timeline-stop {
+  position: relative;
+  display: flex;
+  flex: 0 0 132px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+
+/* The line from the stop before to this one. */
+.timeline-stop::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--hairline-strong);
+}
+
+.timeline-stop.is-first::before {
+  display: none;
+}
+
+.timeline-stop.is-lit::before {
+  background: var(--accent);
+}
+
+.timeline-dot {
+  position: relative;
+  z-index: 1;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 9px;
+  border: 2px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: 600 12px var(--font-sans);
+  cursor: pointer;
+  transition: border-color 0.14s ease-out, background 0.14s ease-out, color 0.14s ease-out, transform 0.14s var(--ease-out);
+}
+
+.timeline-dot:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hairline-strong));
+  transform: scale(1.06);
+}
+
+.timeline-stop.is-lit .timeline-dot {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.timeline-dot.is-from,
+.timeline-dot.is-to {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.timeline-caption {
+  display: -webkit-box;
+  max-width: 120px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.timeline-when {
+  font-size: 10.5px;
+}
+
+.timeline-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px;
+}
+
+.timeline-summary > span {
+  display: inline-flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline-summary .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.review-files.is-stale {
+  opacity: 0.55;
+  transition: opacity 0.16s ease-out;
+}
+
+.timeline-change {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.timeline-change.is-added {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+.timeline-change.is-deleted {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.timeline-change.is-modified {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.timeline-note {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+}
+
+.review-empty.is-error {
+  color: var(--danger);
+}
