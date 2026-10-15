@@ -120,7 +120,8 @@ describe("atui", () => {
 
   it("colours the context from green toward red as it fills", async () => {
     ui = await mount(path.join(server.root, "beta"));
-    const label = async () => (await ui?.spans())?.flat().find((s) => /^ctx \d+%$/.test(s.text));
+    // The sparkline before the figure shares its colour, so the two can come as one run: "▁▂ ctx 8%".
+    const label = async () => (await ui?.spans())?.flat().find((s) => /(^|\s)ctx \d+%$/.test(s.text));
     const toneAt = (percent: number) => RGBA.fromHex(contextTone(ui?.app.theme() as never, percent)).toInts().join();
     await ui.type("hello there");
     ui.keys.pressEnter();
@@ -190,7 +191,8 @@ describe("atui", () => {
   }, 40_000);
 
   it("moves around in vim mode: Esc for NORMAL, j/k and gg/G, : for commands, i to type again", async () => {
-    ui = await mount(path.join(server.root, "beta"), { vim: true, height: 30 });
+    // Wide enough for NORMAL's whole hint beside the context and its sparkline (a narrower footer cuts the hint).
+    ui = await mount(path.join(server.root, "beta"), { vim: true, height: 30, width: 170 });
     expect(await ui.frame()).toContain("-- INSERT --");
     await ui.type("slow stream for scrolling");
     ui.keys.pressEnter();
@@ -571,5 +573,26 @@ describe("atui", () => {
     ui.keys.pressEnter();
     await ui.until(() => ui?.app.chat()?.title === "first session here");
     expect(await ui.frame()).toContain("│ first session here");
+  }, 30_000);
+
+  it("keeps the context's history across a chat's runs, and the harness's commands while one streams", async () => {
+    ui = await mount(path.join(server.root, "alpha"));
+    await ui.type("first run");
+    ui.keys.pressEnter();
+    await idle(ui);
+    await ui.type("second run");
+    ui.keys.pressEnter();
+    await idle(ui);
+    // Each run's context share is kept for the sparkline, not emptied by the next streamed event.
+    await ui.until(() => (ui?.app.contextHistory().length ?? 0) >= 2);
+    // While a run streams, the / menu keeps what the harness offers (the fake's /fake-status), not only awui's own.
+    await ui.type("slow please");
+    ui.keys.pressEnter();
+    await ui.until(() => ui?.app.chat()?.status === "running");
+    await ui.type("/");
+    await ui.until("/new");
+    await ui.until("/fake-status");
+    await wait(400);
+    expect(await ui.frame()).toContain("/fake-status");
   }, 30_000);
 });

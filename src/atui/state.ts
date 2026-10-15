@@ -5,7 +5,7 @@
 // shown tab unless asked for a new one, a tab switched away from keeps its
 // chat to come back to at once, and a run that finishes in a tab not shown
 // marks it.
-import { batch, createEffect, createMemo, createSignal, on } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, on, untrack } from "solid-js";
 import type {
   Bootstrap,
   ChatEvent,
@@ -252,14 +252,26 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     );
   };
 
+  // What the effects below follow, as memos: `on()` runs again whenever its source's signals change, and the
+  // chat signal changes with every streamed event, so each must see a value that changes only when the thing does.
+  // (Read straight from chat(), the sparkline's history was emptied on every event, and the list's refresh was
+  // pushed back by each one, never running while a run streamed.)
+  const chatId = createMemo(() => chat()?.chatId);
+  const listKey = createMemo(() => {
+    const c = chat();
+    return c ? `${c.chatId}:${isBusy(c.status)}:${c.title}:${c.sessionId}` : "";
+  });
+  const tabKey = createMemo(() => {
+    const c = chat();
+    return c ? `${c.chatId}:${c.title}:${c.sessionId}` : "";
+  });
+  const contextPercent = createMemo(() => chat()?.context?.percent ?? null);
+
   // The list follows the shown chat: a run starting or settling, a new title, a session id.
   let listTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(
     on(
-      () => {
-        const c = chat();
-        return c ? `${c.chatId}:${isBusy(c.status)}:${c.title}:${c.sessionId}` : "";
-      },
+      listKey,
       (key) => {
         if (!key) return;
         clearTimeout(listTimer);
@@ -269,10 +281,10 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   );
 
   // The context share over this chat's life, for the status line's sparkline.
-  createEffect(on(() => chat()?.chatId, () => setContextHistory([])));
+  createEffect(on(chatId, () => setContextHistory([])));
   createEffect(
     on(
-      () => chat()?.context?.percent ?? null,
+      contextPercent,
       (percent) => {
         if (percent === null) return;
         setContextHistory((h) => (h[h.length - 1] === percent ? h : [...h, percent].slice(-CONTEXT_SAMPLES)));
@@ -331,12 +343,9 @@ export function createAtui(server: Server, opts: AtuiOptions) {
   /** The shown tab's title and session follow its chat. */
   createEffect(
     on(
+      tabKey,
       () => {
-        const c = chat();
-        return c ? `${c.chatId}:${c.title}:${c.sessionId}` : "";
-      },
-      () => {
-        const c = chat();
+        const c = untrack(chat);
         if (c) setTabs((st) => syncActive(st, c));
       },
     ),
