@@ -32,6 +32,8 @@ import { StatusBar } from "./components/StatusBar.js";
 import { TabStrip } from "./components/TabStrip.js";
 import { SwitchSplash, type SplashTarget } from "./components/SwitchSplash.js";
 import { ProjectSearch } from "./components/ProjectSearch.js";
+import { ShortcutSheet } from "./components/ShortcutSheet.js";
+import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
 import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
 import { useLaunchActions } from "./launch.js";
@@ -96,6 +98,7 @@ export function App() {
   const [pairOpen, setPairOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** What the window-wide shortcuts call, kept current (the listener is added once). */
   const keysRef = useRef<{ step: (step: -1 | 1) => void; reopen: () => void; undo: (() => void) | null; search: () => void }>({ step: () => {}, reopen: () => {}, undo: null, search: () => {} });
   const [searchOpen, setSearchOpen] = useState(false);
@@ -108,6 +111,11 @@ export function App() {
       if (isPaletteKey(e)) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
+        return;
+      }
+      if (isShortcutsKey(e)) {
+        e.preventDefault();
+        setShortcutsOpen((open) => !open);
         return;
       }
       const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
@@ -857,16 +865,17 @@ export function App() {
       id: "search",
       section: "Actions",
       label: "Search in project",
-      hint: "Ctrl+Shift+F",
+      hint: shortcutHint("search"),
       disabled: searchWorkspace ? undefined : "Choose a project first",
       run: () => setSearchOpen(true),
     });
     items.push({ id: "folder", section: "Actions", label: "Choose project folder…", run: () => setPickerOpen(true) });
-    items.push({ id: "reopen", section: "Actions", label: "Reopen closed tab", hint: "Alt+Shift+T", disabled: closedTabs.current.length ? undefined : "No tab closed yet", searchOnly: true, run: reopenClosedTab });
-    items.push({ id: "back", section: "Actions", label: "Back to the previous chat", hint: "Ctrl+[", searchOnly: true, disabled: visits.current.at > 0 ? undefined : "Nothing before this", run: () => stepVisits(-1) });
-    items.push({ id: "forward", section: "Actions", label: "Forward to the next chat", hint: "Ctrl+]", searchOnly: true, disabled: visits.current.at < visits.current.list.length - 1 ? undefined : "Nothing after this", run: () => stepVisits(1) });
+    items.push({ id: "reopen", section: "Actions", label: "Reopen closed tab", hint: shortcutHint("reopen"), disabled: closedTabs.current.length ? undefined : "No tab closed yet", searchOnly: true, run: reopenClosedTab });
+    items.push({ id: "back", section: "Actions", label: "Back to the previous chat", hint: shortcutHint("back"), searchOnly: true, disabled: visits.current.at > 0 ? undefined : "Nothing before this", run: () => stepVisits(-1) });
+    items.push({ id: "forward", section: "Actions", label: "Forward to the next chat", hint: shortcutHint("forward"), searchOnly: true, disabled: visits.current.at < visits.current.list.length - 1 ? undefined : "Nothing after this", run: () => stepVisits(1) });
     items.push({ id: "sidebar", section: "Actions", label: collapsed ? "Show sidebar" : "Hide sidebar", searchOnly: true, run: () => collapseSidebar(!collapsed) });
     items.push({ id: "settings", section: "Actions", label: "Settings", run: () => setSettingsOpen(true) });
+    items.push({ id: "shortcuts", section: "Actions", label: "Keyboard shortcuts", hint: shortcutHint("shortcuts"), keywords: "keys help", run: () => setShortcutsOpen(true) });
     items.push({ id: "pair", section: "Actions", label: "Pair a phone", searchOnly: true, run: () => setPairOpen(true) });
 
     // Pinned first, then newest; the eight at the top show before anything is typed.
@@ -1128,7 +1137,7 @@ export function App() {
               <IconEdit size={14} /> <span className="review-label">Review</span> <span className="review-count">{changedFiles}</span>
             </button>
           ) : null}
-          <button type="button" className="icon-btn palette-open" aria-label="Commands" title="Commands (Ctrl+K)" onClick={() => setPaletteOpen(true)}>
+          <button type="button" className="icon-btn palette-open" aria-label="Commands" title={`Commands (${shortcutHint("palette")})`} onClick={() => setPaletteOpen(true)}>
             <IconSearch size={16} />
           </button>
           {chat && chat.status !== "disposed" ? (
@@ -1381,6 +1390,7 @@ export function App() {
         />
       ) : null}
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
+      {shortcutsOpen ? <ShortcutSheet onClose={() => setShortcutsOpen(false)} /> : null}
       {searchOpen && searchWorkspace ? <ProjectSearch workspace={searchWorkspace} onClose={() => setSearchOpen(false)} /> : null}
       {pairOpen ? <PairDialog urls={boot.pairing.urls} username={boot.auth.username} onClose={() => setPairOpen(false)} /> : null}
     </div>
