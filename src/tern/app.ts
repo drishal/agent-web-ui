@@ -261,10 +261,17 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
         return {
           id: s.id,
           label: s.title || "Untitled",
-          detail: harnesses.get(s.harnessId) ?? s.harnessId,
+          // A herdr pane runs it: opening it shows that pane first (state.ts openSession).
+          detail: `${harnesses.get(s.harnessId) ?? s.harnessId}${s.herdr ? ` · in herdr, ${s.herdr.status}` : ""}`,
           value: s.updatedAt ? agoMs(new Date(s.updatedAt).getTime()) : "",
           group: names.get(s.workspaceId) ?? "Other projects",
-          ...(s.asking ? { dot: "warning" } : isBusy(status) ? { dot: "accent" } : status === "error" ? { dot: "error" } : {}),
+          ...(s.asking || s.herdr?.status === "blocked"
+            ? { dot: "warning" }
+            : isBusy(status) || s.herdr?.status === "working"
+              ? { dot: "accent" }
+              : status === "error"
+                ? { dot: "error" }
+                : {}),
           current: s.id === app.chat()?.sessionId,
         };
       });
