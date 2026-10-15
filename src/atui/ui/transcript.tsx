@@ -303,7 +303,8 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
   const preview = createMemo(() => (row().diff ? highlightPreview(row().diff ?? []) : null));
   const running = () => p.item.status === "running";
   const failed = () => p.item.status === "error";
-  const factColor = (f: string) => (failed() || /^(failed|exit [1-9])/.test(f) ? t().danger : t().ok);
+  const bad = (f: string) => failed() || /^(failed|exit [1-9])/.test(f);
+  const factColor = (f: string) => (bad(f) ? t().danger : t().ok);
   // A running command moves to its own wrapped `└ $` lines, so you can read what is executing.
   const wraps = () => running() && p.item.category === "command" && Boolean(row().detail);
   // A path in the row is a link to the file (where the terminal supports links).
@@ -360,7 +361,10 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
                     <Show when={i > 0}>
                       <span style={{ fg: t().muted }}> · </span>
                     </Show>
-                    <span style={{ fg: factColor(f()) }}>{f()}</span>
+                    {/* A failure is underlined as well as red, so it reads without colour too. */}
+                    <Show when={bad(f())} fallback={<span style={{ fg: factColor(f()) }}>{f()}</span>}>
+                      <u style={{ fg: factColor(f()) }}>{f()}</u>
+                    </Show>
                   </>
                 )}
               </Index>
@@ -411,10 +415,13 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
 function Notice(p: { item: NoticeItem }) {
   const t = useTheme();
   const color = () => (p.item.level === "error" ? t().danger : p.item.level === "warning" ? t().warn : t().info);
+  const text = () => (p.item.detail ? (p.item.title ?? p.item.text) : p.item.text);
   return (
     <text fg={color()} wrapMode="word">
       {p.item.level === "info" ? "ℹ " : "! "}
-      <span style={{ fg: p.item.level === "info" ? t().muted : color() }}>{p.item.detail ? (p.item.title ?? p.item.text) : p.item.text}</span>
+      <Show when={p.item.level === "error"} fallback={<span style={{ fg: p.item.level === "info" ? t().muted : color() }}>{text()}</span>}>
+        <u style={{ fg: color() }}>{text()}</u>
+      </Show>
     </text>
   );
 }
@@ -562,7 +569,8 @@ function Answer(p: { item: AssistantItem }) {
       </Show>
       <Show when={p.item.error && p.item.error !== "Stopped"}>
         <text fg={t().danger} wrapMode="word">
-          {`✗ ${p.item.error}`}
+          {"✗ "}
+          <u>{p.item.error}</u>
         </text>
       </Show>
       <Show when={p.item.error === "Stopped"}>

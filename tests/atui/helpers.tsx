@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRoot } from "solid-js";
+import type { CapturedSpan } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 import { Server } from "../../src/atui/client.js";
 import { createAtui, type Atui } from "../../src/atui/state.js";
@@ -61,6 +62,8 @@ export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export interface Mounted {
   app: Atui;
   frame: () => Promise<string>;
+  /** The frame's styled runs, row by row: colours and attributes, for what the characters alone cannot show. */
+  spans: () => Promise<CapturedSpan[][]>;
   keys: Awaited<ReturnType<typeof testRender>>["mockInput"];
   mouse: Awaited<ReturnType<typeof testRender>>["mockMouse"];
   /** Wait until the frame shows `text` (or the predicate holds). */
@@ -108,6 +111,10 @@ export async function mount(cwd: string, opts: { harness?: string; width?: numbe
   return {
     app,
     frame,
+    spans: async () => {
+      await setup.renderOnce();
+      return setup.captureSpans().lines.map((l) => l.spans);
+    },
     keys: setup.mockInput,
     mouse: setup.mockMouse,
     until,
