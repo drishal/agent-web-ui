@@ -1,6 +1,7 @@
 // The pieces that make the app whole, one test each: the shortcut sheet,
 // search across every chat, the file viewer, saved prompts, usage, the split
 // view, the checkpoint timeline, and chained follow-ups.
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -193,4 +194,36 @@ test("a chat opens beside the main one, streams and takes messages there, and sw
   expect(await page.evaluate(() => location.hash)).not.toBe(hash);
   await side.getByRole("button", { name: "Close the chat beside" }).click();
   await expect(side).toHaveCount(0);
+});
+
+test("the file timeline compares any two points of a chat's checkpoints, and offers to undo to one", async ({ page }) => {
+  const project = path.join(process.env.AWUI_E2E_ROOT ?? "", "timeline-repo");
+  mkdirSync(project, { recursive: true });
+  writeFileSync(path.join(project, "app.ts"), "const a = 1;\n");
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: project });
+  git("init", "-q");
+  git("add", ".");
+  git("commit", "-qm", "init");
+  await signInAndOpen(page, "timeline-repo");
+  await newChat(page);
+  await sendAndWait(page, "first step");
+  writeFileSync(path.join(project, "app.ts"), "const a = 2;\nconst b = 3;\n");
+  await sendAndWait(page, "second step");
+  writeFileSync(path.join(project, "notes.md"), "# notes\n");
+  await page.getByRole("button", { name: "Chat actions" }).click();
+  await page.getByRole("menuitem", { name: "File timeline" }).click();
+  const timeline = page.getByRole("dialog", { name: "File timeline" });
+  const rail = timeline.getByRole("navigation", { name: "Points" });
+  await expect(rail.getByRole("button")).toHaveText(["#1", "#2", "Now"]);
+  // At first: from before the first prompt to now, every file the chat saw change.
+  await expect(timeline.getByTestId("timeline-file")).toHaveCount(2);
+  await expect(timeline.getByTestId("timeline-file").first()).toContainText("app.ts");
+  await expect(timeline.getByTestId("timeline-file").first()).toContainText("const b = 3;");
+  await rail.getByRole("button", { name: /Before prompt 2/ }).click();
+  await expect(timeline.getByTestId("timeline-file")).toHaveCount(1);
+  await expect(timeline.getByTestId("timeline-file")).toContainText("notes.md");
+  await expect(timeline.getByTestId("timeline-file")).toContainText("added");
+  await timeline.getByRole("button", { name: "Undo to before #2…" }).click();
+  await expect(timeline).toBeHidden();
+  await expect(page.getByRole("dialog").filter({ hasText: "notes.md" })).toBeVisible();
 });

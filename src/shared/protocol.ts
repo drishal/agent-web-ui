@@ -424,6 +424,34 @@ export interface CheckpointRestored {
   undo: string;
 }
 
+/** A point on a chat's file timeline: the files as they were just before prompt `turn`. */
+export interface CheckpointPoint {
+  turn: number;
+  /** Epoch ms the snapshot was taken. */
+  at: number;
+  /** The prompt's start. */
+  prompt: string;
+}
+
+/** Two points to compare: a prompt's checkpoint by its turn, or "now" (the files as they are). */
+const checkpointPoint = z.union([z.literal("now"), z.coerce.number().int().min(1).max(100_000)]);
+export const checkpointCompareSchema = z.object({ from: checkpointPoint, to: checkpointPoint });
+
+export interface CheckpointCompareFile {
+  /** Relative to the repository's top level. */
+  path: string;
+  change: "added" | "deleted" | "modified";
+  /** Its lines, bounded as a tool's diff is; null for a binary file or one past the cap (`note` says). */
+  diff: ToolDiff | null;
+  note?: string;
+}
+
+export interface CheckpointComparison {
+  files: CheckpointCompareFile[];
+  /** Files changed beyond those listed. */
+  more: number;
+}
+
 /** One side of a file's git status: what was done to it in the index (staged) or the work tree. */
 export type GitFileState = "modified" | "added" | "deleted" | "renamed" | "copied" | "typechange" | "untracked" | "conflict";
 

@@ -38,6 +38,7 @@ import { FileViewer } from "./components/FileViewer.js";
 import { SavedPromptsDialog } from "./components/SavedPromptsDialog.js";
 import { UsageDialog } from "./components/UsageDialog.js";
 import { SidePane } from "./components/SidePane.js";
+import { TimelineDialog } from "./components/TimelineDialog.js";
 import { useManagePrompts } from "./saved-prompts.js";
 import { useFileRequests, type FileRequest } from "./file-bus.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
@@ -122,6 +123,7 @@ export function App() {
   /** The saved prompts' manager: open, perhaps starting a new prompt from a draft. */
   const [promptsOpen, setPromptsOpen] = useState<{ draft?: string } | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   /** A chat beside the main one (SidePane): what it starts on (null: its picker); `n` remounts it for a new one. */
   const [side, setSide] = useState<{ initial: ChatSnapshot | null; n: number } | null>(null);
   // Two chats side by side need the room: below this the pane is not offered (and one open closes).
@@ -926,6 +928,15 @@ export function App() {
       if (chat.capabilities.supportsRename) items.push({ id: "rename", section: "Actions", label: "Rename chat", run: () => setRenameOpen(true) });
       if (chat.capabilities.supportsCompact) items.push({ id: "compact", section: "Actions", label: "Compact context", disabled: chat.status === "idle" ? undefined : "Wait until the agent is idle", run: () => void compact() });
       items.push({ id: "review", section: "Actions", label: "Review changes", hint: changedFiles > 0 ? `${changedFiles} ${changedFiles === 1 ? "file" : "files"}` : undefined, disabled: changedFiles > 0 ? undefined : "No files changed yet", run: () => setReviewOpen(true) });
+      items.push({
+        id: "timeline",
+        section: "Actions",
+        label: "File timeline",
+        hint: chat.checkpoints.length > 0 ? `${chat.checkpoints.length} ${chat.checkpoints.length === 1 ? "checkpoint" : "checkpoints"}` : undefined,
+        keywords: "checkpoints compare history diff",
+        disabled: chat.checkpoints.length > 0 ? undefined : "No checkpoints yet (one is taken before each prompt in a git repository)",
+        run: () => setTimelineOpen(true),
+      });
       items.push({ id: "export", section: "Actions", label: "Export as Markdown", disabled: hasPrompt ? undefined : "Nothing to export yet", run: exportChat });
       items.push({ id: "close", section: "Actions", label: "Close chat", run: () => void closeChat() });
     }
@@ -1294,6 +1305,20 @@ export function App() {
                         Search and commands
                       </button>
                     </li>
+                    {chat.checkpoints.length > 0 ? (
+                      <li role="none">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setTimelineOpen(true);
+                          }}
+                        >
+                          File timeline
+                        </button>
+                      </li>
+                    ) : null}
                     <li role="none">
                       <button type="button" role="menuitem" disabled={!hasPrompt} onClick={exportChat}>
                         Export as Markdown
@@ -1528,6 +1553,17 @@ export function App() {
       {paletteOpen ? <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} /> : null}
       {shortcutsOpen ? <ShortcutSheet onClose={() => setShortcutsOpen(false)} /> : null}
       {promptsOpen ? <SavedPromptsDialog {...promptsOpen} onClose={() => setPromptsOpen(null)} /> : null}
+      {timelineOpen && chat ? (
+        <TimelineDialog
+          key={chat.chatId}
+          chatId={chat.chatId}
+          onUndo={(turn) => {
+            setTimelineOpen(false);
+            setRestoreTurn(turn);
+          }}
+          onClose={() => setTimelineOpen(false)}
+        />
+      ) : null}
       {usageOpen ? (
         <UsageDialog harnesses={boot.harnesses} onOpenSession={(s, ws) => void openSession(s, ws ? { workspace: ws } : {})} onClose={() => setUsageOpen(false)} />
       ) : null}

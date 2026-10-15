@@ -8,14 +8,17 @@
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { CheckpointChange, CheckpointFile } from "../shared/protocol.js";
+import type { CheckpointChange, CheckpointCompareFile, CheckpointComparison, CheckpointFile, CheckpointPoint } from "../shared/protocol.js";
 import { git } from "./git.js";
+import { parseUnified } from "./harness/tool-diff.js";
 import { isObj, readJson, writeJson } from "./state-file.js";
 
 /** Past this, the prompt goes without a checkpoint; the snapshot still finishes and warms the next one. */
 const SNAPSHOT_WAIT_MS = 10_000;
 const MAX_TURNS_KEPT = 200;
 const TREE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+/** A comparison lists at most this many files with their lines; the rest are counted. */
+const COMPARE_FILES = 60;
 
 export interface Snapshot {
   /** The repository's top level: the work tree that was captured. */
@@ -113,6 +116,28 @@ export class Checkpoints {
       if (kind) files.push({ path: parts[i + 1] as string, change: kind });
     }
     return { now, files };
+  }
+
+  /** Every file that differs between two trees, each with its lines (bounded), in path order. */
+  async compare(repo: string, from: string, to: string): Promise<CheckpointComparison> {
+    if (!TREE.test(from) || !TREE.test(to)) throw new Error("Not a checkpoint");
+    const shadow = await this.shadow(repo);
+    const out = await this.run(repo, shadow, ["diff-tree", "-r", "-z", "--no-renames", "--name-status", from, to]);
+    const parts = out.split("\0").filter(Boolean);
+    const kinds: Record<string, CheckpointCompareFile["change"]> = { A: "added", D: "deleted", M: "modified", T: "modified" };
+    const listed: Array<{ path: string; change: CheckpointCompareFile["change"] }> = [];
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      const change = kinds[(parts[i] as string)[0] as string];
+      if (change) listed.push({ path: parts[i + 1] as string, change });
+    }
+    const files: CheckpointCompareFile[] = [];
+    for (const f of listed.slice(0, COMPARE_FILES)) {
+      // Literal: a file named like pathspec magic is that file.
+      const patch = await this.run(repo, shadow, ["--literal-pathspecs", "diff-tree", "-p", "--no-color", "--no-ext-diff", from, to, "--", f.path]).catch(() => "");
+      const diff = parseUnified(patch);
+      files.push(diff ? { ...f, diff } : { ...f, diff: null, note: /^Binary files /m.test(patch) ? "Binary file" : "No line changes (its mode only)" });
+    }
+    return { files, more: Math.max(0, listed.length - COMPARE_FILES) };
   }
 
   /**
@@ -273,6 +298,18 @@ export class ChatCheckpoints {
     const result = await this.service.restore(target.repo, target.tree, paths);
     this.known.add(result.undo);
     return result;
+  }
+
+  /** The timeline's points: each prompt's checkpoint, oldest first. */
+  points(): CheckpointPoint[] {
+    return [...this.turns.entries()].sort((a, b) => a[0] - b[0]).map(([turn, cp]) => ({ turn, at: cp.at, prompt: cp.text }));
+  }
+
+  /** What changed between two points of the timeline: prompts' checkpoints, or "now" (the files as they are). */
+  async compare(from: number | "now", to: number | "now"): Promise<CheckpointComparison> {
+    if (!this.repo) throw new Error("This chat keeps no file checkpoints");
+    const tree = async (p: number | "now") => (p === "now" ? (await this.service.snapshot(this.repo as string)).tree : this.target(p).tree);
+    return this.service.compare(this.repo, await tree(from), await tree(to));
   }
 
   /** The files a "put back" would touch. */
