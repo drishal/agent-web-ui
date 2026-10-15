@@ -69,6 +69,9 @@ async function main(): Promise<void> {
   const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS"].filter((n) => process.env[n] !== undefined));
   // The agents' shells inherit process.env; the password must not reach them.
   delete process.env.AUTH_PASSWORD;
+  // A server started in a herdr pane must not hand that pane to its harness children: herdr's Claude Code
+  // and Hermes hooks would report every chat's session as the pane's own.
+  for (const name of ["HERDR_ENV", "HERDR_SOCKET_PATH", "HERDR_PANE_ID", "HERDR_WORKSPACE_ID", "HERDR_TAB_ID"]) delete process.env[name];
   if (settings) console.log(`  settings: ${settings.file}`);
   if (settings?.tightened) console.log(`  ${settings.file} holds a password; its mode is now 0600`);
   const pkg = { version: embeddedVersion ?? JSON.parse(await fs.readFile(path.join(root as string, "package.json"), "utf8")).version };
