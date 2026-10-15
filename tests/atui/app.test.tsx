@@ -46,6 +46,24 @@ describe("atui", () => {
     expect(framed).toContain("╭");
   }, 30_000);
 
+  it("shows a reply written between tool calls as a reply, before the fold holding the command", async () => {
+    ui = await mount(path.join(server.root, "beta"), { height: 40 });
+    await ui.type("interleaved please");
+    ui.keys.pressEnter();
+    await idle(ui);
+    const f = await ui.until("Echo: interleaved please");
+    const reply = f.indexOf("this is reply block 1");
+    const fold = f.search(/▸ Worked for \d+s · 1 command/);
+    expect(reply).toBeGreaterThan(0);
+    expect(fold).toBeGreaterThan(reply);
+    expect(f.indexOf("Echo: interleaved please")).toBeGreaterThan(fold);
+    // Opened, the fold holds the command, not the reply again.
+    await ui.click("▸ Worked");
+    const open = await ui.until("● Bash");
+    // (The fake's thought quotes the reply, after "Considering:".)
+    expect(open.match(/(?<!Considering: )this is reply block 1/g)).toHaveLength(1);
+  }, 30_000);
+
   it("changes thinking, model, and harness directly, hands the chat off, and opens history", async () => {
     ui = await mount(path.join(server.root, "alpha"), { height: 50 });
     await ui.type("remember the harness");

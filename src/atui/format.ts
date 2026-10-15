@@ -23,11 +23,18 @@ export function toolTarget(item: ToolItem, workspace: string): string {
   return item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
 }
 
-/** "Working · 12s · 2 reads" while live, "Worked for 1m 4s · 3 reads, 1 edit" after. */
-export function foldLabel(turn: Turn, now = Date.now()): string {
-  const counts = countSummary(turn.counts);
+/**
+ * "Working · 12s · 2 reads" while live, "Worked for 1m 4s · 3 reads, 1 edit"
+ * after. A turn whose replies came between tool calls has a fold per stretch
+ * of work (`part`): the first carries the time, the live one the spinner's
+ * words, and the ones between say only what they did ("2 reads, 1 edit").
+ */
+export function foldLabel(turn: Turn, now = Date.now(), part?: { counts: Turn["counts"]; place: "first" | "middle" | "last" }): string {
+  const counts = countSummary(part?.counts ?? turn.counts);
+  const live = turn.live && (!part || part.place === "last");
+  if (part && !live && part.place !== "first") return counts ? counts.charAt(0).toUpperCase() + counts.slice(1) : "Worked";
   const duration = turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
-  const head = turn.live ? (duration ? `Working · ${duration}` : "Working") : duration ? `Worked for ${duration}` : "Worked";
+  const head = live ? (duration ? `Working · ${duration}` : "Working") : duration ? `Worked for ${duration}` : "Worked";
   return counts ? `${head} · ${counts}` : head;
 }
 

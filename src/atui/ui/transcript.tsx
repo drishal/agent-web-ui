@@ -1,6 +1,7 @@
 // The conversation, turn by turn as the web UI lays it out: the prompt, one
 // "Worked for …" line that opens to the work (thoughts, tool calls, notices),
-// the answer as Markdown, and the files it changed. The look is neat-render's
+// the answer as Markdown, and the files it changed. Replies the agent wrote
+// between tool calls show in order, each stretch of work folded between them. The look is neat-render's
 // (the pi extension): the prompt in a rounded card with the harness's mark in
 // its top edge, each call a bulleted row with its outcome on a `└` line, an
 // edit's first changed lines under it (the changed words brighter), thinking
@@ -12,7 +13,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Index, Mat
 import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
-import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, type Turn } from "../../web/turns.js";
+import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, foldLabel, unifiedDiff } from "../format.js";
 import { mix } from "../fx.js";
 import { filetypeOf, taskBoxes } from "../markdown.js";
@@ -435,7 +436,8 @@ function Request(p: { item: RequestItem }) {
   );
 }
 
-function ProcessItem(p: { item: ChatItem; workspace: string }) {
+/** One item of the work. `thoughtOnly`: an assistant item's text is a reply drawn after the fold, so only its thought is here. */
+function ProcessItem(p: { item: ChatItem; workspace: string; thoughtOnly?: boolean }) {
   const t = useTheme();
   return (
     <Switch>
@@ -446,7 +448,7 @@ function ProcessItem(p: { item: ChatItem; workspace: string }) {
             <Show when={item().thinking.trim()}>
               <Thought item={item()} />
             </Show>
-            <Show when={saysSomething(item().text)}>
+            <Show when={!p.thoughtOnly && saysSomething(item().text)}>
               <box paddingLeft={2}>
                 <Md text={item().text} streaming={item().streaming} fg={t().text2} />
               </box>
@@ -460,18 +462,21 @@ function ProcessItem(p: { item: ChatItem; workspace: string }) {
   );
 }
 
-function Fold(p: { turn: Turn; open: boolean; onToggle: () => void }) {
+type Place = "first" | "middle" | "last";
+
+function Fold(p: { turn: Turn; open: boolean; onToggle: () => void; part?: { counts: Turn["counts"]; place: Place } }) {
   const t = useTheme();
+  const live = () => p.turn.live && (!p.part || p.part.place === "last");
   const label = () => {
     void tick();
-    return foldLabel(p.turn);
+    return foldLabel(p.turn, Date.now(), p.part);
   };
-  const thought = () => (p.turn.live && !p.open ? latestThought(p.turn) : null);
+  const thought = () => (live() && !p.open ? latestThought(p.turn) : null);
   return (
     <box flexDirection="column" marginTop={1}>
       <box flexDirection="row" onMouseDown={p.onToggle}>
         <text fg={t().muted}>
-          <Show when={p.turn.live} fallback={`${p.open ? "▾ " : "▸ "}${label()}`}>
+          <Show when={live()} fallback={`${p.open ? "▾ " : "▸ "}${label()}`}>
             <Spinner />
             {" "}
             <Shimmer text={label()} />
@@ -488,6 +493,68 @@ function Fold(p: { turn: Turn; open: boolean; onToggle: () => void }) {
         )}
       </Show>
     </box>
+  );
+}
+
+/** Some work's items, the answer's own thought at `answerAt` (where the answer came, before any work that followed it). */
+function WorkItems(p: { items: ChatItem[]; answerAt: number; answer: AssistantItem | null; workspace: string; thoughtOnly?: boolean }) {
+  const cut = () => (p.answerAt < 0 ? p.items.length : p.answerAt);
+  return (
+    <box flexDirection="column" paddingLeft={2} marginTop={1}>
+      <Index each={p.items.slice(0, cut())}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Index>
+      <Show when={p.answerAt >= 0 && p.answer?.thinking.trim()}>
+        <Thought item={p.answer as AssistantItem} />
+      </Show>
+      <Index each={p.items.slice(cut())}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Index>
+    </box>
+  );
+}
+
+/**
+ * A turn whose agent wrote replies between its tool calls, in the order it
+ * happened: each stretch of work in its own fold (one that is only thinking
+ * sits inline), each reply after it, as the web UI draws it. While the turn
+ * runs on after a reply, a live fold follows for what comes next.
+ */
+function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: () => void; workspace: string }) {
+  const t = useTheme();
+  const all = createMemo(() => {
+    const ended = p.segments[p.segments.length - 1]?.reply != null;
+    return p.turn.live && ended ? [...p.segments, { key: `${p.turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : p.segments;
+  });
+  const live = (n: number) => p.turn.live && n === all().length - 1;
+  const shape = (n: number) => {
+    const s = all()[n] as WorkSegment;
+    return s.items.length === 0 && !live(n) ? "none" : s.items.every((item) => item.kind === "assistant") && !live(n) ? "thought" : "fold";
+  };
+  // The first fold carries how long the turn took, the live one the spinner.
+  const firstFold = () => all().findIndex((_, n) => shape(n) === "fold");
+  const place = (n: number): Place => (live(n) ? "last" : n === firstFold() ? "first" : "middle");
+  return (
+    <Index each={all()}>
+      {(segment, n) => (
+        <>
+          <Switch>
+            <Match when={shape(n) === "thought"}>
+              <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
+            </Match>
+            <Match when={shape(n) === "fold"}>
+              <Fold turn={p.turn} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: place(n) }} />
+              <Show when={p.open && segment().items.length > 0}>
+                <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
+              </Show>
+            </Match>
+          </Switch>
+          <Show when={segment().reply}>
+            {(reply) => (
+              <box flexDirection="column" marginTop={1}>
+                <Md text={reply().text} streaming={reply().streaming} fg={t().text} />
+              </box>
+            )}
+          </Show>
+        </>
+      )}
+    </Index>
   );
 }
 
@@ -513,6 +580,8 @@ function Answer(p: { item: AssistantItem }) {
 function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; onToggle: () => void; switchedTo: string | null }) {
   const t = useTheme();
   const hasProcess = () => p.turn().process.length > 0 || Boolean(p.turn().answer?.thinking.trim());
+  const segments = createMemo(() => workSegments(p.turn()));
+  const split = () => segments().some((s) => s.reply);
   const files = () => p.turn().changedFiles.map((f) => relativePath(f, p.workspace));
   return (
     <box flexDirection="column" width="100%" maxWidth={MAX_COLUMN}>
@@ -524,18 +593,18 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         )}
       </Show>
       <Show when={p.turn().prompt}>{(prompt) => <UserPrompt item={prompt()} />}</Show>
-      <Show when={hasProcess() || p.turn().live}>
-        <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} />
-        <Show when={p.open}>
-          <box flexDirection="column" paddingLeft={2} marginTop={1}>
-            {/* The answer's own thought sits where the answer came, before any work that followed it. */}
-            <Index each={p.turn().process.slice(0, p.turn().answerAt)}>{(item) => <ProcessItem item={item()} workspace={p.workspace} />}</Index>
-            <Show when={p.turn().answer?.thinking.trim()}>
-              <Thought item={p.turn().answer as AssistantItem} />
+      <Show
+        when={split()}
+        fallback={
+          <Show when={hasProcess() || p.turn().live}>
+            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} />
+            <Show when={p.open}>
+              <WorkItems items={p.turn().process} answerAt={p.turn().answerAt} answer={p.turn().answer} workspace={p.workspace} />
             </Show>
-            <Index each={p.turn().process.slice(p.turn().answerAt)}>{(item) => <ProcessItem item={item()} workspace={p.workspace} />}</Index>
-          </box>
-        </Show>
+          </Show>
+        }
+      >
+        <SegmentedWork turn={p.turn()} segments={segments()} open={p.open} onToggle={p.onToggle} workspace={p.workspace} />
       </Show>
       <Show when={p.turn().answer}>{(a) => <Answer item={a()} />}</Show>
       <For each={p.turn().errors}>{(item) => <Notice item={item} />}</For>
