@@ -8,8 +8,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
-import { APP_COMMANDS, matchCommands, mergeCommands } from "../commands.js";
-import { IconArrowUp, IconImage, IconLink, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
+import { IconArrowUp, IconImage, IconLink, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
@@ -318,17 +318,22 @@ export function Composer({
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
 
   // The "/" menu (Hermes Desktop's): open while the first word is still being typed.
+  // "$" is the skills' own menu, where the harness has any (elsewhere a "$" is just typed).
   const [commands, setCommands] = useState<SlashCommand[] | null>(null);
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const menuId = useId();
   const slashQuery = /^\/(\S*)$/.exec(text)?.[1];
-  const menuOpen = slashQuery !== undefined && !menuDismissed && !closed;
-  const menuItems = menuOpen ? matchCommands(commands ?? APP_COMMANDS, slashQuery) : [];
+  const skillQuery = /^\$(\S*)$/.exec(text)?.[1];
+  const skillCount = commands ? commands.filter(isSkill).length : 0;
+  const menuKind = closed || menuDismissed ? null : slashQuery !== undefined ? "slash" : skillQuery !== undefined && skillCount > 0 ? "skill" : null;
+  const menuOpen = menuKind !== null;
+  const menuItems = menuKind === "slash" ? slashMenu(commands ?? APP_COMMANDS, slashQuery ?? "") : menuKind === "skill" ? skillMenu(commands ?? [], skillQuery ?? "") : [];
   const activeCommand = menuItems[Math.min(menuIndex, menuItems.length - 1)];
+  const wantsCommands = (slashQuery !== undefined || skillQuery !== undefined) && !closed;
 
   useEffect(() => {
-    if (!menuOpen || commands !== null) return;
+    if (!wantsCommands || commands !== null) return;
     let cancelled = false;
     api<{ commands: SlashCommand[] }>(`/api/chats/${chat.chatId}/commands`).then(
       (r) => !cancelled && setCommands(mergeCommands(r.commands)),
@@ -337,12 +342,12 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, [menuOpen, commands, chat.chatId]);
+  }, [wantsCommands, commands, chat.chatId]);
 
   useEffect(() => {
     setMenuIndex(0);
-    if (slashQuery === undefined) setMenuDismissed(false);
-  }, [slashQuery]);
+    if (slashQuery === undefined && skillQuery === undefined) setMenuDismissed(false);
+  }, [slashQuery, skillQuery]);
 
   useEffect(() => {
     if (menuOpen) document.getElementById(`${menuId}-${menuIndex}`)?.scrollIntoView({ block: "nearest" });
@@ -368,7 +373,7 @@ export function Composer({
     }
     if (e.key !== "Tab" && (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing)) return false;
     // A command typed in full that takes nothing more runs on Enter; otherwise the key completes it.
-    if (e.key === "Enter" && activeCommand?.name === slashQuery && !activeCommand.hint) return false;
+    if (e.key === "Enter" && activeCommand && activeCommand.name === slashQuery && !activeCommand.hint) return false;
     if (activeCommand) completeCommand(activeCommand);
     return true;
   };
@@ -575,12 +580,14 @@ export function Composer({
             </p>
           ) : null}
           {menuOpen ? (
-            <div className="command-menu" id={menuId} role="listbox" aria-label="Commands">
+            <div className={`command-menu${menuKind === "skill" ? " is-skills" : ""}`} id={menuId} role="listbox" aria-label={menuKind === "skill" ? "Skills" : "Commands"}>
               <div className="command-menu-head" aria-hidden="true">
-                Commands
+                {menuKind === "skill" ? `Skills · ${skillCount}` : "Commands"}
               </div>
               {menuItems.length === 0 ? (
-                <div className="command-empty">{commands === null ? "Loading commands…" : `No command matches /${slashQuery}`}</div>
+                <div className="command-empty">
+                  {commands === null ? "Loading commands…" : menuKind === "skill" ? `No skill matches $${skillQuery}` : `No command matches /${slashQuery}`}
+                </div>
               ) : (
                 menuItems.map((c, i) => (
                   <div
@@ -589,7 +596,7 @@ export function Composer({
                     role="option"
                     aria-selected={i === menuIndex}
                     className={`command-item${i === menuIndex ? " is-active" : ""}`}
-                    title={c.description ? `/${c.name}${c.hint ? ` ${c.hint}` : ""}: ${c.description}` : undefined}
+                    title={c.description ? `${menuKind === "skill" ? `$${skillName(c)}` : `/${c.name}`}${c.hint ? ` ${c.hint}` : ""}: ${c.description}` : undefined}
                     onPointerMove={() => setMenuIndex(i)}
                     onMouseDown={(e) => {
                       // Keep the caret in the composer.
@@ -597,13 +604,19 @@ export function Composer({
                       completeCommand(c);
                     }}
                   >
-                    <IconTerminal size={14} />
-                    <span className="command-name">/{c.name}</span>
+                    {menuKind === "skill" ? <IconSpark size={14} className="command-icon-skill" /> : <IconTerminal size={14} />}
+                    <span className="command-name">{menuKind === "skill" ? `$${skillName(c)}` : `/${c.name}`}</span>
                     {c.description ? <span className="command-desc">{c.description}</span> : null}
-                    {c.source === "skill" || c.source === "prompt" || c.source === "app" ? <span className="command-source">{c.source}</span> : null}
+                    {menuKind === "slash" && (c.source === "skill" || c.source === "prompt" || c.source === "app") ? <span className="command-source">{c.source}</span> : null}
                   </div>
                 ))
               )}
+              {/* Where the skills went: under "$", unless the query already asks for them. */}
+              {menuKind === "slash" && skillCount > 0 && !(slashQuery ?? "").toLowerCase().startsWith("skill") ? (
+                <div className="command-foot" aria-hidden="true">
+                  <IconSpark size={12} /> {skillCount} {skillCount === 1 ? "skill" : "skills"} under <kbd className="keycap">$</kbd>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <textarea

@@ -2866,6 +2866,33 @@ body.is-resizing {
   color: var(--muted);
 }
 
+/* The "$" menu: the skills, each with a spark in the thinking colour. */
+.command-icon-skill {
+  color: var(--thinking);
+}
+
+.command-menu.is-skills .command-name {
+  color: color-mix(in srgb, var(--thinking) 70%, var(--text));
+}
+
+.command-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 7px 8px 3px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.command-foot .keycap {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
 /* Dropping files: the card outlines itself as the target. */
 .composer-card.is-dragging {
   box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);
