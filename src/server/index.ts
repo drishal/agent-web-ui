@@ -22,7 +22,8 @@ import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
 import { Notifier } from "./notify.js";
 import { ThemeStore } from "./theme.js";
-import { configDir, configEnv, migrateConfigDir, readUserConfig, UserConfigError } from "./user-config.js";
+import { Herdr, herdrSocketPath } from "./herdr.js";
+import { configDir, configEnv, herdrEnabled, migrateConfigDir, readUserConfig, UserConfigError } from "./user-config.js";
 import { Workspaces } from "./workspaces.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,22 @@ async function findRoot(): Promise<string> {
     dir = path.dirname(dir);
   }
   throw new Error("Cannot locate the awui package root");
+}
+
+/** config.yml's `herdr`, read again at most every two seconds, so the Settings dialog turns it on and off without a restart. */
+function herdrSetting(dir: string | null, initial: Parameters<typeof herdrEnabled>[0]): () => boolean {
+  let on = herdrEnabled(initial);
+  let at = Date.now();
+  return () => {
+    if (Date.now() - at < 2000) return on;
+    at = Date.now();
+    try {
+      on = herdrEnabled(readUserConfig(dir)?.config);
+    } catch {
+      // A config.yml broken since startup keeps the last good answer; startup logged the file's problems.
+    }
+    return on;
+  };
 }
 
 async function main(): Promise<void> {
@@ -66,9 +83,10 @@ async function main(): Promise<void> {
   // The binary's extension sources need to be real files for pi/omp's -e; write them before the adapters resolve them.
   await extractEmbeddedExtensions(config.stateDir);
   // Which settings the environment overrides (they beat config.yml), noted before the password leaves it.
-  const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS"].filter((n) => process.env[n] !== undefined));
+  const envSet = new Set(["PORT", "HOST", "AUTH_USERNAME", "AUTH_PASSWORD", "WORKSPACE_ROOTS", "ALLOWED_HOSTS", "ALLOWED_TAILSCALE_USERS", "AWUI_HERDR"].filter((n) => process.env[n] !== undefined));
   // The agents' shells inherit process.env; the password must not reach them.
   delete process.env.AUTH_PASSWORD;
+  const herdr = new Herdr(herdrSocketPath(process.env, config.home, settings?.config.herdr_socket), herdrSetting(config.configDir, settings?.config));
   // A server started in a herdr pane must not hand that pane to its harness children: herdr's Claude Code
   // and Hermes hooks would report every chat's session as the pane's own.
   for (const name of ["HERDR_ENV", "HERDR_SOCKET_PATH", "HERDR_PANE_ID", "HERDR_WORKSPACE_ID", "HERDR_TAB_ID"]) delete process.env[name];
@@ -150,6 +168,7 @@ async function main(): Promise<void> {
     pairingUrls,
     webDir,
     configDir: config.configDir,
+    herdr,
     marks,
     prompts,
     limits,

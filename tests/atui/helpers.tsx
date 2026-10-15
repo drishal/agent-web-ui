@@ -23,6 +23,8 @@ export async function startServer(): Promise<{ root: string; stop: () => Promise
     env: {
       ...process.env,
       AWUI_CONFIG_DIR: "",
+      // Never the developer's herdr: this server's sessions are not in any pane.
+      AWUI_HERDR: "0",
       PORT: String(PORT),
       AWUI_HARNESSES: "fake,fake-b",
       AWUI_FAKE_DELAY_MS: "20",

@@ -87,7 +87,12 @@ export interface SessionSummary {
   snoozedUntil?: number;
   /** A live chat waiting on an answer or an approval. */
   asking?: true;
+  /** Open in a herdr pane (its harness run there, not by this server), and what herdr says it does. */
+  herdr?: { paneId: string; status: HerdrStatus };
 }
+
+/** A herdr pane's agent: `done` is idle with a finish nobody has looked at yet. */
+export type HerdrStatus = "idle" | "done" | "working" | "blocked" | "unknown";
 
 /** A session together with the project it belongs to. */
 export interface ProjectSession extends SessionSummary {
@@ -572,7 +577,7 @@ export interface Bootstrap {
   home: string;
   theme: { active: string; problem?: string };
   /** From config.yml: the shared look (theme null lets theme.yml decide, scale null is 100%). Re-read on every page load. */
-  ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean };
+  ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean; herdr: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -588,7 +593,11 @@ export const resumeChatSchema = z.object({
   harnessId: z.string().min(1).max(64),
   workspaceId: z.string().min(1).max(128),
   sessionId: z.string().min(1).max(512),
+  /** Resume it even though a herdr pane runs it: a second harness on the same session file, which the user chose. */
+  ignoreHerdr: z.boolean().optional(),
 });
+/** A herdr pane to show (herdr's ids look like `w1:p2`). */
+export const herdrFocusSchema = z.object({ paneId: z.string().regex(/^[A-Za-z0-9:_-]{1,64}$/) });
 /** A mention picker's search over a project's files. */
 export const fileSearchSchema = z.object({ q: z.string().max(200).default("") });
 /** Text search across a project's files (fixed strings, never a regex). */
@@ -926,6 +935,8 @@ export interface ServerSettingsValues {
   theme: ThemeChoice | null;
   textScale: number | null;
   autocollapseSidebar: boolean;
+  /** Work with herdr: mark the sessions open in its panes, and let atui report to them. */
+  herdr: boolean;
 }
 
 /** Settings that take effect only when the server restarts. */
@@ -959,6 +970,7 @@ export const settingsPatchSchema = z
     theme: themeChoiceSchema.nullable().optional(),
     textScale: z.number().min(0.5).max(2).nullable().optional(),
     autocollapseSidebar: z.boolean().optional(),
+    herdr: z.boolean().optional(),
   })
   .strict();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

@@ -19,6 +19,8 @@ export interface UiSettings {
   autocollapseSidebar: boolean;
   /** Shared chat text size; null: the 100% default. */
   textScale: number | null;
+  /** Work with herdr (config.yml's `herdr`, or AWUI_HERDR): atui reads it to report its chats to a herdr pane. */
+  herdr: boolean;
 }
 
 export class UserConfigError extends Error {}
@@ -48,6 +50,10 @@ const schema = z
     autocollapse_sidebar: z.boolean().optional(),
     /** Shared chat text size (a scale on the 14.5px base); null when unset. */
     text_scale: z.number().min(0.5).max(2).optional(),
+    /** Work with herdr (herdr.ts, atui/herdr.ts); on unless false. */
+    herdr: z.boolean().optional(),
+    /** Herdr's API socket, when not the default session's (file-only; HERDR_SOCKET_PATH wins). */
+    herdr_socket: z.string().trim().min(1).max(4096).optional(),
     /** How each harness's CLI starts: its executable, and arguments for every chat child. File-only (see HarnessLaunch). */
     harnesses: z
       .object({
@@ -156,7 +162,13 @@ export function launchSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv
   return out;
 }
 
-export function uiSettings(c: UserConfig | undefined): UiSettings {
+/** Whether to work with herdr: AWUI_HERDR (1 or 0) wins over config.yml's `herdr`, which is on unless false. */
+export function herdrEnabled(c: UserConfig | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.AWUI_HERDR === "0" || env.AWUI_HERDR === "1") return env.AWUI_HERDR === "1";
+  return c?.herdr ?? true;
+}
+
+export function uiSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv = process.env): UiSettings {
   const theme = c?.theme === "custom" ? "base16" : (c?.theme ?? null);
-  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null };
+  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null, herdr: herdrEnabled(c, env) };
 }

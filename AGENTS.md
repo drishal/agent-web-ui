@@ -88,6 +88,7 @@ src/server/
   saved-prompts.ts            Saved prompts: the server's list for every device, names unique, bounded, in the state folder.
   usage-report.ts             Usage across chats: each session's calls (adapter.readUsage), added up by day, harness, model, chat.
   chat-search.ts              Search every chat: the sidebar's sessions read (never started), matched, bounded, cached per version.
+  herdr.ts                    herdr's JSON socket: its panes by session (sidebar marks, the resume guard), focusing one; atui reports through it.
   harness/plans.ts            A plan call's plan (ExitPlanMode, plan_mode_complete) onto its tool item, bounded.
 src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css one stylesheet.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.

@@ -42,6 +42,7 @@ const ENV_OF: Partial<Record<keyof ServerSettingsValues, string>> = {
   workspaceRoots: "WORKSPACE_ROOTS",
   allowedHosts: "ALLOWED_HOSTS",
   allowedTailscaleUsers: "ALLOWED_TAILSCALE_USERS",
+  herdr: "AWUI_HERDR",
 };
 
 function fileOf(ctx: SettingsContext): string | null {
@@ -86,6 +87,7 @@ function valuesOf(c: UserConfig, ctx: SettingsContext): ServerSettingsValues {
     theme: c.theme === "custom" ? "base16" : (c.theme ?? null),
     textScale: c.text_scale ?? null,
     autocollapseSidebar: c.autocollapse_sidebar ?? true,
+    herdr: c.herdr ?? true,
   };
 }
 
@@ -177,6 +179,7 @@ export function writeSettings(ctx: SettingsContext, patch: SettingsPatch, who: R
   if (patch.theme !== undefined) set(["theme"], patch.theme);
   if (patch.textScale !== undefined) set(["text_scale"], patch.textScale);
   if (patch.autocollapseSidebar !== undefined) set(["autocollapse_sidebar"], patch.autocollapseSidebar);
+  if (patch.herdr !== undefined) set(["herdr"], patch.herdr);
   const auth = doc.getIn(["auth"]) as { items?: unknown[] } | undefined;
   if (auth && Array.isArray(auth.items) && auth.items.length === 0) doc.deleteIn(["auth"]);
 

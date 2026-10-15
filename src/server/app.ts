@@ -26,6 +26,7 @@ import {
   renameSchema,
   settingsPatchSchema,
   resumeChatSchema,
+  herdrFocusSchema,
   rewindSchema,
   runCommandSchema,
   savedPromptSchema,
@@ -66,6 +67,7 @@ import type { ThemeStore } from "./theme.js";
 import { readSettings, writeSettings, type Requester, type SettingsContext } from "./settings.js";
 import { readAwuiConfig, writeAwuiConfig } from "./awui-settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
+import { HerdrError, type Herdr } from "./herdr.js";
 import { SessionMarks } from "./session-marks.js";
 import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
@@ -108,6 +110,8 @@ export interface AppDeps {
   checkpointsDir?: string | null;
   /** The server state folder, where agent-rendered HTML pages are stored. */
   stateDir?: string | null;
+  /** Herdr's panes, to mark the sessions they run; none when absent (tests that do not ask for it). */
+  herdr?: Herdr;
   log?: (message: string) => void;
 }
 
@@ -521,9 +525,11 @@ export function createApp(deps: AppDeps) {
         ...(chat.pendingCount > 0 ? { asking: true as const } : {}),
       });
     }
+    const inHerdr = deps.herdr ? await deps.herdr.bySession() : null;
     for (const [id, s] of sessions) {
       const mark = marks.get(id);
-      if (mark) sessions.set(id, { ...s, ...mark });
+      const pane = inHerdr?.get(id);
+      if (mark || pane) sessions.set(id, { ...s, ...mark, ...(pane ? { herdr: { paneId: pane.paneId, status: pane.status } } : {}) });
     }
     return {
       workspaces: [...projects.values()],
@@ -608,8 +614,31 @@ export function createApp(deps: AppDeps) {
     const prefix = `${adapter.id}:`;
     if (!input.sessionId.startsWith(prefix)) throw new ChatError(400, "wrong_harness", "Session belongs to another harness");
     const ws = await workspaces.get(input.workspaceId);
-    const chat = await manager.resume(adapter, ws, input.sessionId.slice(prefix.length));
+    const nativeId = input.sessionId.slice(prefix.length);
+    // A herdr pane runs this session's harness already: a second one here would write the same session file.
+    if (deps.herdr && !input.ignoreHerdr && !manager.liveChatFor(adapter.id, nativeId)) {
+      const pane = (await deps.herdr.bySession()).get(input.sessionId);
+      if (pane) {
+        throw new ChatError(409, "open_in_herdr", `This session is open in herdr (pane ${pane.paneId}, ${pane.status}): opening it here as well would run a second ${adapter.displayName} on the same session`);
+      }
+    }
+    const chat = await manager.resume(adapter, ws, nativeId);
     res.json(chat.snapshot());
+  });
+
+  // Show a herdr pane (a session open there). Only this machine: herdr's socket controls its terminals,
+  // and a pane switched from another device would change a screen nobody there is looking at.
+  app.post("/api/herdr/focus", async (req, res) => {
+    if (res.locals.local !== true) throw new ChatError(403, "local_only", "Only this machine can switch herdr's panes");
+    if (!deps.herdr?.on) throw new ChatError(404, "herdr_off", "The herdr integration is turned off");
+    const { paneId } = body(herdrFocusSchema, req);
+    try {
+      await deps.herdr.focus(paneId);
+    } catch (error) {
+      if (error instanceof HerdrError) throw new ChatError(error.code === "not_running" || error.code === "timeout" ? 503 : 422, "herdr_failed", `herdr: ${error.message}`);
+      throw error;
+    }
+    res.json({ ok: true });
   });
 
   // An image under a prompt (see image-store): the id is the hash of its bytes, so it never changes.

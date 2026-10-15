@@ -5,7 +5,7 @@
 // the device making it), and what takes a restart says so, with a Restart
 // button when systemd supervises.
 import { useEffect, useState, type CSSProperties } from "react";
-import type { RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
+import type { Bootstrap, RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
@@ -83,6 +83,7 @@ interface Draft {
   theme: ThemeChoice | "";
   textScale: number;
   autocollapseSidebar: boolean;
+  herdr: boolean;
 }
 
 function draftOf(v: ServerSettingsValues): Draft {
@@ -98,6 +99,7 @@ function draftOf(v: ServerSettingsValues): Draft {
     theme: v.theme ?? "",
     textScale: v.textScale ?? 1,
     autocollapseSidebar: v.autocollapseSidebar,
+    herdr: v.herdr,
   };
 }
 
@@ -117,6 +119,7 @@ function patchOf(d: Draft, v: ServerSettingsValues): SettingsPatch {
   if ((d.theme || null) !== v.theme) p.theme = d.theme || null;
   if (d.textScale !== (v.textScale ?? 1)) p.textScale = d.textScale;
   if (d.autocollapseSidebar !== v.autocollapseSidebar) p.autocollapseSidebar = d.autocollapseSidebar;
+  if (d.herdr !== v.herdr) p.herdr = d.herdr;
   return p;
 }
 
@@ -142,7 +145,7 @@ export function SettingsDialog({
   onToggleNotify: () => Promise<void>;
   onTestNotify: () => Promise<void>;
   /** The file's look settings changed: the open page follows without a reload. */
-  onUiSaved: (ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean }) => void;
+  onUiSaved: (ui: Partial<Bootstrap["ui"]>) => void;
   onClose: () => void;
 }) {
   const [server, setServer] = useState<ServerSettings | null>(null);
@@ -185,8 +188,13 @@ export function SettingsDialog({
       setServer(next);
       setDraft(draftOf(next.values));
       setSaved(true);
-      if (patch.theme !== undefined || patch.textScale !== undefined || patch.autocollapseSidebar !== undefined) {
-        onUiSaved({ theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar });
+      if (patch.theme !== undefined || patch.textScale !== undefined || patch.autocollapseSidebar !== undefined || patch.herdr !== undefined) {
+        onUiSaved({
+          theme: next.values.theme,
+          textScale: next.values.textScale,
+          autocollapseSidebar: next.values.autocollapseSidebar,
+          ...(patch.herdr !== undefined ? { herdr: next.values.herdr } : {}),
+        });
       }
     } catch (e) {
       setError(errorText(e));
@@ -332,7 +340,7 @@ export function SettingsDialog({
             ? "This server runs without a settings folder, so there is nothing to save to."
             : server && !server.editable
               ? "These live in config.yml on the machine running the server; change them there."
-              : "Saved to config.yml for every device. Theme, text size, and sidebar apply here at once and on other devices on their next page load; the rest when the server restarts."}
+              : "Saved to config.yml for every device. Theme, text size, sidebar, and herdr apply here at once and on other devices on their next page load (atui on its next start); the rest when the server restarts."}
         </p>
         {!draft ? (
           error ? null : <p className="settings-note">Loading…</p>
@@ -399,6 +407,10 @@ export function SettingsDialog({
             <label className="settings-row settings-check">
               <input type="checkbox" disabled={!editable} checked={draft.autocollapseSidebar} onChange={(e) => update({ autocollapseSidebar: e.target.checked })} />
               <span>Fold the sidebar away in narrow windows</span>
+            </label>
+            <label className="settings-row settings-check">
+              <input type="checkbox" disabled={field("herdr")} checked={draft.herdr} onChange={(e) => update({ herdr: e.target.checked })} />
+              <span>Work with herdr: mark the sessions open in its panes, and let atui in a pane report its chats</span>
             </label>
             <label className="settings-row">
               <span className="settings-label">Listen on</span>
