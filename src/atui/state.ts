@@ -52,6 +52,8 @@ export interface AtuiOptions {
   glass?: boolean;
   /** Tell the desktop (a terminal notification) that a background session finished or asks; none in tests. */
   notify?: (title: string, body: string) => void;
+  /** false (--no-herdr): in a herdr pane, report nothing to herdr (main.tsx does the reporting). */
+  herdr?: boolean;
 }
 
 /** A toast in the corner: a background session's news, for a few seconds. */

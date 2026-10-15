@@ -111,6 +111,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   shortcuts.ts                Every key the app answers: the shortcut sheet's table, and the palette's hints.
 src/atui/                     The terminal client (Bun + OpenTUI + Solid). state.ts is the app state; ui/ the components.
   format.ts, neat.ts, vim.ts  Pure formatting and key logic, unit-tested from tests/unit.
+  herdr.ts                    In a herdr pane: what the pane reports (pure) and the reporter main.tsx feeds.
   fx.ts, minimap.ts, words.ts, markdown.ts, assist.ts, images.ts   Pure logic for the look: shimmer, paced
                               streaming, meters, eased scrolls, the turn gutter, word-level diffs, task boxes,
                               @mentions, ghost text, toasts, desktop notifications, image protocol and drops.

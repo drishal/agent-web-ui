@@ -1,13 +1,15 @@
 // atui: awui in the terminal, in OpenCode's TUI style (OpenTUI and
 // Solid, run by Bun). A client of the same server as the browser, so every
 // harness, session, approval, and setting is shared with the web UI.
-import { createRoot } from "solid-js";
+import { createEffect, createRoot } from "solid-js";
 import { render } from "@opentui/solid";
 import { Server } from "./client.js";
-import { parseArgs, USAGE } from "./args.js";
+import { DEFAULT_URL, parseArgs, USAGE } from "./args.js";
 import { notifySequence } from "./assist.js";
+import { createHerdrReporter, herdrPane, paneReport, resumeArgv } from "./herdr.js";
 import { readPrefs, writePrefs } from "./prefs.js";
-import { createAtui, message } from "./state.js";
+import { createAtui, message, type Atui } from "./state.js";
+import { isBusy } from "../web/session-groups.js";
 import { progressSequence, speaksProgress, type Progress, type TerminalState } from "./terminal.js";
 import { App } from "./ui/app.js";
 import { startTicker, stopTicker } from "./ui/ticker.js";
@@ -33,6 +35,7 @@ async function main(): Promise<void> {
     console.error(`atui: ${message(error)}`);
     process.exit(1);
   }
+  reportToHerdr(app, parsed.url, parsed.herdr);
   startTicker();
   let done = false;
   const exit = () => {
@@ -65,6 +68,29 @@ async function main(): Promise<void> {
   // The command line, else $ATUI_VIM, else what C-x v last chose.
   const vim = parsed.vim ?? (process.env.ATUI_VIM ? process.env.ATUI_VIM === "1" : (prefs.vim ?? false));
   await render(() => <App app={app} onExit={exit} vim={vim} onVim={(on) => writePrefs({ vim: on })} onGlass={(on) => writePrefs({ glass: on })} onTerminal={onTerminal} />, renderer);
+}
+
+/** In a herdr pane, and unless the server's setting or --no-herdr says not: tell herdr what this atui's chats do. */
+function reportToHerdr(app: Atui, url: string, wanted: boolean | undefined): void {
+  const pane = herdrPane(process.env);
+  if (!pane || wanted === false || app.boot()?.ui.herdr === false) return;
+  // Herdr starts the resume command by name after a restart, so only an atui it can find on PATH is offered.
+  const command = Bun.which("atui") ? "atui" : null;
+  const reporter = createHerdrReporter(pane, { resume: (sessionId) => resumeArgv(command, url, DEFAULT_URL, sessionId) });
+  createRoot(() =>
+    createEffect(() => {
+      const c = app.chat();
+      const shown = c?.chatId ?? null;
+      const live = new Map(app.overview().sessions.flatMap((s) => (s.liveChatId ? [[s.liveChatId, s] as const] : [])));
+      const others = { busy: 0, asking: 0 };
+      for (const tab of app.tabs().tabs) {
+        const s = tab.chatId && tab.chatId !== shown ? live.get(tab.chatId) : undefined;
+        if (s?.asking) others.asking += 1;
+        else if (s && isBusy(s.status)) others.busy += 1;
+      }
+      reporter.report(paneReport(c && c.status !== "disposed" ? c : null, others));
+    }),
+  );
 }
 
 if (import.meta.main) void main();
