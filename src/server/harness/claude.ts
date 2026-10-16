@@ -354,10 +354,8 @@ class ClaudeLiveChat implements LiveChat {
       const init = await rpc.init;
       this.models = (Array.isArray(init.models) ? init.models : []).map(toModelInfo).filter((m): m is ModelInfo => m !== null);
       this.commands = (Array.isArray(init.commands) ? init.commands : []).map(toCommand).filter((c): c is SlashCommand => c !== null);
-      const settings = await rpc.request<Obj>({ subtype: "get_settings" }).catch(() => null);
-      const effective = settings && isObj(settings.effective) ? settings.effective : {};
-      this.model = str(effective.model) || "default";
-      this.effort = str(effective.effortLevel) || null;
+      const settings = await this.readSettings(rpc);
+      this.model = str(settings.effective.model) || "default";
       // Thinking is omitted from the stream unless asked for; summaries are what the TUI shows.
       await rpc.request({ subtype: "set_max_thinking_tokens", max_thinking_tokens: null, thinking_display: "summarized" }).catch(() => undefined);
       this.emit({ type: "session", nativeId: this.sessionId });
@@ -648,7 +646,27 @@ class ClaudeLiveChat implements LiveChat {
   }
 
   async getConfig(): Promise<ChatConfig> {
-    return { model: this.model, thinkingLevel: this.effort, models: this.models, thinkingLevels: [] };
+    return { model: this.model, thinkingLevel: this.effort, models: this.models, thinkingLevels: this.levels() };
+  }
+
+  /** The chosen model's effort levels, as the CLI lists them per model (some have fewer, some none). */
+  private levels(): string[] {
+    // A 1M-context variant ("opus[1m]") has its base model's levels.
+    const key = this.model?.replace(/\[[^\]]*\]$/, "") ?? "";
+    return (this.models.find((m) => m.key === key) ?? this.models.find((m) => m.id === key))?.levels ?? [];
+  }
+
+  /**
+   * The settings in force. `applied.effort` is the effort the model really
+   * runs at (its default when no settings file names one, null on a model
+   * without levels); `effective.effortLevel` only says what a file or flag set.
+   */
+  private async readSettings(rpc: ClaudeRpc): Promise<{ effective: Obj }> {
+    const settings = await rpc.request<Obj>({ subtype: "get_settings" }).catch(() => null);
+    const effective = settings && isObj(settings.effective) ? settings.effective : {};
+    const applied = settings && isObj(settings.applied) ? settings.applied : null;
+    this.effort = (applied ? str(applied.effort) : str(effective.effortLevel)) || null;
+    return { effective };
   }
 
   async getContextUsage(): Promise<ContextUsage | null> {
@@ -737,15 +755,19 @@ class ClaudeLiveChat implements LiveChat {
   }
 
   async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
+    const rpc = this.live;
     if (patch.model !== undefined) {
-      await this.live.request({ subtype: "set_model", model: patch.model });
+      await rpc.request({ subtype: "set_model", model: patch.model });
       this.model = patch.model;
     }
     if (patch.thinkingLevel !== undefined) {
+      // The CLI takes any word here without complaint, so only a level the model lists goes through.
+      if (!this.levels().includes(patch.thinkingLevel)) throw new Error(`${patch.thinkingLevel} is not an effort level of this model`);
       // The flag layer: this session only, never your settings.json.
-      await this.live.request({ subtype: "apply_flag_settings", settings: { effortLevel: patch.thinkingLevel } });
-      this.effort = patch.thinkingLevel;
+      await rpc.request({ subtype: "apply_flag_settings", settings: { effortLevel: patch.thinkingLevel } });
     }
+    // A model has its own default effort, so either change can move it.
+    if (patch.model !== undefined || patch.thinkingLevel !== undefined) await this.readSettings(rpc);
   }
 
   async refreshModels(): Promise<void> {
