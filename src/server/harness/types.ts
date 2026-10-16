@@ -218,6 +218,13 @@ export interface HarnessAdapter {
    */
   readTranscript?(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null>;
   /**
+   * The command (program and arguments, unquoted) that resumes this session
+   * in the harness's own CLI when run from its project folder, for
+   * capabilities.supportsResumeCommand. Null when nothing is saved to resume
+   * yet, or the session is not this project's.
+   */
+  resumeCommand?(req: { cwd: string; nativeId: string }): Promise<string[] | null>;
+  /**
    * Every model call a stored session made, with its tokens (side branches
    * too: what they spent was spent), read without starting the harness; for
    * usage across sessions. Null when the session cannot be read.

@@ -26,6 +26,8 @@ export interface HarnessCapabilities {
   supportsQueueEdit: boolean;
   /** The harness has permission modes (how much it asks before acting), switchable at any time, mid-run too (Claude Code). */
   supportsPermissionMode: boolean;
+  /** A saved session can be resumed in the harness's own CLI from a terminal, by a command the server gives ("Copy resume command"). */
+  supportsResumeCommand: boolean;
 }
 
 export interface HarnessStatus {
@@ -768,6 +770,16 @@ export const sessionPreviewSchema = z.object({
   workspaceId: z.string().min(1).max(128),
   sessionId: z.string().min(1).max(512),
 });
+/** A session to resume from a terminal, outside awui ("Copy resume command"). */
+export const resumeCommandSchema = sessionPreviewSchema;
+
+/** The shell line that resumes a session in its harness's own CLI. */
+export interface ResumeCommand {
+  /** `cd <project> && claude --resume <id>`, quoted for a POSIX shell or fish. */
+  command: string;
+  /** awui has the session open: closing it here first keeps one writer on the session. */
+  live: boolean;
+}
 
 /** What a history picker or a hover card shows of a session: its last prompt and answer, cut short. */
 export interface SessionPreview {

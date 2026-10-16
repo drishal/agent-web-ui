@@ -601,6 +601,7 @@ export class OmpAdapter implements HarnessAdapter {
     supportsHtmlRender: renderHtmlExtension() !== null,
     supportsQueueEdit: true,
     supportsPermissionMode: false,
+    supportsResumeCommand: false,
   };
   private lister: AcpLister;
   private sessionFiles = new SessionFiles(() => this.resolveSessionDir());

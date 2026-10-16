@@ -54,6 +54,7 @@ export class AwuiAdapter extends PiAdapter {
     supportsHtmlRender: renderHtmlExtension() !== null,
     supportsQueueEdit: true,
     supportsPermissionMode: false,
+    supportsResumeCommand: false,
   };
   // A distinct accent so the harness menu tells it apart from Pi.
   protected override accentToken = "thinking";

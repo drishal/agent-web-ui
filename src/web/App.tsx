@@ -52,6 +52,7 @@ import { ReviewPanel } from "./components/ReviewPanel.js";
 import { RestoreDialog } from "./components/RestoreDialog.js";
 import { HerdrDialog } from "./components/HerdrDialog.js";
 import { collectChanges } from "./review.js";
+import { copyResumeCommand, useResumeCommand } from "./resume-command.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar, IconSplit } from "./icons.js";
@@ -1077,6 +1078,15 @@ export function App() {
 
   const collapsed = sidebarCollapsed || (narrow && !openedWhileNarrow && (boot?.ui.autocollapseSidebar ?? true));
 
+  // Above the early returns: a hook must run on every render.
+  const resumable = chat?.capabilities.supportsResumeCommand && chat.sessionId ? { harnessId: chat.harnessId, sessionId: chat.sessionId, workspaceId: chat.workspace.id } : null;
+  const { resume, why: noResume } = useResumeCommand(menuOpen ? resumable : null);
+  const copyResume = () => {
+    if (!resume) return;
+    setMenuOpen(false);
+    void copyResumeCommand(resume).then((text) => setBanner({ level: "info", text, ...(resume.live ? { action: { label: "Close chat", run: () => void closeChat() } } : {}) }));
+  };
+
   if (signedOut) {
     return <LoginForm />;
   }
@@ -1193,6 +1203,7 @@ export function App() {
         onWarmSession={warmSession}
         onOpenBeside={wide ? (s) => void openBeside(s) : undefined}
         onMarkSession={(s, change) => void markSessionAs(s, change)}
+        onNotice={(text) => setBanner({ level: "info", text })}
         onRefresh={() => void refreshSessions()}
         onSettings={() => {
           setSettingsOpen(true);
@@ -1357,6 +1368,13 @@ export function App() {
                         Export as Markdown
                       </button>
                     </li>
+                    {resumable ? (
+                      <li role="none">
+                        <button type="button" role="menuitem" disabled={!resume} title={resume?.command ?? noResume ?? undefined} onClick={copyResume}>
+                          Copy resume command
+                        </button>
+                      </li>
+                    ) : null}
                     <li role="none">
                       <button type="button" role="menuitem" onClick={() => void closeChat()}>
                         Close chat

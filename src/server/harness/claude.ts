@@ -898,6 +898,7 @@ export class ClaudeAdapter implements HarnessAdapter {
     supportsHtmlRender: renderHtmlMcpServer() !== null,
     supportsQueueEdit: true,
     supportsPermissionMode: true,
+    supportsResumeCommand: true,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
   private usageCache: { at: number; accounts: LimitAccount[] } | null = null;
@@ -952,6 +953,16 @@ export class ClaudeAdapter implements HarnessAdapter {
     if (!/^[0-9a-f-]{36}$/i.test(nativeId)) return null;
     const file = path.join(await this.resolveSessionDir(cwd), `${nativeId}.jsonl`);
     return (await fs.stat(file).catch(() => null))?.isFile() ? file : null;
+  }
+
+  /**
+   * The terminal's own `claude`, not cliCommand: that may be a path from
+   * CLAUDE_BIN or config.yml, which clients are not told. A session awui made
+   * is resumable there by id even though Claude Code's picker leaves it out
+   * (it hides sessions started through `claude -p`).
+   */
+  async resumeCommand(req: { cwd: string; nativeId: string }): Promise<string[] | null> {
+    return (await this.sessionFile(req.cwd, req.nativeId)) ? ["claude", "--resume", req.nativeId] : null;
   }
 
   /** Listing metadata per file, reparsed only when its size or mtime changes. */
