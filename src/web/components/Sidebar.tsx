@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
 import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning, IconSplit } from "../icons.js";
@@ -66,7 +66,17 @@ function RowMenu({
   onMark: (change: MarkChange) => void;
   onClose: () => void;
 }) {
-  const below = anchor.bottom + 300 < window.innerHeight;
+  const list = useRef<HTMLUListElement>(null);
+  // Its height, measured before the first paint: the layout's, since it pops in scaled.
+  const [height, setHeight] = useState(300);
+  useLayoutEffect(() => {
+    if (list.current) setHeight(list.current.scrollHeight);
+  }, []);
+  // Below when it fits there, else above when it fits there, else on the roomier side, scrolling.
+  const roomBelow = window.innerHeight - anchor.bottom - 12;
+  const roomAbove = anchor.top - 12;
+  const below = height <= roomBelow || (height > roomAbove && roomBelow >= roomAbove);
+  const room = below ? roomBelow : roomAbove;
   // Under the ⋯ button it lines up with the button's right edge; at a right-click's
   // point (no width) it opens rightwards, since the sidebar sits at the window's left.
   const across = anchor.width === 0 ? { left: Math.max(8, Math.min(anchor.left, window.innerWidth - 240)), right: "auto" } : { left: "auto", right: Math.max(8, window.innerWidth - anchor.right) };
@@ -74,6 +84,7 @@ function RowMenu({
     position: "fixed" as const,
     ...across,
     ...(below ? { top: anchor.bottom + 4, bottom: "auto" } : { top: "auto", bottom: window.innerHeight - anchor.top + 4 }),
+    ...(height > room ? { maxHeight: room, overflowY: "auto" as const } : {}),
   };
   const { beside } = useContext(RowActions);
   const pick = (change: MarkChange) => {
@@ -83,7 +94,7 @@ function RowMenu({
   return (
     <>
       <div className="menu-backdrop" onClick={onClose} aria-hidden="true" />
-      <ul className="menu-list row-menu" role="menu" style={style} onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <ul ref={list} className="menu-list row-menu" role="menu" style={style} onKeyDown={(e) => e.key === "Escape" && onClose()}>
         <li role="none">
           <button
             type="button"
