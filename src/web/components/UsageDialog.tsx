@@ -29,7 +29,7 @@ function Card({ label, value, sub, tone }: { label: string; value: string; sub?:
 /** A row with a bar: its share of the largest in its list. */
 function BarRow({ label, share, value, detail, style }: { label: React.ReactNode; share: number; value: string; detail?: string; style?: React.CSSProperties }) {
   return (
-    <div className="usage-row" style={style}>
+    <div className="usage-bar-row" style={style}>
       <span className="usage-row-label">{label}</span>
       <span className="usage-row-bar" aria-hidden="true">
         <span style={{ width: `${Math.max(2, Math.round(share * 100))}%` }} />

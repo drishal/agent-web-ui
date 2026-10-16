@@ -8666,7 +8666,8 @@ body {
   text-transform: uppercase;
 }
 
-.usage-row {
+/* The Usage panel's rows with a bar (by harness, by model); the context popover owns .usage-row. */
+.usage-bar-row {
   display: grid;
   grid-template-columns: minmax(90px, 140px) 1fr auto auto;
   align-items: center;
