@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconWarning, IconSplit } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
+import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import { dateBucket, groupByProject, historySections, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
@@ -41,15 +42,25 @@ export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boole
  * chats) or a mouse press, so the click finds it loaded. A context, so the
  * rows in every list get it without threading it through each one.
  */
-/** What a row can do besides opening: warm its session, and open it beside the shown chat (where the window has the room). */
-const RowActions = createContext<{ warm: (s: ProjectSession, why: "hover" | "press") => void; beside?: (s: ProjectSession) => void }>({ warm: () => {} });
+/**
+ * What a row can do besides opening: warm its session, open it beside the
+ * shown chat (where the window has the room), and copy the command that
+ * resumes it in a terminal (on a harness that has one), saying so in the banner.
+ */
+const RowActions = createContext<{
+  warm: (s: ProjectSession, why: "hover" | "press") => void;
+  beside?: (s: ProjectSession) => void;
+  resumable: (s: ProjectSession) => boolean;
+  notice: (text: string) => void;
+}>({ warm: () => {}, resumable: () => false, notice: () => {} });
 const HOVER_WARM_MS = 90;
 /** How long the mouse rests on a row before its hover card shows. */
 const HOVER_CARD_MS = 500;
 
 /**
- * Open in a new tab, pin, settle, snooze, archive: from the row's ⋯ button or a
- * right-click (a long press on phones). A session not saved yet can only be opened.
+ * Open in a new tab, copy its resume command, pin, settle, snooze, archive:
+ * from the row's ⋯ button or a right-click (a long press on phones). A session
+ * not saved yet can only be opened.
  */
 function RowMenu({
   s,
@@ -86,7 +97,9 @@ function RowMenu({
     ...(below ? { top: anchor.bottom + 4, bottom: "auto" } : { top: "auto", bottom: window.innerHeight - anchor.top + 4 }),
     ...(height > room ? { maxHeight: room, overflowY: "auto" as const } : {}),
   };
-  const { beside } = useContext(RowActions);
+  const { beside, resumable, notice } = useContext(RowActions);
+  const canResume = markable && resumable(s);
+  const { resume, why } = useResumeCommand(canResume ? { harnessId: s.harnessId, sessionId: s.id, workspaceId: s.workspaceId } : null);
   const pick = (change: MarkChange) => {
     onClose();
     onMark(change);
@@ -119,6 +132,23 @@ function RowMenu({
               }}
             >
               <IconSplit size={14} /> Open beside
+            </button>
+          </li>
+        ) : null}
+        {canResume ? (
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!resume}
+              title={resume?.command ?? why ?? undefined}
+              onClick={() => {
+                if (!resume) return;
+                onClose();
+                void copyResumeCommand(resume).then(notice);
+              }}
+            >
+              <IconTerminal size={14} /> Copy resume command
             </button>
           </li>
         ) : null}
@@ -453,6 +483,8 @@ export function Sidebar(props: {
   onOpenBeside?: (s: ProjectSession) => void;
   /** Pin or archive a session. */
   onMarkSession: (s: ProjectSession, change: MarkChange) => void;
+  /** Say something in the app's banner (a copied resume command). */
+  onNotice: (text: string) => void;
   onRefresh: () => void;
   /** Open Settings (theme, text size, pairing, sign-out, and the server's config.yml). */
   onSettings: () => void;
@@ -468,6 +500,7 @@ export function Sidebar(props: {
 }) {
   const current = props.harnesses.find((h) => h.id === props.harnessId);
   const names = useMemo(() => new Map(props.harnesses.map((h) => [h.id as string, h.displayName])), [props.harnesses]);
+  const resumable = (s: ProjectSession) => props.harnesses.some((h) => h.id === s.harnessId && h.capabilities.supportsResumeCommand);
   const [showArchived, setShowArchived] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
   const [showSnoozed, setShowSnoozed] = useState(false);
@@ -528,7 +561,7 @@ export function Sidebar(props: {
   );
 
   return (
-    <RowActions.Provider value={{ warm: props.onWarmSession, ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}) }}>
+    <RowActions.Provider value={{ warm: props.onWarmSession, ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}), resumable, notice: props.onNotice }}>
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">

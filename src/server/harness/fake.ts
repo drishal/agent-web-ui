@@ -114,6 +114,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsHtmlRender: true,
       supportsQueueEdit: true,
       supportsPermissionMode: true,
+      supportsResumeCommand: true,
       ...options.capabilities,
     };
   }
@@ -212,6 +213,11 @@ export class FakeAdapter implements HarnessAdapter {
     const session = this.sessions.get(req.nativeId);
     if (!session || session.cwd !== req.cwd) return null;
     return { items: historyToItems(session.messages), title: session.title || null };
+  }
+
+  async resumeCommand(req: { cwd: string; nativeId: string }): Promise<string[] | null> {
+    const session = this.sessions.get(req.nativeId);
+    return session && session.cwd === req.cwd && session.messages.length > 0 ? [this.cliCommand, "--resume", req.nativeId] : null;
   }
 
   async openChat(req: OpenChatRequest): Promise<LiveChat> {

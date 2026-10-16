@@ -271,6 +271,16 @@ describe("claude adapter (scripted CLI)", () => {
     expect(copy.snapshot().items.map((i) => (i.kind === "user" || i.kind === "assistant" ? i.text : i.kind))).toEqual(["first prompt", "claude says first prompt"]);
   });
 
+  it("gives a terminal command that resumes the session by id, once it is saved", async () => {
+    const { chat, live } = await openChat();
+    const nativeId = live.nativeId as string;
+    expect(await adapter.resumeCommand({ cwd: project, nativeId })).toBeNull();
+    await chat.send("hello there", "normal");
+    await until(() => chat.status === "idle" && answered(chat, "claude says hello there"));
+    expect(await adapter.resumeCommand({ cwd: project, nativeId })).toEqual(["claude", "--resume", nativeId]);
+    expect(await adapter.resumeCommand({ cwd: project, nativeId: "../../etc/passwd" })).toBeNull();
+  });
+
   it("compacts and waits for the CLI to finish", async () => {
     const { chat } = await openChat();
     await chat.send("first prompt", "normal");

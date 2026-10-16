@@ -982,6 +982,7 @@ export class HermesAdapter implements HarnessAdapter {
     // Its steer and follow-up are prompts sent at once: nothing waits in a queue.
     supportsQueueEdit: false,
     supportsPermissionMode: false,
+    supportsResumeCommand: false,
   };
   private probes = new Map<string, { at: number; models: ModelInfo[]; userDefined: Set<string> }>();
   private rowCache: { at: number; rows: StoredRow[] } | null = null;

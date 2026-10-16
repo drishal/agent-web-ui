@@ -437,6 +437,7 @@ export class PiAdapter implements HarnessAdapter {
     supportsHtmlRender: renderHtmlExtension() !== null,
     supportsQueueEdit: true,
     supportsPermissionMode: false,
+    supportsResumeCommand: false,
   };
   get capabilities(): HarnessCapabilities {
     return this.capabilitySet;

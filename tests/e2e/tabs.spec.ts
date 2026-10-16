@@ -208,6 +208,36 @@ test("a row's menu opens where it was asked for, as wide as its items, inside th
   expect(box.width).toBeLessThan(300);
 });
 
+test("Copy resume command puts the line that resumes a session in a terminal on the clipboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInAndOpen(page);
+  await newChat(page);
+  const menu = page.getByRole("button", { name: "Chat actions" });
+  const item = page.getByRole("menuitem", { name: "Copy resume command" });
+  // Nothing is saved to resume before the first message.
+  await menu.click();
+  await expect(item).toBeDisabled();
+  // A click outside closes the menu.
+  await page.locator(".menu-backdrop").click();
+  await sendAndWait(page, "resume me in a terminal");
+  await menu.click();
+  await item.click();
+  const line = /^cd \S+alpha && fake --resume \S+$/;
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(line);
+  // The chat is open here, a second writer if left open: the banner says so and can close it.
+  const banner = page.getByRole("status").filter({ hasText: "Copied: cd " });
+  await expect(banner).toContainText("close the chat here first");
+  await banner.getByRole("button", { name: "Close chat" }).click();
+  await expect(page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: /resume me in a terminal/ })).toHaveCount(0);
+  // Its row copies the same line, without the warning now that nothing here has it open.
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await showSidebar(page);
+  await session(page, "resume me in a terminal").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy resume command" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(line);
+  await expect(page.getByRole("status").filter({ hasText: "Copied: cd " })).not.toContainText("close the chat");
+});
+
 test("a session opens at once: its tab, title, and a loading screen show while it loads", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

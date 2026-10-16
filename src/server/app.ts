@@ -44,6 +44,8 @@ import {
   queueSchema,
   sessionPreviewSchema,
   type SessionPreview,
+  resumeCommandSchema,
+  type ResumeCommand,
   uploadPasteSchema,
   usageReportSchema,
   type SessionsOverview,
@@ -78,6 +80,7 @@ import { UsageReader, type UsageTarget } from "./usage-report.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
 import { runCommand } from "./run-command.js";
+import { shellLine } from "./shell-line.js";
 import type { Workspaces } from "./workspaces.js";
 
 /** How many of each harness's newest sessions the sidebar sees across projects. */
@@ -469,6 +472,25 @@ export function createApp(deps: AppDeps) {
       files: files.slice(-8),
     };
     res.json(preview);
+  });
+
+  // "Copy resume command": the line that resumes a session in its harness's own
+  // CLI, from a terminal outside awui. Only the adapter knows its CLI, and session
+  // ids are opaque to clients, so the line is made here. `live` lets the client
+  // say to close the chat here first: awui keeps one writer per session, and a
+  // terminal running the same session would be a second.
+  app.get("/api/sessions/resume-command", async (req, res) => {
+    const input = resumeCommandSchema.parse(req.query);
+    const adapter = adapterOr404(input.harnessId);
+    if (!adapter.capabilities.supportsResumeCommand || !adapter.resumeCommand) throw new ChatError(400, "unsupported", "This harness has no resume command");
+    const prefix = `${adapter.id}:`;
+    if (!input.sessionId.startsWith(prefix)) throw new ChatError(400, "wrong_harness", "Session belongs to another harness");
+    const nativeId = input.sessionId.slice(prefix.length);
+    const ws = await workspaces.get(input.workspaceId);
+    const argv = await adapter.resumeCommand({ cwd: ws.path, nativeId });
+    if (!argv) throw new ChatError(404, "not_saved", "That session has nothing saved to resume yet");
+    const body: ResumeCommand = { command: shellLine(ws.path, argv), live: manager.liveChatFor(adapter.id, nativeId) !== undefined };
+    res.json(body);
   });
 
   // The sidebar's list: each harness's newest sessions across projects, every
