@@ -10,6 +10,7 @@ import type {
   ChatItem,
   ChatSnapshot,
   ChatStatus,
+  ConfigPatch,
   ContextUsage,
   ImageAttachment,
   ImageRef,
@@ -1069,13 +1070,18 @@ export class Chat implements CheckpointHost {
     if (this.status === "stopping") this.setStatus("idle");
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
+  async setConfig(patch: ConfigPatch): Promise<void> {
     this.assertOpen();
     // While starting the change waits for the harness, which applies it before any run.
-    if (this.status !== "idle" && this.status !== "error" && this.status !== "starting") {
+    const idle = this.status === "idle" || this.status === "error" || this.status === "starting";
+    // A permission mode is the exception: it can change mid-run, as Claude Code's own Shift+Tab does.
+    if (!idle && (patch.model !== undefined || patch.thinkingLevel !== undefined)) {
       throw new ChatError(409, "busy", "Settings can only change while the agent is idle");
     }
     const caps = this.adapter.capabilities;
+    if (patch.permissionMode !== undefined && !caps.supportsPermissionMode) {
+      throw new ChatError(400, "unsupported", "This harness has no permission modes");
+    }
     if (patch.model !== undefined && !caps.supportsModelSelection) {
       throw new ChatError(400, "unsupported", "This harness cannot change models");
     }

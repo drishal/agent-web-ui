@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Scripted `claude -p --input-format stream-json --output-format stream-json`
 // for adapter tests: the frames and control requests the real CLI speaks (as
-// recorded from Claude Code 2.1.289), and session files in its shape under
+// recorded from Claude Code 2.1.289; settings and permission modes from
+// 2.1.301), and session files in its shape under
 // $CLAUDE_CONFIG_DIR/projects/<cwd as dashes>/<id>.jsonl. Prompt text selects
 // behaviour:
 //   "tool"  read a file first        "ask"       a Bash call that needs approval
 //   "slow"  stream many chunks       "fail"      end the turn with an error
 //   "todo"  write a TodoWrite list   "question"  an AskUserQuestion call
 //   "/compact"  compact the conversation
+//   "exitplan"  leave plan mode by itself (as an approved plan does), announced in a status frame
 //   "render"    call render_html through the MCP server --mcp-config names, as the CLI does
 // A message sent while a turn runs is queued: priority "next" lands after the
 // current tool call, anything else runs once the turn ends. Every permission
@@ -76,7 +78,7 @@ const chained = (entry) => {
 
 // ---- turns -------------------------------------------------------------------
 const MODELS = [
-  { value: "default", resolvedModel: "fake-opus", displayName: "Default (recommended)", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high"] },
+  { value: "default", resolvedModel: "fake-opus", displayName: "Default (recommended)", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high"], supportsAutoMode: true },
   { value: "haiku", resolvedModel: "fake-haiku", displayName: "Haiku", supportsEffort: true, supportedEffortLevels: ["low", "high"] },
   { value: "tiny", resolvedModel: "fake-tiny", displayName: "Tiny", supportsThinkingOff: true },
 ];
@@ -85,6 +87,10 @@ const DEFAULT_EFFORT = { default: "medium", haiku: "high" };
 let model = "default";
 /** The effort the flag layer set (apply_flag_settings), if any. */
 let flagEffort = null;
+const canBypass = argv.includes("--allow-dangerously-skip-permissions") || argv.includes("--dangerously-skip-permissions");
+let permissionMode = flag("--permission-mode") ?? (argv.includes("--dangerously-skip-permissions") ? "bypassPermissions" : "default");
+/** As 2.1.301 announces a mode change, the CLI's own or the host's. */
+const announceMode = () => out({ type: "system", subtype: "status", status: null, permissionMode, uuid: randomUUID(), session_id: sessionId });
 let busy = false;
 let aborted = false;
 const steering = [];
@@ -199,7 +205,11 @@ async function runTurn(m) {
   aborted = false;
   const compacting = typeof m.message.content === "string" && m.message.content.startsWith("/compact");
   const text = consume(m, false, !compacting);
-  out({ type: "system", subtype: "init", session_id: sessionId, cwd, model: "fake-opus", tools: ["Bash", "Read"] });
+  out({ type: "system", subtype: "init", session_id: sessionId, cwd, model: "fake-opus", tools: ["Bash", "Read"], permissionMode });
+  if (text.includes("exitplan")) {
+    permissionMode = "acceptEdits";
+    announceMode();
+  }
   let error = null;
   let answer = "";
   if (text.startsWith("/compact")) {
@@ -277,13 +287,14 @@ async function runTurn(m) {
 function control(frame) {
   const { request_id: id, request } = frame;
   const ok = (response) => out({ type: "control_response", response: { subtype: "success", request_id: id, ...(response === undefined ? {} : { response }) } });
+  const fail = (error) => out({ type: "control_response", response: { subtype: "error", request_id: id, error } });
   switch (request.subtype) {
     case "initialize":
       return ok({
         commands: [{ name: "review", description: "Review the change", argumentHint: "[focus]" }],
         models: MODELS,
         account: { email: "someone@example.com", subscriptionType: "Claude Pro" },
-        current_permission_mode: "default",
+        current_permission_mode: permissionMode,
       });
     case "get_settings": {
       // As 2.1.301 answers: `effective` is what the settings layers name, `applied` what runs.
@@ -301,6 +312,16 @@ function control(frame) {
       return ok();
     case "set_max_thinking_tokens":
       return ok();
+    case "set_permission_mode": {
+      // The answers and refusals as recorded from 2.1.301.
+      const modes = ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"];
+      if (!modes.includes(request.mode)) return fail(`Cannot set permission mode: must be one of ${modes.join(", ")}`);
+      if (request.mode === "bypassPermissions" && !canBypass) return fail("Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions");
+      permissionMode = request.mode;
+      record("modes", permissionMode);
+      ok({ mode: permissionMode });
+      return announceMode();
+    }
     case "list_models":
       return ok({ models: [...MODELS, { value: "sonnet", resolvedModel: "fake-sonnet", displayName: "Sonnet", supportedEffortLevels: ["low"] }] });
     case "get_usage":
@@ -350,7 +371,7 @@ function control(frame) {
       return ok({ cancelled: true });
     }
     default:
-      return out({ type: "control_response", response: { subtype: "error", request_id: id, error: `unknown subtype ${request.subtype}` } });
+      return fail(`unknown subtype ${request.subtype}`);
   }
 }
 

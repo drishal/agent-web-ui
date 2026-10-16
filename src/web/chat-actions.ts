@@ -3,7 +3,7 @@
 // thinking level, re-read the models, and hand the chat off. The chat beside
 // the main one uses these; the main pane's own versions in App.tsx do more
 // (Edit and Retry by branching, forks, file undo), so it keeps them.
-import type { ChatSnapshot, ImageAttachment, InteractionAnswer, SendMode } from "../shared/protocol.js";
+import type { ChatSnapshot, ConfigPatch, ImageAttachment, InteractionAnswer, SendMode } from "../shared/protocol.js";
 import { api, ApiError } from "./api.js";
 import type { ChatState } from "./chat-state.js";
 import { appCommand } from "./commands.js";
@@ -12,7 +12,7 @@ export interface ChatActions {
   send: (text: string, mode: SendMode, images?: ImageAttachment[], options?: { compactFirst?: boolean; attachments?: string[] }) => Promise<boolean>;
   stop: () => void;
   answer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
-  configure: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
+  configure: (patch: ConfigPatch) => Promise<void>;
   refreshModels: () => Promise<void>;
   handoff: (harnessId: string, draft: string) => Promise<void>;
 }

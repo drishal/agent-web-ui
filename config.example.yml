@@ -57,3 +57,4 @@ herdr: true
 #     command: ~/code/pi/bin/pi
 #   claude:
 #     args: [--add-dir, /srv/docs]   # passed as they are: no shell, so no ~
+#     # --allow-dangerously-skip-permissions also offers Bypass (asks nothing) in the permission picker

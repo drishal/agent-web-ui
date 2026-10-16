@@ -1,10 +1,12 @@
-// Model and thinking live inside the composer card's bottom row (DeepSeek
-// Harness). Tools are never narrowed: each harness keeps its normal tool set.
+// Model, thinking, and permission mode live inside the composer card's bottom
+// row (DeepSeek Harness). Tools are never narrowed: each harness keeps its
+// normal tool set.
 import { useState } from "react";
 import type { ChatState } from "../chat-state.js";
-import type { HarnessStatus } from "../../shared/protocol.js";
+import type { ConfigPatch, HarnessStatus } from "../../shared/protocol.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { PermissionPicker } from "./PermissionPicker.js";
 import { ThinkingPicker } from "./ThinkingPicker.js";
 
 /**
@@ -52,7 +54,7 @@ export function ComposerControls({
 }: {
   chat: ChatState;
   harnesses: HarnessStatus[];
-  onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
+  onConfig: (patch: ConfigPatch) => Promise<void>;
   onRefreshModels: () => Promise<void>;
   onHandoff: (harnessId: string) => Promise<void>;
 }) {
@@ -79,6 +81,14 @@ export function ComposerControls({
           current={config.thinkingLevel}
           disabled={!idle}
           onSelect={(thinkingLevel) => void onConfig({ thinkingLevel })}
+        />
+      ) : null}
+      {caps.supportsPermissionMode && config.permissionModes?.length ? (
+        <PermissionPicker
+          modes={config.permissionModes}
+          current={config.permissionMode ?? null}
+          disabled={chat.status === "disposed"}
+          onSelect={(permissionMode) => void onConfig({ permissionMode })}
         />
       ) : null}
     </div>

@@ -4,6 +4,7 @@ import type {
   ChatSnapshot,
   CheckpointPreview,
   CheckpointRestored,
+  ConfigPatch,
   ImageAttachment,
   InteractionAnswer,
   ProjectSession,
@@ -795,14 +796,18 @@ export function App() {
         through > 1
           ? await api<ChatSnapshot>(`/api/chats/${from.chatId}/fork`, { body: { through: through - 1 } })
           : await api<ChatSnapshot>("/api/chats", { body: { harnessId: from.harnessId, workspaceId: from.workspace.id } });
-      const patch: { model?: string; thinkingLevel?: string } = {};
+      const patch: ConfigPatch = {};
       if (from.capabilities.supportsModelSelection && from.config.model && next.config.model !== from.config.model && next.config.models.some((m) => m.key === from.config.model)) {
         patch.model = from.config.model;
       }
       if (from.capabilities.supportsThinkingLevel && from.config.thinkingLevel && next.config.thinkingLevel !== from.config.thinkingLevel) {
         patch.thinkingLevel = from.config.thinkingLevel;
       }
-      if (patch.model || patch.thinkingLevel) await api(`/api/chats/${next.chatId}/config`, { method: "PATCH", body: patch }).catch(() => undefined);
+      const mode = from.config.permissionMode;
+      if (from.capabilities.supportsPermissionMode && mode && next.config.permissionMode !== mode && next.config.permissionModes?.some((m) => m.id === mode)) {
+        patch.permissionMode = mode;
+      }
+      if (patch.model || patch.thinkingLevel || patch.permissionMode) await api(`/api/chats/${next.chatId}/config`, { method: "PATCH", body: patch }).catch(() => undefined);
       showChat(next);
       await api(`/api/chats/${next.chatId}/messages`, { body: { text, mode: "normal", ...withImages } });
       setBanner({
@@ -847,7 +852,7 @@ export function App() {
     }
   };
 
-  const configure = async (patch: { model?: string; thinkingLevel?: string }) => {
+  const configure = async (patch: ConfigPatch) => {
     if (!chat) return;
     try {
       await api(`/api/chats/${chat.chatId}/config`, { method: "PATCH", body: patch });
@@ -1009,6 +1014,20 @@ export function App() {
     if (chat && chat.status !== "disposed" && chat.capabilities.supportsThinkingLevel) {
       for (const level of chat.config.thinkingLevels) {
         items.push({ id: `t:${level}`, section: "Thinking", label: `Thinking: ${level}`, searchOnly: true, current: level === chat.config.thinkingLevel, disabled: waitIdle, run: () => void configure({ thinkingLevel: level }) });
+      }
+    }
+    // Mid-run too, unlike model and thinking.
+    if (chat && chat.status !== "disposed" && chat.capabilities.supportsPermissionMode) {
+      for (const mode of chat.config.permissionModes ?? []) {
+        items.push({
+          id: `p:${mode.id}`,
+          section: "Permissions",
+          label: `Permissions: ${mode.label}`,
+          keywords: `${mode.id} ${mode.description}`,
+          searchOnly: true,
+          current: mode.id === chat.config.permissionMode,
+          run: () => void configure({ permissionMode: mode.id }),
+        });
       }
     }
     for (const h of boot.harnesses) {

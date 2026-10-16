@@ -121,6 +121,7 @@ test("switch harness without reloading; capabilities change the composer", async
   await signInAndOpen(page);
   await newChat(page, "Fake B");
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
+  await expect(page.getByTestId("permission-picker")).toHaveCount(0);
   await send(page, "slow please");
   await expect(page.getByRole("button", { name: "Stop and send" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Steer" })).toHaveCount(0);
@@ -429,6 +430,39 @@ test("model and thinking changes apply while idle", async ({ page }) => {
   await page.mouse.click(box.x + 4, box.y + box.height / 2);
   await expect(page.getByRole("slider", { name: "Thinking" })).toHaveAttribute("aria-valuetext", "off");
   await expect(page.getByTestId("thinking-picker")).toHaveAccessibleName("Thinking: off");
+});
+
+test("the permission mode changes mid-run, from its picker, by keyboard, and from the palette", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const picker = page.getByTestId("permission-picker");
+  await expect(picker).toHaveAccessibleName("Permissions: Ask first");
+  // While a run goes the model and thinking wait for it; the permission mode does not.
+  await send(page, "slow permissions");
+  await expect(status(page)).toHaveText("Working");
+  await expect(page.getByTestId("model-picker")).toBeDisabled();
+  await picker.click();
+  const list = page.getByRole("listbox", { name: "Permission mode" });
+  await expect(list.getByRole("option")).toHaveText([/Ask first/, /Accept edits/, /Bypass/]);
+  await list.getByRole("option", { name: "Accept edits" }).click();
+  await expect(list).toBeHidden();
+  await expect(picker).toHaveAccessibleName("Permissions: Accept edits");
+  await expect(picker).toBeFocused();
+  await expect(status(page)).toHaveText("Working");
+  // By keyboard: ↓ opens the list on the current mode, End and Enter pick the last.
+  await page.keyboard.press("ArrowDown");
+  await expect(list).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await expect(picker).toHaveAccessibleName("Permissions: Bypass");
+  await expect(status(page)).toHaveText("Idle", { timeout: 20_000 });
+  // A reload (or another device) shows the mode the harness is in.
+  await page.reload();
+  await expect(picker).toHaveAccessibleName("Permissions: Bypass");
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("permissions ask");
+  await page.keyboard.press("Enter");
+  await expect(picker).toHaveAccessibleName("Permissions: Ask first");
 });
 
 test("the model picker searches across providers, remembers recents, and works by keyboard", async ({ page }) => {

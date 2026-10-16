@@ -17,11 +17,13 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ConfigPatch,
   type ContextUsage,
   type HarnessCapabilities,
   type ImageAttachment,
   type InteractionAnswer,
   type ModelInfo,
+  type PermissionModeInfo,
   type SlashCommand,
   type TodoItem,
 } from "../../shared/protocol.js";
@@ -57,6 +59,11 @@ const FAKE_MODELS: ModelInfo[] = [
   { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true, vision: false, levels: ["low", "high", "max"] },
 ];
 const FAKE_THINKING = ["off", "low", "high"];
+const FAKE_PERMISSION_MODES: PermissionModeInfo[] = [
+  { id: "default", label: "Ask first", description: "Asks before edits and commands" },
+  { id: "acceptEdits", label: "Accept edits", description: "Edits files without asking; asks before commands" },
+  { id: "bypass", label: "Bypass", description: "Runs everything without asking", caution: true },
+];
 
 interface FakeSession {
   nativeId: string;
@@ -106,6 +113,7 @@ export class FakeAdapter implements HarnessAdapter {
       supportsRewind: true,
       supportsHtmlRender: true,
       supportsQueueEdit: true,
+      supportsPermissionMode: true,
       ...options.capabilities,
     };
   }
@@ -189,7 +197,7 @@ export class FakeAdapter implements HarnessAdapter {
         push({ role: "toolResult", toolCallId: id, toolName: entry.name, content: [{ type: "text", text: toolRecordText(entry) }], isError: false });
       }
     }
-    return new FakeLiveChat(session, this.chunkDelayMs);
+    return new FakeLiveChat(session, this.chunkDelayMs, this.capabilities.supportsPermissionMode);
   }
 
   /** Like the file-backed harnesses: each call's usage, from the stored session. */
@@ -216,7 +224,7 @@ export class FakeAdapter implements HarnessAdapter {
       session = { nativeId: randomUUID(), cwd: req.cwd, title: "", messages: [], updatedAt: new Date() };
       this.sessions.set(session.nativeId, session);
     }
-    return new FakeLiveChat(session, this.chunkDelayMs, req.renderEnv);
+    return new FakeLiveChat(session, this.chunkDelayMs, this.capabilities.supportsPermissionMode, req.renderEnv);
   }
 
   async shutdown(): Promise<void> {}
@@ -231,11 +239,14 @@ class FakeLiveChat implements LiveChat {
   private pending = new Map<string, (answer: InteractionAnswer | null) => void>();
   private model = "fake/echo";
   private thinkingLevel = "low";
+  private permissionMode = "default";
   private disposed = false;
 
   constructor(
     private readonly session: FakeSession,
     private readonly delayMs: number,
+    /** The adapter declares permission modes (fake does, fake-b does not). */
+    private readonly modes: boolean,
     private readonly renderEnv?: NodeJS.ProcessEnv,
   ) {}
 
@@ -273,6 +284,7 @@ class FakeLiveChat implements LiveChat {
       thinkingLevel: this.thinkingLevel,
       models: this.refreshed ? [...FAKE_MODELS, { key: "fake/fresh", provider: "fake", id: "fresh", name: "Fake Fresh" }] : FAKE_MODELS,
       thinkingLevels: FAKE_THINKING,
+      ...(this.modes ? { permissionMode: this.permissionMode, permissionModes: FAKE_PERMISSION_MODES } : {}),
     };
   }
 
@@ -374,8 +386,12 @@ class FakeLiveChat implements LiveChat {
     await this.running?.catch(() => undefined);
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
-    if (this.running) throw new Error("Agent is busy");
+  async setConfig(patch: ConfigPatch): Promise<void> {
+    if (this.running && (patch.model !== undefined || patch.thinkingLevel !== undefined)) throw new Error("Agent is busy");
+    if (patch.permissionMode !== undefined) {
+      if (!this.modes || !FAKE_PERMISSION_MODES.some((m) => m.id === patch.permissionMode)) throw new Error("Unknown permission mode");
+      this.permissionMode = patch.permissionMode;
+    }
     if (patch.model !== undefined) {
       if (!FAKE_MODELS.some((m) => m.key === patch.model)) throw new Error("Unknown model");
       this.model = patch.model;

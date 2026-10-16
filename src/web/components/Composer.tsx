@@ -5,7 +5,7 @@
 // link's text arrives with a note to read it, and a run stopped on a usage
 // limit offers to continue when the limit resets.
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { type ChainStep, IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
+import { type ChainStep, type ConfigPatch, IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
@@ -65,7 +65,7 @@ export function Composer({
   onSend: (text: string, mode: SendMode, images: ImageAttachment[], options?: { compactFirst?: boolean; attachments?: string[] }) => Promise<boolean>;
   onStop: () => void;
   onAnswer: (requestId: string, answer: InteractionAnswer) => Promise<void>;
-  onConfig: (patch: { model?: string; thinkingLevel?: string }) => Promise<void>;
+  onConfig: (patch: ConfigPatch) => Promise<void>;
   onRefreshModels: () => Promise<void>;
   onHandoff: (harnessId: string, draft: string) => Promise<void>;
   /** Ctrl+Alt+Enter: once the message is sent, open a new chat. */

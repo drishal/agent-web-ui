@@ -8,6 +8,7 @@
 import type {
   ChatConfig,
   ChatItem,
+  ConfigPatch,
   ContextUsage,
   ImageAttachment,
   InteractionAnswer,
@@ -121,7 +122,7 @@ export class DeferredLiveChat implements LiveChat {
     if (this.real) await this.real.abort();
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
+  async setConfig(patch: ConfigPatch): Promise<void> {
     return (await this.harness()).setConfig(patch);
   }
 

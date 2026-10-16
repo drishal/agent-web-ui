@@ -176,6 +176,11 @@ export const IconWarning = (p: IconProps) => (
     <path d="M8 6.5v3M8 11.5v.01" />
   </Svg>
 );
+export const IconShield = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 1.75l5.25 2v4.1c0 3-2.2 5.3-5.25 6.4-3.05-1.1-5.25-3.4-5.25-6.4v-4.1z" />
+  </Svg>
+);
 export const IconInfo = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="8" cy="8" r="6.25" />

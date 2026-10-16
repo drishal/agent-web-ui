@@ -2,8 +2,9 @@
 // (DevTools' Input.dispatchTouchEvent): a long press on a message opens its
 // actions, a swipe from the left edge opens the drawer, a drag down on a
 // sheet's handle closes it. Also the thumb bar's Stop, Search in the chat
-// menu, tabs in the drawer, the home-screen shortcuts, and a share from
-// another app arriving in a new chat's composer.
+// menu, tabs in the drawer, the home-screen shortcuts, a share from another
+// app arriving in a new chat's composer, and the permission list kept on
+// screen from the end of the composer's row.
 import { expect, test, type Page } from "@playwright/test";
 import { newChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
@@ -137,4 +138,18 @@ test("a share from another app opens a new chat with the text and image in its c
   await page.goto("/?share=1");
   await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("look at this screenshot");
   await expect(page.getByRole("list", { name: "Attached images" }).getByRole("listitem")).toHaveCount(1);
+});
+
+test("the permission list opens on screen from the end of the composer's row", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.getByTestId("permission-picker").click();
+  const list = page.getByRole("listbox", { name: "Permission mode" });
+  await expect(list.getByRole("option", { name: "Accept edits" })).toBeVisible();
+  // It pops in scaled (the placement must not depend on that): measure it where it settles.
+  await list.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  const box = (await list.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(8);
+  expect(box.x + box.width).toBeLessThanOrEqual(390 - 8);
 });

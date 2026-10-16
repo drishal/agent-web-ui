@@ -14,6 +14,7 @@ import {
   asHarnessId,
   type ChatConfig,
   type ChatItem,
+  type ConfigPatch,
   type ContextCategory,
   type ContextUsage,
   type HarnessCapabilities,
@@ -22,6 +23,7 @@ import {
   type InteractionRequest,
   type LimitAccount,
   type ModelInfo,
+  type PermissionModeInfo,
   type QueueState,
   type SlashCommand,
   type TodoItem,
@@ -88,6 +90,32 @@ function renderMcpArgs(renderEnv: NodeJS.ProcessEnv | undefined): string[] {
   const node = process.versions.bun ? "node" : process.execPath;
   const config = { mcpServers: { [HTML_RENDER_MCP_SERVER]: { type: "stdio", command: node, args: [server], env: { AWUI_RENDER_URL: renderEnv.AWUI_RENDER_URL, AWUI_RENDER_TOKEN: renderEnv.AWUI_RENDER_TOKEN } } } };
   return ["--mcp-config", JSON.stringify(config), "--allowedTools", HTML_RENDER_MCP_TOOL];
+}
+
+/** Claude Code's permission modes, in the order its own Shift+Tab cycle and docs give them. */
+const PERMISSION_MODES: PermissionModeInfo[] = [
+  { id: "default", label: "Ask first", description: "Asks before edits and commands your rules do not allow" },
+  { id: "acceptEdits", label: "Accept edits", description: "Makes file edits without asking; still asks before most commands" },
+  { id: "plan", label: "Plan", description: "Researches and plans; changes nothing" },
+  { id: "auto", label: "Auto", description: "A safety check approves routine actions and stops risky ones" },
+  { id: "dontAsk", label: "Don't ask", description: "Never asks: anything your rules do not allow is denied" },
+];
+/**
+ * Offered only when config.yml's claude args launch the CLI able to switch to
+ * it: without one of these flags it refuses the mode.
+ */
+const BYPASS_MODE: PermissionModeInfo = { id: "bypassPermissions", label: "Bypass", description: "Runs everything without asking or checking", caution: true };
+const BYPASS_FLAGS = ["--allow-dangerously-skip-permissions", "--dangerously-skip-permissions"];
+
+/** The models (by alias and by id) the CLI says can run in auto mode. */
+function autoModeModels(raw: unknown[]): Set<string> {
+  const keys = new Set<string>();
+  for (const m of raw) {
+    if (!isObj(m) || m.supportsAutoMode !== true) continue;
+    if (str(m.value)) keys.add(str(m.value));
+    if (str(m.resolvedModel)) keys.add(str(m.resolvedModel));
+  }
+  return keys;
 }
 
 const STREAM_ARGS = [
@@ -296,6 +324,8 @@ class ClaudeLiveChat implements LiveChat {
   private commands: SlashCommand[] = [];
   private model: string | null = null;
   private effort: string | null = null;
+  private permissionMode: string | null = null;
+  private autoModels = new Set<string>();
   private queued: QueuedMessage[] = [];
   private step: Step | null = null;
   private running = false;
@@ -352,7 +382,10 @@ class ClaudeLiveChat implements LiveChat {
     });
     try {
       const init = await rpc.init;
-      this.models = (Array.isArray(init.models) ? init.models : []).map(toModelInfo).filter((m): m is ModelInfo => m !== null);
+      const models = Array.isArray(init.models) ? init.models : [];
+      this.models = models.map(toModelInfo).filter((m): m is ModelInfo => m !== null);
+      this.autoModels = autoModeModels(models);
+      this.permissionMode = str(init.current_permission_mode) || null;
       this.commands = (Array.isArray(init.commands) ? init.commands : []).map(toCommand).filter((c): c is SlashCommand => c !== null);
       const settings = await this.readSettings(rpc);
       this.model = str(settings.effective.model) || "default";
@@ -525,10 +558,13 @@ class ClaudeLiveChat implements LiveChat {
           this.sessionId = id;
           this.emit({ type: "session", nativeId: id });
         }
+        this.notePermissionMode(str(frame.permissionMode));
         return;
       }
       case "status":
         if (frame.status === "compacting") this.emit({ type: "compacting", active: true });
+        // Every mode change is announced here, the CLI's own too (an approved plan leaves plan mode).
+        this.notePermissionMode(str(frame.permissionMode));
         return;
       case "compact_boundary":
         this.emit({ type: "compacting", active: false });
@@ -646,13 +682,40 @@ class ClaudeLiveChat implements LiveChat {
   }
 
   async getConfig(): Promise<ChatConfig> {
-    return { model: this.model, thinkingLevel: this.effort, models: this.models, thinkingLevels: this.levels() };
+    return {
+      model: this.model,
+      thinkingLevel: this.effort,
+      models: this.models,
+      thinkingLevels: this.levels(),
+      permissionMode: this.permissionMode,
+      permissionModes: this.permissionModes(),
+    };
+  }
+
+  private notePermissionMode(mode: string): void {
+    if (!mode || mode === this.permissionMode) return;
+    this.permissionMode = mode;
+    this.emit({ type: "config", config: { permissionMode: mode, permissionModes: this.permissionModes() } });
+  }
+
+  /** The modes this chat can switch to: auto only on a model that runs it, bypass only when the CLI was launched able to. */
+  private permissionModes(): PermissionModeInfo[] {
+    const auto = this.autoModels.has(this.baseModel) || this.permissionMode === "auto";
+    const modes = PERMISSION_MODES.filter((m) => m.id !== "auto" || auto);
+    if (this.adapter.allowsBypass || this.permissionMode === BYPASS_MODE.id) modes.push(BYPASS_MODE);
+    // A mode this list does not know (a newer CLI's) still shows as the one in force.
+    if (this.permissionMode && !modes.some((m) => m.id === this.permissionMode)) modes.push({ id: this.permissionMode, label: this.permissionMode, description: "Set by Claude Code" });
+    return modes;
+  }
+
+  /** The chosen model without a context variant: "opus[1m]" has what "opus" has. */
+  private get baseModel(): string {
+    return this.model?.replace(/\[[^\]]*\]$/, "") ?? "";
   }
 
   /** The chosen model's effort levels, as the CLI lists them per model (some have fewer, some none). */
   private levels(): string[] {
-    // A 1M-context variant ("opus[1m]") has its base model's levels.
-    const key = this.model?.replace(/\[[^\]]*\]$/, "") ?? "";
+    const key = this.baseModel;
     return (this.models.find((m) => m.key === key) ?? this.models.find((m) => m.id === key))?.levels ?? [];
   }
 
@@ -754,8 +817,13 @@ class ClaudeLiveChat implements LiveChat {
     if (!this.running) this.emit({ type: "settled" });
   }
 
-  async setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void> {
+  async setConfig(patch: ConfigPatch): Promise<void> {
     const rpc = this.live;
+    if (patch.permissionMode !== undefined) {
+      if (!this.permissionModes().some((m) => m.id === patch.permissionMode)) throw new Error(`${patch.permissionMode} is not a permission mode this chat can switch to`);
+      const answer = await rpc.request<Obj>({ subtype: "set_permission_mode", mode: patch.permissionMode });
+      this.notePermissionMode((isObj(answer) && str(answer.mode)) || patch.permissionMode);
+    }
     if (patch.model !== undefined) {
       await rpc.request({ subtype: "set_model", model: patch.model });
       this.model = patch.model;
@@ -774,7 +842,10 @@ class ClaudeLiveChat implements LiveChat {
     this.adapter.dropModelCache();
     const listed = await this.live.request<Obj>({ subtype: "list_models" }).catch(() => null);
     const raw = Array.isArray(listed) ? listed : listed && Array.isArray(listed.models) ? listed.models : null;
-    if (raw) this.models = raw.map(toModelInfo).filter((m): m is ModelInfo => m !== null);
+    if (raw) {
+      this.models = raw.map(toModelInfo).filter((m): m is ModelInfo => m !== null);
+      this.autoModels = autoModeModels(raw);
+    }
   }
 
   async rename(name: string): Promise<void> {
@@ -826,6 +897,7 @@ export class ClaudeAdapter implements HarnessAdapter {
     // Through awui's MCP server (extensions/render-html-mcp.mjs), which the CLI is given per chat.
     supportsHtmlRender: renderHtmlMcpServer() !== null,
     supportsQueueEdit: true,
+    supportsPermissionMode: true,
   };
   private modelCache: { at: number; models: ModelInfo[] } | null = null;
   private usageCache: { at: number; accounts: LimitAccount[] } | null = null;
@@ -837,6 +909,11 @@ export class ClaudeAdapter implements HarnessAdapter {
 
   get extraArgs(): string[] {
     return this.options.args ?? [];
+  }
+
+  /** config.yml's claude args let the CLI switch to bypassPermissions. */
+  get allowsBypass(): boolean {
+    return this.extraArgs.some((a) => BYPASS_FLAGS.includes(a));
   }
 
   /** The CLI's environment, minus the markers a parent Claude Code session sets. */
