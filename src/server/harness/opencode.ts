@@ -783,6 +783,7 @@ export class OpenCodeAdapter implements HarnessAdapter {
     supportsRewind: true,
     supportsHtmlRender: false,
     supportsQueueEdit: true,
+    supportsPermissionMode: false,
   };
   readonly server: OpenCodeServer;
   private modelCache = new Map<string, { at: number; models: ModelInfo[]; windows: Map<string, number> }>();

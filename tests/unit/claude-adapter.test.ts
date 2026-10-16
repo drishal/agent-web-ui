@@ -194,6 +194,47 @@ describe("claude adapter (scripted CLI)", () => {
     expect(chat.snapshot().config).toMatchObject({ model: "tiny", thinkingLevel: null, thinkingLevels: [] });
   });
 
+  it("switches the permission mode mid-run, and follows the CLI's own changes", async () => {
+    const { chat } = await openChat();
+    const config = () => chat.snapshot().config;
+    expect(config().permissionMode).toBe("default");
+    expect(config().permissionModes?.map((m) => m.id)).toEqual(["default", "acceptEdits", "plan", "auto", "dontAsk"]);
+    // While a run waits on an approval, as Shift+Tab does in Claude Code itself.
+    await chat.send("ask first", "normal");
+    await until(() => chat.snapshot().pending.length === 1);
+    expect(chat.status).toBe("running");
+    await expect(chat.setConfig({ model: "haiku" })).rejects.toMatchObject({ status: 409, code: "busy" });
+    await chat.setConfig({ permissionMode: "acceptEdits" });
+    expect(config().permissionMode).toBe("acceptEdits");
+    expect(recorded("modes")).toEqual(["acceptEdits"]);
+    chat.answer(chat.snapshot().pending[0]?.id as string, { kind: "select", value: "Allow once" });
+    await until(() => chat.status === "idle");
+    // Bypass needs a launch flag this chat's CLI was not given, so it is neither offered nor sent.
+    await expect(chat.setConfig({ permissionMode: "bypassPermissions" })).rejects.toMatchObject({ status: 422, code: "config_rejected" });
+    expect(recorded("modes")).toEqual(["acceptEdits"]);
+    // Auto runs only on a model the CLI says can.
+    await chat.setConfig({ model: "haiku" });
+    expect(config().permissionModes?.map((m) => m.id)).not.toContain("auto");
+    // An approved plan leaves plan mode by itself; the CLI's status frame moves the picker.
+    await chat.setConfig({ permissionMode: "plan" });
+    await chat.send("exitplan now", "normal");
+    await until(() => chat.status === "idle" && config().permissionMode === "acceptEdits");
+  });
+
+  it("offers bypass only when config.yml's claude args let the CLI switch to it", async () => {
+    adapter = new ClaudeAdapter({
+      command: script,
+      home,
+      args: ["--allow-dangerously-skip-permissions"],
+      env: { ...process.env, CLAUDE_CONFIG_DIR: path.join(home, ".claude"), FAKE_CLAUDE_STATE: state },
+    });
+    const { chat } = await openChat();
+    expect(chat.snapshot().config.permissionModes?.at(-1)).toMatchObject({ id: "bypassPermissions", caution: true });
+    await chat.setConfig({ permissionMode: "bypassPermissions" });
+    expect(chat.snapshot().config.permissionMode).toBe("bypassPermissions");
+    expect(recorded("modes")).toEqual(["bypassPermissions"]);
+  });
+
   it("reads context usage with Claude Code's own categories, minus deferred and free space", async () => {
     const { live } = await openChat();
     expect(await live.getContextUsage()).toEqual({

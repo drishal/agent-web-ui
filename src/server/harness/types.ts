@@ -3,6 +3,7 @@
 import type {
   ChatConfig,
   ChatItem,
+  ConfigPatch,
   ContextUsage,
   HarnessCapabilities,
   HarnessId,
@@ -164,7 +165,8 @@ export interface LiveChat {
    * capabilities.supportsQueueEdit implement it.
    */
   replaceQueue?(queue: QueueState): Promise<void>;
-  setConfig(patch: { model?: string; thinkingLevel?: string }): Promise<void>;
+  /** Model and thinking only while idle (Chat checks); a permission mode, on a harness that declares them, at any time. */
+  setConfig(patch: ConfigPatch): Promise<void>;
   /** Drop cached models so the next getConfig() sees new ones (local servers, catalogs, config edits). */
   refreshModels(): Promise<void>;
   rename(name: string): Promise<void>;

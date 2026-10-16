@@ -315,6 +315,21 @@ describe("chat lifecycle over HTTP + SSE", () => {
     expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ thinkingLevel: "off" })).status).toBe(409);
   });
 
+  it("changes the permission mode mid-run, on a harness that has modes", async () => {
+    const { t, agent, ws } = await setup({ chunkDelayMs: 20 });
+    const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;
+    expect(chat.config.permissionMode).toBe("default");
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "slow" });
+    expect(t.manager.get(chat.chatId).status).toBe("running");
+    const res = await agent.patch(`/api/chats/${chat.chatId}/config`).send({ permissionMode: "acceptEdits" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ permissionMode: "acceptEdits" });
+    expect((await agent.patch(`/api/chats/${chat.chatId}/config`).send({ permissionMode: "nope" })).status).toBe(422);
+    const other = (await agent.post("/api/chats").send({ harnessId: "fake-b", workspaceId: ws.id })).body as ChatSnapshot;
+    expect(other.config.permissionModes).toBeUndefined();
+    expect((await agent.patch(`/api/chats/${other.chatId}/config`).send({ permissionMode: "default" })).status).toBe(400);
+  });
+
   it("lists the chat harness's / commands", async () => {
     const { agent, ws } = await setup();
     const chat = (await agent.post("/api/chats").send({ harnessId: "fake", workspaceId: ws.id })).body as ChatSnapshot;

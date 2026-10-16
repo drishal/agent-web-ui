@@ -24,6 +24,8 @@ export interface HarnessCapabilities {
   supportsHtmlRender: boolean;
   /** Queued steering and follow-up messages can be taken back and replaced (edited, removed) before they run. */
   supportsQueueEdit: boolean;
+  /** The harness has permission modes (how much it asks before acting), switchable at any time, mid-run too (Claude Code). */
+  supportsPermissionMode: boolean;
 }
 
 export interface HarnessStatus {
@@ -124,11 +126,26 @@ export interface ModelInfo {
   levels?: string[];
 }
 
+/** One of a harness's permission modes. */
+export interface PermissionModeInfo {
+  /** The harness's own name for it (Claude Code's `acceptEdits`). */
+  id: string;
+  label: string;
+  /** What the agent does without asking in this mode, in a line. */
+  description: string;
+  /** Nothing is asked or checked in this mode: clients mark it while it is on. */
+  caution?: boolean;
+}
+
 export interface ChatConfig {
   model: string | null;
   thinkingLevel: string | null;
   models: ModelInfo[];
   thinkingLevels: string[];
+  /** The permission mode in force; absent when the harness has none (supportsPermissionMode). */
+  permissionMode?: string | null;
+  /** The modes it can switch to, in the harness's order. */
+  permissionModes?: PermissionModeInfo[];
 }
 
 /** An image under a prompt, served at /api/images/<id>. */
@@ -853,10 +870,13 @@ export const patchConfigSchema = z
   .object({
     model: z.string().min(1).max(512).optional(),
     thinkingLevel: z.string().min(1).max(32).optional(),
+    permissionMode: z.string().min(1).max(64).optional(),
   })
-  .refine((v) => v.model !== undefined || v.thinkingLevel !== undefined, {
+  .refine((v) => v.model !== undefined || v.thinkingLevel !== undefined || v.permissionMode !== undefined, {
     message: "empty patch",
   });
+/** A chat's settings change: model and thinking only while idle, permission mode at any time. */
+export type ConfigPatch = { model?: string; thinkingLevel?: string; permissionMode?: string };
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(200) });
 export const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048) });
 export const pushTestSchema = z.object({ endpoint: z.string().url().max(2048).optional() });
