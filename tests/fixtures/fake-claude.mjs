@@ -78,8 +78,13 @@ const chained = (entry) => {
 const MODELS = [
   { value: "default", resolvedModel: "fake-opus", displayName: "Default (recommended)", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high"] },
   { value: "haiku", resolvedModel: "fake-haiku", displayName: "Haiku", supportsEffort: true, supportedEffortLevels: ["low", "high"] },
+  { value: "tiny", resolvedModel: "fake-tiny", displayName: "Tiny", supportsThinkingOff: true },
 ];
+/** Each model's effort when nothing names one (a model without levels has none). */
+const DEFAULT_EFFORT = { default: "medium", haiku: "high" };
 let model = "default";
+/** The effort the flag layer set (apply_flag_settings), if any. */
+let flagEffort = null;
 let busy = false;
 let aborted = false;
 const steering = [];
@@ -280,14 +285,19 @@ function control(frame) {
         account: { email: "someone@example.com", subscriptionType: "Claude Pro" },
         current_permission_mode: "default",
       });
-    case "get_settings":
-      return ok({ effective: { model: "default", effortLevel: "medium" } });
+    case "get_settings": {
+      // As 2.1.301 answers: `effective` is what the settings layers name, `applied` what runs.
+      const levels = MODELS.find((m) => m.value === model)?.supportedEffortLevels ?? [];
+      const effort = levels.length === 0 ? null : levels.includes(flagEffort) ? flagEffort : (DEFAULT_EFFORT[model] ?? null);
+      return ok({ effective: { model: "default", ...(flagEffort ? { effortLevel: flagEffort } : {}) }, applied: { model: MODELS.find((m) => m.value === model)?.resolvedModel, effort } });
+    }
     case "set_model":
       model = request.model ?? "default";
       record("models", model);
       return ok();
     case "apply_flag_settings":
       record("flags", request.settings);
+      if (typeof request.settings?.effortLevel === "string") flagEffort = request.settings.effortLevel;
       return ok();
     case "set_max_thinking_tokens":
       return ok();

@@ -68,6 +68,7 @@ describe("claude adapter (scripted CLI)", () => {
     expect(chat.snapshot().config.models.map((m) => [m.key, m.levels])).toEqual([
       ["default", ["low", "medium", "high"]],
       ["haiku", ["low", "high"]],
+      ["tiny", undefined],
     ]);
     await chat.send("hello there", "normal");
     await until(() => chat.status === "idle" && answered(chat, "claude says hello there"));
@@ -176,6 +177,21 @@ describe("claude adapter (scripted CLI)", () => {
     expect(recorded("flags")).toEqual([{ effortLevel: "high" }]);
     await chat.refreshModels();
     expect(chat.snapshot().config.models.map((m) => m.key)).toContain("sonnet");
+  });
+
+  it("offers the chosen model's effort levels, at the effort it really runs at", async () => {
+    const { chat } = await openChat();
+    // No settings file names an effort: the model's own default is the one in force.
+    expect(chat.snapshot().config).toMatchObject({ model: "default", thinkingLevel: "medium", thinkingLevels: ["low", "medium", "high"] });
+    await chat.setConfig({ model: "haiku" });
+    expect(chat.snapshot().config).toMatchObject({ model: "haiku", thinkingLevel: "high", thinkingLevels: ["low", "high"] });
+    // The CLI would take a level the model does not list; awui never sends one.
+    await expect(chat.setConfig({ thinkingLevel: "medium" })).rejects.toMatchObject({ status: 422, code: "config_rejected" });
+    expect(recorded("flags")).toEqual([]);
+    await chat.setConfig({ thinkingLevel: "low" });
+    expect(chat.snapshot().config).toMatchObject({ thinkingLevel: "low" });
+    await chat.setConfig({ model: "tiny" });
+    expect(chat.snapshot().config).toMatchObject({ model: "tiny", thinkingLevel: null, thinkingLevels: [] });
   });
 
   it("reads context usage with Claude Code's own categories, minus deferred and free space", async () => {
