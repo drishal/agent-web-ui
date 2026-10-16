@@ -177,6 +177,37 @@ test("a row's menu opens its session in a new tab, next to the shown one", async
   await expect(tab(page, "menu tab two")).toHaveAttribute("aria-selected", "false");
 });
 
+test("a row's menu opens where it was asked for, as wide as its items, inside the window", async ({ page }) => {
+  // The menu pops in scaled; measure it where it settles.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "menu placed");
+  await showSidebar(page);
+  const row = session(page, "menu placed");
+  const menu = page.getByRole("menu");
+  const rowBox = (await row.boundingBox())!;
+
+  await row.click({ button: "right", position: { x: 20, y: 10 } });
+  let box = (await menu.boundingBox())!;
+  expect(box.x).toBeCloseTo(rowBox.x + 20, 0);
+  expect(box.y).toBeGreaterThan(rowBox.y + 10);
+  expect(box.width).toBeLessThan(300);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  // Too near the window's bottom to open downwards: the menu opens above its ⋯ button.
+  await page.setViewportSize({ width: 1280, height: Math.ceil(rowBox.y + rowBox.height) + 200 });
+  const more = page.getByRole("button", { name: "More for menu placed" });
+  await more.click();
+  const moreBox = (await more.boundingBox())!;
+  box = (await menu.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(moreBox.y);
+  expect(box.x + box.width).toBeCloseTo(moreBox.x + moreBox.width, 0);
+  expect(box.width).toBeLessThan(300);
+});
+
 test("a session opens at once: its tab, title, and a loading screen show while it loads", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
