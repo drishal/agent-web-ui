@@ -1,7 +1,12 @@
-// Hermes adapter: newline-delimited JSON-RPC over stdio to a `hermes` gateway
-// child (`<HERMES_PYTHON> -m tui_gateway.entry`), the same transport the Hermes
-// TUI and its dashboard chat tab use. One child serves one live chat; probes
-// for models and session rows use a short-lived child of their own.
+// Hermes adapter: the profile gateway is the agent. Every Hermes surface — its Ink
+// TUI, the desktop app, the dashboard — runs chats through the one gateway that owns
+// the profile home (`~/.hermes/gateway.lock`), and so does awui: it attaches over that
+// gateway's canonical WebSocket (hermes-gateway.ts, with hermes-canonical.ts speaking
+// its session dialect), starting one with `hermes gateway ensure` when none runs.
+// The stdio `python -m tui_gateway.entry` child this used to start per chat remains
+// only as the fallback for a home no gateway runs against (Hermes retired that entry
+// point as a product surface in 2026.9.24 and it refuses to start beside a live
+// owner); probes share the same two paths.
 //
 // On the wire: client→server requests with an id, `event` notifications from
 // the gateway, and server→client requests for human decisions (approval,
@@ -38,6 +43,7 @@ import {
   type GatewayFrame,
   type GatewayLink,
 } from "./hermes-gateway.js";
+import { CanonicalChatLink } from "./hermes-canonical.js";
 import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import type {
@@ -63,10 +69,6 @@ const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** Why a chat cannot run on a gateway that is already serving the home (see openChatLink). */
-function gatewayServesChats(pid: number | null): string {
-  return `a Hermes gateway${pid === null ? "" : ` (pid ${pid})`} serves this home over its newer session protocol: awui reads its sessions and models from there, but a chat needs that gateway stopped`;
-}
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** Epoch seconds (gateway) to epoch ms. */
@@ -654,6 +656,13 @@ class HermesLiveChat implements LiveChat {
       }
       case "request.cancel": {
         const id = str(p.id);
+        const group = this.pending.get(id);
+        if (group?.kind === "clarify") {
+          // The cards a clarify group raised are keyed `${id}:${qid}`; clear them all.
+          this.pending.delete(id);
+          for (const qid of group.open) this.emit({ type: "request_cancelled", requestId: `${id}:${qid}`, outcome: str(p.reason) || "cancelled" });
+          break;
+        }
         if (this.pending.delete(id)) this.emit({ type: "request_cancelled", requestId: id, outcome: str(p.reason) || "cancelled" });
         break;
       }
@@ -1078,7 +1087,7 @@ export class HermesAdapter implements HarnessAdapter {
   async openProbe(cwd: string, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink> {
     if (!this.options.command) {
       const home = await this.resolveAgentDir();
-      const link = await this.attach(home, () => undefined, onRequest);
+      const link = await this.attach(home, (endpoint, ticket) => GatewaySocket.open(endpoint, ticket, () => undefined, onRequest));
       if (link) return link;
     }
     const { command, args, env } = await this.spawnSpec();
@@ -1086,27 +1095,36 @@ export class HermesAdapter implements HarnessAdapter {
   }
 
   /**
-   * The connection one chat runs on. A chat speaks the session dialect this build knows,
-   * which is the stdio entry point's; the socket a running gateway offers speaks its newer
-   * canonical one (session/dialect verbs with revisions, receipts and event watermarks),
-   * where even `session.create` and `client.capabilities` differ. So a chat needs a gateway
-   * of its own — and while another one owns the home it cannot have one, which is what this
-   * says instead of letting a doomed child exit with a bare code.
+   * The connection one chat runs on: the home's gateway, which is where its sessions
+   * live and what every other Hermes surface sees. When none answers, the bootstrap
+   * upstream's own clients use starts one (`hermes gateway ensure`: an unmanaged daemon
+   * that idles out), so a chat never needs the stdio entry point Hermes 2026.9.24
+   * retired — a wire change lands in the canonical shim (hermes-canonical.ts), not in
+   * every call site. The stdio child remains only for a home no gateway can run
+   * against at all.
    */
   async openChatLink(cwd: string, onEvent: (params: Obj) => void, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink> {
     if (!this.options.command) {
       const home = await this.resolveAgentDir();
+      if (!(await this.endpoint(home))) await this.ensureGateway();
+      const link = await this.attach(home, (endpoint, ticket) => CanonicalChatLink.open(endpoint, ticket, onEvent, onRequest));
+      if (link) return link;
       const owner = await gatewayOwner(home);
-      const endpoint = await this.endpoint(home);
-      if (endpoint) throw new Error(gatewayServesChats(owner));
-      if (owner !== null) throw new Error(`a Hermes gateway (pid ${owner}) owns this Hermes home but is not answering on its control socket yet; a chat needs that gateway stopped`);
+      if (owner !== null) throw new Error(`a Hermes gateway (pid ${owner}) owns this Hermes home but is not answering on its control socket yet; awui cannot run a chat against it`);
     }
     const { command, args, env } = await this.spawnSpec();
     return track(new HermesRpc(command, args, env, cwd, onEvent, onRequest));
   }
 
-  /** Attach to the home's owner, or null when there is none (or it went away mid-handshake). */
-  private async attach(home: string, onEvent: (params: Obj) => void, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink | null> {
+  /** `hermes gateway ensure`: this home's gateway, started when none answers (it idles out on its own). */
+  private async ensureGateway(): Promise<void> {
+    await run(this.cliCommand, ["gateway", "ensure", "--json", "--timeout", "60"], { timeout: 75_000 }).catch(() => undefined);
+    // A new owner may be serving now; the cached "nobody answers" is stale.
+    this.endpointCache = null;
+  }
+
+  /** Attach to the home's owner through `dial`, or null when there is none (or it went away mid-handshake). */
+  private async attach(home: string, dial: (endpoint: GatewayEndpoint, ticket: string) => Promise<GatewayLink>): Promise<GatewayLink | null> {
     // Twice, because an owner can be replaced between its identify answer and the dial
     // (an update, a restart) and the old endpoint then points at a closed port.
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1114,7 +1132,7 @@ export class HermesAdapter implements HarnessAdapter {
       if (!endpoint) return null;
       try {
         const ticket = await gatewayTicket(home, endpoint);
-        return track(await GatewaySocket.open(endpoint, ticket, onEvent, onRequest));
+        return track(await dial(endpoint, ticket));
       } catch (error) {
         this.endpointCache = null;
         if (attempt === 1) throw error;
@@ -1138,11 +1156,10 @@ export class HermesAdapter implements HarnessAdapter {
     const endpoint = await this.endpoint(home, true);
     if (endpoint) {
       // Attached: its version is the one serving this home, and the CLI on PATH may be older,
-      // newer, or absent. Session rows and models come from the gateway; a *chat* cannot, since
-      // the owner's socket speaks its newer canonical session protocol (see openLink).
+      // newer, or absent. Session rows, models, and chats all come from the gateway —
+      // the canonical wire is what upstream's own surfaces run on (see hermes-canonical.ts).
       const label = versionLabel(endpoint.version ?? "unknown");
       const detail = endpoint.version && endpoint.codeSha ? `${endpoint.version} · gateway ${endpoint.codeSha.slice(0, 8)}` : undefined;
-      warnings.push(gatewayServesChats(await gatewayOwner(home)));
       return { available: true, ...label, ...(detail ? { versionDetail: detail } : {}), warnings, overrides };
     }
     const owner = await gatewayOwner(home);
