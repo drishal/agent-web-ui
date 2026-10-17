@@ -12,6 +12,7 @@
 // the gateway, and server→client requests for human decisions (approval,
 // clarify) that arrive as ordinary JSON-RPC requests with `srq-…` ids and are
 // answered with ordinary JSON-RPC responses.
+import { DatabaseSync } from "node:sqlite";
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -497,10 +498,35 @@ class HermesLiveChat implements LiveChat {
     // An attached client must say it can answer approvals and questions, or the gateway
     // parks them for some later client instead of asking this one.
     await rpc.request("client.capabilities", { server_requests: true });
-    const result = resumeNativeId
-      ? await rpc.request<Obj>("session.resume", { session_id: resumeNativeId, source: "webui" })
-      : await rpc.request<Obj>("session.create", { cwd: this.cwd, source: "webui" });
+    let result: Obj;
+    try {
+      result = resumeNativeId
+        ? await rpc.request<Obj>("session.resume", { session_id: resumeNativeId, source: "webui", display_projection: true })
+        : await rpc.request<Obj>("session.create", { cwd: this.cwd, source: "webui" });
+    } catch (error) {
+      // Older awui chats are stored as source `webui`. The gateway lists them and then
+      // refuses to mount that source (`not_found`); a bare code is not a reason.
+      if (error instanceof HermesRpcError && error.message === "not_found") {
+        throw new Error("Hermes refused to reopen this session (not_found). The gateway will not mount chats an older awui saved (source webui). Open it from the Hermes TUI, or start a new chat.");
+      }
+      throw error;
+    }
     this.applySnapshot(result);
+    await this.requestLiveReasoning(rpc);
+  }
+
+  /**
+   * Ask the owner to stream this session's reasoning, as the CLI and the ACP editor do.
+   *
+   * The gateway publishes `reasoning.delta` only when the session's `show_reasoning` flag
+   * is on, and a session starts with it off: a reasoning sink changes what the provider
+   * is asked for, so a viewer has to ask. `config.set` of that key is the session's own
+   * flag, not a write to config.yaml. The stdio child already defaults the flag on and
+   * does not have this key. A refusal leaves the chat up, just without the live stream.
+   */
+  private async requestLiveReasoning(rpc: GatewayLink): Promise<void> {
+    if (!rpc.attached || !this.runtimeId) return;
+    await rpc.request("config.set", { session_id: this.runtimeId, key: "show_reasoning", value: "1" }).catch(() => undefined);
   }
 
   private applySnapshot(result: Obj): void {
@@ -1367,10 +1393,56 @@ export class HermesAdapter implements HarnessAdapter {
       const folder = str(info.cwd);
       if (folder && path.resolve(folder) !== path.resolve(req.cwd)) return null;
       return { items: transcriptItems(Array.isArray(result?.messages) ? result.messages : []), title: str(info.title) || null };
+    } catch (error) {
+      // The gateway lists these and then refuses to mount them (older awui chats, source
+      // `webui`). The rows are still in state.db; show them, and let openChat say why a
+      // new turn cannot run here.
+      if (!(error instanceof HermesRpcError) || error.message !== "not_found") throw error;
+      return this.storedTranscript(req);
     } finally {
       await link.kill().catch(() => undefined);
     }
   }
+
+  /**
+   * A session the gateway will not mount, read from the home's state.db. Read-only, and
+   * only the columns the transcript needs: this is the harness's own store, not a second
+   * one. Null when the row is missing or belongs to another folder, so the manager's
+   * session-list guard still says that.
+   */
+  private async storedTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    const file = path.join(await this.resolveAgentDir(), "state.db");
+    let db: DatabaseSync;
+    try {
+      db = new DatabaseSync(file, { readOnly: true });
+    } catch {
+      return null;
+    }
+    try {
+      const session = db.prepare("SELECT cwd, title FROM sessions WHERE id = ?").get(req.nativeId) as { cwd?: unknown; title?: unknown } | undefined;
+      if (!session) return null;
+      const folder = str(session.cwd);
+      if (folder && path.resolve(folder) !== path.resolve(req.cwd)) return null;
+      // Indexed on (session_id, id). Enough for a chat; a longer one is cut, as every other transcript read is.
+      const rows = db.prepare("SELECT id, role, content, tool_name, tool_call_id, reasoning, timestamp FROM messages WHERE session_id = ? AND active = 1 ORDER BY id LIMIT 4000").all(req.nativeId) as Array<Record<string, unknown>>;
+      const messages = rows.map((row) => ({
+        role: str(row.role),
+        ...(row.content !== undefined ? { content: row.content } : {}),
+        ...(typeof row.content === "string" && row.content ? { text: row.content } : {}),
+        ...(str(row.tool_name) ? { name: str(row.tool_name) } : {}),
+        ...(str(row.tool_call_id) ? { tool_call_id: str(row.tool_call_id) } : {}),
+        ...(str(row.reasoning) ? { reasoning: str(row.reasoning) } : {}),
+        ...(typeof row.timestamp === "number" ? { timestamp: row.timestamp } : {}),
+        ...(typeof row.id === "number" ? { row_id: row.id } : {}),
+      }));
+      return { items: transcriptItems(messages), title: str(session.title) || null };
+    } catch {
+      return null;
+    } finally {
+      db.close();
+    }
+  }
+
   async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
     const rows = await this.rows(homedir());
     return rows

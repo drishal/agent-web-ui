@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -133,6 +134,24 @@ describe("a Hermes home whose gateway is running", () => {
     expect(submit?.params.input_id).toEqual(expect.any(String));
   });
 
+  it("asks the session to stream its reasoning on create and on resume", async () => {
+    const created = await adapter.openChat({ cwd: project });
+    const nativeId = created.nativeId;
+    expect(nativeId).toBe("20261002_120000_fake1");
+    await created.dispose();
+    if (!nativeId) throw new Error("the created chat has no session id");
+    const resumed = await adapter.openChat({ cwd: project, resumeNativeId: nativeId });
+    await resumed.dispose();
+    const shows = canonical().filter((call) => call.name === "config.set" && call.params.key === "show_reasoning");
+    expect(shows.map((call) => call.params)).toEqual([
+      { session_id: "4242", key: "show_reasoning", value: "1" },
+      { session_id: "4242", key: "show_reasoning", value: "1" },
+    ]);
+    const names = canonical().map((call) => call.name);
+    expect(names.indexOf("session.create")).toBeLessThan(names.indexOf("config.set"));
+    expect(names.indexOf("session.resume")).toBeLessThan(names.lastIndexOf("config.set"));
+  });
+
   it("turns a gateway approval event into a card and its answer into approval.respond", async () => {
     const { chat } = await openChat();
     await chat.send("ask please", "normal");
@@ -187,6 +206,33 @@ describe("a Hermes home whose gateway is running", () => {
     const names = canonical().map((call) => call.name);
     expect(names).toContain("session.detach");
     expect(names).not.toContain("session.close");
+    // end_reason closes the conversation. Leaving is a detach without one.
+    expect(canonical().filter((call) => call.name === "session.detach").every((call) => call.params.end_reason === undefined)).toBe(true);
+  });
+
+  it("shows a resumed transcript when the gateway returns stored rows, not display text", async () => {
+    const { chat, live } = await openChat();
+    await chat.send("tool please", "normal");
+    await until(() => chat.status === "idle");
+    const items = await live.history();
+    expect(items.find((item) => item.kind === "user")).toMatchObject({ text: "tool please" });
+    expect(items.find((item) => item.kind === "tool")).toMatchObject({ name: "read", output: "file.txt", summary: "README.md" });
+    const assistant = items.find((item) => item.kind === "assistant");
+    expect(assistant && assistant.kind === "assistant" ? assistant.text : "").toContain("hermes says tool please");
+  });
+
+  it("shows a session the gateway will not mount from state.db, and says so", async () => {
+    const db = new DatabaseSync(path.join(home, "state.db"));
+    db.exec("CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, title TEXT); CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_name TEXT, tool_call_id TEXT, reasoning TEXT, timestamp REAL, active INTEGER)");
+    db.prepare("INSERT INTO sessions (id, cwd, title) VALUES (?, ?, ?)").run("refused-webui", project, "Old awui chat");
+    db.prepare("INSERT INTO messages (session_id, role, content, timestamp, active) VALUES (?, ?, ?, ?, ?)").run("refused-webui", "user", "hello from the store", 1, 1);
+    db.close();
+    const transcript = await adapter.readTranscript({ cwd: project, nativeId: "refused-webui" });
+    expect(transcript?.title).toBe("Old awui chat");
+    expect(transcript?.items.find((item) => item.kind === "user")).toMatchObject({ text: "hello from the store" });
+    // Another folder is not this workspace's to open.
+    expect(await adapter.readTranscript({ cwd: "/", nativeId: "refused-webui" })).toBeNull();
+    await expect(adapter.openChat({ cwd: project, resumeNativeId: "refused-webui" })).rejects.toThrow(/source webui/);
   });
 });
 

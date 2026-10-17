@@ -48,12 +48,46 @@ interface Control {
   promptId: string;
 }
 
-/** Transcript rows as the stdio dialect projects them (role/text/tool_call_id/row_id/…). */
-function projectedRows(messages: unknown): Obj[] {
-  return (Array.isArray(messages) ? messages : []).filter(isObj).map((row) => {
-    const content = row.content;
-    const text = str(row.text) || (Array.isArray(content) ? content.map((part) => (typeof part === "string" ? part : isObj(part) && typeof part.text === "string" ? part.text : "")).filter(Boolean).join("\n") : "");
-    return { ...row, ...(text ? { text } : {}) };
+/**
+ * The snapshot's rows in the stdio dialect's shape (`role`/`text`/`name`/`content`/`args`).
+ *
+ * The canonical wire returns two copies. `messages` are the stored rows (`content` holds the
+ * text, tools are `tool_name`); `display_messages`, only when `display_projection` was asked,
+ * are what the TUI renders (`text`, `name`, `args`, and no tool output). Using `messages`
+ * alone drops every user prompt — the chat opens on the empty composer — and using only
+ * `display_messages` drops what a tool returned. This keeps the display rows and fills tool
+ * output from the stored ones; with no display copy, a string `content` is the text.
+ */
+function projectSnapshot(snapshot: Obj): Obj[] {
+  const raw = (Array.isArray(snapshot.messages) ? snapshot.messages : []).filter(isObj);
+  const display = (Array.isArray(snapshot.display_messages) ? snapshot.display_messages : []).filter(isObj);
+  const byCall = new Map<string, Obj>();
+  const byRow = new Map<number, Obj>();
+  for (const row of raw) {
+    const call = str(row.tool_call_id);
+    if (call) byCall.set(call, row);
+    const id = num(row.row_id);
+    if (id !== null) byRow.set(id, row);
+  }
+  return (display.length > 0 ? display : raw).map((row) => {
+    const call = str(row.tool_call_id);
+    const id = num(row.row_id);
+    const stored = (call && byCall.get(call)) || (id !== null ? byRow.get(id) : undefined);
+    const content = row.content !== undefined ? row.content : stored?.content;
+    const text = str(row.text) || (typeof content === "string" ? content : Array.isArray(content) ? content.map((part) => (typeof part === "string" ? part : isObj(part) && typeof part.text === "string" ? part.text : "")).filter(Boolean).join("\n") : "");
+    const name = str(row.name) || str(stored?.name) || str(stored?.tool_name) || str(row.tool_name);
+    const reasoning = str(row.reasoning) || str(stored?.reasoning);
+    const context = str(row.context) || str(stored?.context);
+    const args = row.args ?? stored?.args;
+    return {
+      ...row,
+      ...(text ? { text } : {}),
+      ...(name ? { name } : {}),
+      ...(content !== undefined ? { content } : {}),
+      ...(args !== undefined ? { args } : {}),
+      ...(reasoning ? { reasoning } : {}),
+      ...(context ? { context } : {}),
+    };
   });
 }
 
@@ -160,6 +194,9 @@ export class CanonicalChatLink implements GatewayLink {
   }
 
   async kill(): Promise<void> {
+    // Leave as a viewer. An end_reason would close the conversation; the session
+    // belongs to the gateway and outlives this link.
+    await this.detach().catch(() => undefined);
     await this.socket.kill();
   }
 
@@ -222,11 +259,12 @@ export class CanonicalChatLink implements GatewayLink {
       revision: num(snapshot.revision) ?? 0,
       generation: num(snapshot.execution_generation) ?? 0,
     };
-    this.rows = projectedRows(snapshot.messages);
+    this.rows = projectSnapshot(snapshot);
     // A resume over a live session returns a new subscription (the old one is a stale
-    // viewer now); the TUI drops its predecessor the same way.
+    // viewer now). Detach names no end_reason: that field closes the conversation, and
+    // the owner then ends the idle local row once no viewer is left.
     if (previous?.subscriptionId && (previous.sessionId !== sessionId || previous.subscriptionId !== subscriptionId)) {
-      void this.socket.request("session.detach", { session_id: previous.sessionId, subscription_id: previous.subscriptionId, end_reason: "superseded" }).catch(() => undefined);
+      void this.socket.request("session.detach", { session_id: previous.sessionId, subscription_id: previous.subscriptionId }).catch(() => undefined);
     }
     const info: Obj = isObj(snapshot.info) ? snapshot.info : {};
     this.info = { ...info, running: snapshot.running === true };
@@ -276,6 +314,8 @@ export class CanonicalChatLink implements GatewayLink {
       return this.mutate("model", { model, ...(provider ? { provider } : {}) }, true);
     }
     if (key === "reasoning") return this.mutate("reasoning", { effort: str(params.value) }, true);
+    // `show_reasoning` stays this verb: the session's live-stream flag, not an effort
+    // and not a settings write. Mapping it onto `reasoning` would change the wrong thing.
     return this.socket.request("config.set", params);
   }
 
@@ -292,11 +332,15 @@ export class CanonicalChatLink implements GatewayLink {
     return result ?? {};
   }
 
-  private async detach(endReason: string): Promise<Obj> {
+  private async detach(endReason?: string): Promise<Obj> {
     const session = this.session;
     this.session = null;
     if (!session?.subscriptionId) return { detached: false };
-    return this.socket.request("session.detach", { session_id: session.sessionId, subscription_id: session.subscriptionId, end_reason: endReason });
+    return this.socket.request("session.detach", {
+      session_id: session.sessionId,
+      subscription_id: session.subscriptionId,
+      ...(endReason ? { end_reason: endReason } : {}),
+    });
   }
 
   // ---- translation: the wire's events and prompts into the chat's ------------------------------

@@ -163,13 +163,36 @@ server.on("upgrade", (req, socket) => {
     session.revision += 1;
     return { session_id: params.session_id, operation: params.operation, revision: session.revision, execution_generation: session.generation, ...(result ?? {}) };
   };
-  const snapshot = (legacy) => {
+  // The real gateway's resume: stored rows keep text in `content` (tools as `tool_name`),
+  // and `display_messages` is the TUI projection (`text`/`name`/`args`, no tool output).
+  // The stdio child speaks the old shape; rewrite when the client asked for the projection,
+  // which is what a chat's resume does.
+  const canonicalHistory = (rows) => ({
+    messages: rows.map((row) => ({
+      role: row.role,
+      content: row.content !== undefined ? row.content : (row.text ?? ""),
+      ...(row.tool_call_id ? { tool_call_id: row.tool_call_id, tool_name: row.name } : {}),
+      ...(row.reasoning ? { reasoning: row.reasoning } : {}),
+      ...(row.row_id != null ? { row_id: row.row_id } : {}),
+      ...(row.timestamp != null ? { timestamp: row.timestamp } : {}),
+    })),
+    display_messages: rows.map((row) => ({
+      role: row.role,
+      ...(row.timestamp != null ? { timestamp: row.timestamp } : {}),
+      ...(row.row_id != null ? { row_id: row.row_id } : {}),
+      ...(row.role === "tool"
+        ? { name: row.name, context: row.context, tool_call_id: row.tool_call_id, args: row.args ?? {} }
+        : { text: row.text ?? "", ...(row.reasoning ? { reasoning: row.reasoning } : {}) }),
+    })),
+  });
+  const snapshot = (legacy, params = {}) => {
     session.sessionId = legacy.session_id ?? session.sessionId;
     session.revision += 1;
+    const history = params.display_projection ? canonicalHistory(legacy.messages ?? []) : { messages: legacy.messages ?? [] };
     return {
       session_id: session.sessionId,
       stored_session_id: legacy.stored_session_id ?? session.sessionId,
-      messages: legacy.messages ?? [],
+      ...history,
       message_count: legacy.message_count ?? (legacy.messages ?? []).length,
       running: legacy.running === true || legacy.info?.running === true,
       authority_epoch: 1,
@@ -210,7 +233,9 @@ server.on("upgrade", (req, socket) => {
         session.cwd = params.cwd ?? session.cwd;
         return callChild(id, "session.create", { cwd: params.cwd, title: params.title }, snapshot);
       case "session.resume":
-        return callChild(id, "session.resume", { session_id: params.session_id, source: params.source }, snapshot);
+        // The real gateway's refusal for a session it lists but will not mount (source webui).
+        if (params.session_id === "refused-webui") return send({ jsonrpc: "2.0", id, error: { code: 4001, message: "not_found", data: { reason: "not_found" } } });
+        return callChild(id, "session.resume", { session_id: params.session_id, source: params.source }, (legacy) => snapshot(legacy, params));
       case "prompt.submit":
         return callChild(id, "prompt.submit", { session_id: params.session_id, text: params.text }, () => admission(params));
       case "session.interrupt":
