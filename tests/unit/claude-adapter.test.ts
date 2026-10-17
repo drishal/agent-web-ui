@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
@@ -318,5 +318,20 @@ describe("Claude plan limits", () => {
     const { claudeUsageLimits } = await import("../../src/server/harness/limits.js");
     expect(claudeUsageLimits({ rate_limits_available: false, rate_limits: null })).toBeNull();
     expect(claudeUsageLimits({ rate_limits_available: true, rate_limits: { five_hour: { utilization: 100, resets_at: null } } })?.limited).toBe(true);
+  });
+});
+
+describe("a claude child that dies at startup", () => {
+  it("reports what it printed on stderr, not just the exit code", async () => {
+    // The shape most CLIs use for a refused start: one line on stderr, exit 1.
+    const refuses = path.join(home, "refuses.sh");
+    writeFileSync(refuses, '#!/bin/sh\necho "Invalid API key · Please run /login" >&2\nexit 1\n');
+    chmodSync(refuses, 0o755);
+    const dying = new ClaudeAdapter({ command: refuses, home, env: { ...process.env, CLAUDE_CONFIG_DIR: path.join(home, ".claude") } });
+    try {
+      await expect(dying.openChat({ cwd: project })).rejects.toThrow("claude exited (code 1): Invalid API key · Please run /login");
+    } finally {
+      await dying.shutdown();
+    }
   });
 });

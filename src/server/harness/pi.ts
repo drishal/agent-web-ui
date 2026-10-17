@@ -26,7 +26,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
-import { PendingRequests, terminateChild } from "./child-process.js";
+import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import { branchMessages, fileMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
@@ -280,7 +280,7 @@ function contextCategories(messages: unknown[]): ContextCategory[] {
 /** One `pi --mode rpc` child: JSON-lines commands on stdin, responses + session events on stdout. */
 class PiRpc {
   readonly child: ChildProcessWithoutNullStreams;
-  private stderrTail = "";
+  private readonly stderr: StderrTail;
   exited = false;
   private exitListeners = new Set<(message: string) => void>();
   private readonly calls = new PendingRequests<string>(
@@ -309,6 +309,7 @@ class PiRpc {
     this.readyResolve = resolveReady;
     this.readyReject = rejectReady;
     this.child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    this.stderr = new StderrTail(this.child);
     const rl = readline.createInterface({ input: this.child.stdout, crlfDelay: Infinity });
     let up = false;
     rl.on("line", (line) => {
@@ -329,15 +330,12 @@ class PiRpc {
       if (this.calls.accept(frame)) return;
       onEvent(frame);
     });
-    this.child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-2000);
-    });
     this.child.stdin.on("error", () => undefined);
     const onExit = (detail: string) => {
       if (this.exited) return;
       this.exited = true;
-      const last = this.stderrTail.trim().split("\n").pop()?.slice(0, 300);
-      const message = last ? `${detail}: ${last}` : detail;
+      const reason = this.stderr.reason();
+      const message = reason ? `${detail}: ${reason}` : detail;
       this.readyReject(new Error(message));
       this.calls.failAll(message);
       for (const l of this.exitListeners) l(message);

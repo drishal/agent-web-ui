@@ -29,7 +29,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { historyToItems, isObj, textOf, type Obj } from "./agent-events.js";
-import { PendingRequests, terminateChild } from "./child-process.js";
+import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
 import {
   forkSessionText,
   latestTodos,
@@ -165,7 +165,7 @@ const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v)
 class ClaudeRpc {
   readonly child: ChildProcessWithoutNullStreams;
   exited = false;
-  private stderrTail = "";
+  private readonly stderr: StderrTail;
   private exitListeners = new Set<(message: string) => void>();
   private readonly calls = new PendingRequests<string>(
     {
@@ -184,6 +184,7 @@ class ClaudeRpc {
 
   constructor(command: string, args: string[], env: NodeJS.ProcessEnv, cwd: string, onFrame: (frame: Obj) => void) {
     this.child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    this.stderr = new StderrTail(this.child);
     track(this.child);
     const rl = readline.createInterface({ input: this.child.stdout, crlfDelay: Infinity });
     rl.on("line", (line) => {
@@ -197,15 +198,12 @@ class ClaudeRpc {
       if (!isObj(frame) || this.calls.accept(frame)) return;
       onFrame(frame);
     });
-    this.child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-2000);
-    });
     this.child.stdin.on("error", () => undefined);
     const onExit = (detail: string) => {
       if (this.exited) return;
       this.exited = true;
-      const last = this.stderrTail.trim().split("\n").pop()?.slice(0, 300);
-      const message = last ? `${detail}: ${last}` : detail;
+      const reason = this.stderr.reason();
+      const message = reason ? `${detail}: ${reason}` : detail;
       this.calls.failAll(message);
       for (const l of this.exitListeners) l(message);
     };
