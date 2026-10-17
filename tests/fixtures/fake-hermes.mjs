@@ -252,6 +252,11 @@ rl.on("line", (line) => {
         event("session.info", { model, provider, reasoning_effort: effort, running: false, stored_session_id: storedId, title });
         return ok(id, { key: "reasoning", value: params.value });
       }
+      // The owner's session flag (gateway/session_busy_controls.py): not an effort, and not a config write.
+      if (params.key === "show_reasoning") {
+        const on = ["1", "on", "true"].includes(String(params.value).trim().toLowerCase());
+        return ok(id, { key: "show_reasoning", value: on ? "1" : "0", scope: "session" });
+      }
       return fail(id, 4002, `unknown config key: ${params.key}`);
     case "model.options":
       return ok(id, multimodel
