@@ -23,20 +23,25 @@ const instanceId = process.env.FAKE_HERMES_INSTANCE ?? "fake-instance";
 const tickets = new Map();
 const controlPath = path.join(home, "gateway.sock");
 
-/** What the client sent over the canonical wire, kept in FAKE_HERMES_STATE (`canonical`) for assertions. */
+/**
+ * What the client sent over the canonical wire, one array in `FAKE_HERMES_STATE.canonical.json`
+ * (its own file: the stdio fake under this gateway rewrites the state file for its rows and
+ * spawns, and sharing one would let either writer clobber the other's last entries).
+ */
 const record = (name, params) => {
   const stateFile = process.env.FAKE_HERMES_STATE;
   if (!stateFile) return;
-  let current = {};
+  const file = `${stateFile}.canonical.json`;
+  let calls = [];
   try {
-    current = JSON.parse(readFileSync(stateFile, "utf8"));
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    if (Array.isArray(parsed)) calls = parsed;
   } catch {
-    // No state yet.
+    // No recording yet.
   }
-  const canonical = Array.isArray(current.canonical) ? current.canonical : [];
-  const temp = `${stateFile}.${process.pid}.tmp`;
-  writeFileSync(temp, JSON.stringify({ ...current, canonical: [...canonical, { name, params }] }));
-  renameSync(temp, stateFile);
+  const temp = `${file}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify([...calls, { name, params }]));
+  renameSync(temp, file);
 };
 
 // ── WebSocket, server side (RFC 6455), text frames only ──────────────────────
@@ -148,7 +153,7 @@ server.on("upgrade", (req, socket) => {
   };
   const calls = new Map(); // child request id -> { clientId, wrap }
   const prompts = new Map(); // canonical prompt_id -> { legacyId, kind, qid, need, answers }
-  const session = { sessionId: "", revision: 0, generation: 0, next: 0 };
+  const session = { sessionId: "", cwd: "", revision: 0, generation: 0, next: 0 };
   const callChild = (clientId, method, params, wrap = (result) => result) => {
     const childId = `c${++session.next}`;
     calls.set(childId, { clientId, wrap });
@@ -175,7 +180,8 @@ server.on("upgrade", (req, socket) => {
       execution_generation: session.generation,
       pending: [],
       prompts: [],
-      info: { desktop_protocol: "hermes-gateway-v1", ...(legacy.info ?? {}) },
+      // The owner reports the session's own folder (the child only knows its process cwd).
+      info: { desktop_protocol: "hermes-gateway-v1", ...(legacy.info ?? {}), ...(session.cwd ? { cwd: session.cwd } : {}) },
     };
   };
   const admission = (params) => {
@@ -201,6 +207,7 @@ server.on("upgrade", (req, socket) => {
           },
         });
       case "session.create":
+        session.cwd = params.cwd ?? session.cwd;
         return callChild(id, "session.create", { cwd: params.cwd, title: params.title }, snapshot);
       case "session.resume":
         return callChild(id, "session.resume", { session_id: params.session_id, source: params.source }, snapshot);

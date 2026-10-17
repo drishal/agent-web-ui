@@ -59,7 +59,8 @@ afterEach(async () => {
 
 const canonical = (): { name: string; params: Record<string, unknown> }[] => {
   try {
-    return JSON.parse(readFileSync(state, "utf8")).canonical ?? [];
+    const calls = JSON.parse(readFileSync(`${state}.canonical.json`, "utf8"));
+    return Array.isArray(calls) ? calls : [];
   } catch {
     return [];
   }
@@ -99,6 +100,19 @@ describe("a Hermes home whose gateway is running", () => {
   it("reads a project's sessions and its models over the attachment", async () => {
     expect((await adapter.listSessions(project)).map((row) => row.nativeId)).toEqual(["20261002_120000_fake1"]);
     expect((await adapter.listModels(project, true)).map((model) => model.key)).toEqual(["fake/fake-model", "fake/fake-mini"]);
+    expect(liveHermesLinks()).toBe(0);
+  });
+
+  it("reads a session's own rows, so a chat opens before its gateway does", async () => {
+    // A chat opened and left unused has no rows, but its session is this folder's: the deferred
+    // resume shows an empty transcript and opens it, instead of refusing it as unknown.
+    const fresh = await adapter.openChat({ cwd: project });
+    const nativeId = fresh.nativeId as string;
+    expect(await adapter.readTranscript({ cwd: project, nativeId })).toEqual({ items: [], title: "Fake Hermes session" });
+    await fresh.dispose();
+    // The gateway resolves a session by id alone, so another folder must not read it here: null
+    // sends the manager to its session-list guard, which says exactly that.
+    expect(await adapter.readTranscript({ cwd: "/", nativeId })).toBeNull();
     expect(liveHermesLinks()).toBe(0);
   });
 

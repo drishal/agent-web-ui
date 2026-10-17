@@ -74,6 +74,8 @@ export class CanonicalChatLink implements GatewayLink {
   private described: Described | null = null;
   private session: Tracked | null = null;
   private rows: Obj[] | null = null;
+  /** The snapshot's `info` (model, cwd, title, …), kept for a caller that only reads. */
+  private info: Obj = {};
   private readonly controls = new Map<string, Control>();
 
   private constructor(
@@ -203,8 +205,10 @@ export class CanonicalChatLink implements GatewayLink {
    * snapshot is the history.
    */
   private async history(sessionId: string): Promise<Obj> {
-    await this.resume(this.require().storedId || sessionId);
-    return { messages: this.rows ?? [] };
+    // The held session's durable id when this link has one, else the caller's: a read of a
+    // session this connection has not opened yet (the adapter's readTranscript).
+    await this.resume(this.session?.storedId || sessionId);
+    return { messages: this.rows ?? [], info: this.info };
   }
   /** Take a canonical snapshot as the stdio create/resume answer, keeping its fences. */
   private adopt(snapshot: Obj): Obj {
@@ -225,10 +229,11 @@ export class CanonicalChatLink implements GatewayLink {
       void this.socket.request("session.detach", { session_id: previous.sessionId, subscription_id: previous.subscriptionId, end_reason: "superseded" }).catch(() => undefined);
     }
     const info: Obj = isObj(snapshot.info) ? snapshot.info : {};
+    this.info = { ...info, running: snapshot.running === true };
     return {
       session_id: sessionId,
       stored_session_id: str(snapshot.stored_session_id) || sessionId,
-      info: { ...info, running: snapshot.running === true },
+      info: this.info,
       ...(isObj(snapshot.todo_state) ? { todo_state: snapshot.todo_state } : {}),
     };
   }

@@ -37,9 +37,9 @@ const approvals = [];
 const state = () => {
   try {
     const raw = JSON.parse(readFileSync(stateFile, "utf8"));
-    return { rows: Array.isArray(raw?.rows) ? raw.rows : [], spawns: Array.isArray(raw?.spawns) ? raw.spawns : [] };
+    return { rows: Array.isArray(raw?.rows) ? raw.rows : [], spawns: Array.isArray(raw?.spawns) ? raw.spawns : [], cwd: typeof raw?.cwd === "string" ? raw.cwd : "" };
   } catch {
-    return { rows: [], spawns: [] };
+    return { rows: [], spawns: [], cwd: "" };
   }
 };
 // Written whole and renamed into place: a test (or another fake) reading it meanwhile sees the old state or the new, never an empty file.
@@ -182,11 +182,13 @@ rl.on("line", (line) => {
     case "session.create":
       runtimeId = "4242";
       title = params.title ?? title;
+      // The row keeps the session's folder, as the store does: a later connection resumes it.
+      persist({ cwd: params.cwd ?? process.cwd() });
       return ok(id, { session_id: runtimeId, stored_session_id: storedId, message_count: 0, messages: [], info: { model, provider: "fake", reasoning_effort: effort, title, cwd: params.cwd ?? process.cwd(), stored_session_id: storedId, running: false, lazy: true } });
     case "session.resume":
       runtimeId = "4242";
       if (params.session_id !== storedId && params.session_id !== title) return fail(id, 4006, "session not found");
-      return ok(id, { session_id: runtimeId, stored_session_id: storedId, message_count: messages.length, messages, status: "idle", running: false, info: { model, provider: "fake", reasoning_effort: effort, title, cwd: process.cwd(), stored_session_id: storedId, running: false } });
+      return ok(id, { session_id: runtimeId, stored_session_id: storedId, message_count: messages.length, messages, status: "idle", running: false, info: { model, provider: "fake", reasoning_effort: effort, title, cwd: state().cwd || process.cwd(), stored_session_id: storedId, running: false } });
     case "session.history":
       return ok(id, { count: messages.length, messages });
     case "session.title":

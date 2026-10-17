@@ -1348,6 +1348,29 @@ export class HermesAdapter implements HarnessAdapter {
       .map(toSummary);
   }
 
+  /**
+   * A session's rows, for a chat that opens before its gateway does (the manager's deferred
+   * resume: the transcript shows at once and the harness starts behind it). The gateway resolves
+   * a session by id alone, so the folder is checked here — a session that belongs to another
+   * project is not this workspace's to open, and null sends the manager to its session-list guard,
+   * which says exactly that. A session with nothing in it yet answers with no rows, which is what
+   * makes a chat opened and left unused reopenable.
+   */
+  async readTranscript(req: { cwd: string; nativeId: string }): Promise<{ items: ChatItem[]; title: string | null } | null> {
+    if (this.options.command) return null;
+    const home = await this.resolveAgentDir();
+    const link = await this.attach(home, (endpoint, ticket) => CanonicalChatLink.open(endpoint, ticket, () => undefined, () => undefined));
+    if (!link) return null;
+    try {
+      const result = await link.request<Obj>("session.history", { session_id: req.nativeId });
+      const info = isObj(result?.info) ? result.info : {};
+      const folder = str(info.cwd);
+      if (folder && path.resolve(folder) !== path.resolve(req.cwd)) return null;
+      return { items: transcriptItems(Array.isArray(result?.messages) ? result.messages : []), title: str(info.title) || null };
+    } finally {
+      await link.kill().catch(() => undefined);
+    }
+  }
   async listRecentSessions(limit: number): Promise<RecentNativeSession[]> {
     const rows = await this.rows(homedir());
     return rows
