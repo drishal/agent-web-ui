@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
-import { HermesAdapter, hermesModelKey, liveHermesChildren } from "../../src/server/harness/hermes.js";
+import { HermesAdapter, hermesModelKey, liveHermesLinks } from "../../src/server/harness/hermes.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(async () => {
   for (const chat of open.splice(0)) await chat.dispose();
   await adapter.shutdown();
-  expect(liveHermesChildren()).toBe(0);
+  expect(liveHermesLinks()).toBe(0);
 });
 
 async function openChat(resumeNativeId?: string) {
@@ -284,6 +284,21 @@ describe("hermes adapter (scripted gateway)", () => {
     await chat.send("/review the tests", "normal");
     await until(() => chat.snapshot().items.some((i) => i.kind === "assistant" && i.text.includes("Review: the tests")));
     await until(() => chat.status === "idle");
+  });
+});
+
+describe("a gateway that refuses to start", () => {
+  it("tells the chat why, from stderr, instead of the bare exit code", async () => {
+    // What the real entry point does when another gateway owns the home
+    // (tui_gateway/entry.py's _claim_launch_home): one line on stderr, exit 1.
+    process.env.FAKE_HERMES_REFUSE = "/home/u/.hermes";
+    try {
+      await expect(adapter.openChat({ cwd: project })).rejects.toThrow(
+        "hermes exited (code 1): [gateway-exit] refused: /home/u/.hermes is owned by a running gateway; attach to it instead",
+      );
+    } finally {
+      delete process.env.FAKE_HERMES_REFUSE;
+    }
   });
 });
 

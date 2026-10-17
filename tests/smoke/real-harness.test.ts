@@ -12,7 +12,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
 import { ClaudeAdapter, liveClaudeChildren } from "../../src/server/harness/claude.js";
-import { HermesAdapter, liveHermesChildren } from "../../src/server/harness/hermes.js";
+import { HermesAdapter, liveHermesLinks } from "../../src/server/harness/hermes.js";
 import { liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import { PiAdapter } from "../../src/server/harness/pi.js";
 import type { HarnessAdapter } from "../../src/server/harness/types.js";
@@ -67,7 +67,7 @@ for (const [name, make, model] of harnesses) {
       await chat.dispose("smoke done");
       await adapter.shutdown();
       expect(liveOmpChildren()).toBe(0);
-      expect(liveHermesChildren()).toBe(0);
+      expect(liveHermesLinks()).toBe(0);
       expect(liveClaudeChildren()).toBe(0);
     }, 60_000);
 

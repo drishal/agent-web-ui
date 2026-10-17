@@ -1113,7 +1113,7 @@ export function App() {
   const newChatDisabled = !currentHarness
     ? "No harness is available."
     : !currentHarness.available
-      ? `${currentHarness.displayName} is not installed.`
+      ? (currentHarness.reason ?? `${currentHarness.displayName} is not installed.`)
       : !workspace
         ? "Choose a project folder first."
         : opening
