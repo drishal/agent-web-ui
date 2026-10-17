@@ -8,6 +8,7 @@
 //   "big"   oversized tool output          "edit"  edit a file (src/app.ts)
 //   "vanish"  the turn stops on a fallback model with no message.complete
 //   "wait"  a provider-wait line on the status line (thinking.delta)
+//   "echoed"  the "💭 **Reasoning:**" block Hermes prepends when show_reasoning is on
 // Every turn starts with the gateway's spinner frame on the status line, as the real one does.
 // Session rows for projects.tree/list come from FAKE_HERMES_STATE (JSON file).
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -133,7 +134,11 @@ async function runPrompt(text) {
   }
   turns += 1;
   const failed = /\bfail\b/.test(text);
-  event("message.complete", { text: body, status: aborted ? "interrupted" : failed ? "error" : "complete", ...(failed ? { error: "fake failure" } : {}), reasoning: "hmm ", usage: emitUsage() }, sessionId);
+  // As the real gateway delivers a turn on a surface with show_reasoning on: the thought is
+  // prepended to the text (gateway/run_turn_persistence.py's _hmwa_prepend_reasoning) and the
+  // payload carries its own copy too. Stored rows stay clean.
+  const delivered = /\bechoed\b/.test(text) ? `💭 **Reasoning:**\n\`\`\`\n${body}, thought about\n\`\`\`\n\n${body}` : body;
+  event("message.complete", { text: delivered, status: aborted ? "interrupted" : failed ? "error" : "complete", ...(failed ? { error: "fake failure" } : {}), reasoning: "hmm ", usage: emitUsage() }, sessionId);
   event("session.info", { model, provider, reasoning_effort: effort, running: false, title, stored_session_id: storedId, usage: emitUsage() });
   const now = Date.now() / 1000;
   messages.push({ role: "user", text, timestamp: now, row_id: ++rowIds });

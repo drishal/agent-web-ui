@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
-import { HermesAdapter, hermesModelKey, liveHermesLinks } from "../../src/server/harness/hermes.js";
+import { HermesAdapter, hermesModelKey, liveHermesLinks, splitReasoningBlock } from "../../src/server/harness/hermes.js";
 import type { LiveChat } from "../../src/server/harness/types.js";
 import type { WorkspaceInfo } from "../../src/shared/protocol.js";
 import { tempDir } from "../helpers/app.js";
@@ -332,5 +332,34 @@ describe("gateway runtime", () => {
         else process.env[key] = value;
       }
     }
+  });
+});
+
+describe("the reasoning block Hermes writes into the answer", () => {
+  it("comes off the text, in each style a surface can ask for", () => {
+    // display.reasoning_style "code" (the default): the label, a fence, then the answer.
+    expect(splitReasoningBlock("💭 **Reasoning:**\n```\nhmm, thought about it\n```\n\nhermes says hi")).toEqual({ text: "hermes says hi", thinking: "hmm, thought about it" });
+    // "blockquote": the label and the thought quoted line by line.
+    expect(splitReasoningBlock("> 💭 **Reasoning:**\n> one\n> two\n\nanswer")).toEqual({ text: "answer", thinking: "one\ntwo" });
+    // "subtext" (Discord): the label and the thought as "-" lines.
+    expect(splitReasoningBlock("-# 💭 Reasoning\n-# one\n-# two\n\nanswer")).toEqual({ text: "answer", thinking: "one\ntwo" });
+    // The gateway's own copy of the thought wins when it sends one (it is the fuller text).
+    expect(splitReasoningBlock("💭 **Reasoning:**\n```\nshort\n```\n\nanswer", "the whole thought")).toEqual({ text: "answer", thinking: "the whole thought" });
+  });
+
+  it("leaves an answer that only looks like one alone", () => {
+    const text = "💭 **Reasoning:** is how Hermes labels a thought, but this is prose.";
+    expect(splitReasoningBlock(text)).toEqual({ text, thinking: "" });
+    expect(splitReasoningBlock("plain answer", "  ")).toEqual({ text: "plain answer", thinking: "" });
+  });
+
+  it("keeps the answer clean and the thought on the item, as omp's arrives", async () => {
+    const { chat } = await openChat();
+    await chat.send("echoed greeting", "normal");
+    await until(() => chat.status === "idle");
+    const assistant = chat.snapshot().items.find((i) => i.kind === "assistant");
+    // The prepended block is gone from the answer, and the reasoning is the item's own.
+    expect(assistant).toMatchObject({ text: "hermes says echoed greeting", thinking: "hmm " });
+    expect(assistant && assistant.kind === "assistant" && assistant.text).not.toContain("Reasoning:");
   });
 });
