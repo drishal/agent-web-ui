@@ -67,6 +67,34 @@ const ENDPOINT_TTL_MS = 15_000;
 /** Hermes's effort ladder (agent/reasoning_effort.py); the route clamps to what it accepts. */
 const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+
+/**
+ * A turn's reasoning, when Hermes put it in the answer itself: a surface whose `show_reasoning` is
+ * on gets the thought prepended to the final text (`gateway/run_turn_persistence.py::
+ * _hmwa_prepend_reasoning`) — `💭 **Reasoning:**` with a fenced block by default, a blockquote, or
+ * Discord's `-# ` subtext. awui shows reasoning where omp's goes, on the item's own `thinking`, so
+ * the block comes off the answer here; the payload's own (fuller) `reasoning` wins when the gateway
+ * names one. Anything that is not one of those shapes is left alone.
+ */
+export function splitReasoningBlock(text: string, reasoning = ""): { text: string; thinking: string } {
+  const shapes: [RegExp, (body: string) => string][] = [
+    // display.reasoning_style "code": the thought in a fence, a blank line, then the answer.
+    [/^💭 \*\*Reasoning:\*\*\n```[^\n]*\n([\s\S]*?)\n```\n*/, (body) => body],
+    // "blockquote": the label and the thought quoted line by line.
+    [/^> 💭 \*\*Reasoning:\*\*\n((?:>.*\n)+)/, (body) => body.replace(/^> ?/gm, "").trimEnd()],
+    // "subtext" (Discord): the label and the thought as "-" lines.
+    [/^-# 💭 Reasoning\n((?:-#.*\n)+)/, (body) => body.replace(/^-# ?/gm, "").trimEnd()],
+  ];
+  // The payload's own copy is kept verbatim; only the block taken out of the text is trimmed.
+  const named = reasoning.trim() ? reasoning : "";
+  for (const [shape, unquote] of shapes) {
+    const match = shape.exec(text);
+    if (!match) continue;
+    const block = unquote(match[1] ?? "").trim();
+    return { text: text.slice(match[0].length).replace(/^\n+/, ""), thinking: named || block };
+  }
+  return { text, thinking: named };
+}
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -576,7 +604,8 @@ class HermesLiveChat implements LiveChat {
         this.statusLine(str(p.text));
         break;
       case "message.interim": {
-        const text = str(p.text);
+        // An interim carries the same display text, reasoning block and all.
+        const text = splitReasoningBlock(str(p.text)).text;
         if (text && p.already_streamed !== true) this.emit({ type: "assistant_delta", field: "text", delta: text });
         break;
       }
@@ -586,10 +615,13 @@ class HermesLiveChat implements LiveChat {
         const error = status === "error" ? str(p.error) || str(p.failure_reason) || "The run failed" : undefined;
         const step = usageOf(p.usage);
         if (step) this.accumulateUsage(step);
+        // The gateway may have written the thought into the text itself (see splitReasoningBlock):
+        // it belongs on the item's thinking, where this UI renders it as its own row.
+        const answer = splitReasoningBlock(str(p.text), str(p.reasoning));
         this.emit({
           type: "assistant_end",
-          text: str(p.text),
-          thinking: str(p.reasoning),
+          text: answer.text,
+          thinking: answer.thinking,
           ...(error ? { error } : {}),
           ...(step ? { usage: step } : {}),
         });
