@@ -1,6 +1,7 @@
 // Shared machinery for driving a harness child's stdio: graceful termination
-// that cannot hang, and the pending-request bookkeeping behind each adapter's
-// JSON-RPC dialect (omp rpc-ui, omp acp, the hermes gateway).
+// that cannot hang, the child's stderr kept for why it died, and the
+// pending-request bookkeeping behind each adapter's JSON-RPC dialect
+// (omp rpc-ui, omp acp, the hermes gateway).
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { Obj } from "./agent-events.js";
 
@@ -55,7 +56,43 @@ export function terminateChild(child: ChildProcessWithoutNullStreams, timeoutMs 
   return promise;
 }
 
-/** How one adapter frames requests and recognizes their responses. */
+/**
+ * Why a child died, as one line for a banner: the last few non-empty stderr
+ * lines, ANSI escapes (a harness's spinner) taken out, bounded. Harnesses print
+ * their refusals and tracebacks to stderr and leave stdout at the protocol, so
+ * this is the only place the reason appears at all — the commonest one being a
+ * Python entry point that exits 1 with nothing on stdout.
+ */
+export function stderrReason(text: string, lines = 3, width = 400): string | null {
+  const tail = text
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .slice(-lines)
+    .join(" ");
+  return tail ? tail.slice(0, width) : null;
+}
+
+/**
+ * One child's stderr, kept to its tail. Bounded because a chatty harness would
+ * otherwise grow it for as long as the chat lives, and read through `reason()`
+ * when the child exits (or never becomes ready).
+ */
+export class StderrTail {
+  private text = "";
+  constructor(child: ChildProcessWithoutNullStreams, private readonly limit = 8_000) {
+    child.stderr.on("data", (chunk: Buffer) => {
+      this.text = (this.text + chunk.toString("utf8")).slice(-limit);
+    });
+  }
+  /** What to append to a failure message, or null when it said nothing. */
+  reason(): string | null {
+    return stderrReason(this.text);
+  }
+}
+
+/** How one adapter frames requests and recognizes its responses. */
 export interface FrameCodec<Id extends string | number> {
   /** A fresh id for the next request (string or number, as the dialect uses). */
   formatId(n: number): Id;

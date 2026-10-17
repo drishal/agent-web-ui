@@ -31,7 +31,7 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
-import { PendingRequests, terminateChild } from "./child-process.js";
+import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
 import { branchMessages, fileMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { ompLimits } from "./limits.js";
 import { rewindExtension, rewindExtensionArgs, rewindWithExtension } from "./rewind-extension.js";
@@ -156,12 +156,13 @@ export function liveOmpChildren(): number {
 /** JSON-lines RPC over a child's stdio, used for both rpc-ui and acp. */
 class LineProcess {
   readonly child: ChildProcessWithoutNullStreams;
-  private stderrTail = "";
+  private readonly stderr: StderrTail;
   exited = false;
   private exitListeners = new Set<(message: string) => void>();
 
   constructor(command: string, args: string[], env: NodeJS.ProcessEnv, cwd: string, onLine: (frame: Obj) => void) {
     this.child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    this.stderr = new StderrTail(this.child);
     track(this.child);
     const rl = readline.createInterface({ input: this.child.stdout, crlfDelay: Infinity });
     rl.on("line", (line) => {
@@ -174,15 +175,12 @@ class LineProcess {
       }
       if (isObj(frame)) onLine(frame);
     });
-    this.child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-2000);
-    });
     this.child.stdin.on("error", () => undefined);
     const onExit = (detail: string) => {
       if (this.exited) return;
       this.exited = true;
-      const last = this.stderrTail.trim().split("\n").pop()?.slice(0, 300);
-      for (const l of this.exitListeners) l(last ? `${detail}: ${last}` : detail);
+      const reason = this.stderr.reason();
+      for (const l of this.exitListeners) l(reason ? `${detail}: ${reason}` : detail);
     };
     this.child.once("error", (error) => onExit(`could not start omp (${error.message})`));
     this.child.once("exit", (code, signal) => onExit(`omp exited (${signal ?? `code ${code}`})`));

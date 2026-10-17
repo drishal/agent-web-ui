@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import readline from "node:readline";
 import { isObj, type Obj } from "./agent-events.js";
-import { terminateChild } from "./child-process.js";
+import { StderrTail, terminateChild } from "./child-process.js";
 
 /** How long `opencode serve` may take to listen (its plugins load after). */
 const START_TIMEOUT_MS = 30_000;
@@ -79,7 +79,8 @@ export class OpenCodeServer {
   /** Told when the server stops under open chats (their runs are gone with it). */
   private exitListeners = new Set<(message: string) => void>();
   private idleTimer: NodeJS.Timeout | null = null;
-  private stderrTail = "";
+  /** The running server's stderr; one server serves every chat, so it is kept for the server's lifetime. */
+  private stderr: StderrTail | null = null;
 
   constructor(
     private readonly command: string,
@@ -112,12 +113,11 @@ export class OpenCodeServer {
         for (const c of servers) c.kill("SIGKILL");
       });
     }
-    child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-4000);
-    });
+    const stderr = new StderrTail(child);
+    this.stderr = stderr;
     const url = await new Promise<string>((resolve, reject) => {
       const lines = readline.createInterface({ input: child.stdout });
-      const timer = setTimeout(() => fail(new Error("opencode serve did not start listening")), START_TIMEOUT_MS);
+      const timer = setTimeout(() => fail(new Error(`opencode serve did not start listening${this.tail(stderr)}`)), START_TIMEOUT_MS);
       const fail = (error: Error) => {
         clearTimeout(timer);
         lines.close();
@@ -134,7 +134,7 @@ export class OpenCodeServer {
         resolve(found);
       });
       child.once("error", (error) => fail(new Error(`opencode could not start: ${error.message}`)));
-      child.once("exit", (code, signal) => fail(new Error(`opencode serve exited (${signal ?? code})${this.tail()}`)));
+      child.once("exit", (code, signal) => fail(new Error(`opencode serve exited (${signal ?? code})${this.tail(stderr)}`)));
     });
     const running: Running = { child, url, auth: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`, events: new AbortController() };
     this.running = running;
@@ -149,9 +149,9 @@ export class OpenCodeServer {
     return running;
   }
 
-  private tail(): string {
-    const last = this.stderrTail.trim().split("\n").slice(-3).join(" ").slice(0, 400);
-    return last ? `: ${last}` : "";
+  private tail(stderr = this.stderr): string {
+    const reason = stderr?.reason();
+    return reason ? `: ${reason}` : "";
   }
 
   /** The event stream, read until the server goes; a dropped stream is opened again. */
