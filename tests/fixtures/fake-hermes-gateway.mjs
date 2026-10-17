@@ -10,7 +10,7 @@
 // FAKE_HERMES_STATE is passed to the child, as the stdio fake reads it.)
 import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { unlinkSync } from "node:fs";
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import net from "node:net";
 import path from "node:path";
@@ -22,6 +22,22 @@ if (!home) throw new Error("usage: fake-hermes-gateway.mjs <home>");
 const instanceId = process.env.FAKE_HERMES_INSTANCE ?? "fake-instance";
 const tickets = new Map();
 const controlPath = path.join(home, "gateway.sock");
+
+/** What the client sent over the canonical wire, kept in FAKE_HERMES_STATE (`canonical`) for assertions. */
+const record = (name, params) => {
+  const stateFile = process.env.FAKE_HERMES_STATE;
+  if (!stateFile) return;
+  let current = {};
+  try {
+    current = JSON.parse(readFileSync(stateFile, "utf8"));
+  } catch {
+    // No state yet.
+  }
+  const canonical = Array.isArray(current.canonical) ? current.canonical : [];
+  const temp = `${stateFile}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify({ ...current, canonical: [...canonical, { name, params }] }));
+  renameSync(temp, stateFile);
+};
 
 // ── WebSocket, server side (RFC 6455), text frames only ──────────────────────
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -108,7 +124,11 @@ server.on("upgrade", (req, socket) => {
     ].join("\r\n"),
   );
 
-  // The session RPC behind this connection: the stdio fake, bridged both ways.
+  // The session RPC behind this connection: the stdio fake, with the canonical
+  // session wire translated onto its stdio dialect both ways — the inverse of
+  // src/server/harness/hermes-canonical.ts, in the shapes gateway/session_contract.py
+  // declares. What the client sends is recorded in FAKE_HERMES_STATE under
+  // `canonical`, so a test can assert exactly what went over the wire.
   const child = spawn(process.execPath, [path.join(import.meta.dirname, "fake-hermes.mjs")], { env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"] });
   const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
   let open = true;
@@ -123,8 +143,149 @@ server.on("upgrade", (req, socket) => {
       // Already gone.
     }
   };
+  const send = (obj) => {
+    if (open) socket.write(frame(JSON.stringify(obj)));
+  };
+  const calls = new Map(); // child request id -> { clientId, wrap }
+  const prompts = new Map(); // canonical prompt_id -> { legacyId, kind, qid, need, answers }
+  const session = { sessionId: "", revision: 0, generation: 0, next: 0 };
+  const callChild = (clientId, method, params, wrap = (result) => result) => {
+    const childId = `c${++session.next}`;
+    calls.set(childId, { clientId, wrap });
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: childId, method, params })}\n`);
+  };
+  const mutateResult = (params, result) => {
+    session.revision += 1;
+    return { session_id: params.session_id, operation: params.operation, revision: session.revision, execution_generation: session.generation, ...(result ?? {}) };
+  };
+  const snapshot = (legacy) => {
+    session.sessionId = legacy.session_id ?? session.sessionId;
+    session.revision += 1;
+    return {
+      session_id: session.sessionId,
+      stored_session_id: legacy.stored_session_id ?? session.sessionId,
+      messages: legacy.messages ?? [],
+      message_count: legacy.message_count ?? (legacy.messages ?? []).length,
+      running: legacy.running === true || legacy.info?.running === true,
+      authority_epoch: 1,
+      replay_epoch: "fake-epoch",
+      last_sequence: 0,
+      subscription_id: `sub-${session.next}`,
+      revision: session.revision,
+      execution_generation: session.generation,
+      pending: [],
+      prompts: [],
+      info: { desktop_protocol: "hermes-gateway-v1", ...(legacy.info ?? {}) },
+    };
+  };
+  const admission = (params) => {
+    session.generation += 1;
+    return { admission_id: params.input_id ?? `adm-${session.generation}`, ref: { profile_id: home, session_id: session.sessionId }, sequence: session.generation, status: "queued", outcome: null, authority_epoch: 1, execution_generation: session.generation };
+  };
+  const handleResult = () => ({ ref: { profile_id: home, session_id: session.sessionId }, instance_id: instanceId, authority_epoch: 1, revision: session.revision, execution_generation: session.generation, execution_state: "idle" });
+
+  const handle = (msg) => {
+    const { id, method, params = {} } = msg;
+    record(method, params);
+    switch (method) {
+      case "runtime.describe":
+        return send({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            instance_id: instanceId,
+            profile_id: home,
+            authority_epoch: 1,
+            capabilities: ["session-authority-v1", "event-replay-v1"],
+            session_create: { sources: ["cli", "tui", "gui"], parameters: ["request_id", "source", "cwd", "title", "model", "provider", "reasoning", "toolsets", "skills", "max_turns", "client_env"] },
+          },
+        });
+      case "session.create":
+        return callChild(id, "session.create", { cwd: params.cwd, title: params.title }, snapshot);
+      case "session.resume":
+        return callChild(id, "session.resume", { session_id: params.session_id, source: params.source }, snapshot);
+      case "prompt.submit":
+        return callChild(id, "prompt.submit", { session_id: params.session_id, text: params.text }, () => admission(params));
+      case "session.interrupt":
+        return callChild(id, "session.interrupt", { session_id: params.session_id }, handleResult);
+      case "session.detach":
+        return send({ jsonrpc: "2.0", id, result: { session_id: params.session_id, subscription_id: params.subscription_id, detached: true } });
+      case "approval.respond": {
+        const prompt = prompts.get(params.prompt_id);
+        if (prompt) settle(prompt, { choice: params.choice });
+        return send({ jsonrpc: "2.0", id, result: { status: "resolved", prompt_id: params.prompt_id } });
+      }
+      case "clarify.respond": {
+        const prompt = prompts.get(params.prompt_id);
+        if (prompt) settle(prompt, { [prompt.qid]: params.answer });
+        return send({ jsonrpc: "2.0", id, result: { status: "resolved", prompt_id: params.prompt_id } });
+      }
+      case "session.mutate": {
+        const payload = params.payload ?? {};
+        const wrapped = (result) => mutateResult(params, result);
+        if (params.operation === "rename") return callChild(id, "session.title", { session_id: params.session_id, title: payload.title }, wrapped);
+        if (params.operation === "model") {
+          const value = payload.provider ? `${payload.model} --provider ${payload.provider}` : payload.model;
+          return callChild(id, "config.set", { session_id: params.session_id, key: "model", value }, wrapped);
+        }
+        if (params.operation === "reasoning") return callChild(id, "config.set", { session_id: params.session_id, key: "reasoning", value: payload.effort }, wrapped);
+        if (params.operation === "compress") return callChild(id, "session.compress", { session_id: params.session_id, ...(payload.focus ? { focus_topic: payload.focus } : {}) }, wrapped);
+        // rewind is a receipt here; the child cuts its transcript through its own
+        // truncate path, which the stdio adapter tests already cover.
+        return send({ jsonrpc: "2.0", id, result: mutateResult(params, {}) });
+      }
+      default:
+        return callChild(id, method, params);
+    }
+  };
+
+  const settle = (prompt, answer) => {
+    if (prompt.kind === "approval") {
+      prompts.delete([...prompts].find(([key, value]) => value === prompt)?.[0] ?? "");
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: prompt.legacyId, result: answer })}\n`);
+      return;
+    }
+    Object.assign(prompt.answers, answer);
+    if (Object.keys(prompt.answers).length < prompt.need) return;
+    for (const [key, value] of prompts) if (value === prompt) prompts.delete(key);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: prompt.legacyId, result: { answers: prompt.answers } })}\n`);
+  };
+
+  // The scripts' server→client requests become the canonical wire's prompt events.
+  const promptEvent = (msg) => {
+    const params = msg.params ?? {};
+    session.generation += 1;
+    if (msg.method === "approval") {
+      const promptId = `p-${++session.next}`;
+      prompts.set(promptId, { legacyId: msg.id, kind: "approval" });
+      send({ jsonrpc: "2.0", method: "event", params: { type: "approval.request", session_id: session.sessionId, payload: { prompt_id: promptId, execution_generation: session.generation, choices: params.choices, command: params.command, description: params.description, tool_name: params.tool_name } } });
+      return;
+    }
+    const questions = Array.isArray(params.questions) ? params.questions : [];
+    for (const question of questions) {
+      const qid = String(question.qid ?? "q");
+      const promptId = `p-${++session.next}:${qid}`;
+      prompts.set(promptId, { legacyId: msg.id, kind: "clarify", qid, need: questions.length, answers: {} });
+      send({ jsonrpc: "2.0", method: "event", params: { type: "clarify.request", session_id: session.sessionId, payload: { prompt_id: promptId, execution_generation: session.generation, question: question.question, choices: question.choices, multi_select: question.multi_select } } });
+    }
+  };
+
   lines.on("line", (line) => {
-    if (open && line.trim()) socket.write(frame(line));
+    if (!open || !line.trim()) return;
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (msg.method && msg.id !== undefined && (msg.method === "approval" || msg.method === "clarify")) return promptEvent(msg);
+    const pending = msg.id !== undefined ? calls.get(String(msg.id)) : undefined;
+    if (pending) {
+      calls.delete(String(msg.id));
+      send(msg.error ? { jsonrpc: "2.0", id: pending.clientId, error: msg.error } : { jsonrpc: "2.0", id: pending.clientId, result: pending.wrap(msg.result ?? {}) });
+      return;
+    }
+    send(msg);
   });
   child.once("exit", () => {
     if (!open) return;
@@ -135,9 +296,13 @@ server.on("upgrade", (req, socket) => {
       // Already gone.
     }
   });
-  socket.on("data", readFrames((text) => child.stdin.write(`${text}\n`), close));
-  socket.on("close", close);
-  socket.on("error", close);
+  socket.on("data", readFrames((text) => {
+    try {
+      handle(JSON.parse(text));
+    } catch {
+      // Not a frame we understand; the real owner would answer invalid_params.
+    }
+  }, close));
 });
 
 // ── The control socket: identify, session-ticket ─────────────────────────────
