@@ -27,7 +27,17 @@ import {
   type TodoItem,
 } from "../../shared/protocol.js";
 import { commandOutputEvents, historyToItems, isObj, type Obj } from "./agent-events.js";
-import { PendingRequests, terminateChild } from "./child-process.js";
+import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
+import {
+  GatewaySocket,
+  HermesRpcError,
+  gatewayEndpoint,
+  gatewayTicket,
+  hermesCodec,
+  type GatewayEndpoint,
+  type GatewayFrame,
+  type GatewayLink,
+} from "./hermes-gateway.js";
 import { versionLabel } from "./version.js";
 import { EventHub } from "./event-hub.js";
 import type {
@@ -46,10 +56,17 @@ import type {
 const run = promisify(execFile);
 const READY_TIMEOUT_MS = 30_000;
 const PROBE_TTL_MS = 60_000;
+/** How long a discovered gateway endpoint is trusted: its port and instance change only on a restart. */
+const ENDPOINT_TTL_MS = 15_000;
 /** Hermes's effort ladder (agent/reasoning_effort.py); the route clamps to what it accepts. */
 const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** Why a chat cannot run on a gateway that is already serving the home (see openChatLink). */
+function gatewayServesChats(pid: number | null): string {
+  return `a Hermes gateway${pid === null ? "" : ` (pid ${pid})`} serves this home over its newer session protocol: awui reads its sessions and models from there, but a chat needs that gateway stopped`;
+}
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** Epoch seconds (gateway) to epoch ms. */
@@ -108,6 +125,56 @@ export function scriptPython(text: string): string | null {
   return null;
 }
 
+/** A `gateway.pid` record's identifying fields, as far as this server needs them. */
+export function gatewayRecord(text: string): { pid: number; startTime: number | null } | null {
+  try {
+    const record = JSON.parse(text) as Obj;
+    const pid = num(record.pid);
+    if (pid === null || pid <= 0) return null;
+    return { pid, startTime: num(record.start_time) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A process's start-time fingerprint (field 22 of `/proc/<pid>/stat`, in clock
+ * ticks since boot), or null where there is no `/proc`. Hermes records the same
+ * number in `gateway.pid`, so the pair survives pid reuse.
+ */
+export async function processStartTime(pid: number): Promise<number | null> {
+  const stat = await fs.readFile(`/proc/${pid}/stat`, "utf8").catch(() => null);
+  if (stat === null) return null;
+  // The comm field is parenthesized and may hold spaces, so the fields count from after it: field 3 (state) is index 0, field 22 (starttime) is index 19.
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  const started = Number(fields[19]);
+  return Number.isInteger(started) ? started : null;
+}
+
+/**
+ * The pid of the gateway that owns `home`, when one is running. Hermes's own
+ * `hermes gateway` (the dotfiles' systemd service, the desktop app, a TUI)
+ * holds the home's `gateway.lock` for as long as it lives, and the stdio
+ * session server awui starts refuses to run beside it — so this is what lets
+ * discovery say why a Hermes chat will not start, instead of leaving "exited
+ * (code 1)" to speak for itself.
+ */
+export async function gatewayOwner(home: string): Promise<number | null> {
+  const text = await fs.readFile(path.join(home, "gateway.pid"), "utf8").catch(() => null);
+  const record = text === null ? null : gatewayRecord(text);
+  if (!record) return null;
+  try {
+    process.kill(record.pid, 0);
+  } catch (error) {
+    // EPERM is a live process this user does not own; anything else means the pid is gone.
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") return null;
+  }
+  const started = await processStartTime(record.pid);
+  // A recycled pid is not the gateway: the recorded start time must still match, where both are known.
+  if (record.startTime !== null && started !== null && record.startTime !== started) return null;
+  return record.pid;
+}
+
 async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
   const fallback: GatewayRuntime = { python: process.platform === "win32" ? "python" : "python3", env: { ...process.env }, source: "PATH" };
   try {
@@ -135,59 +202,29 @@ async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
   }
 }
 
-/** Every gateway child this process spawned; killed on shutdown and dropped on exit. */
-const liveChildren = new Set<HermesRpc>();
-function track(child: HermesRpc): HermesRpc {
-  liveChildren.add(child);
-  child.onExit(() => liveChildren.delete(child));
-  return child;
+/** Every gateway connection this process holds — a child of ours or an attachment — closed on shutdown. */
+const liveLinks = new Set<GatewayLink>();
+function track<L extends GatewayLink>(link: L): L {
+  liveLinks.add(link);
+  link.onExit(() => liveLinks.delete(link));
+  return link;
 }
-/** Test seam: how many gateway children are alive. */
-export function liveHermesChildren(): number {
-  return liveChildren.size;
-}
-
-/** One gateway frame; a type alias so it also satisfies `Record<string, unknown>`. */
-type Frame = {
-  jsonrpc?: string;
-  id?: string | number;
-  method?: string;
-  params?: Obj;
-  result?: unknown;
-  error?: { code?: number; message?: string };
-};
-
-/** A gateway error with its JSON-RPC code (4018: "run this through command.dispatch"). */
-class HermesRpcError extends Error {
-  constructor(
-    message: string,
-    readonly code: number | undefined,
-  ) {
-    super(message);
-  }
+/** Test seam: how many gateway connections are alive. */
+export function liveHermesLinks(): number {
+  return liveLinks.size;
 }
 
 /** JSON-RPC over one child's stdio: requests we send, events and server requests we receive. */
-class HermesRpc {
+class HermesRpc implements GatewayLink {
   readonly child: ChildProcessWithoutNullStreams;
-  private readonly calls = new PendingRequests<string>(
-    {
-      formatId: (n) => String(n),
-      encode: (id, payload) => ({ jsonrpc: "2.0", id, ...payload }),
-      answeredId: (frame) => (frame.id === undefined ? null : String(frame.id)),
-      outcome: (frame) => {
-        const error = frame.error as Frame["error"];
-        return error
-          ? { error: new HermesRpcError(error.message ?? `hermes error ${error.code ?? ""}`.trim(), error.code) }
-          : { value: frame.result };
-      },
-    },
-    (frame) => this.child.stdin.write(`${JSON.stringify(frame)}\n`),
-  );
+  /** A child of our own: the session lives and dies with it. */
+  readonly attached = false;
+  private readonly calls = new PendingRequests<string>(hermesCodec(), (frame) => this.child.stdin.write(`${JSON.stringify(frame)}\n`));
   private readyResolve!: () => void;
   private readyReject!: (error: Error) => void;
   readonly ready: Promise<void>;
   exited = false;
+  private readonly stderr: StderrTail;
   private exitListeners = new Set<(message: string) => void>();
 
   constructor(
@@ -196,22 +233,30 @@ class HermesRpc {
     env: NodeJS.ProcessEnv,
     cwd: string,
     private readonly onEvent: (params: Obj) => void,
-    private readonly onRequest: (frame: Frame) => void,
+    private readonly onRequest: (frame: GatewayFrame) => void,
   ) {
     this.child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    this.stderr = new StderrTail(this.child);
     this.ready = new Promise((resolve, reject) => {
       this.readyResolve = resolve;
       this.readyReject = reject;
     });
-    const readyTimer = setTimeout(() => this.readyReject(new Error("hermes gateway did not become ready")), READY_TIMEOUT_MS);
+    // `detail`, then Hermes's own last words on stderr: it exits 1 with the reason
+    // there (a refusal, a traceback) and nothing but protocol on stdout, so without
+    // this every failed start reads as a bare exit code.
+    const why = (detail: string) => {
+      const reason = this.stderr.reason();
+      return reason ? `${detail}: ${reason}` : detail;
+    };
+    const readyTimer = setTimeout(() => this.readyReject(new Error(why("hermes gateway did not become ready"))), READY_TIMEOUT_MS);
     void this.ready.then(() => clearTimeout(readyTimer), () => clearTimeout(readyTimer));
 
     const lines = readline.createInterface({ input: this.child.stdout, crlfDelay: Infinity });
     lines.on("line", (line) => {
       if (!line.trim()) return;
-      let frame: Frame;
+      let frame: GatewayFrame;
       try {
-        frame = JSON.parse(line) as Frame;
+        frame = JSON.parse(line) as GatewayFrame;
       } catch {
         return;
       }
@@ -227,14 +272,14 @@ class HermesRpc {
       // No pending request matches: a server→client request (approval, clarify, …).
       if (frame.method && frame.id !== undefined) this.onRequest(frame);
     });
-    this.child.stderr.on("data", () => undefined);
     this.child.stdin.on("error", () => undefined);
     const failed = (detail: string) => {
       if (this.exited) return;
       this.exited = true;
-      this.readyReject(new Error(detail));
-      this.calls.failAll(detail);
-      for (const listener of this.exitListeners) listener(detail);
+      const message = why(detail);
+      this.readyReject(new Error(message));
+      this.calls.failAll(message);
+      for (const listener of this.exitListeners) listener(message);
     };
     this.child.once("error", (error) => failed(`could not start hermes (${error.message})`));
     this.child.once("exit", (code, signal) => failed(`hermes exited (${signal ?? `code ${code}`})`));
@@ -372,7 +417,7 @@ type PendingRequest = PendingApproval | PendingClarify;
 class HermesLiveChat implements LiveChat {
   /** Buffered until the first subscriber, so events raised while starting survive. */
   private hub = new EventHub();
-  private rpc: HermesRpc | null = null;
+  private rpc: GatewayLink | null = null;
   private runtimeId: string | null = null;
   private storedId: string | null = null;
   private sessionTitle: string | null = null;
@@ -407,19 +452,20 @@ class HermesLiveChat implements LiveChat {
     this.hub.emit(event);
   }
 
-  private get live(): HermesRpc {
+  private get live(): GatewayLink {
     if (!this.rpc || this.rpc.exited) throw new Error("hermes is not running for this chat");
     return this.rpc;
   }
 
   async start(resumeNativeId: string | null): Promise<void> {
-    const { command, args, env } = await this.adapter.spawnSpec();
-    const rpc = track(new HermesRpc(command, args, env, this.cwd, (params) => this.onEvent(params), (frame) => this.onRequest(frame)));
+    const rpc = await this.adapter.openChatLink(this.cwd, (params) => this.onEvent(params), (frame) => this.onRequest(frame));
     this.rpc = rpc;
     rpc.onExit((message) => {
       if (!this.disposed) this.emit({ type: "fatal", message });
     });
     await rpc.ready;
+    // An attached client must say it can answer approvals and questions, or the gateway
+    // parks them for some later client instead of asking this one.
     await rpc.request("client.capabilities", { server_requests: true });
     const result = resumeNativeId
       ? await rpc.request<Obj>("session.resume", { session_id: resumeNativeId, source: "webui" })
@@ -621,7 +667,7 @@ class HermesLiveChat implements LiveChat {
 
   // ---- server→client requests -------------------------------------------------
 
-  private onRequest(frame: Frame): void {
+  private onRequest(frame: GatewayFrame): void {
     const id = frame.id as string | number;
     const params = isObj(frame.params) ? frame.params : {};
     switch (frame.method) {
@@ -799,7 +845,7 @@ class HermesLiveChat implements LiveChat {
       const done = await this.live.request<Obj>("slash.exec", { session_id: id, command: text });
       return this.commandOutput(text, str(done?.output));
     } catch (error) {
-      if (!(error instanceof HermesRpcError && error.code === 4018)) throw error;
+      if (!(error instanceof HermesRpcError) || error.code !== 4018) throw error;
     }
     const name = text.slice(1).split(/\s+/)[0] ?? "";
     const arg = text.slice(1 + name.length).trim();
@@ -901,7 +947,10 @@ class HermesLiveChat implements LiveChat {
     const rpc = this.rpc;
     this.rpc = null;
     if (!rpc) return;
-    if (this.runtimeId) await rpc.request("session.close", { session_id: this.runtimeId }).catch(() => undefined);
+    // A child of ours holds a session nobody else can see, so it is ended with the chat.
+    // An attached one serves a gateway that keeps the session (another client may hold it
+    // too, and its lifetime is the gateway's business): detaching is all this is.
+    if (!rpc.attached && this.runtimeId) await rpc.request("session.close", { session_id: this.runtimeId }).catch(() => undefined);
     await rpc.kill().catch(() => undefined);
   }
 
@@ -1010,6 +1059,70 @@ export class HermesAdapter implements HarnessAdapter {
     throw new Error("Hermes cannot take a handoff: it can only record turns by running them");
   }
 
+  /** The home's owner, cached for a moment: every chat and probe would otherwise identify afresh. */
+  private endpointCache: { at: number; home: string; endpoint: GatewayEndpoint | null } | null = null;
+
+  private async endpoint(home: string, fresh = false): Promise<GatewayEndpoint | null> {
+    const cached = this.endpointCache;
+    if (!fresh && cached && cached.home === home && Date.now() - cached.at < ENDPOINT_TTL_MS) return cached.endpoint;
+    const endpoint = await gatewayEndpoint(home);
+    this.endpointCache = { at: Date.now(), home, endpoint };
+    return endpoint;
+  }
+
+  /**
+   * The connection a probe uses: an attachment to the gateway that owns the home, else a
+   * gateway child of our own. Probes are reads (`projects.tree`, `model.options`) and a
+   * running owner can serve them, which is also far cheaper than starting a child for each.
+   */
+  async openProbe(cwd: string, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink> {
+    if (!this.options.command) {
+      const home = await this.resolveAgentDir();
+      const link = await this.attach(home, () => undefined, onRequest);
+      if (link) return link;
+    }
+    const { command, args, env } = await this.spawnSpec();
+    return track(new HermesRpc(command, args, env, cwd, () => undefined, onRequest));
+  }
+
+  /**
+   * The connection one chat runs on. A chat speaks the session dialect this build knows,
+   * which is the stdio entry point's; the socket a running gateway offers speaks its newer
+   * canonical one (session/dialect verbs with revisions, receipts and event watermarks),
+   * where even `session.create` and `client.capabilities` differ. So a chat needs a gateway
+   * of its own — and while another one owns the home it cannot have one, which is what this
+   * says instead of letting a doomed child exit with a bare code.
+   */
+  async openChatLink(cwd: string, onEvent: (params: Obj) => void, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink> {
+    if (!this.options.command) {
+      const home = await this.resolveAgentDir();
+      const owner = await gatewayOwner(home);
+      const endpoint = await this.endpoint(home);
+      if (endpoint) throw new Error(gatewayServesChats(owner));
+      if (owner !== null) throw new Error(`a Hermes gateway (pid ${owner}) owns this Hermes home but is not answering on its control socket yet; a chat needs that gateway stopped`);
+    }
+    const { command, args, env } = await this.spawnSpec();
+    return track(new HermesRpc(command, args, env, cwd, onEvent, onRequest));
+  }
+
+  /** Attach to the home's owner, or null when there is none (or it went away mid-handshake). */
+  private async attach(home: string, onEvent: (params: Obj) => void, onRequest: (frame: GatewayFrame) => void): Promise<GatewayLink | null> {
+    // Twice, because an owner can be replaced between its identify answer and the dial
+    // (an update, a restart) and the old endpoint then points at a closed port.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const endpoint = await this.endpoint(home);
+      if (!endpoint) return null;
+      try {
+        const ticket = await gatewayTicket(home, endpoint);
+        return track(await GatewaySocket.open(endpoint, ticket, onEvent, onRequest));
+      } catch (error) {
+        this.endpointCache = null;
+        if (attempt === 1) throw error;
+      }
+    }
+    return null;
+  }
+
   async spawnSpec(): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv }> {
     if (this.options.command) return { command: this.options.command, args: this.options.args ?? [], env: { ...process.env } };
     const runtime = await gatewayRuntime(this.cliCommand);
@@ -1018,6 +1131,31 @@ export class HermesAdapter implements HarnessAdapter {
 
   async discover(): Promise<HarnessDiscovery> {
     const warnings: string[] = [];
+    const overrides = { HERMES_HOME: process.env.HERMES_HOME ? ("set" as const) : ("unset" as const) };
+    const home = await this.resolveAgentDir();
+    // A gateway that owns the home is the authority: chats and session rows both come
+    // from it, and it is what upstream's clients attach to (see hermes-gateway.ts).
+    const endpoint = await this.endpoint(home, true);
+    if (endpoint) {
+      // Attached: its version is the one serving this home, and the CLI on PATH may be older,
+      // newer, or absent. Session rows and models come from the gateway; a *chat* cannot, since
+      // the owner's socket speaks its newer canonical session protocol (see openLink).
+      const label = versionLabel(endpoint.version ?? "unknown");
+      const detail = endpoint.version && endpoint.codeSha ? `${endpoint.version} · gateway ${endpoint.codeSha.slice(0, 8)}` : undefined;
+      warnings.push(gatewayServesChats(await gatewayOwner(home)));
+      return { available: true, ...label, ...(detail ? { versionDetail: detail } : {}), warnings, overrides };
+    }
+    const owner = await gatewayOwner(home);
+    if (owner !== null) {
+      // Someone holds the home but does not answer on its control socket (still starting,
+      // or wedged). A gateway child of ours would be refused, so name what is wrong.
+      return {
+        available: false,
+        reason: `a Hermes gateway (pid ${owner}) owns the Hermes home but is not answering on its control socket yet`,
+        warnings,
+        overrides,
+      };
+    }
     try {
       const { stdout } = await run(this.cliCommand, ["--version"], { timeout: 15_000 });
       const label = versionLabel(stdout.trim().split("\n")[0]?.replace(/^Hermes Agent\s*/i, "") || "unknown");
@@ -1031,7 +1169,7 @@ export class HermesAdapter implements HarnessAdapter {
         const from = runtime.source === "PATH" ? "on PATH (the hermes launcher names no Python)" : runtime.source === "HERMES_PYTHON" ? "from HERMES_PYTHON" : "from the hermes launcher";
         warnings.push(`${runtime.python} ${from} cannot import Hermes's tui_gateway; set HERMES_PYTHON to the Python of the Hermes install`);
       }
-      return { available: true, ...label, warnings, overrides: { HERMES_HOME: process.env.HERMES_HOME ? "set" : "unset" } };
+      return { available: true, ...label, warnings, overrides };
     } catch (error) {
       return {
         available: false,
@@ -1054,16 +1192,18 @@ export class HermesAdapter implements HarnessAdapter {
     return path.join(await this.resolveAgentDir(), "sessions");
   }
 
-  /** A throwaway gateway child: probes never touch a chat's session. */
-  private async withProbe<T>(cwd: string, fn: (rpc: HermesRpc) => Promise<T>): Promise<T> {
-    const { command, args, env } = await this.spawnSpec();
-    const rpc = track(new HermesRpc(command, args, env, cwd, () => undefined, (frame) => rpc.respond(frame.id as string | number, { value: "" })));
+  /** A throwaway connection — attached when the home has an owner — that touches no chat's session. */
+  private async withProbe<T>(cwd: string, fn: (rpc: GatewayLink) => Promise<T>): Promise<T> {
+    let link!: GatewayLink;
+    link = await this.openProbe(cwd, (frame) => {
+      link.respond(frame.id as string | number, { value: "" });
+    });
     try {
-      await rpc.ready;
-      await rpc.request("client.capabilities", { server_requests: true });
-      return await fn(rpc);
+      await link.ready;
+      await link.request("client.capabilities", { server_requests: true });
+      return await fn(link);
     } finally {
-      await rpc.kill().catch(() => undefined);
+      await link.kill().catch(() => undefined);
     }
   }
 
@@ -1180,6 +1320,6 @@ export class HermesAdapter implements HarnessAdapter {
   }
 
   async shutdown(): Promise<void> {
-    await Promise.allSettled([...liveChildren].map((child) => child.kill()));
+    await Promise.allSettled([...liveLinks].map((link) => link.kill()));
   }
 }

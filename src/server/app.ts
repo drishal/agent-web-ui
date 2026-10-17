@@ -402,7 +402,10 @@ export function createApp(deps: AppDeps) {
   };
   const availableAdapter = (id: string) => {
     const adapter = adapterOr404(id);
-    if (!registry.isAvailable(id)) throw new ChatError(422, "harness_unavailable", `${adapter.displayName} is not installed`);
+    const status = registry.status().find((s) => s.id === adapter.id);
+    // A harness can be installed and still unavailable (a Hermes gateway owning its
+    // home, say); discovery's reason is the only thing that says which it is.
+    if (status?.available !== true) throw new ChatError(422, "harness_unavailable", `${adapter.displayName} is unavailable${status?.reason ? `: ${status.reason}` : ""}`);
     return adapter;
   };
 

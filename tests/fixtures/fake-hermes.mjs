@@ -51,6 +51,14 @@ const persist = (patch) => {
 
 persist({ spawns: [...state().spawns, { cwd: process.cwd(), args: process.argv.slice(2) }] });
 
+// FAKE_HERMES_REFUSE: the home it names is owned by a running gateway, so this
+// entry point exits 1 with the refusal on stderr and nothing on stdout — the
+// shape tui_gateway/entry.py's _claim_launch_home has (recorded from it).
+if (process.env.FAKE_HERMES_REFUSE) {
+  process.stderr.write(`[gateway-exit] refused: ${process.env.FAKE_HERMES_REFUSE} is owned by a running gateway; attach to it instead\n`);
+  process.exit(1);
+}
+
 event("gateway.ready", { skin: { name: "fake" }, change_events: true, replay_epoch: "test-epoch" }, "");
 
 function emitUsage() {
