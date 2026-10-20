@@ -59,7 +59,22 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     // holds live and settled, so nothing changes style when a run ends.
     let answerIndex = -1;
     let workAfter = false;
-    for (let i = rest.length - 1; i >= 0; i--) {
+    // A message streaming straight after a reply, with no tool between (the agent
+    // carrying on after a steer or an extension's nudge), may still become the answer:
+    // until it says something, the reply is not, so it stays put instead of jumping.
+    const tail = rest[rest.length - 1];
+    let carryingOn = false;
+    if (live && tail?.kind === "assistant" && tail.streaming && !saysSomething(tail.text)) {
+      for (let i = rest.length - 2; i >= 0; i--) {
+        const item = rest[i] as ChatItem;
+        if (item.kind === "tool" || item.kind === "request") break;
+        if (item.kind === "assistant" && saysSomething(item.text)) {
+          carryingOn = true;
+          break;
+        }
+      }
+    }
+    for (let i = carryingOn ? -1 : rest.length - 1; i >= 0; i--) {
       const item = rest[i] as ChatItem;
       if (item.kind === "tool" || item.kind === "request") workAfter = true;
       else if (item.kind === "assistant" && (saysSomething(item.text) || item.error)) {

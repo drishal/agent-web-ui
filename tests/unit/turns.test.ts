@@ -145,6 +145,21 @@ describe("replies between tool calls", () => {
   });
 });
 
+describe("a message streaming after a reply", () => {
+  it("leaves the reply where it is, from the first token to the settled turn", () => {
+    const reply: ChatItem = { kind: "assistant", id: "a1", text: "Done — 2/3 complete.\n\n- [x] a\n- [x] b\n- [ ] c", thinking: "", streaming: false };
+    const next = (text: string, streaming: boolean): ChatItem => ({ kind: "assistant", id: "a2", text, thinking: "The reminder nags about c.", streaming });
+    const order = (items: ChatItem[], status: "running" | "idle") => {
+      const [turn] = buildTurns([{ kind: "user", id: "u1", text: "todos" }, tool("t1", "command"), reply, ...items], status);
+      return { answer: turn?.answer?.id ?? null, replies: turn ? workSegments(turn).map((s) => s.reply?.id ?? null) : [] };
+    };
+    // Thinking only: the reply is already an interim one, and the thought follows it.
+    expect(order([next("", true)], "running")).toEqual({ answer: null, replies: ["a1", null] });
+    expect(order([next("C stays open", true)], "running")).toEqual({ answer: "a2", replies: ["a1", null] });
+    expect(order([next("C stays open", false)], "idle")).toEqual({ answer: "a2", replies: ["a1", null] });
+  });
+});
+
 describe("notices that arrive while idle", () => {
   it("sit after the turn and never stretch its duration", () => {
     const day = 86_400_000;
