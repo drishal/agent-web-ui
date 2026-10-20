@@ -1,6 +1,6 @@
 # awui settings: copy to ~/.config/awui/config.yml.
 # Every key is optional. Restart the server after changing port, host, auth,
-# or the lists (systemctl --user restart awui); theme, text_scale,
+# or the lists (systemctl --user restart awui); theme, text_scale, chat_width,
 # autocollapse_sidebar, and herdr apply on the next page load. Environment
 # variables (PORT, HOST, AUTH_USERNAME, ...) win over this file.
 
@@ -30,9 +30,11 @@ auth:
 
 # The shared look on every device: theme is system (follow light/dark),
 # light, dark, or base16 (theme.yml in this folder: a base16/base24 scheme).
-# text_scale sizes the conversation (1 = 100%).
+# text_scale sizes the conversation (1 = 100%); chat_width sets how wide it
+# runs: comfortable (960 px), wide (1400 px), or full (the whole pane).
 theme: system
 # text_scale: 1.1
+# chat_width: wide
 
 # Fold the sidebar away in narrow windows (below 1200 px; phones use the
 # drawer anyway). A sidebar you collapsed yourself stays collapsed.

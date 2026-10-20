@@ -44,6 +44,7 @@ describe("settings", () => {
       allowedTailscaleUsers: [],
       theme: "base16",
       textScale: null,
+      chatWidth: null,
       autocollapseSidebar: true,
       herdr: true,
     });
@@ -52,19 +53,23 @@ describe("settings", () => {
   it("rewrites the file in place, keeping comments, and says what waits for a restart", () => {
     const { ctx, file, home } = setup(FILE);
     const code = path.join(home, "code");
-    const view = writeSettings(ctx, { port: 4800, theme: null, textScale: 1.22, autocollapseSidebar: false, herdr: false, workspaceRoots: [code] });
+    const view = writeSettings(ctx, { port: 4800, theme: null, textScale: 1.22, chatWidth: "wide", autocollapseSidebar: false, herdr: false, workspaceRoots: [code] });
     const text = readFileSync(file, "utf8");
     expect(text).toContain("# My agent-web-ui settings");
     expect(text).toContain("port: 4800 # the usual port");
     expect(text).not.toContain("theme:");
     expect(text).toContain("text_scale: 1.22");
+    expect(text).toContain("chat_width: wide");
     expect(text).toContain("autocollapse_sidebar: false");
     expect(text).toContain("herdr: false");
     expect(text).toContain(`workspace_roots:\n  - ${code}`);
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(view.values).toMatchObject({ port: 4800, theme: null, textScale: 1.22, autocollapseSidebar: false, herdr: false });
-    // Port and roots take a restart; theme, text size, folding, and herdr apply on the next page load.
+    expect(view.values).toMatchObject({ port: 4800, theme: null, textScale: 1.22, chatWidth: "wide", autocollapseSidebar: false, herdr: false });
+    // Port and roots take a restart; theme, text size, width, folding, and herdr apply on the next page load.
     expect(view.restartPending).toEqual(["port", "workspaceRoots"]);
+    // Back to comfortable, the default, leaves no setting behind.
+    expect(writeSettings(ctx, { chatWidth: null }).values.chatWidth).toBeNull();
+    expect(readFileSync(file, "utf8")).not.toContain("chat_width");
   });
 
   it("keeps the password write-only and refuses to listen beyond this machine without a login", () => {
