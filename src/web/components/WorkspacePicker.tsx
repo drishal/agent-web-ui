@@ -1,3 +1,5 @@
+// Open a project: browse folders under the server's workspace roots (the
+// server confines every listing), type a path, or pick a recent one.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowseResult } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";

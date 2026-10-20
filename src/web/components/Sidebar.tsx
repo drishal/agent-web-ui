@@ -1,3 +1,8 @@
+// The sessions sidebar: the harness and project pickers, search, and every
+// project's sessions in date sections (the current project's first, with
+// "Show N more" past a few), from the server's sessions overview. Rows warm
+// their chat on hover, show a hover card, and carry a menu (new tab, resume
+// command, pin, snooze, archive). On phones it is the drawer.
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";

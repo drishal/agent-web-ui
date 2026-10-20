@@ -1,3 +1,7 @@
+// Answers and prompts as Markdown (GitHub-flavoured), rendered safely: raw
+// HTML is skipped, links are http(s)/mailto only and open in a new tab, and
+// remote images never load (their alt text and URL show instead). Code blocks
+// get Copy, and Run on a one-line shell block in a finished answer.
 import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
