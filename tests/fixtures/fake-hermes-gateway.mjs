@@ -191,7 +191,7 @@ server.on("upgrade", (req, socket) => {
     const history = params.display_projection ? canonicalHistory(legacy.messages ?? []) : { messages: legacy.messages ?? [] };
     return {
       session_id: session.sessionId,
-      stored_session_id: legacy.stored_session_id ?? session.sessionId,
+      stored_session_id: legacy.stored_session_id ?? legacy.resumed ?? session.sessionId,
       ...history,
       message_count: legacy.message_count ?? (legacy.messages ?? []).length,
       running: legacy.running === true || legacy.info?.running === true,

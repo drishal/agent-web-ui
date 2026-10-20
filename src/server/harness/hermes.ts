@@ -540,7 +540,8 @@ class HermesLiveChat implements LiveChat {
     let result: Obj;
     try {
       result = resumeNativeId
-        ? await rpc.request<Obj>("session.resume", { session_id: resumeNativeId, source: "webui", display_projection: true })
+        ? // The attached shim asks for display rows itself; a stdio gateway refuses keys it does not declare.
+          await rpc.request<Obj>("session.resume", { session_id: resumeNativeId, source: "webui" })
         : await rpc.request<Obj>("session.create", { cwd: this.cwd, source: "webui" });
     } catch (error) {
       // Older awui chats are stored as source `webui`. The gateway lists them and then
@@ -550,6 +551,8 @@ class HermesLiveChat implements LiveChat {
       }
       throw error;
     }
+    // 0.22.2 names no stored id on a lazy resume (only `resumed`) until a turn builds the agent.
+    if (resumeNativeId) this.storedId = resumeNativeId;
     this.applySnapshot(result);
     await this.requestLiveReasoning(rpc);
   }
@@ -1241,15 +1244,15 @@ export class HermesAdapter implements HarnessAdapter {
   async spawnSpec(): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv }> {
     if (this.options.command) return { command: this.options.command, args: this.options.args ?? [], env: { ...process.env } };
     const runtime = await gatewayRuntime(this.cliCommand);
-    return { command: runtime.python, args: ["-m", "tui_gateway.entry"], env: runtime.env };
-  }
-
     // A launcher that answered for itself hands over the whole argv: the installer's Python
     // needs its `-I -c` bootstrap to put the checkout on sys.path and find tui_gateway.
     if (runtime.argv) {
       const [command = runtime.python, ...args] = runtime.argv;
       return { command, args, env: runtime.env };
     }
+    return { command: runtime.python, args: ["-m", "tui_gateway.entry"], env: runtime.env };
+  }
+
   async discover(): Promise<HarnessDiscovery> {
     const warnings: string[] = [];
     const overrides = { HERMES_HOME: process.env.HERMES_HOME ? ("set" as const) : ("unset" as const) };
