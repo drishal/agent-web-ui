@@ -66,6 +66,56 @@ describe("discovering Hermes installed as a console script (Ubuntu, pip, uv)", (
   });
 });
 
+describe("discovering Hermes installed by upstream's installer", () => {
+  const saved = { PATH: process.env.PATH, HERMES_PYTHON: process.env.HERMES_PYTHON, HERMES_HOME: process.env.HERMES_HOME };
+  afterEach(() => {
+    process.env.PATH = saved.PATH;
+    for (const key of ["HERMES_PYTHON", "HERMES_HOME"] as const) {
+      const value = saved[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  /** A launcher holding `script`, on a PATH of its own, with a home of its own to serve. */
+  const launcher = (script: (python: string) => string) => {
+    const bin = tempDir("awui-hermes-installer-");
+    const python = path.join(bin, "python3");
+    writeFileSync(python, "#!/bin/sh\n");
+    chmodSync(python, 0o755);
+    writeFileSync(path.join(bin, "hermes"), script(python));
+    chmodSync(path.join(bin, "hermes"), 0o755);
+    process.env.PATH = `${bin}:${saved.PATH}`;
+    delete process.env.HERMES_PYTHON;
+    // Never the developer's own ~/.hermes: a gateway running there would be found.
+    process.env.HERMES_HOME = tempDir("awui-hermes-home-");
+    // The runtime is cached per command name, so each install gets its own path.
+    return { launcher: path.join(bin, "hermes"), python };
+  };
+
+  /** What `--print-runtime-command` prints for `python`, and the rest of the launcher. */
+  const prints = (python: string, rest: string) =>
+    `#!/bin/sh\ncase "$1" in\n  --print-runtime-command) printf '%s\\n' '${JSON.stringify([python, "-I", "-c", "bootstrap"])}'; exit 0;;\n  --version) echo "Hermes Agent v0.22.2"; exit 0;;\nesac\n${rest}`;
+
+  it("starts the gateway from the launch command the installer's launcher prints", async () => {
+    // The installer's script: `exec` carries an inline Python bootstrap, so the interpreter
+    // is past `-c` and the script does not end in `exec` — neither shape names a Python.
+    const { launcher: bin, python } = launcher((p) => prints(p, '\' \"$@\"\n'));
+    const adapter = new HermesAdapter({ launcher: bin });
+    const found = await adapter.discover();
+    expect(found.available).toBe(true);
+    expect(found.warnings).toEqual([]);
+    expect(await adapter.spawnSpec()).toMatchObject({ command: python, args: ["-I", "-c", "bootstrap"] });
+  });
+
+  it("asks a shell launcher that exports no HERMES_PYTHON the same way", async () => {
+    const { launcher: bin, python } = launcher((p) => prints(p, `exec ${p} -m tui_gateway.entry "$@"\n`));
+    const adapter = new HermesAdapter({ launcher: bin });
+    expect((await adapter.discover()).warnings).toEqual([]);
+    expect(await adapter.spawnSpec()).toMatchObject({ command: python, args: ["-I", "-c", "bootstrap"] });
+  });
+});
+
 describe("the gateway that owns a Hermes home", () => {
   it("reads a pid record and ignores anything else", () => {
     expect(gatewayRecord('{"pid": 12, "start_time": 34, "kind": "hermes-gateway"}')).toEqual({ pid: 12, startTime: 34 });
