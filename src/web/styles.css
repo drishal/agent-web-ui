@@ -3081,9 +3081,10 @@ body.is-resizing {
 }
 
 .composer-bar .composer-attach {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   margin-left: -6px;
+  border-radius: 50%;
 }
 
 .composer-input {
@@ -3128,7 +3129,7 @@ body.is-resizing {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  height: 32px;
   max-width: 210px;
   border-radius: 999px;
   background: var(--hover);
@@ -3201,8 +3202,8 @@ body.is-resizing {
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: 50%;
   background: var(--text);
@@ -3225,7 +3226,7 @@ body.is-resizing {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  height: 32px;
   padding: 0 6px;
   border: 0;
   border-radius: var(--r-sm);
@@ -3494,7 +3495,16 @@ body.is-resizing {
 
 /* Git row: its own bubble, detached from the card above it. */
 .status-stack.is-base-only {
-  padding-top: 2px;
+  border-color: transparent;
+  background: none;
+}
+
+/* Alone, the row is the stack's bubble: no card around it, at the card's width and radius. */
+.status-stack.is-base-only > .git-row {
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  border-radius: var(--r-lg);
 }
 
 .git-row {
@@ -5142,7 +5152,7 @@ body.is-resizing {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 32px;
   max-width: 230px;
   padding: 0 10px 0 12px;
   border: 0;
@@ -5548,9 +5558,11 @@ body.is-resizing {
 }
 
 button.harness-chip {
+  justify-content: center;
   gap: 4px;
-  height: 30px;
-  padding: 0 8px 0 10px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 12px;
   border: 0;
   border-radius: 999px;
   font-size: 12.5px;
@@ -7114,8 +7126,9 @@ body {
 
 .composer-bar .composer-stash {
   position: relative;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
 }
 
 .stash-count {
