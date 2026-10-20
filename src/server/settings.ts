@@ -86,6 +86,7 @@ function valuesOf(c: UserConfig, ctx: SettingsContext): ServerSettingsValues {
     allowedTailscaleUsers: c.allowed_tailscale_users ?? [],
     theme: c.theme === "custom" ? "base16" : (c.theme ?? null),
     textScale: c.text_scale ?? null,
+    chatWidth: c.chat_width ?? null,
     autocollapseSidebar: c.autocollapse_sidebar ?? true,
     herdr: c.herdr ?? true,
   };
@@ -178,6 +179,7 @@ export function writeSettings(ctx: SettingsContext, patch: SettingsPatch, who: R
   if (patch.allowedTailscaleUsers !== undefined) set(["allowed_tailscale_users"], patch.allowedTailscaleUsers);
   if (patch.theme !== undefined) set(["theme"], patch.theme);
   if (patch.textScale !== undefined) set(["text_scale"], patch.textScale);
+  if (patch.chatWidth !== undefined) set(["chat_width"], patch.chatWidth);
   if (patch.autocollapseSidebar !== undefined) set(["autocollapse_sidebar"], patch.autocollapseSidebar);
   if (patch.herdr !== undefined) set(["herdr"], patch.herdr);
   const auth = doc.getIn(["auth"]) as { items?: unknown[] } | undefined;

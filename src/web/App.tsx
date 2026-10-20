@@ -196,6 +196,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--chat-scale", String(textScale));
   }, [textScale]);
+  const chatWidth = boot?.ui.chatWidth ?? null;
+  useEffect(() => {
+    const root = document.documentElement.style;
+    if (chatWidth === "wide") root.setProperty("--chat-col", "1400px");
+    else if (chatWidth === "full") root.setProperty("--chat-col", "100%");
+    else root.removeProperty("--chat-col");
+  }, [chatWidth]);
 
   const available = useMemo(() => boot?.harnesses.filter((h) => h.available) ?? [], [boot]);
   useEffect(() => {
@@ -922,7 +929,7 @@ export function App() {
   const chooseTheme = async (theme: ThemeChoice) => {
     try {
       const next = await api<ServerSettings>("/api/settings", { method: "PUT", body: { theme } });
-      setBoot((b) => (b ? { ...b, ui: { ...b.ui, theme: next.values.theme, textScale: next.values.textScale, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
+      setBoot((b) => (b ? { ...b, ui: { ...b.ui, theme: next.values.theme, textScale: next.values.textScale, chatWidth: next.values.chatWidth, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
     } catch (e) {
       fail(e);
     }

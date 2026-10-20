@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
-import { themeChoiceSchema, type ThemeChoice } from "../shared/protocol.js";
+import { chatWidthSchema, themeChoiceSchema, type ChatWidth, type ThemeChoice } from "../shared/protocol.js";
 
 export const CONFIG_FILE = "config.yml";
 export const THEME_FILE = "theme.yml";
@@ -19,6 +19,8 @@ export interface UiSettings {
   autocollapseSidebar: boolean;
   /** Shared chat text size; null: the 100% default. */
   textScale: number | null;
+  /** Shared conversation width; null: comfortable. */
+  chatWidth: ChatWidth | null;
   /** Work with herdr (config.yml's `herdr`, or AWUI_HERDR): atui reads it to report its chats to a herdr pane. */
   herdr: boolean;
 }
@@ -50,6 +52,8 @@ const schema = z
     autocollapse_sidebar: z.boolean().optional(),
     /** Shared chat text size (a scale on the 14.5px base); null when unset. */
     text_scale: z.number().min(0.5).max(2).optional(),
+    /** Shared conversation width: comfortable (960px), wide (1400px), or full. */
+    chat_width: chatWidthSchema.optional(),
     /** Work with herdr (herdr.ts, atui/herdr.ts); on unless false. */
     herdr: z.boolean().optional(),
     /** Herdr's API socket, when not the default session's (file-only; HERDR_SOCKET_PATH wins). */
@@ -172,5 +176,5 @@ export function herdrEnabled(c: UserConfig | undefined, env: NodeJS.ProcessEnv =
 
 export function uiSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv = process.env): UiSettings {
   const theme = c?.theme === "custom" ? "base16" : (c?.theme ?? null);
-  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null, herdr: herdrEnabled(c, env) };
+  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null, chatWidth: c?.chat_width ?? null, herdr: herdrEnabled(c, env) };
 }

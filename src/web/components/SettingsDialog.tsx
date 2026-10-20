@@ -5,7 +5,7 @@
 // the device making it), and what takes a restart says so, with a Restart
 // button when systemd supervises.
 import { useEffect, useState, type CSSProperties } from "react";
-import type { Bootstrap, RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
+import type { Bootstrap, ChatWidth, RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
@@ -82,6 +82,7 @@ interface Draft {
   allowedTailscaleUsers: string;
   theme: ThemeChoice | "";
   textScale: number;
+  chatWidth: ChatWidth;
   autocollapseSidebar: boolean;
   herdr: boolean;
 }
@@ -98,6 +99,7 @@ function draftOf(v: ServerSettingsValues): Draft {
     allowedTailscaleUsers: v.allowedTailscaleUsers.join("\n"),
     theme: v.theme ?? "",
     textScale: v.textScale ?? 1,
+    chatWidth: v.chatWidth ?? "comfortable",
     autocollapseSidebar: v.autocollapseSidebar,
     herdr: v.herdr,
   };
@@ -118,6 +120,9 @@ function patchOf(d: Draft, v: ServerSettingsValues): SettingsPatch {
   if (!same(lines(d.allowedTailscaleUsers), v.allowedTailscaleUsers)) p.allowedTailscaleUsers = lines(d.allowedTailscaleUsers);
   if ((d.theme || null) !== v.theme) p.theme = d.theme || null;
   if (d.textScale !== (v.textScale ?? 1)) p.textScale = d.textScale;
+  // Comfortable is the default: saved as no setting at all.
+  const width = d.chatWidth === "comfortable" ? null : d.chatWidth;
+  if (width !== v.chatWidth) p.chatWidth = width;
   if (d.autocollapseSidebar !== v.autocollapseSidebar) p.autocollapseSidebar = d.autocollapseSidebar;
   if (d.herdr !== v.herdr) p.herdr = d.herdr;
   return p;
@@ -188,10 +193,11 @@ export function SettingsDialog({
       setServer(next);
       setDraft(draftOf(next.values));
       setSaved(true);
-      if (patch.theme !== undefined || patch.textScale !== undefined || patch.autocollapseSidebar !== undefined || patch.herdr !== undefined) {
+      if (patch.theme !== undefined || patch.textScale !== undefined || patch.chatWidth !== undefined || patch.autocollapseSidebar !== undefined || patch.herdr !== undefined) {
         onUiSaved({
           theme: next.values.theme,
           textScale: next.values.textScale,
+          chatWidth: next.values.chatWidth,
           autocollapseSidebar: next.values.autocollapseSidebar,
           ...(patch.herdr !== undefined ? { herdr: next.values.herdr } : {}),
         });
@@ -340,7 +346,7 @@ export function SettingsDialog({
             ? "This server runs without a settings folder, so there is nothing to save to."
             : server && !server.editable
               ? "These live in config.yml on the machine running the server; change them there."
-              : "Saved to config.yml for every device. Theme, text size, sidebar, and herdr apply here at once and on other devices on their next page load (atui on its next start); the rest when the server restarts."}
+              : "Saved to config.yml for every device. Theme, text size, chat width, sidebar, and herdr apply here at once and on other devices on their next page load (atui on its next start); the rest when the server restarts."}
         </p>
         {!draft ? (
           error ? null : <p className="settings-note">Loading…</p>
@@ -404,6 +410,14 @@ export function SettingsDialog({
                 </output>
               </div>
             </div>
+            <label className="settings-row">
+              <span className="settings-label">Chat width</span>
+              <select className="select" aria-label="Chat width" disabled={!editable} value={draft.chatWidth} onChange={(e) => update({ chatWidth: e.target.value as ChatWidth })}>
+                <option value="comfortable">Comfortable (960px)</option>
+                <option value="wide">Wide (1400px)</option>
+                <option value="full">Full: the whole pane</option>
+              </select>
+            </label>
             <label className="settings-row settings-check">
               <input type="checkbox" disabled={!editable} checked={draft.autocollapseSidebar} onChange={(e) => update({ autocollapseSidebar: e.target.checked })} />
               <span>Fold the sidebar away in narrow windows</span>

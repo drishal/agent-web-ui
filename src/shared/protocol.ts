@@ -586,6 +586,9 @@ export interface ThemeInfo {
 export const themeChoiceSchema = z.enum(["system", "light", "dark", "base16", "custom"]);
 /** A device's theme mode; the file's legacy `custom` maps to `base16`. */
 export type ThemeChoice = Exclude<z.infer<typeof themeChoiceSchema>, "custom">;
+/** How wide the conversation and composer run: 960px, 1400px, or the whole pane. */
+export const chatWidthSchema = z.enum(["comfortable", "wide", "full"]);
+export type ChatWidth = z.infer<typeof chatWidthSchema>;
 
 export interface Bootstrap {
   version: string;
@@ -596,7 +599,7 @@ export interface Bootstrap {
   home: string;
   theme: { active: string; problem?: string };
   /** From config.yml: the shared look (theme null lets theme.yml decide, scale null is 100%). Re-read on every page load. */
-  ui: { theme: ThemeChoice | null; textScale: number | null; autocollapseSidebar: boolean; herdr: boolean };
+  ui: { theme: ThemeChoice | null; textScale: number | null; chatWidth: ChatWidth | null; autocollapseSidebar: boolean; herdr: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -966,6 +969,8 @@ export interface ServerSettingsValues {
   /** Shared look for every device; null theme lets a theme.yml decide, null scale is 100%. */
   theme: ThemeChoice | null;
   textScale: number | null;
+  /** null is comfortable. */
+  chatWidth: ChatWidth | null;
   autocollapseSidebar: boolean;
   /** Work with herdr: mark the sessions open in its panes, and let atui report to them. */
   herdr: boolean;
@@ -1001,6 +1006,7 @@ export const settingsPatchSchema = z
     allowedTailscaleUsers: z.array(z.string().trim().min(1).max(255)).max(64).optional(),
     theme: themeChoiceSchema.nullable().optional(),
     textScale: z.number().min(0.5).max(2).nullable().optional(),
+    chatWidth: chatWidthSchema.nullable().optional(),
     autocollapseSidebar: z.boolean().optional(),
     herdr: z.boolean().optional(),
   })

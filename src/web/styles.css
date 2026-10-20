@@ -118,6 +118,8 @@
   --r-xl: 20px;
   --r-panel: 24px;
   --col: 960px;
+  /* The conversation's own width (Settings → Chat width); drawers keep --col. */
+  --chat-col: var(--col);
   --sidebar-w: 272px;
   --chat-scale: 1;
   --chat-font: calc(14.5px * var(--chat-scale));
@@ -1259,7 +1261,7 @@ body.is-resizing {
 }
 
 .thread {
-  max-width: var(--col);
+  max-width: var(--chat-col);
   margin: 0 auto;
   padding: 8px 20px 28px;
 }
@@ -2789,7 +2791,7 @@ body.is-resizing {
 
 .composer {
   width: 100%;
-  max-width: calc(var(--col) + 8px);
+  max-width: calc(var(--chat-col) + 8px);
   margin: 0 auto;
   padding: 4px 16px calc(14px + env(safe-area-inset-bottom));
 }
@@ -4119,7 +4121,7 @@ body.is-resizing {
 
 .hero-inner {
   width: 100%;
-  max-width: calc(var(--col) + 8px);
+  max-width: calc(var(--chat-col) + 8px);
 }
 
 .hero-title {
@@ -6952,7 +6954,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 11px;
-  width: min(var(--col), 100%);
+  width: min(var(--chat-col), 100%);
   animation: fade-in 0.4s ease-out 0.08s both;
 }
 
