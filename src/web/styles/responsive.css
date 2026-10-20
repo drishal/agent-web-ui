@@ -1,0 +1,160 @@
+/* ---- responsive --------------------------------------------------------------------------- */
+
+.drawer-open,
+.drawer-close,
+.drawer-open-inline,
+.backdrop {
+  display: none;
+}
+
+/* Collapsible sidebar (wide screens only; phones keep the drawer). */
+@media (min-width: 820px) {
+  .app.is-toggling {
+    transition: grid-template-columns 0.18s ease;
+  }
+
+  .app.is-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .app.is-collapsed .sidebar {
+    visibility: hidden;
+    border-right-width: 0;
+  }
+
+  .sidebar {
+    transition: visibility 0.18s;
+  }
+
+  .sidebar-expand {
+    margin-left: -8px;
+  }
+}
+
+@media (max-width: 819px) {
+  .sidebar-collapse,
+  .sidebar-expand {
+    display: none;
+  }
+}
+
+@media (max-width: 1099px) {
+  .turn-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 819px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .status-bar {
+    display: none;
+  }
+
+
+  .sidebar-resizer {
+    display: none;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(88vw, 340px);
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    border-right: 0;
+    box-shadow: var(--shadow-float);
+    transform: translateX(-105%);
+    transition: transform 0.16s ease, visibility 0.16s;
+    visibility: hidden;
+  }
+
+  .sidebar.is-open {
+    transform: none;
+    visibility: visible;
+  }
+
+  .backdrop.is-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgb(0 0 0 / 0.4);
+  }
+
+  .drawer-open,
+  .drawer-close,
+  .drawer-open-inline {
+    display: inline-flex;
+  }
+
+  .chat-header {
+    min-height: 50px;
+    padding: 6px 10px;
+  }
+
+  .chat-path {
+    display: none;
+  }
+
+  .thread {
+    padding: 4px 12px 20px;
+  }
+
+  .bubble-stack {
+    max-width: 88%;
+  }
+
+  .composer {
+    padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .composer-card {
+    padding: 8px 8px 6px 12px;
+    border-radius: 20px;
+  }
+
+  .pill-select {
+    max-width: 44vw;
+    height: 32px;
+  }
+
+  .pill-btn {
+    height: 32px;
+  }
+
+  .round-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .session {
+    min-height: 40px;
+  }
+
+  .hero-title {
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 419px) {
+  .composer-bar {
+    gap: 6px;
+  }
+
+  .pill-select {
+    max-width: 40vw;
+  }
+
+  .context-pct {
+    display: none;
+  }
+}

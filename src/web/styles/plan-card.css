@@ -1,0 +1,48 @@
+/* ---- plan card ------------------------------------------------------------------------- */
+
+.plan-card {
+  margin: 10px 0 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--hairline));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 5%, var(--card));
+  overflow: hidden;
+}
+
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.plan-card-body {
+  position: relative;
+  padding: 2px 14px 4px;
+  font-size: var(--chat-font);
+  line-height: 1.65;
+}
+
+/* Folded: its first lines, fading out. */
+.plan-card:not(.is-open) .plan-card-body {
+  max-height: 13.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+.plan-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 10px;
+}
+
+.plan-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}

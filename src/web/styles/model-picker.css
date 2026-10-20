@@ -1,0 +1,582 @@
+/* ---- model picker (search popover; bottom sheet on phones) -------------------- */
+
+.model-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.pill-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  max-width: 230px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.pill-trigger:hover:not(:disabled),
+.pill-trigger[aria-expanded="true"] {
+  background: var(--active);
+  color: var(--text);
+}
+
+.pill-trigger:disabled {
+  opacity: 0.6;
+}
+
+.pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-backdrop {
+  display: none;
+}
+
+.model-pop {
+  position: absolute;
+  left: -4px;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 32px));
+  max-height: var(--pop-max-h, 520px);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  overflow: hidden;
+}
+
+.model-pop.is-below {
+  bottom: auto;
+  top: calc(100% + 10px);
+}
+
+.model-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--muted);
+}
+
+.model-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.model-count {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-search .model-refresh {
+  width: 26px;
+  height: 26px;
+  margin-right: -4px;
+}
+
+.model-search .model-refresh:disabled {
+  opacity: 0.55;
+}
+
+.model-current {
+  flex: none;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-current strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.model-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 6px 6px;
+}
+
+.model-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 8px 4px;
+  background: var(--card);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 13.5px;
+}
+
+.model-option.is-active {
+  background: var(--hover);
+}
+
+/* The model in use: the same selected fill the sidebar gives the open session. */
+.model-option.is-current {
+  background: var(--active);
+}
+
+.model-option.is-current .model-name {
+  font-weight: 620;
+}
+
+.model-name {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.model-tag {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--thinking) 16%, transparent);
+  color: var(--thinking);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.model-check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  margin-left: auto;
+  color: var(--accent);
+}
+
+.model-tag + .model-check {
+  margin-left: 8px;
+}
+
+/* The thinking picker: an effort slider from Faster to Smarter, one stop per level. */
+.effort-pop {
+  width: 280px;
+  padding: 12px 14px 14px;
+  overflow: visible;
+}
+
+.effort-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.effort-label {
+  color: var(--muted);
+}
+
+.effort-value {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.effort-ends {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.effort-slider {
+  border-radius: 10px;
+  outline: none;
+}
+
+.effort-slider:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.effort-track {
+  --inset: 14px;
+  position: relative;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.effort-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--inset) + var(--pos) * (100% - 2 * var(--inset)));
+  border-radius: 10px 0 0 10px;
+  background: color-mix(in srgb, var(--thinking) 16%, transparent);
+  transition: width 0.2s var(--ease-out);
+}
+
+.effort-stop {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--inset) + var(--at) * (100% - 2 * var(--inset)));
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.55;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.effort-stop.is-passed {
+  background: var(--thinking);
+  opacity: 0.9;
+}
+
+.effort-thumb {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--inset) + var(--pos) * (100% - 2 * var(--inset)));
+  width: 18px;
+  height: 24px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(0 0 0 / 0.06);
+  transform: translate(-50%, -50%);
+  transition:
+    left 0.2s var(--ease-out),
+    transform 0.15s var(--ease-out);
+}
+
+.effort-track:hover .effort-thumb,
+.effort-slider:focus-visible .effort-thumb {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.effort-slider.is-dragging .effort-thumb {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.effort-slider.is-dragging .effort-thumb,
+.effort-slider.is-dragging .effort-fill {
+  transition: transform 0.15s var(--ease-out);
+}
+
+.model-empty {
+  padding: 18px 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 819px) {
+  .model-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgb(0 0 0 / 0.4);
+  }
+
+  .model-pop,
+  .model-pop.is-below,
+  .model-pop.effort-pop {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 72dvh;
+    border-radius: var(--r-xl);
+  }
+
+  .model-option {
+    min-height: 42px;
+  }
+
+  .pill-trigger {
+    height: 32px;
+    max-width: 44vw;
+  }
+}
+
+/* Harness menu: the sidebar row (switch) and the composer chip (handoff). */
+.harness-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.harness-menu-wrap.is-row {
+  display: flex;
+}
+
+.harness-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.harness-row:hover:not(:disabled) {
+  background: var(--hover-strong, var(--hover));
+}
+
+.harness-row .harness-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 2px;
+}
+
+.harness-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harness-row-meta {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 450;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.harness-row .icon:last-child {
+  flex: none;
+  color: var(--muted);
+}
+
+.harness-row-name + .icon:last-child {
+  margin-left: auto;
+}
+
+button.harness-chip {
+  justify-content: center;
+  gap: 4px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--harness, var(--muted)) 16%, transparent);
+  color: var(--harness, var(--text-2));
+}
+
+button.harness-chip:hover:not(:disabled) {
+  background: var(--hover-strong, var(--hover));
+}
+
+button.harness-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.harness-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(340px, 80vw);
+  max-height: min(340px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+  outline: none;
+}
+
+/* The sidebar's menu is exactly as wide as its row; long versions truncate. */
+.is-row > .harness-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.harness-menu-head {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.harness-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.harness-option.is-active {
+  background: var(--hover);
+}
+
+.harness-option.is-blocked {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.harness-option .harness-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.harness-option-name {
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.harness-option-meta {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.harness-option-check {
+  flex: none;
+  color: var(--accent);
+}
+
+/* Permission mode: the harness menu's popover, a name and a line per mode. A
+   mode that asks and checks nothing (Claude Code's bypass) shows in the warning
+   colour, on the pill too while it is on. */
+.permission-trigger > .icon:first-child {
+  flex: none;
+  color: var(--muted);
+}
+
+.permission-trigger.is-caution,
+.permission-trigger.is-caution:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+}
+
+.permission-trigger.is-caution > .icon:first-child {
+  color: currentColor;
+}
+
+.permission-menu {
+  max-width: min(300px, 86vw);
+}
+
+.permission-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.permission-option.is-active {
+  background: var(--hover);
+}
+
+.permission-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.permission-option-name {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.permission-option-desc {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.permission-option.is-caution .permission-option-name {
+  color: var(--warn);
+}
+
+.permission-option .harness-option-check {
+  margin-left: auto;
+}

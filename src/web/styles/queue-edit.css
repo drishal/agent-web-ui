@@ -1,0 +1,33 @@
+/* ---- status stack: editing a queued message --------------------------------------------- */
+
+.stack-actions {
+  display: none;
+  gap: 2px;
+}
+
+.stack-row:hover .stack-actions,
+.stack-row:focus-within .stack-actions {
+  display: inline-flex;
+}
+
+@media (pointer: coarse) {
+  .stack-actions {
+    display: inline-flex;
+  }
+}
+
+.stack-row.is-editing {
+  align-items: flex-start;
+}
+
+.stack-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
