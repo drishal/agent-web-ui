@@ -269,7 +269,8 @@ export function readsAsNarration(thinking: string): boolean {
   if (lines.some((l) => /^#{1,6}\s+\S/.test(l))) signals += 2; // a markdown heading
   if (lines.some((l) => /^\d+\.\s+\S+/.test(l))) signals += 2; // a numbered list
   if (lines.some((l) => /https?:\/\/\S/.test(l))) signals += 2; // a URL
-  if (lines.some((l) => /\b[\w.-]+\/[\w./-]+/.test(l))) signals += 2; // a project file path (src/server/app.ts)
+  // A project file path (src/server/app.ts), not any "a/b": reasoning names paths too, so it only adds weight.
+  if (lines.some((l) => /(?:^|[\s`("'])(?:[\w.-]+\/)+[\w-]+\.[A-Za-z0-9]{1,8}\b/.test(l))) signals += 1;
   if (lines.some((l) => /\*\*\S[^*]*\*\*/.test(l))) signals += 1; // bolded spans
   if (lines.length >= 3) signals += 1; // multi-line prose block
   return signals >= 3;
