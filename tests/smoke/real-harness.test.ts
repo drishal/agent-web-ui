@@ -2,7 +2,8 @@
 // Without SMOKE_MODEL nothing calls a model (no tokens). With SMOKE_MODEL set
 // to a model already configured in both harnesses, preferably local (e.g.
 // SMOKE_MODEL=local2/GLM5), it also runs prompt -> stream -> stop. Claude Code
-// has its own model names, so it takes SMOKE_CLAUDE_MODEL (e.g. haiku). This
+// has its own model names, so it takes SMOKE_CLAUDE_MODEL (e.g. haiku). Grok
+// Build's ids are bare, so it takes SMOKE_GROK_MODEL (e.g. grok-4.7). This
 // never starts or reconfigures a model server.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync } from "node:fs";
@@ -12,6 +13,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Chat } from "../../src/server/chats/chat.js";
 import { ClaudeAdapter, liveClaudeChildren } from "../../src/server/harness/claude.js";
+import { GrokAdapter, liveGrokChildren } from "../../src/server/harness/grok.js";
 import { HermesAdapter, liveHermesLinks } from "../../src/server/harness/hermes.js";
 import { liveOmpChildren, OmpAdapter } from "../../src/server/harness/omp.js";
 import { PiAdapter } from "../../src/server/harness/pi.js";
@@ -48,6 +50,7 @@ const harnesses: Array<[string, () => HarnessAdapter, string | undefined]> = [
   ["omp", () => new OmpAdapter({ agentDir: null, sessionDir: null, home: homedir() }), model],
   ["hermes", () => new HermesAdapter(), model],
   ["claude", () => new ClaudeAdapter({ home: homedir() }), process.env.SMOKE_CLAUDE_MODEL],
+  ["grok", () => new GrokAdapter({ home: homedir() }), process.env.SMOKE_GROK_MODEL],
 ];
 
 for (const [name, make, model] of harnesses) {
@@ -69,6 +72,7 @@ for (const [name, make, model] of harnesses) {
       expect(liveOmpChildren()).toBe(0);
       expect(liveHermesLinks()).toBe(0);
       expect(liveClaudeChildren()).toBe(0);
+      expect(liveGrokChildren()).toBe(0);
     }, 60_000);
 
     it("lists sessions for a workspace through the harness's own API", async () => {
@@ -102,6 +106,7 @@ for (const [name, make, model] of harnesses) {
       await adapter.shutdown();
       expect(liveOmpChildren()).toBe(0);
       expect(liveClaudeChildren()).toBe(0);
+      expect(liveGrokChildren()).toBe(0);
     }, 180_000);
   });
 }

@@ -64,6 +64,8 @@ const schema = z
         pi: launchSchema.optional(),
         omp: launchSchema.optional(),
         claude: launchSchema.optional(),
+        // Grok's chats run one `grok agent --no-leader stdio` child each, so it takes a command line like pi's and claude's.
+        grok: launchSchema.optional(),
         // Hermes's chats run its gateway from its Python package: there is no command line to add to.
         hermes: z.object({ command: commandSchema.optional() }).strict().optional(),
         // OpenCode's chats share one `opencode serve`: no per-chat command line either.
@@ -148,11 +150,11 @@ export function configEnv(c: UserConfig): Record<string, string> {
 }
 
 /** Environment variables that name a harness's executable; they win over config.yml, as every variable does. */
-const BIN_ENV = { pi: "PI_BIN", omp: "OMP_BIN", hermes: "HERMES_BIN", claude: "CLAUDE_BIN", opencode: "OPENCODE_BIN" } as const;
+const BIN_ENV = { pi: "PI_BIN", omp: "OMP_BIN", hermes: "HERMES_BIN", claude: "CLAUDE_BIN", opencode: "OPENCODE_BIN", grok: "GROK_BIN" } as const;
 
 /**
  * Each harness's launch settings: config.yml's `harnesses:` block, its
- * command overridden by PI_BIN, OMP_BIN, HERMES_BIN, CLAUDE_BIN, or OPENCODE_BIN, and `~/`
+ * command overridden by PI_BIN, OMP_BIN, HERMES_BIN, CLAUDE_BIN, OPENCODE_BIN, or GROK_BIN, and `~/`
  * expanded. A harness with neither is left out (its name on PATH, as before).
  */
 export function launchSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv, home: string): Partial<Record<keyof typeof BIN_ENV, { command?: string; args: string[] }>> {

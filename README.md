@@ -1,6 +1,6 @@
 # awui
 
-**awui** (agent web UI) is a local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), **Hermes** (hermes-agent), **Claude Code**, and **OpenCode** coding-agent harnesses — plus one read-only chat harness of its own, **Awui** (below). Use it from your desktop browser, through Tailscale Serve from your phone, or in a terminal with **atui**, its terminal client.
+**awui** (agent web UI) is a local, private, responsive web UI for the **Pi**, **omp** (oh-my-pi), **Hermes** (hermes-agent), **Claude Code**, **OpenCode**, and **Grok Build** coding-agent harnesses — plus one read-only chat harness of its own, **Awui** (below). Use it from your desktop browser, through Tailscale Serve from your phone, or in a terminal with **atui**, its terminal client.
 
 The browser is only a control surface. Each harness remains the agent and the source of truth for its own models, authentication, settings, tools, resources, trust decisions, and session files. This app never edits an existing session file and keeps no second transcript database; forks and handoffs only add new sessions in the harness's own store.
 
@@ -11,6 +11,7 @@ browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAd
                                                         ├─ Hermes (child process: `python -m tui_gateway.entry`, one per live chat)
                                                         ├─ Claude Code (child process: `claude -p` in stream-json mode, one per live chat)
                                                         ├─ OpenCode (one private `opencode serve` for every chat: its HTTP API and event stream)
+                                                        ├─ Grok   (child process: `grok agent --no-leader stdio`, one per live chat)
                                                         ├─ Awui   (`pi --mode rpc`, read-only: the writing/executing tools denied)
                                                         └─ fake   (tests only)
 ```
@@ -39,7 +40,7 @@ Build it yourself from a clone (inside `devenv shell`; see below): `bun run scri
 
 ### From source
 
-Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, and/or `claude` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
+Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, `claude`, `opencode`, and/or `grok` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
 
 ```bash
 npm ci
@@ -69,7 +70,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 | `npm run typecheck` | Strict TypeScript for server, web, and tests |
 | `npm test` | Vitest unit and integration tests. Uses only fake and scripted harnesses, so no model tokens are spent. |
 | `npm run test:e2e` | Builds, then runs Playwright (Chromium) against the fake harnesses |
-| `npm run smoke` | Opt-in checks against the real installed Pi, omp, Hermes, and Claude Code (see [Testing](#testing)) |
+| `npm run smoke` | Opt-in checks against the real installed Pi, omp, Hermes, Claude Code, and Grok Build (see [Testing](#testing)) |
 | `npm run build` / `npm start` | Production build, then a single process serving UI and API |
 | `bun run scripts/build-binary.ts` | Compile the self-contained binary into `dist/bin/<platform>` (`--all` for every target). Run inside `devenv shell`. |
 
@@ -97,8 +98,8 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 | `autocollapse_sidebar` | `true` | Fold the sidebar away below 1200 px wide (phones use the drawer anyway); a sidebar collapsed with its button stays collapsed at any width. |
 | `herdr` | `true` | Work with [herdr](#with-herdr): mark the sessions open in its panes (and show one there rather than start a second harness on it), and let atui in a herdr pane report its chats. Nothing happens where herdr does not run. |
 | `herdr_socket` | herdr's default session's | herdr's API socket (`~/` is expanded), for a named herdr session: `~/.config/herdr/sessions/<name>/herdr.sock`. File-only, read at startup. |
-| `harnesses.<pi\|omp\|claude\|hermes\|opencode>.command` | the name on `PATH` | The harness's executable (`~/` is expanded), e.g. a dev build. The Awui harness runs Pi's. |
-| `harnesses.<pi\|omp\|claude>.args` | — | Arguments added to each chat's command line, before the ones awui must set last (`--session-dir`, `--cwd`, `--resume`): `[--add-dir, /srv/docs]` for Claude Code, or `[--allow-dangerously-skip-permissions]` to offer its Bypass mode in the permission picker. Model probes and listings do not get them, and the Awui harness never does (they could loosen its read-only lock). Hermes and OpenCode take no `args`: Hermes's chats run its gateway from its Python package, and OpenCode's share one server. This block is file-only, read at startup: the Settings dialog does not show it, because a command is a program the server runs and any signed-in device can save settings. |
+| `harnesses.<pi\|omp\|claude\|hermes\|opencode\|grok>.command` | the name on `PATH` | The harness's executable (`~/` is expanded), e.g. a dev build. The Awui harness runs Pi's. |
+| `harnesses.<pi\|omp\|claude\|grok>.args` | — | Arguments added to each chat's command line, before the ones awui must set last (`--session-dir`, `--cwd`, `--resume`): `[--add-dir, /srv/docs]` for Claude Code, or `[--allow-dangerously-skip-permissions]` to offer its Bypass mode in the permission picker. For Grok they go before the mode name `stdio`. Model probes and listings do not get them, and the Awui harness never does (they could loosen its read-only lock). Hermes and OpenCode take no `args`: Hermes's chats run its gateway from its Python package, and OpenCode's share one server. This block is file-only, read at startup: the Settings dialog does not show it, because a command is a program the server runs and any signed-in device can save settings. |
 
 **`theme.yml`**: a base16/base24 scheme (see [Theme](#theme)); the dotfiles' stylix module writes it.
 
@@ -109,8 +110,8 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 | `PORT`, `HOST`, `AUTH_USERNAME`, `AUTH_PASSWORD` | As the keys above. |
 | `WORKSPACE_ROOTS`, `ALLOWED_HOSTS`, `ALLOWED_TAILSCALE_USERS` | As the lists above (`:`-separated roots, comma-separated hosts and users). |
 | `AWUI_CONFIG_DIR` | Another settings folder; empty ignores `config.yml` (the tests do this). |
-| `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes,claude,opencode,awui` (the tests use `fake`). |
-| `PI_BIN`, `OMP_BIN`, `HERMES_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN` | A harness's executable, over `harnesses.<id>.command`; default its name on `PATH`. |
+| `AWUI_HARNESSES` | Comma list of harness adapters to enable; default `pi,omp,hermes,claude,opencode,grok,awui` (the tests use `fake`). |
+| `PI_BIN`, `OMP_BIN`, `HERMES_BIN`, `CLAUDE_BIN`, `OPENCODE_BIN`, `GROK_BIN` | A harness's executable, over `harnesses.<id>.command`; default its name on `PATH`. |
 | `AWUI_HERDR` | `1` or `0`: over `herdr`. |
 | `HERDR_SOCKET_PATH` | Set by herdr in its panes: a server started in one asks that herdr session (over `herdr_socket`). The server keeps herdr's pane variables from its harness children, so their own herdr hooks do not claim its pane. |
 | `AWUI_WEB_DIR` | Serve the built UI from here instead of `dist/web`. |
@@ -278,7 +279,7 @@ src/server/
 src/web/                    React + Vite client
 ```
 
-**Resume without waiting.** Opening an old Pi, omp, or Claude Code session shows its transcript straight from the session file (`readTranscript`, a few milliseconds) and starts the harness behind it; the status reads *Starting* until it is up, usually under a second. A prompt or model change made meanwhile goes through once it is. Hermes keeps its history behind its gateway, so its sessions open when the gateway is ready (a session the gateway will not mount still shows its transcript from `state.db`); OpenCode's are read through its server. Session listings are warmed at startup, and Hermes's are served from cache while they refresh.
+**Resume without waiting.** Opening an old Pi, omp, Claude Code, or Grok session shows its transcript straight from the session file (`readTranscript`, a few milliseconds) and starts the harness behind it; the status reads *Starting* until it is up, usually under a second. A prompt or model change made meanwhile goes through once it is. Hermes keeps its history behind its gateway, so its sessions open when the gateway is ready (a session the gateway will not mount still shows its transcript from `state.db`); OpenCode's are read through its server. Session listings are warmed at startup, and Hermes's are served from cache while they refresh.
 
 **Single writer.** `chatId → live session` and `harnessId + native session id → chatId` mean the same session is never opened twice in this process. For omp that also means never two child processes. A second tab or device attaches to the existing chat as another SSE subscriber. **Another terminal or process running `pi`/`omp`/`hermes` is not locked out.** Avoid driving the same session from a terminal while it is open here.
 
@@ -316,6 +317,8 @@ The natural generic adapter is the [Agent Client Protocol](https://agentclientpr
 | session config options | model / thinking / mode |
 
 ACP has no standard steer or follow-up, so an ACP adapter declares `supportsSteer: false` and `supportsFollowUp: false`. Pi and omp do **not** use ACP here. omp's ACP mode cancels a running turn when a new prompt arrives instead of steering, and Pi has only third-party bridges.
+
+**Grok Build** is that adapter here: [`src/server/harness/grok.ts`](src/server/harness/grok.ts) drives one `grok agent --no-leader stdio` child per chat, and [`grok-transcript.ts`](src/server/harness/grok-transcript.ts) folds its `session/update` payloads for both the live child and its `updates.jsonl`.
 
 ### Pi
 
@@ -372,6 +375,15 @@ OpenCode 2 is driven through its own HTTP API: awui starts **one** private `open
 - **Decisions:** a permission request is an approval card (*Allow once*, *Always allow* with the pattern OpenCode would save, *Deny*); a form (the question tool's) is one card per field, its answers sent back together. A request answered in OpenCode's own client closes here.
 - **Config:** the project's models (OpenCode's list), each model's variants as its thinking levels (`none` and `default` are not levels); a change goes to `POST /session/{id}/model`, or waits for the session before the first message. Context is the last step's tokens against the model's window; usage and cost are OpenCode's own totals.
 
+### Grok
+
+Each live chat runs the **installed** `grok` as `grok agent --no-leader stdio`, one child per chat, speaking the [Agent Client Protocol](#later-harnesses-via-acp) as JSON-RPC 2.0 lines over stdio. awui never attaches to the shared `grok` agent leader (`--no-leader`), never passes `--always-approve` or `--leader`, and leaves the permission mode to Grok's own config. Your login and `~/.grok` settings apply, inherited from the environment; the server sets only `GROK_DISABLE_AUTOUPDATER=1` on each child, and `GROK_HOME` (else `~/.grok`) names the agent dir.
+
+- **Sessions:** a new chat is `session/new` and resume is `session/load`; Grok writes its own store. Listing, history, and usage read `~/.grok/sessions/<encoded cwd>/<id>/` (`summary.json` and `updates.jsonl`) read-only — a group directory whose `.cwd` file names the project is included too, when the encoded name does not fit in one file name — and awui never writes inside `~/.grok`.
+- **Runs:** a send returns once `session/prompt` is written. Grok does not echo the user prompt, so that row is awui's. The call then streams `agent_message_chunk` (text) and `agent_thought_chunk` (thinking), tool calls fold from `tool_call`/`tool_call_update` (a result's diff block becomes the chat's diff), and `turn_completed` records the turn's tokens and cost. A run is settled only when the `prompt` RPC result arrives, with its `stopReason`; **Stop** sends `session/cancel`.
+- **Decisions:** `session/request_permission` becomes a card whose options are Grok's own words, answered with the option's own id or cancelled; Stop and Close cancel a pending one on the wire.
+- **Config:** the handshake's `modelState` and `configOptions` give the models, their effort levels, and the current selection; a change goes through `session/set_config_option` (a bare value string), and a level the target model does not list is refused before anything is sent. Context is the last turn's tokens against the model's window; usage sums the per-turn tokens and cost. Todo and command listings are empty, as ACP has neither.
+
 ### Approvals and extension dialogs
 
 Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `yolo`, as configured; this app never changes it or passes `--auto-approve`). Dialogs come from Pi or omp extensions (`select`, `confirm`, `input`, `editor`). Both become one `interaction_request`:
@@ -382,12 +394,12 @@ Tool approvals come from omp's `tools.approvalMode` (`always-ask` | `write` | `y
 
 ### Config dirs
 
-| | Pi | omp | Hermes | Claude Code |
-|---|---|---|---|---|
-| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` | `CLAUDE_CONFIG_DIR` or `~/.claude` |
-| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) | `<config>/projects/<cwd as dashes>/` |
+| | Pi | omp | Hermes | Claude Code | Grok Build |
+|---|---|---|---|---|---|
+| Agent dir | `PI_CODING_AGENT_DIR` or `~/.pi/agent` (via `getAgentDir()`) | `~/.omp/agent` (or `OMP_AGENT_DIR`) | `HERMES_HOME` or `~/.hermes` | `CLAUDE_CONFIG_DIR` or `~/.claude` | `GROK_HOME` or `~/.grok` |
+| Sessions | `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` setting > `<agentDir>/sessions` | `~/.omp/agent/sessions` (or `OMP_SESSION_DIR`) | `~/.hermes/sessions` (jsonl; the `state.db` row is the source of truth) | `<config>/projects/<cwd as dashes>/` | `~/.grok/sessions/<encoded cwd>/<id>/` |
 
-omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app writes inside `~/.pi` or `~/.omp` only to add a new session file for a fork or handoff, inside `~/.claude` only for a fork's new file, never inside `~/.hermes`, and the browser never sees agent dirs or session file paths.
+omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`). Any `PI_*` value in this server's environment belongs to Pi and is stripped from omp children. `OMP_AGENT_DIR` and `OMP_SESSION_DIR` are mapped onto omp's names for the child only. Overrides are reported as set/unset only. The app writes inside `~/.pi` or `~/.omp` only to add a new session file for a fork or handoff, inside `~/.claude` only for a fork's new file, never inside `~/.hermes` or `~/.grok`, and the browser never sees agent dirs or session file paths.
 
 ## With herdr
 
@@ -496,9 +508,9 @@ git pull && npm ci && npm run build && systemctl --user restart awui   # update
 
 ## Testing
 
-- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the resume command's shell line (run in bash and fish from a folder named with a space, a quote, and a `$`), the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing, a `FAKE_HERMES_REFUSE` start that exits 1 with a refusal on stderr, as the real entry point does beside a running gateway, and `tests/fixtures/fake-hermes-gateway.mjs`, a scripted *gateway* whose control socket mints tickets and whose `/api/ws` translates the canonical session wire onto the same scripts, so the attach path is tested end to end — reads, a full chat (create, submit with an input id, streaming), an approval round trip, fenced model/reasoning mutations, Edit/Retry as a rewind mutation, detach on close, and `hermes gateway ensure` bootstrapping a home with no gateway), and the **Claude Code adapter against a scripted `claude`** (`tests/fixtures/fake-claude.mjs`, frames as recorded from Claude Code 2.1.289, settings and permission modes from 2.1.301: streaming, tools, approvals, AskUserQuestion, steer and follow-up, stop, todos, model and effort, permission modes, context, rename, resume from the file, the terminal resume command, fork, compaction), and the **OpenCode adapter against a scripted `opencode serve`** (`tests/fixtures/fake-opencode.mjs`, OpenCode 2's routes and events as recorded from 2.0.27: streaming, short replies with no deltas, tools and edit diffs, permissions, question forms, steer and follow-up, stop, todos, model and level before and after the session exists, rename, listing, resume, Edit/Retry by revert, fork, compaction).
+- `npm test` runs security (Host/Origin/cookie/Tailscale), API + SSE flows (send, steer, follow-up, stop, replay without duplicates, resnapshot, single writer, approvals, bounded output), theme parsing and contrast, config, the resume command's shell line (run in bash and fish from a folder named with a space, a quote, and a `$`), the **omp adapter against a scripted `omp`** (`tests/fixtures/fake-omp.mjs`, which speaks rpc-ui and ACP), the **Hermes adapter against a scripted `tui_gateway`** (`tests/fixtures/fake-hermes.mjs`: sessions, streaming, tools, approvals, interrupt, model/session listing, a `FAKE_HERMES_REFUSE` start that exits 1 with a refusal on stderr, as the real entry point does beside a running gateway, and `tests/fixtures/fake-hermes-gateway.mjs`, a scripted *gateway* whose control socket mints tickets and whose `/api/ws` translates the canonical session wire onto the same scripts, so the attach path is tested end to end — reads, a full chat (create, submit with an input id, streaming), an approval round trip, fenced model/reasoning mutations, Edit/Retry as a rewind mutation, detach on close, and `hermes gateway ensure` bootstrapping a home with no gateway), and the **Claude Code adapter against a scripted `claude`** (`tests/fixtures/fake-claude.mjs`, frames as recorded from Claude Code 2.1.289, settings and permission modes from 2.1.301: streaming, tools, approvals, AskUserQuestion, steer and follow-up, stop, todos, model and effort, permission modes, context, rename, resume from the file, the terminal resume command, fork, compaction), and the **OpenCode adapter against a scripted `opencode serve`** (`tests/fixtures/fake-opencode.mjs`, OpenCode 2's routes and events as recorded from 2.0.27: streaming, short replies with no deltas, tools and edit diffs, permissions, question forms, steer and follow-up, stop, todos, model and level before and after the session exists, rename, listing, resume, Edit/Retry by revert, fork, compaction), and the **Grok adapter against a scripted `grok`** (`tests/fixtures/fake-grok.mjs`, ACP over stdio: streaming, thinking, tools with an edit diff, permission cards in Grok's own words, model and effort changes, stop, resume from the file, session and model listing).
 - `npm run test:e2e` runs Playwright against the built server with two fake harnesses. It covers local access without sign-in, LAN sign-in on a real `HOST=0.0.0.0` server (wrong password, sign-in, sign-out), settings and login from `config.yml` (kept across restarts, revoked by a new password), a run that carries on after the browser closes and finishes in front of a second (phone-sized) browser, streaming, harness switch, steer and follow-up, stop, approvals, offline reconnect, reload and resume, markdown safety, theme contrast, the process fold, stacked approvals, the todo status stack, the context ring, changed files, the turn rail, sessions grouped by project (search, harness filter, *Show N more*, opening another project's session), chat text size, the button ripple (and its reduced-motion opt-out), sidebar resizing, the model picker (search, keyboard, recents, phone sheet), the permission picker (mid-run, keyboard, palette, kept on a phone's screen), Copy resume command (the clipboard, the banner's Close chat, a session row), images (paste, drop, picker, remove, vision warning, send), the working spinner, prompt recall, lists, the stash, find in chat, plan cards, usage-limit stops, queue edits, search in project, the hover card, prompt links, the title's count, the shortcut sheet, the `$` skills menu, Search every chat, the file viewer, saved prompts, usage across chats, a chat beside, the file timeline, the chain, and 390×844 and 320 px layouts.
-- `npm run smoke` runs the real Pi, omp, Hermes, and Claude Code: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in both harnesses; then it also runs prompt → stream → stop → resume. Claude Code takes `SMOKE_CLAUDE_MODEL` instead (e.g. `haiku`). Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
+- `npm run smoke` runs the real Pi, omp, Hermes, Claude Code, and Grok Build: discovery, a session with the harness's normal tools, config, session listing, and Pi resume-after-restart (from a session written by Pi's own `SessionManager`). It never calls a model unless `SMOKE_MODEL=<provider/model>` names a model already configured in Pi, omp, and Hermes; then it also runs prompt → stream → stop → resume. Claude Code takes `SMOKE_CLAUDE_MODEL` instead (e.g. `haiku`), and Grok Build takes `SMOKE_GROK_MODEL` (e.g. `grok-4.7`). Prefer a local model so it costs no tokens. It never starts a model server. Hermes needs its gateway interpreter: `HERMES_PYTHON` if set, otherwise the one the `hermes` launcher sets up, run with that launcher's environment (see [Hermes](#hermes)), otherwise `python3`.
 
 **NixOS.** Playwright browsers come from nixpkgs through `PLAYWRIGHT_BROWSERS_PATH`, and `@playwright/test` is pinned to the same version (1.63.0). Never run `npx playwright install`. Check the version with:
 

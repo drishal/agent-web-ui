@@ -66,7 +66,7 @@ src/server/
   chats/manager.ts            Chat registry; one live writer per native session; idle reaping.
   harness/types.ts            HarnessAdapter / LiveChat contract and the normalized HarnessEvent union.
   harness/registry.ts         One factory per harness; AWUI_HARNESSES selects them.
-  harness/{pi,omp,hermes,claude,opencode}.ts   The five adapters. fake.ts is the deterministic test adapter.
+  harness/{pi,omp,hermes,claude,opencode,grok}.ts   The six adapters; grok-transcript.ts folds Grok's ACP session updates (live and on disk). fake.ts is the deterministic test adapter.
   harness/opencode-server.ts  OpenCode's one shared `opencode serve`: started when needed, awui's password, events by session.
   harness/opencode-messages.ts  OpenCode's messages, models, forms, permissions as awui's (pure, against recorded shapes).
   harness/awui.ts              The Awui chat harness: a read-only `pi` child (subclass), own agent dir, write/exec tools denied; loads render_html + eval_python, not rewind. Web-only.
