@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig, migrateStateDir } from "../../src/server/config.js";
-import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, piTodos, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("the state folder", () => {
@@ -151,7 +151,30 @@ describe("agent event normalization", () => {
     expect(toolSummary({ _i: "x", ops: [{ op: "init", list: [{ phase: "P", items: ["a", "b"] }, { phase: "Q", items: ["c"] }] }] })).toBe("Planned 3 tasks");
     expect(toolSummary({ ops: [{ op: "done", task: "a" }, { op: "done", task: "b" }] })).toBe("Done: a, b");
     expect(toolSummary({ op: "init", list: [{ phase: "Fix", items: ["one"] }] })).toBe("Planned 1 task");
+    // Pi's flat init, and the op a model left out.
+    expect(toolSummary({ op: "init", items: ["a", "b"] })).toBe("Planned 2 tasks");
+    expect(toolSummary({ list: [{ phase: "P", items: ["a"] }] })).toBe("Planned 1 task");
+    expect(toolSummary({ items: ["a"], phase: "P" })).toBe("Added 1 task");
     expect(toolCategory("todo_write")).toBe("other");
+  });
+
+  it("reads a Pi chat's todos from its newest todo result", () => {
+    const result = (details: unknown, isError = false) => ({ role: "toolResult", toolName: "todo", isError, details });
+    const phases = (status: string) => [{ name: "Tasks", tasks: [{ content: "Inspect", status }] }];
+    expect(piTodos([])).toEqual([]);
+    expect(
+      piTodos([
+        result({ op: "init", phases: phases("in_progress") }),
+        { role: "assistant", content: [] },
+        result({ op: "done", phases: phases("completed") }),
+        result({ op: "done" }, true),
+      ]),
+    ).toEqual([{ phase: "Tasks", text: "Inspect", status: "completed" }]);
+    // Pi's example extension keeps `{text, done}`.
+    expect(piTodos([result({ todos: [{ id: 1, text: "a", done: true }, { id: 2, text: "b", done: false }] })])).toEqual([
+      { text: "a", status: "completed" },
+      { text: "b", status: "pending" },
+    ]);
   });
 
   it("takes an edit's count from its output only in the bracketed form", () => {

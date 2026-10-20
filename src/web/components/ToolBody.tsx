@@ -257,17 +257,22 @@ function todoEntries(args: Args | null): TodoEntry[] | null {
   if (Array.isArray(args.todos)) {
     return args.todos.filter(obj).map((t) => ({ text: String(t.content ?? t.text ?? t.title ?? ""), status: todoStatus(t.status) }));
   }
-  const ops = Array.isArray(args.ops) ? args.ops.filter(obj) : typeof args.op === "string" ? [args] : null;
+  // Pi lets a model leave `op` out of a `list` or `items` call.
+  const single = typeof args.op === "string" || Array.isArray(args.list) || Array.isArray(args.items);
+  const ops = Array.isArray(args.ops) ? args.ops.filter(obj) : single ? [args] : null;
   if (!ops) return null;
   const out: TodoEntry[] = [];
+  const planned = (items: unknown, phase: unknown) => {
+    for (const task of Array.isArray(items) ? items : []) {
+      out.push({ text: String(task), status: "pending", ...(typeof phase === "string" ? { phase } : {}) });
+    }
+  };
   for (const op of ops) {
     const kind = String(op.op ?? "");
     if (Array.isArray(op.list)) {
-      for (const phase of op.list.filter(obj)) {
-        for (const task of Array.isArray(phase.items) ? phase.items : []) {
-          out.push({ text: String(task), status: "pending", ...(typeof phase.phase === "string" ? { phase: phase.phase } : {}) });
-        }
-      }
+      for (const phase of op.list.filter(obj)) planned(phase.items, phase.phase);
+    } else if (Array.isArray(op.items)) {
+      planned(op.items, op.phase);
     } else if (typeof op.task === "string" || typeof op.text === "string") {
       const status: TodoEntry["status"] = /done|complete/.test(kind) ? "done" : /start|progress/.test(kind) ? "active" : /drop|remove|cancel/.test(kind) ? "cancelled" : "pending";
       out.push({ text: String(op.task ?? op.text), status });
