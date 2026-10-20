@@ -1,3 +1,8 @@
+// The app shell: bootstrap and sign-in, the tabs of open chats, the sidebar,
+// the conversation and its header, the composer, and every dialog. It owns
+// which chat is shown (the URL's #chat=, chat-stream.ts streams it over SSE)
+// and hands each region its data and callbacks; the regions themselves live
+// in components/ and draw from props.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   SessionMarkState,
