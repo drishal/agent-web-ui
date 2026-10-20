@@ -183,6 +183,8 @@ export interface HarnessAdapter {
   readonly capabilities: HarnessCapabilities;
   /** Its colour, one of HARNESS_ACCENTS; without one the registry assigns a free one. */
   readonly accent?: string;
+  /** What to run in a terminal to log in to a provider, for the "No models" hint; without one the hint names no command. */
+  readonly setupCommand?: string | undefined;
   discover(): Promise<HarnessDiscovery>;
   /** Why this harness cannot open the workspace, or null. */
   workspaceProblem(cwd: string): string | null;

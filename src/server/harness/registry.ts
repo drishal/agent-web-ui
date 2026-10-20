@@ -96,6 +96,7 @@ export class HarnessRegistry {
           capabilities: adapter.capabilities,
           overrides: d.overrides,
           accent: accents.get(adapter.id) ?? "muted",
+          ...(adapter.setupCommand ? { setupCommand: adapter.setupCommand } : {}),
         });
       }),
     );
