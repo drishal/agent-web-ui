@@ -206,6 +206,9 @@ describe("narration-looking thinking", () => {
   it("leaves plain chain-of-thought alone", () => {
     expect(readsAsNarration("The user asks whether the marker check is enough. The request is risky.")).toBe(false);
     expect(readsAsNarration("hmm, maybe the constraint is upstream")).toBe(false);
+    // A slash between words is no path, and a long thought that names a file is still a thought.
+    expect(readsAsNarration("The user has a gaming mouse/keyboard and a NixOS desktop.\nIdea: ask about rebuilds.\nBetter: a which-would-you-rather.\nLet me craft it.")).toBe(false);
+    expect(readsAsNarration("The handler lives in src/server/app.ts.\nIt reads the config first.\nSo the bug is upstream of the parse.")).toBe(false);
   });
 });
 
