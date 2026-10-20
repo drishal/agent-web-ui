@@ -22,6 +22,7 @@ const event = (type, payload, sessionId = runtimeId) =>
   out({ jsonrpc: "2.0", method: "event", params: { type, session_id: sessionId, ...(payload === undefined ? {} : { payload }) } });
 
 const storedId = "20261002_120000_fake1";
+const RESUME_PARAMS = new Set(["session_id", "profile", "cols", "source", "lazy", "defer_history", "omit_messages", "eager_build", "close_on_disconnect", "inline_images"]);
 let runtimeId = "4242";
 let title = "Fake Hermes session";
 let multimodel = false;
@@ -185,10 +186,15 @@ rl.on("line", (line) => {
       // The row keeps the session's folder, as the store does: a later connection resumes it.
       persist({ cwd: params.cwd ?? process.cwd() });
       return ok(id, { session_id: runtimeId, stored_session_id: storedId, message_count: 0, messages: [], info: { model, provider: "fake", reasoning_effort: effort, title, cwd: params.cwd ?? process.cwd(), stored_session_id: storedId, running: false, lazy: true } });
-    case "session.resume":
+    case "session.resume": {
+      // 0.22.2's contract refuses any key it does not declare (tui_gateway/contracts/registry.py).
+      const extra = Object.keys(params).find((key) => !RESUME_PARAMS.has(key));
+      if (extra) return fail(id, 4000, `invalid params for session.resume: ${extra}: Extra inputs are not permitted`);
       runtimeId = "4242";
       if (params.session_id !== storedId && params.session_id !== title) return fail(id, 4006, "session not found");
-      return ok(id, { session_id: runtimeId, stored_session_id: storedId, message_count: messages.length, messages, status: "idle", running: false, info: { model, provider: "fake", reasoning_effort: effort, title, cwd: state().cwd || process.cwd(), stored_session_id: storedId, running: false } });
+      // As 0.22.2 answers a lazy resume: the stored id only as `resumed`, none in the reply or its info.
+      return ok(id, { session_id: runtimeId, resumed: storedId, session_key: storedId, message_count: messages.length, messages, status: "idle", running: false, info: { model, provider: "fake", reasoning_effort: effort, title, cwd: state().cwd || process.cwd(), running: false, lazy: true } });
+    }
     case "session.history":
       return ok(id, { count: messages.length, messages });
     case "session.title":
