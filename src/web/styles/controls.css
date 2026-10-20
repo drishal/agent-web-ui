@@ -1,0 +1,133 @@
+/* ---- controls --------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 85%, var(--bg));
+}
+
+.btn-danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+.btn-ghost {
+  border-color: transparent;
+}
+
+.btn-danger-text {
+  color: var(--danger);
+}
+
+.btn-small {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.ghost-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ghost-icon:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.input,
+.select {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  max-width: 100%;
+}
+
+.input {
+  width: 100%;
+}
+
+.select-small {
+  min-height: 28px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}

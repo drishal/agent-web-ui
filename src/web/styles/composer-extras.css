@@ -1,0 +1,114 @@
+/* ---- composer extras: the link note, the stash, the usage-limit banner -------------------- */
+
+.stash {
+  position: relative;
+  display: inline-flex;
+}
+
+.composer-bar .composer-stash {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.stash-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.menu-list.stash-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 8px);
+  left: -6px;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(360px, 50dvh);
+  overflow-y: auto;
+  transform-origin: bottom left;
+}
+
+.stash-menu kbd {
+  margin-left: auto;
+}
+
+.stash-empty {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.stash-entry {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.menu-list .stash-take {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stash-text,
+.stash-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-meta {
+  font-size: 11px;
+}
+
+.menu-list .stash-drop {
+  width: 26px;
+  flex: none;
+}
+
+.composer-linked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-linked span {
+  flex: 1;
+}
+
+.limit-recovery {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 4px 8px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--hairline));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--warn) 9%, var(--card));
+  font-size: 13px;
+  animation: rise-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.limit-recovery-icon {
+  display: inline-flex;
+  color: var(--warn);
+}
+
+.limit-recovery-text {
+  flex: 1;
+  min-width: 12em;
+}

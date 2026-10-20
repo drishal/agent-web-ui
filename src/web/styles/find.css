@@ -1,0 +1,46 @@
+/* ---- find in chat ---------------------------------------------------------------------- */
+
+/* Over the thread's top right, out of the way of the turn rail. */
+.find-bar {
+  position: absolute;
+  top: 8px;
+  right: 28px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  color: var(--muted);
+  animation: pop-down 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.find-input {
+  width: 200px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.find-count {
+  min-width: 64px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+::highlight(awui-find) {
+  background-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  color: inherit;
+}
+
+::highlight(awui-find-current) {
+  background-color: color-mix(in srgb, var(--warn) 70%, transparent);
+  color: var(--bg);
+}

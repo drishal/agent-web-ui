@@ -1,0 +1,356 @@
+/* ---- the file viewer --------------------------------------------------------------------- */
+
+/* A project path that opens the viewer: the path's own look, underlined on hover. */
+.file-link {
+  display: inline;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color 0.12s ease-out, color 0.12s ease-out;
+}
+
+.file-link:hover,
+.file-link:focus-visible {
+  color: var(--link);
+  text-decoration-color: color-mix(in srgb, var(--link) 60%, transparent);
+}
+
+.viewer {
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  width: min(1000px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-float), -1px 0 0 var(--hairline-strong);
+}
+
+.viewer[open] {
+  display: flex;
+  animation: review-in 0.22s var(--ease-out);
+}
+
+.viewer::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+.viewer-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 10px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.viewer-title {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.viewer-title h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.viewer-dir {
+  color: var(--muted);
+}
+
+.viewer-name {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.viewer-goto {
+  position: relative;
+  width: min(280px, 38vw);
+}
+
+.viewer-goto-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.viewer-goto-box:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline-strong));
+}
+
+.viewer-goto-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.viewer-goto-box input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.viewer-goto-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: max(100%, 360px);
+  max-height: 320px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  animation: fade-in 0.12s ease-out;
+}
+
+.viewer-goto-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.viewer-goto-list li.is-active {
+  background: var(--hover);
+}
+
+.viewer-goto-list .icon {
+  flex: none;
+  align-self: center;
+  color: var(--muted);
+}
+
+.viewer-goto-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.viewer-goto-dir {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 8px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.viewer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.viewer-chip.is-changed {
+  background: color-mix(in srgb, var(--ok) 13%, transparent);
+  color: var(--text);
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.viewer-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.viewer-code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px 0 28px;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+/* A block of rows off screen is not laid out until it scrolls near. */
+.vl-chunk {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(var(--rows) * 20px);
+}
+
+/* As wide as the longest line, and never narrower than the view, so a marked line's wash spans it. */
+.vl {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+
+.vl-text {
+  flex: 1;
+}
+
+.vl-num {
+  position: sticky;
+  left: 0;
+  flex: none;
+  width: 4.6em;
+  padding: 0 12px 0 0;
+  border: 0;
+  border-right: 2px solid transparent;
+  background: var(--code-bg);
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+  font: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.vl-num:hover {
+  color: var(--text-2);
+}
+
+.vl-text {
+  padding: 0 24px 0 14px;
+  color: var(--text-2);
+  white-space: pre;
+}
+
+/* What this chat's edits added: a green edge on the number, a faint wash on the line. */
+.vl.is-added .vl-num {
+  border-right-color: var(--ok);
+  color: color-mix(in srgb, var(--ok) 80%, var(--text));
+}
+
+.vl.is-added .vl-text {
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+}
+
+.vl.is-marked .vl-num {
+  border-right-color: var(--accent);
+  color: var(--text);
+  font-weight: 650;
+}
+
+.vl.is-marked .vl-text,
+.vl.is-marked {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tk-comment {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.tk-string {
+  color: color-mix(in srgb, var(--ok) 85%, var(--text));
+}
+
+.tk-number,
+.tk-literal {
+  color: color-mix(in srgb, var(--orange) 85%, var(--text));
+}
+
+.tk-keyword {
+  color: color-mix(in srgb, var(--thinking) 88%, var(--text));
+}
+
+.tk-type {
+  color: color-mix(in srgb, var(--info) 85%, var(--text));
+}
+
+.tk-key {
+  color: color-mix(in srgb, var(--link) 85%, var(--text));
+}
+
+.tk-heading {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.viewer-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 28px 22px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.viewer-empty.is-error {
+  color: var(--danger);
+}
+
+.viewer-cut {
+  margin: 10px 0 0;
+  padding: 0 22px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .viewer-head {
+    flex-wrap: wrap;
+  }
+
+  .viewer-goto {
+    order: 3;
+    width: 100%;
+  }
+}

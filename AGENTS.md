@@ -92,7 +92,7 @@ src/server/
   chat-search.ts              Search every chat: the sidebar's sessions read (never started), matched, bounded, cached per version.
   herdr.ts                    herdr's JSON socket: its panes by session (sidebar marks, the resume guard), focusing one; atui reports through it.
   harness/plans.ts            A plan call's plan (ExitPlanMode, plan_mode_complete) onto its tool item, bounded.
-src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css one stylesheet.
+src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css imports styles/*.css in cascade order.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
@@ -206,8 +206,8 @@ if every test passes.
 - **Web UI:** colours are CSS custom properties on `:root`; a base16 theme
   overrides the base tokens and everything else derives from them with
   `color-mix`, so never hard-code a colour. Motion is short and eased out, and
-  `prefers-reduced-motion` turns all of it off (a rule at the top of
-  `styles.css`). Browser storage goes through `storage.ts` (`awui.` prefix);
+  `prefers-reduced-motion` turns all of it off (a rule at the end of
+  `styles/tokens.css`). Browser storage goes through `storage.ts` (`awui.` prefix);
   requests through `api.ts`. Every interactive element works by keyboard and
   has an accessible name: the e2e tests select by role and name.
 - **atui:** the theme comes from the server's tokens (`theme.ts`); mouse and

@@ -1,0 +1,96 @@
+/* ---- search in project ------------------------------------------------------------------ */
+
+.dialog.search-dialog {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.search-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.search-case {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.search-status {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.search-results {
+  max-height: min(60dvh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.search-results.is-stale {
+  opacity: 0.55;
+}
+
+.search-path {
+  position: sticky;
+  top: 0;
+  padding: 6px 4px 3px;
+  background: var(--card);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-row {
+  display: flex;
+  gap: 10px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.search-row.is-active {
+  background: var(--hover);
+}
+
+.search-line {
+  min-width: 3.5em;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  color: var(--text-2);
+}
+
+.search-text mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--warn) 35%, transparent);
+  color: var(--text);
+}
+
+.search-more {
+  margin: 8px auto 2px;
+  display: block;
+}

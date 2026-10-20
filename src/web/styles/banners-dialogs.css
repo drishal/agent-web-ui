@@ -1,0 +1,735 @@
+/* ---- banners, dialogs, picker ---------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--info) 9%, var(--bg));
+}
+
+.banner-warning {
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg));
+}
+
+.banner-error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+}
+
+.dialog {
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--text);
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+}
+
+.dialog-wide {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+/* Review (OpenCode's review tab): a sheet on the right with every file the chat changed; a
+   diff line takes a comment, and the comments go to the agent as one prompt. */
+.review {
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  width: min(var(--col), 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-float), -1px 0 0 var(--hairline-strong);
+}
+
+.review[open] {
+  display: flex;
+  animation: review-in 0.22s var(--ease-out);
+}
+
+@keyframes review-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.review::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+.review-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.review-head h2 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+
+.review-head p {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.review-files {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 16px 24px;
+}
+
+.review-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.review-file + .review-file {
+  margin-top: 18px;
+}
+
+.review-path {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -16px 6px;
+  padding: 8px 16px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.review-path code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-edit {
+  margin-bottom: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.review-edit-head {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
+.review-edit .diff {
+  max-height: none;
+}
+
+.diff.is-commentable .diff-line {
+  cursor: pointer;
+}
+
+.diff.is-commentable .diff-line:hover,
+.diff.is-commentable .diff-line:focus-visible {
+  outline: none;
+  box-shadow: inset 2px 0 0 var(--accent);
+  background-color: var(--hover);
+}
+
+.diff-line.has-note {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.review-note {
+  margin: 4px 10px 8px 34px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--hairline));
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 7%, var(--card));
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+  white-space: normal;
+}
+
+.review-note p {
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+}
+
+.review-input {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  font: inherit;
+}
+
+.review-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.review-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+}
+
+.review-foot > span {
+  margin-right: auto;
+}
+
+.review-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+@media (max-width: 640px) {
+  .review-label {
+    display: none;
+  }
+}
+
+.review-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Undo file changes: the files a restore would touch, each with what happens to it. */
+.restore-list {
+  max-height: 46vh;
+  margin: 10px 0;
+  padding: 4px 0;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+
+.restore-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.restore-list code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restore-change {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.restore-change.is-delete {
+  color: var(--danger);
+}
+
+.restore-change.is-recreate {
+  color: var(--ok);
+}
+
+.banner-action {
+  flex: none;
+  margin-left: auto;
+}
+
+/* Command palette (Ctrl+K): a search box over one list, near the top like an editor's. */
+.palette {
+  margin: min(12vh, 96px) auto auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--text);
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(560px, calc(100dvh - 32px));
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  overflow: hidden;
+}
+
+.palette[open] {
+  display: flex;
+}
+
+.palette::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+.palette-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.palette-search {
+  padding: 12px 14px;
+}
+
+.palette-search input {
+  font-size: 15px;
+}
+
+.palette-kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 5px;
+  font: 11px var(--font-mono, monospace);
+  color: var(--muted);
+}
+
+.palette-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 6px 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-hint {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.palette-check {
+  flex: none;
+  color: var(--accent);
+}
+
+.palette-option.is-disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.palette-empty {
+  padding: 18px 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (hover: none) {
+  .palette-kbd {
+    display: none;
+  }
+}
+
+.dialog-body {
+  padding: 16px 18px 18px;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dialog-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 640;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dialog code {
+  overflow-wrap: anywhere;
+}
+
+/* The image viewer: the picture grows from its thumbnail over a dim backdrop. */
+.image-lightbox {
+  max-width: none;
+  max-height: none;
+  width: 100vw;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  outline: none;
+}
+
+.image-lightbox[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.image-lightbox::backdrop {
+  background: rgb(0 0 0 / 0.78);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.24s ease;
+}
+
+.image-lightbox.is-closing::backdrop {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-lightbox-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  padding: 0 16px;
+}
+
+.image-lightbox-img {
+  display: block;
+  max-width: min(92vw, calc(100vw - 140px));
+  max-height: calc(100dvh - 120px);
+  border-radius: 10px;
+  object-fit: contain;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 24px 60px rgb(0 0 0 / 0.5);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.image-lightbox-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: rgb(255 255 255 / 0.85);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  animation: rise-in 0.3s var(--ease-out) 0.08s backwards;
+}
+
+.image-lightbox-caption .image-tag {
+  color: #fff;
+  font-weight: 700;
+}
+
+.image-lightbox-caption .muted {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.image-lightbox-close,
+.image-lightbox-nav {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+  transition: background-color 0.12s ease;
+  animation: fade-in 0.3s ease 0.08s backwards;
+}
+
+.image-lightbox-close:hover,
+.image-lightbox-nav:hover {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+}
+
+.image-lightbox-nav.is-prev svg {
+  transform: rotate(180deg);
+}
+
+.image-lightbox.is-closing .image-lightbox-caption,
+.image-lightbox.is-closing .image-lightbox-close,
+.image-lightbox.is-closing .image-lightbox-nav {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+@media (max-width: 640px) {
+  .image-lightbox-img {
+    max-width: calc(100vw - 24px);
+  }
+
+  .image-lightbox-nav {
+    position: fixed;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .image-lightbox-nav.is-prev {
+    left: 16px;
+  }
+
+  .image-lightbox-nav.is-next {
+    right: 16px;
+  }
+}
+
+.picker-section {
+  margin-top: 12px;
+}
+
+.picker-section h3 {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.picker-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.picker-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.picker-current {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.picker-scroll {
+  max-height: 40dvh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--hover);
+}
+
+.picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.picker-item:hover {
+  background: var(--hover);
+}
+
+.picker-path {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.picker-empty {
+  padding: 8px 10px;
+}
+
+.picker-type label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.picker-type-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.pair-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.pair-url code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--hover);
+  font-size: 12px;
+}
+
+.fullscreen-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.fullscreen-message h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.fullscreen-message code {
+  overflow-wrap: anywhere;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 24px 22px;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--hairline);
+  text-align: left;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.login-card p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.login-error {
+  color: var(--danger);
+}
+
+.login-submit {
+  min-height: 40px;
+}
+
+.empty-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.empty-main h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.empty-main p {
+  margin: 0;
+}
+
+/* Copy feedback: the checkmark pops in on swap. Reduced-motion disables it
+   globally (top of file). */
+.ghost-icon > .icon {
+  transition: transform 0.12s ease;
+}
+.ghost-icon[aria-label="Copied"] > .icon {
+  animation: pop 0.22s var(--ease-out);
+}

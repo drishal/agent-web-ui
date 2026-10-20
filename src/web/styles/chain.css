@@ -1,0 +1,55 @@
+/* ---- the chain --------------------------------------------------------------------------- */
+
+/* "Then" and its arrow read as one split button. */
+.then-split {
+  position: relative;
+  display: inline-flex;
+}
+
+.then-split .then-btn {
+  border-radius: 999px 0 0 999px;
+  border-right-width: 0;
+}
+
+.then-split .then-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 0 999px 999px 0;
+}
+
+/* Over the composer, opening upwards: below it is the edge of the window. */
+.menu-list.then-menu {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  min-width: 230px;
+  transform-origin: bottom right;
+}
+
+.then-menu-head {
+  padding: 6px 10px 4px;
+  font-size: 11.5px;
+}
+
+.stack-chain {
+  border-top: 1px solid var(--hairline);
+}
+
+.stack-chain .chain-row .stack-kind {
+  color: var(--accent);
+}
+
+.stack-paused {
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--text);
+}
+
+.stack-paused .stack-icon {
+  color: var(--warn);
+}
+
+.stack-actions.is-shown {
+  display: inline-flex;
+  gap: 6px;
+}

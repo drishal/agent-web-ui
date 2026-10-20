@@ -1,0 +1,646 @@
+/* ---- sidebar -------------------------------------------------------------- */
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 10px 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--hairline);
+  overflow: hidden;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding: 0 6px;
+}
+
+/* The brand takes the free space; Settings and the fold/close buttons sit together at the right. */
+.sidebar-head .brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.brand {
+  font-weight: 650;
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+}
+
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  font-weight: 550;
+  text-align: left;
+  box-shadow: 0 1px 2px rgb(0 0 0 / calc(var(--shadow-strength) * 0.6));
+}
+
+.new-chat:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 3%, var(--bg));
+}
+
+.new-chat:disabled {
+  opacity: 0.55;
+}
+
+.sidebar-note {
+  margin: 0;
+  padding: 0 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sidebar-note.is-warning {
+  color: var(--warn);
+}
+
+.workspace-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+  color: var(--text-2);
+}
+
+.workspace-btn:hover {
+  background: var(--hover);
+}
+
+.workspace-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workspace-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workspace-path {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Usage limits (sidebar footer): folded to one line with the fullest window. */
+/* The fullest limit, in the sidebar's Usage row. */
+.limits-top {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.limits-top.is-warn {
+  color: var(--warn);
+}
+
+.limits-top.is-full {
+  color: var(--danger);
+}
+
+/* The Usage panel's limits: a card per account. */
+.limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.limits-account {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 11px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.limits-account.is-limited {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 45%, var(--hairline));
+}
+
+.limits-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.limits-plan {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.limits-plan.is-full {
+  color: var(--danger);
+}
+
+/* A window: its name and share on one line, the bar under them, when it resets under that. */
+.limits-window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 4px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.limits-label {
+  grid-area: 1 / 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.limits-bar {
+  grid-area: 2 / 1 / 3 / -1;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.limits-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ok);
+  transition: width 0.4s var(--ease-out);
+}
+
+.limits-fill.is-warn {
+  background: var(--warn);
+}
+
+.limits-fill.is-full {
+  background: var(--danger);
+}
+
+.limits-pct {
+  grid-area: 1 / 2;
+  text-align: right;
+}
+
+.limits-reset {
+  grid-area: 3 / 1 / 4 / -1;
+  font-size: 10.5px;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--muted);
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.search-field:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.sessions-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sessions-head .search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.sessions-head .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.session-list,
+.session-sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+/* Sidebar skeleton: three pulsing rows while the first session list loads, so
+   the panel does not snap from empty to populated. Reduced-motion safe (the
+   global rule kills the pulse). */
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.skeleton-row {
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-row:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.skeleton-row:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.date-divider {
+  padding: 8px 10px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Project groups (Hermes Desktop): a folder row with its sessions on a rail below. */
+.project-group + .project-group {
+  margin-top: 6px;
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--r-sm);
+}
+
+.project-head:hover {
+  background: var(--hover);
+}
+
+.project-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.project-group.is-current .project-toggle {
+  color: var(--text);
+}
+
+.project-group.is-current .project-toggle svg:not(.group-chevron) {
+  color: var(--accent);
+}
+
+.project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.12s ease;
+}
+
+.project-group:not(.is-open) .group-chevron {
+  transform: rotate(-90deg);
+}
+
+.group-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.project-head .project-new {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+}
+
+.project-head:hover .project-new,
+.project-head .project-new:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .project-head .project-new {
+    opacity: 1;
+  }
+}
+
+.project-group .session-sublist {
+  margin-left: 12px;
+  padding-left: 6px;
+  border-left: 1px solid var(--hairline);
+}
+
+/* Which harness a session belongs to; the harness menu doubles as the legend. The colour
+   comes from the server (HarnessStatus.accent) as --harness, so a new harness needs no CSS. */
+.harness-dot {
+  flex: none;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--harness, var(--muted));
+}
+
+/* Same 10px slot as the working ring, so titles don't shift when a run starts. */
+.session .harness-dot {
+  margin: 0 2px;
+}
+
+/* A run in progress (Hermes Desktop's sidebar): a spinning ring, harness-coloured in the All
+   view. Reduced motion stops the spin and leaves the ring with its gap. */
+.working-ring {
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.working-ring.is-harness {
+  color: var(--harness, var(--accent));
+}
+
+.project-toggle .working-ring {
+  margin-left: 2px;
+}
+
+.show-more {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.show-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.session:hover {
+  background: var(--hover);
+}
+
+.session.is-active {
+  background: var(--active);
+}
+
+.session-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Pin and archive: a ⋯ over the row's time on hover; on touch screens on the open session's
+   row, and a long press on any row. */
+.session-item {
+  position: relative;
+}
+
+.session-more {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+.session-item:hover .session-more,
+.session-item.is-menu-open .session-more,
+.session-more:focus-visible {
+  opacity: 1;
+}
+
+.session-item:hover .session-meta,
+.session-item.is-menu-open .session-meta {
+  visibility: hidden;
+}
+
+@media (hover: none) {
+  .session-more {
+    pointer-events: none;
+  }
+
+  .session-item:has(> .session.is-active) .session-more {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .session-item:has(> .session.is-active) .session-meta {
+    visibility: hidden;
+  }
+}
+
+.session.is-archived .session-title {
+  color: var(--muted);
+}
+
+.session-project {
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-toggle.is-static {
+  cursor: default;
+}
+
+.pinned-group .session-sublist {
+  border-left-color: transparent;
+}
+
+.row-menu {
+  position: fixed;
+}
+
+.row-menu button,
+.menu-list button:has(> .icon) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archived-toggle {
+  margin-top: 6px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.badge-harness {
+  background: color-mix(in srgb, var(--harness, var(--muted)) 16%, transparent);
+  color: var(--harness, var(--text-2));
+}
+
+/* Resize handle on the sidebar's right edge. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.is-resizing .sidebar-resizer::after {
+  background: var(--accent);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}

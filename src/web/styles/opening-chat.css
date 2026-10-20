@@ -1,0 +1,130 @@
+/* ---- opening a chat ------------------------------------------------------------------ */
+
+/* Everything under the header: the conversation and composer, or the hero, or
+   the empty state; the loading screen lies over it while a chat opens. */
+.chat-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The chat being opened: its title and harness over a ghost of a thread, in
+   the harness's colour. It shows in the click's frame and fades once the
+   conversation has drawn underneath (App drops it 260 ms later). */
+.switch-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 34px;
+  padding: 12vh 24px 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 18%, color-mix(in srgb, var(--harness, var(--accent)) 9%, transparent), transparent 70%),
+    var(--bg);
+  transition: opacity 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.switch-splash.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(640px, 100%);
+  text-align: center;
+  animation: rise-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.splash-mark .loader-run {
+  stroke: var(--harness, var(--accent));
+}
+
+.splash-title {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.splash-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* A thread's shape (a prompt bubble on the right, answer lines under it) in shimmering bars. */
+.splash-ghost {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  width: min(var(--chat-col), 100%);
+  animation: fade-in 0.4s ease-out 0.08s both;
+}
+
+.ghost-bubble,
+.ghost-line {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--harness, var(--accent)) 12%, transparent) 50%,
+      transparent 100%
+    )
+    0 0 / 200% 100%,
+    color-mix(in srgb, var(--text) 6%, transparent);
+  animation: shimmer 1.4s linear infinite;
+}
+
+.ghost-bubble {
+  align-self: flex-end;
+  width: 46%;
+  height: 38px;
+  margin: 6px 0 4px;
+  border-radius: 18px;
+}
+
+.ghost-bubble.is-short {
+  width: 30%;
+  margin-top: 18px;
+}
+
+.ghost-line {
+  height: 12px;
+}
+
+.ghost-line:nth-child(2) {
+  width: 92%;
+}
+.ghost-line:nth-child(3) {
+  width: 78%;
+}
+.ghost-line:nth-child(4) {
+  width: 85%;
+}
+.ghost-line:nth-child(5) {
+  width: 40%;
+}
+.ghost-line:nth-child(7) {
+  width: 88%;
+}
+.ghost-line:nth-child(8) {
+  width: 64%;
+}

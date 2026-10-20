@@ -1,0 +1,133 @@
+/* ---- keyboard shortcuts ----------------------------------------------------------------- */
+
+.dialog.keys-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.keys-search {
+  margin: 0 -2px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+.keys-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline-strong));
+}
+
+.keys-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Two stacks of groups side by side where there is room, one under the other on a phone. */
+.keys-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
+  column-gap: 28px;
+  max-height: min(62dvh, 600px);
+  margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.keys-group {
+  padding: 10px 0 6px;
+}
+
+.keys-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.keys-group h3::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.keys-group dl {
+  margin: 0;
+}
+
+.keys-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.keys-row:last-child {
+  border-bottom: 0;
+}
+
+.keys-row dt {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.keys-row dd {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.keys-combo {
+  display: inline-flex;
+  gap: 3px;
+}
+
+/* A keycap: a raised key, its lower edge a little heavier, in any theme. */
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--bg));
+  color: var(--text);
+  font: 500 11.5px var(--font-mono);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.keys-or {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.keys-empty {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.keys-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+}

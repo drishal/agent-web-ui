@@ -39,7 +39,7 @@ export function pressIntent(ms: number, moved: Point): "long" | "moved" | "short
   return ms >= LONG_PRESS_MS ? "long" : "short";
 }
 
-/** Drawer mode: the width at which the sessions panel is a drawer (styles.css's 819px breakpoint). */
+/** Drawer mode: the width at which the sessions panel is a drawer (styles/responsive.css's 819px breakpoint). */
 const DRAWER_QUERY = "(max-width: 819px)";
 
 /** Open and close the drawer by swiping, in drawer mode only. */

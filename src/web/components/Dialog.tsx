@@ -3,7 +3,7 @@ import { useSwipeDown } from "../gestures.js";
 
 /**
  * Native modal <dialog>: focus trap, Escape, and inert background for free.
- * On a phone it is a bottom sheet (styles.css): a handle on top, and a drag
+ * On a phone it is a bottom sheet (styles/phones.css): a handle on top, and a drag
  * down on the handle or the title closes it.
  */
 export function Dialog({

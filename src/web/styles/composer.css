@@ -1,0 +1,554 @@
+/* ---- composer card (DeepSeek Harness) --------------------------------------- */
+
+.composer {
+  width: 100%;
+  max-width: calc(var(--chat-col) + 8px);
+  margin: 0 auto;
+  padding: 4px 16px calc(14px + env(safe-area-inset-bottom));
+}
+
+.composer-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px 8px 14px;
+  border-radius: var(--r-panel);
+  background: var(--card);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--hairline);
+  transition: box-shadow 0.12s ease;
+}
+
+.composer-card:focus-within {
+  box-shadow: var(--shadow-soft), 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.composer-card.is-closed {
+  opacity: 0.6;
+}
+
+/* "/" command menu (Hermes Desktop's): above the composer, the full description on hover. */
+.command-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: min(560px, 100%);
+  max-height: min(340px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+}
+
+.command-menu-head {
+  padding: 8px 8px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.command-item.is-active {
+  background: var(--hover);
+}
+
+.command-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.command-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-source {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 11px;
+}
+
+.command-empty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* The "$" menu: the skills, each with a spark in the thinking colour. */
+.command-icon-skill {
+  color: var(--thinking);
+}
+
+.command-menu.is-skills .command-name {
+  color: color-mix(in srgb, var(--thinking) 70%, var(--text));
+}
+
+.command-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 7px 8px 3px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.command-foot .keycap {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+/* Dropping files: the card outlines itself as the target. */
+.composer-card.is-dragging {
+  box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);
+}
+
+/* Attached images: plain rounded frames, each labelled with its #N and size,
+   so a prompt can say "#2". */
+.composer-pastes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.composer-paste {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--muted);
+  animation: settle-in 0.24s var(--ease-out);
+}
+
+.composer-paste .paste-label strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.composer-paste .composer-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+/* The oversized-paste choice shown in place of the blob. */
+.paste-offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.composer-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.composer-image {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  animation: settle-in 0.24s var(--ease-out);
+}
+
+.composer-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.composer-image-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.composer-image-open img {
+  transition:
+    filter 0.15s ease,
+    transform 0.25s var(--ease-out);
+}
+
+.composer-image-open:hover img {
+  filter: brightness(0.9);
+  transform: scale(1.04);
+}
+
+/* "#1 · 473×228" on the image's lower edge. */
+.image-label {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 12px);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(4px);
+  color: rgb(255 255 255 / 0.75);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.image-label strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+.composer-image-remove {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, #000 60%, transparent);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.composer-image:hover .composer-image-remove,
+.composer-image:focus-within .composer-image-remove {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .composer-image-remove {
+    opacity: 1;
+  }
+}
+
+.composer-note {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.composer-bar .composer-attach {
+  width: 32px;
+  height: 32px;
+  margin-left: -6px;
+  border-radius: 50%;
+}
+
+.composer-input {
+  display: block;
+  width: 100%;
+  min-height: 26px;
+  max-height: 260px;
+  padding: 4px 2px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-size: var(--chat-font);
+  line-height: 1.55;
+}
+
+.composer-input::placeholder {
+  color: var(--muted);
+}
+
+.composer.is-hero .composer-input {
+  min-height: 52px;
+}
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pill-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  max-width: 210px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.pill-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 100%;
+  padding: 0 26px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pill-select select:disabled {
+  opacity: 0.6;
+}
+
+.pill-select .icon {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+}
+
+.pill-select select option {
+  background: var(--bg);
+  color: var(--text);
+}
+
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.composer-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.pill-btn {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pill-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.pill-btn:disabled {
+  opacity: 0.45;
+}
+
+.round-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.round-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 82%, var(--bg));
+}
+
+.round-btn:disabled {
+  opacity: 0.28;
+}
+
+.context-ring-wrap {
+  position: relative;
+}
+
+.context-ring {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring:hover {
+  background: var(--hover);
+}
+
+/* The ring sweeps as context grows instead of snapping between percent steps.
+   stroke-dasharray is animatable; the reduced-motion rule kills it. */
+.context-ring circle:last-child {
+  transition: stroke-dasharray 0.3s var(--ease-out);
+}
+
+.context-ring.tone-warn {
+  color: var(--warn);
+}
+
+.context-ring.tone-danger {
+  color: var(--danger);
+}
+
+/* Context and usage panel (DeepSeek Harness's three popovers, as sections of one). */
+.usage-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-section {
+  padding: 10px 0;
+}
+
+.usage-section + .usage-section {
+  border-top: 1px solid var(--hairline);
+}
+
+.usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.usage-head strong {
+  font-weight: 600;
+}
+
+.usage-bar {
+  display: flex;
+  gap: 1px;
+  height: 5px;
+  margin: 2px 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.usage-bar span {
+  flex: none;
+  min-width: 2px;
+  height: 100%;
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.usage-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.usage-swatch {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.usage-value {
+  flex: none;
+  color: var(--text);
+}
+
+.usage-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
