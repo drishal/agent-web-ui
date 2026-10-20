@@ -291,12 +291,12 @@ src/web/                    React + Vite client
 
 ### The adapter registry: adding a harness
 
-A third harness is a new file plus a registry entry:
+A harness is one adapter file plus a registry entry; the web UI, atui, and the Tern client need no code for it, since they draw what its adapter declares (name, colour, capabilities, setup command). The only per-harness tables are atui's optional mark and spinner. [docs/harnesses.md](docs/harnesses.md) is the full guide: which existing adapter to copy for the agent's transport, the `HarnessAdapter` / `LiveChat` contract, what each capability turns on, every file a new harness touches (registry, config, README, a scripted fake CLI and its tests), and how to check it against the real CLI. In short:
 
 1. Implement `HarnessAdapter` and `LiveChat` from `src/server/harness/types.ts` in `src/server/harness/<name>.ts`. Normalize everything into `HarnessEvent`. Never pass SDK or wire types further out.
-2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared (steer, follow-up, thinking, compact, rename, model selection, interactive requests, and `supportsHtmlRender` for the `render_html` tool only when the child has awui's render endpoint — Pi and omp through [`extensions/render-html.ts`](extensions/render-html.ts)).
-3. Add one line to `factories` in `src/server/harness/registry.ts`, and its name to `AWUI_HARNESSES` if it should not be on by default.
-4. Run the contract tests against it. `tests/unit/api.test.ts` exercises the same chat flows the fake adapter supports.
+2. Declare `capabilities` honestly. The UI hides or disables whatever is not declared.
+3. Register it: a line in `factories` (`registry.ts`), the default `AWUI_HARNESSES` list (`config.ts`), and its `harnesses.<id>` launch settings and `<ID>_BIN` (`user-config.ts`).
+4. Test it against a scripted stand-in that speaks the CLI's recorded wire (`tests/fixtures/fake-<name>.mjs`), then against the real CLI (`npm run smoke`).
 
 `HarnessId` is a branded string, so adding one never edits the protocol types.
 

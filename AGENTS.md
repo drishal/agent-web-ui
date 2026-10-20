@@ -24,6 +24,17 @@ settings, tools, trust decisions, and session files. awui only drives it,
 renders it, and adds a few things on the side (checkpoints, pins, review
 comments, notifications), each kept in awui's own state folder.
 
+## Start here
+
+Match the task to a guide before opening code:
+
+| The task | Read first | Then |
+|---|---|---|
+| "Add support for <agent>"; one harness fails to start, resume, stream, or answer approvals | [docs/harnesses.md](docs/harnesses.md) | `src/server/harness/<id>.ts` and its stand-in `tests/fixtures/fake-<id>.mjs` |
+| A part of the web UI is broken or "looks off"; restyle or move one | [docs/ui.md](docs/ui.md) | Its region table: the component and `src/web/styles/<area>.css` |
+| Messages wrong or out of order in every harness | [docs/ui.md](docs/ui.md), section 1 | `src/server/chats/chat.ts` (the reducer), `src/web/turns.ts` |
+| A new route, setting, or tool rendering; an atui feature | [Making common changes](#making-common-changes) | The files it lists |
+
 ## Commands
 
 | Command | What it does |
@@ -39,6 +50,7 @@ comments, notifications), each kept in awui's own state folder.
 | `npm run test:atui` | Build, then `bun test tests/atui` (atui in OpenTUI's test renderer, and the Tern client against a stand-in Tern, both against a real server). |
 | `awui tern` | The Tern client in a Tern pane (`bun --conditions=browser src/tern/main.ts`; Solid's default Bun build is its server one, where effects never run). |
 | `npm run smoke` | Opt-in tests against the real installed harnesses. No model is called unless `SMOKE_MODEL` (and `SMOKE_CLAUDE_MODEL`) name one. |
+| `node scripts/ui-shot.mjs <url> <selector> <out.png>` | Screenshot one element of a running UI and print every control's size, radius, padding, and font (`--phone`, `--narrow`, `--light`). See docs/ui.md. |
 | `npm run set-password` | Store an scrypt login for other devices. |
 | `npm run service -- install\|uninstall\|print` | The systemd user unit (`contrib/systemd/awui.service`). |
 
@@ -92,7 +104,8 @@ src/server/
   chat-search.ts              Search every chat: the sidebar's sessions read (never started), matched, bounded, cached per version.
   herdr.ts                    herdr's JSON socket: its panes by session (sidebar marks, the resume guard), focusing one; atui reports through it.
   harness/plans.ts            A plan call's plan (ExitPlanMode, plan_mode_complete) onto its tool item, bounded.
-src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css imports styles/*.css in cascade order.
+src/web/                      React 19 + Vite client. App.tsx is the shell; components/ the pieces; styles.css imports
+                              styles/*.css (one file per area) in cascade order. docs/ui.md maps which part is where.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
@@ -132,6 +145,9 @@ tests/fixtures                Scripted stand-ins: fake-omp.mjs, fake-hermes.mjs,
 tests/e2e                     Playwright. global-setup.ts starts the built server with AWUI_HARNESSES=fake,fake-b.
 tests/atui                    bun:test against a real server; helpers.tsx mounts atui in the test renderer;
                               tern-fake.tsx is a stand-in Tern (handshake, frames applied to a document, acks).
+docs/harnesses.md             Adding or fixing a harness: the contract, capabilities, every file a new one touches, tests, pitfalls.
+docs/ui.md                    Finding and fixing a part of the web UI: regions → components → styles → e2e specs, tokens, a sandbox, measuring.
+scripts/                      dev.mjs (npm run dev), build-binary.ts, service.mjs, set-password.mjs, ui-shot.mjs (see Commands).
 design/                       App icon drafts. .todo/ is gitignored: private notes, never committed.
 ```
 
@@ -245,8 +261,9 @@ if every test passes.
   parser against real sessions on the machine (`~/.pi/agent/sessions`,
   `~/.omp/agent/sessions`, `~/.claude/projects`) with a throwaway script, read
   only. Never open the session the current agent is itself running in.
-- **Screenshots** for visual work: `AWUI_SCREENSHOTS=<dir> npx playwright test
-  screenshots` writes frames; for atui, render frames in `tests/atui` and read
+- **Screenshots** for visual work: `node scripts/ui-shot.mjs` for one element
+  and its controls' sizes against a sandbox server (docs/ui.md, sections 4–5);
+  `AWUI_SCREENSHOTS=<dir> npx playwright test screenshots` writes frames; for atui, render frames in `tests/atui` and read
   them; for the Tern client, run a headless `tern serve --control <port>` (in
   tmux) and drive it in real time with `tern ctl --control <port> run|type|key|shot`
   (a `tern shot` scenario's `wait` is virtual time, too short for the server's
@@ -282,12 +299,13 @@ if every test passes.
 a supertest case in `tests/unit`. If a remote device must not be able to do it,
 say why in the route's comment and test the 401/403.
 
-**A new harness.** Implement `HarnessAdapter` and `LiveChat`
-(`src/server/harness/types.ts`) in `src/server/harness/<name>.ts`, normalizing
-into `HarnessEvent`; declare capabilities; add one line to `factories` in
-`registry.ts`; write a scripted fake CLI in `tests/fixtures` and an adapter
-test. `HarnessId` is a branded string, so the protocol types do not change. See
-README "The adapter registry" and the ACP mapping there.
+**A new harness.** Follow [docs/harnesses.md](docs/harnesses.md): which
+existing adapter to copy for the agent's transport, the `HarnessAdapter` /
+`LiveChat` contract (`src/server/harness/types.ts`), what each capability turns
+on, the full list of files a new harness touches (registry, config, README,
+tests), and the pitfalls earlier harnesses hit. Clients need no code for a new
+harness: they draw what the adapter declares (atui's optional mark and spinner
+aside).
 
 **A new tool rendering.** Tool calls arrive as `ToolItem` (category from
 `toolCategory()` in agent-events.ts). Structured extras (a diff, subagent runs)
