@@ -30,7 +30,7 @@ import {
   type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
+import { commandOutputEvents, historyToItems, isObj, normalizeAgentEvent, type Obj, todoPhaseItems, usageEntries } from "./agent-events.js";
 import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
 import { branchMessages, fileMessages, forkSessionText, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
 import { ompLimits } from "./limits.js";
@@ -1140,17 +1140,7 @@ class OmpLiveChat implements LiveChat {
   /** omp's todo phases (`get_state.todoPhases`), flattened. */
   async getTodos(): Promise<TodoItem[]> {
     const state = await this.live.command<Obj>("get_state");
-    const phases = Array.isArray(state?.todoPhases) ? state.todoPhases : [];
-    const out: TodoItem[] = [];
-    for (const phase of phases) {
-      if (!isObj(phase)) continue;
-      const name = typeof phase.name === "string" ? phase.name : undefined;
-      for (const task of Array.isArray(phase.tasks) ? phase.tasks : []) {
-        if (!isObj(task) || typeof task.content !== "string") continue;
-        out.push({ ...(name ? { phase: name } : {}), text: task.content.slice(0, 500), status: String(task.status ?? "pending") });
-      }
-    }
-    return out.slice(0, 100);
+    return todoPhaseItems(state?.todoPhases);
   }
 
   async prompt(text: string, images?: ImageAttachment[]): Promise<void> {

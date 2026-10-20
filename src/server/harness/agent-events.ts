@@ -1,7 +1,7 @@
 // Normalization for Pi-family agent events and transcript messages. omp is a
 // Pi fork and emits the same shapes over RPC, so both adapters share this.
 // Inputs are untyped on purpose: SDK and wire types never leave the adapters.
-import type { ChatItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
+import type { ChatItem, TodoItem, ToolCategory, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { argsDiff, resultDiff } from "./tool-diff.js";
 import { imageRefs } from "../image-store.js";
 import { applyReports, asyncReports, detailReports, isAgentTool, notifyReports, runsFromArgs, runsFromDetails, settleRuns, type AgentReport } from "./subagents.js";
@@ -214,9 +214,55 @@ export function editShape(diff: ToolDiff | null, output: string | null): Pick<To
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
+ * The op a todo call without one performs, as Pi's todo tool infers it: a
+ * `list` is an init, `items` with a `phase` an append, bare `items` an init.
+ */
+function todoKind(op: Obj): string {
+  if (typeof op.op === "string") return op.op;
+  if (Array.isArray(op.list)) return "init";
+  if (Array.isArray(op.items)) return typeof op.phase === "string" ? "append" : "init";
+  return "";
+}
+
+/** omp's and Pi's todo phases (`[{name, tasks: [{content, status}]}]`), flattened. */
+export function todoPhaseItems(phases: unknown): TodoItem[] {
+  const out: TodoItem[] = [];
+  for (const phase of Array.isArray(phases) ? phases : []) {
+    if (!isObj(phase)) continue;
+    const name = typeof phase.name === "string" ? phase.name : undefined;
+    for (const task of Array.isArray(phase.tasks) ? phase.tasks : []) {
+      if (!isObj(task) || typeof task.content !== "string") continue;
+      out.push({ ...(name ? { phase: name } : {}), text: task.content.slice(0, 500), status: String(task.status ?? "pending") });
+    }
+  }
+  return out.slice(0, 100);
+}
+
+/**
+ * The list a Pi todo extension holds: its newest successful `todo` result's
+ * details, which carry the whole list after every op (the extension rebuilds
+ * its own state the same way).
+ */
+export function piTodos(messages: unknown[]): TodoItem[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!isObj(m) || m.role !== "toolResult" || m.toolName !== "todo" || m.isError === true || !isObj(m.details)) continue;
+    if (Array.isArray(m.details.phases)) return todoPhaseItems(m.details.phases);
+    // Pi's example todo extension: `{todos: [{text, done}]}`.
+    if (Array.isArray(m.details.todos)) {
+      return m.details.todos
+        .filter(isObj)
+        .map((t) => ({ text: String(t.text ?? "").slice(0, 500), status: t.done === true ? "completed" : "pending" }))
+        .slice(0, 100);
+    }
+  }
+  return [];
+}
+
+/**
  * A todo call in words: Claude Code's and Hermes's whole list (`todos`) as
  * its progress and current item; omp's and Pi's operations (`ops`, or one
- * `op`) as what they did.
+ * `op`, which Pi lets a model leave out) as what they did.
  */
 function todoSummary(args: Obj): string | null {
   if (Array.isArray(args.todos) && args.todos.every(isObj)) {
@@ -226,11 +272,16 @@ function todoSummary(args: Obj): string | null {
     const label = current ? String(current.activeForm ?? current.content ?? current.text ?? "") : "";
     return oneLine(`${done}/${plural(todos.length, "todo")} done${label ? ` · ${label}` : ""}`);
   }
-  const ops = Array.isArray(args.ops) ? args.ops.filter(isObj) : typeof args.op === "string" ? [args] : null;
+  const single = typeof args.op === "string" || Array.isArray(args.list) || Array.isArray(args.items);
+  const ops = Array.isArray(args.ops) ? args.ops.filter(isObj) : single ? [args] : null;
   if (!ops || ops.length === 0) return null;
   const parts = ops.map((op) => {
-    const kind = String(op.op ?? "");
-    const items = Array.isArray(op.list) ? op.list.reduce((n: number, phase) => n + (isObj(phase) && Array.isArray(phase.items) ? phase.items.length : 0), 0) : 0;
+    const kind = todoKind(op);
+    const items = Array.isArray(op.list)
+      ? op.list.reduce((n: number, phase) => n + (isObj(phase) && Array.isArray(phase.items) ? phase.items.length : 0), 0)
+      : Array.isArray(op.items)
+        ? op.items.length
+        : 0;
     const what = typeof op.task === "string" ? op.task : typeof op.text === "string" ? op.text : "";
     if (kind === "init" || kind === "replace") return `Planned ${plural(items, "task")}`;
     if (kind === "done" || kind === "complete") return `Done: ${what}`;

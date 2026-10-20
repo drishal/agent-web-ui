@@ -25,7 +25,7 @@ import {
   type SubagentRun,
   type TodoItem,
 } from "../../shared/protocol.js";
-import { historyToItems, isObj, normalizeAgentEvent, type Obj, usageEntries } from "./agent-events.js";
+import { historyToItems, isObj, normalizeAgentEvent, piTodos, type Obj, usageEntries } from "./agent-events.js";
 import { PendingRequests, StderrTail, terminateChild } from "./child-process.js";
 import { seedTranscript, type HandoffSeed } from "./handoff.js";
 import { branchMessages, fileMessages, seedSessionText, sessionFileTimestamp, uuidv7 } from "./session-files.js";
@@ -889,9 +889,10 @@ class PiLiveChat implements LiveChat {
     });
   }
 
-  /** Pi has no built-in todo list. */
+  /** Pi has no built-in todo list; a todo extension's lives in its tool results. */
   async getTodos(): Promise<TodoItem[]> {
-    return [];
+    const data = await this.live.command<Obj>("get_messages");
+    return piTodos(Array.isArray(data?.messages) ? data.messages : []);
   }
 
   async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
