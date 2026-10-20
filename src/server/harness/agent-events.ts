@@ -157,7 +157,7 @@ export function toolCategory(name: string): ToolCategory {
   return "other";
 }
 
-const PATH_KEYS = ["path", "file_path", "filePath", "file", "filename", "target", "notebook_path"];
+const PATH_KEYS = ["path", "file_path", "filePath", "file", "filename", "target", "target_file", "target_directory", "notebook_path"];
 
 /** File paths named in tool arguments, as given (absolute or relative). */
 export function toolPaths(args: unknown): string[] {
