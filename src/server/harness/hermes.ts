@@ -109,6 +109,8 @@ const atMs = (v: unknown): number | undefined => {
 interface GatewayRuntime {
   /** The interpreter that can import tui_gateway. */
   python: string;
+  /** The launcher's own launch command, when it answered for itself (see printedRuntime). */
+  argv?: string[];
   /** The environment the gateway runs in. */
   env: NodeJS.ProcessEnv;
   /** How it was found, for discovery warnings. */
@@ -123,16 +125,20 @@ interface GatewayRuntime {
  * server is not started by the launcher, so it replays the launcher's setup
  * (everything before its final `exec`) once and captures the environment, the
  * way the dotfiles' hermes-python wrapper does at build time. An explicit
- * HERMES_PYTHON wins; anything that is not a shell wrapper falls back to python3.
+ * HERMES_PYTHON wins while it can import the gateway; the installer exports a
+ * bare tool Python that only finds the checkout through the launcher's own
+ * bootstrap, and then the launcher is asked to name the command instead.
+ * Anything that is not a shell wrapper falls back to python3, unless the
+ * launcher answers `--print-runtime-command` (see printedRuntime).
  */
 const runtimeCache = new Map<string, Promise<GatewayRuntime>>();
 function gatewayRuntime(cliCommand: string): Promise<GatewayRuntime> {
-  const explicit = process.env.HERMES_PYTHON?.trim();
-  if (explicit) return Promise.resolve({ python: explicit, env: { ...process.env }, source: "HERMES_PYTHON" });
-  let cached = runtimeCache.get(cliCommand);
+  // The environment is part of the answer, so HERMES_PYTHON is part of the key.
+  const key = `${cliCommand}\0${process.env.HERMES_PYTHON?.trim() ?? ""}`;
+  let cached = runtimeCache.get(key);
   if (!cached) {
     cached = launcherRuntime(cliCommand);
-    runtimeCache.set(cliCommand, cached);
+    runtimeCache.set(key, cached);
   }
   return cached;
 }
@@ -206,19 +212,51 @@ export async function gatewayOwner(home: string): Promise<number | null> {
   return record.pid;
 }
 
+/**
+ * The launch command the launcher publishes for itself: `--print-runtime-command`
+ * prints a JSON argv that starts a module in the install. The installer's launcher is
+ * a shell script with an inline Python bootstrap, so its interpreter sits past `-c` and
+ * its `exec` is not the last line — neither shape above can read that. Null for a
+ * launcher that does not answer (an old build, or a console script).
+ */
+async function printedRuntime(bin: string): Promise<GatewayRuntime | null> {
+  try {
+    const { stdout } = await run(bin, ["--print-runtime-command", "--module", "tui_gateway.entry"], { timeout: 15_000 });
+    const parsed: unknown = JSON.parse(stdout);
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((arg) => typeof arg === "string")) return null;
+    const [command, ...args] = parsed as string[];
+    return command ? { python: command, argv: [command, ...args], env: { ...process.env }, source: "launcher" } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
   const fallback: GatewayRuntime = { python: process.platform === "win32" ? "python" : "python3", env: { ...process.env }, source: "PATH" };
   try {
     const { stdout } = await run("sh", ["-c", `command -v -- "$1"`, "sh", cliCommand], { timeout: 5_000 });
     const bin = stdout.trim().split("\n")[0];
     if (!bin) return fallback;
+    // HERMES_PYTHON wins while that interpreter can import the gateway. The installer
+    // exports its bare tool Python, which only finds tui_gateway through the launcher's
+    // `-I -c` bootstrap, so there the launcher names the command instead.
+    const explicit = process.env.HERMES_PYTHON?.trim();
+    if (explicit) {
+      const env = { ...process.env };
+      const imports = await run(explicit, ["-c", "import tui_gateway.entry"], { env, timeout: 15_000 }).then(
+        () => true,
+        () => false,
+      );
+      if (imports) return { python: explicit, env, source: "HERMES_PYTHON" };
+      return (await printedRuntime(bin)) ?? { python: explicit, env, source: "HERMES_PYTHON" };
+    }
     const text = await fs.readFile(bin, "utf8");
     const python = scriptPython(text);
     if (python) return { python, env: { ...process.env }, source: "launcher" };
     const lines = text.trimEnd().split("\n");
     const shell = /^#!\s*(\S+)/.exec(lines[0] ?? "")?.[1];
     const last = lines[lines.length - 1] ?? "";
-    if (!shell || !/^exec\s/.test(last.trim())) return fallback;
+    if (!shell || !/^exec\s/.test(last.trim())) return (await printedRuntime(bin)) ?? fallback;
     const prelude = lines.slice(1, -1).join("\n");
     const { stdout: dump } = await run(shell, ["-c", `${prelude}\nenv -0`], { env: process.env, timeout: 5_000, maxBuffer: 4 * 1024 * 1024 });
     const env: NodeJS.ProcessEnv = {};
@@ -227,7 +265,8 @@ async function launcherRuntime(cliCommand: string): Promise<GatewayRuntime> {
       if (eq > 0) env[entry.slice(0, eq)] = entry.slice(eq + 1);
     }
     const exported = env.HERMES_PYTHON?.trim();
-    return exported ? { python: exported, env, source: "launcher" } : fallback;
+    if (exported) return { python: exported, env, source: "launcher" };
+    return (await printedRuntime(bin)) ?? fallback;
   } catch {
     return fallback;
   }
@@ -1205,6 +1244,12 @@ export class HermesAdapter implements HarnessAdapter {
     return { command: runtime.python, args: ["-m", "tui_gateway.entry"], env: runtime.env };
   }
 
+    // A launcher that answered for itself hands over the whole argv: the installer's Python
+    // needs its `-I -c` bootstrap to put the checkout on sys.path and find tui_gateway.
+    if (runtime.argv) {
+      const [command = runtime.python, ...args] = runtime.argv;
+      return { command, args, env: runtime.env };
+    }
   async discover(): Promise<HarnessDiscovery> {
     const warnings: string[] = [];
     const overrides = { HERMES_HOME: process.env.HERMES_HOME ? ("set" as const) : ("unset" as const) };
@@ -1236,10 +1281,13 @@ export class HermesAdapter implements HarnessAdapter {
       const label = versionLabel(stdout.trim().split("\n")[0]?.replace(/^Hermes Agent\s*/i, "") || "unknown");
       const runtime = await gatewayRuntime(this.cliCommand);
       // What matters is that the gateway module imports, wherever the interpreter came from.
-      const imports = await run(runtime.python, ["-c", "import tui_gateway.entry"], { env: runtime.env, timeout: 15_000 }).then(
-        () => true,
-        () => false,
-      );
+      // A launcher that printed its own launch command has already resolved that for us.
+      const imports =
+        runtime.argv !== undefined ||
+        (await run(runtime.python, ["-c", "import tui_gateway.entry"], { env: runtime.env, timeout: 15_000 }).then(
+          () => true,
+          () => false,
+        ));
       if (!imports) {
         const from = runtime.source === "PATH" ? "on PATH (the hermes launcher names no Python)" : runtime.source === "HERMES_PYTHON" ? "from HERMES_PYTHON" : "from the hermes launcher";
         warnings.push(`${runtime.python} ${from} cannot import Hermes's tui_gateway; set HERMES_PYTHON to the Python of the Hermes install`);
