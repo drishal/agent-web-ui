@@ -1123,6 +1123,7 @@ export class HermesAdapter implements HarnessAdapter {
   readonly id = asHarnessId("hermes");
   readonly displayName = "Hermes";
   readonly accent = "orange";
+  readonly setupCommand = "hermes model";
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,

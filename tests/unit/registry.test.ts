@@ -20,6 +20,15 @@ describe("harness launch settings", () => {
   });
 });
 
+describe("harness setup commands", () => {
+  it("reach the bootstrap from the adapter, and the Awui harness names none of Pi's", async () => {
+    const registry = HarnessRegistry.fromConfig(loadConfig({ AWUI_HARNESSES: "pi,awui", AWUI_CONFIG_DIR: "" }));
+    for (const id of ["pi", "awui"]) (registry.get(id) as unknown as { discover: () => Promise<unknown> }).discover = async () => ({ available: true, warnings: [], overrides: {} });
+    const statuses = await registry.refreshStatus();
+    expect(Object.fromEntries(statuses.map((s) => [s.id, s.setupCommand]))).toEqual({ pi: "pi", awui: undefined });
+  });
+});
+
 describe("harness accents", () => {
   it("keeps declared accents and gives the rest the colours nobody claimed", () => {
     const accents = assignAccents([adapter("pi", "link"), adapter("new"), adapter("omp", "thinking"), adapter("other"), adapter("odd", "not-a-token")]);

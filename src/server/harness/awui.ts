@@ -32,6 +32,8 @@ const AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 export class AwuiAdapter extends PiAdapter {
   override readonly id = asHarnessId("awui");
   override readonly displayName = "Awui";
+  // Its providers live in its own agent dir (awui-settings.ts), not in what `pi` logs in to.
+  override readonly setupCommand = undefined;
   // Not only render_html: eval_python lets the chat compute without touching
   // the project (its Python runs in a throwaway tmp dir, output-bounded).
   // Both extensions write only outside the workspace.

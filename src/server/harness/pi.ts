@@ -407,6 +407,7 @@ function activeBranch(entries: Obj[]): Obj[] {
 export class PiAdapter implements HarnessAdapter {
   readonly id: HarnessId = asHarnessId("pi");
   readonly displayName: string = "Pi";
+  readonly setupCommand: string | undefined = "pi";
   readonly cliCommand: string;
   /** config.yml's extra arguments for every chat child. */
   private readonly extraArgs: string[];

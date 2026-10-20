@@ -1401,7 +1401,13 @@ export function App() {
         ) : null}
         {chat && chat.config.models.length === 0 && chat.capabilities.supportsModelSelection ? (
           <div className="banner banner-warning">
-            No models are available. Run <code>{chatHarness?.id === "omp" ? "omp" : chatHarness?.id === "opencode" ? "opencode auth login" : "pi"}</code> in a terminal and log in to a provider.
+            {chatHarness?.setupCommand ? (
+              <>
+                No models are available. Run <code>{chatHarness.setupCommand}</code> in a terminal and log in to a provider.
+              </>
+            ) : (
+              <>No models are available. Log in to a provider for {chatHarness?.displayName ?? chat.harnessId}, then reopen this chat.</>
+            )}
           </div>
         ) : null}
         {banner ? (

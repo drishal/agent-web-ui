@@ -768,6 +768,7 @@ class OpenCodeChat implements LiveChat {
 export class OpenCodeAdapter implements HarnessAdapter {
   readonly id = asHarnessId("opencode");
   readonly displayName = "OpenCode";
+  readonly setupCommand = "opencode auth login";
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     supportsSteer: true,

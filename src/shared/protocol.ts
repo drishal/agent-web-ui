@@ -46,6 +46,8 @@ export interface HarnessStatus {
   overrides: Record<string, "set" | "unset">;
   /** The theme colour token (`link`, `thinking`, …) its dot, badge, spinner, and chip use. */
   accent: string;
+  /** The terminal command that logs it in to a provider (`opencode auth login`), when it has one. */
+  setupCommand?: string;
 }
 
 /** Theme colour tokens a harness may take, in the order unclaimed harnesses get them. */

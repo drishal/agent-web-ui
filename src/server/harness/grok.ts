@@ -743,6 +743,7 @@ export class GrokAdapter implements HarnessAdapter {
   readonly id = asHarnessId("grok");
   readonly displayName = "Grok";
   readonly accent = "info";
+  readonly setupCommand = "grok login";
   readonly cliCommand: string;
   readonly capabilities: HarnessCapabilities = {
     // ACP has no steer or follow-up; Grok neither renames nor compacts a session here.
