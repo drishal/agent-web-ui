@@ -440,7 +440,7 @@
   height: 32px;
   padding: 0 6px;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 999px;
   background: none;
   color: var(--muted);
   font-size: 11.5px;
