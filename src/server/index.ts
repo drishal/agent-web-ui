@@ -18,6 +18,7 @@ import { installTui } from "./install-tui.js";
 import { installService } from "./install-service.js";
 import { runTern } from "./tern-client.js";
 import { SessionMarks } from "./session-marks.js";
+import { SessionOrder } from "./session-order.js";
 import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
 import { Notifier } from "./notify.js";
@@ -151,6 +152,7 @@ async function main(): Promise<void> {
   // also serves the LAN: the page stays on the machine the project is on.
   manager.render = { baseUrl: `http://127.0.0.1:${config.port}` };
   const marks = await SessionMarks.open(config.stateDir);
+  const order = await SessionOrder.open(config.stateDir);
   const prompts = await SavedPrompts.open(config.stateDir);
   const limits = await Limits.open(registry, config.stateDir);
   const notifier = await Notifier.open(config.stateDir, (m) => console.error(`awui: ${m}`));
@@ -170,6 +172,7 @@ async function main(): Promise<void> {
     configDir: config.configDir,
     herdr,
     marks,
+    order,
     prompts,
     limits,
     notifier,

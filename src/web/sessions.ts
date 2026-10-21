@@ -72,5 +72,10 @@ export function useSessions({ boot, workspace, chat }: { boot: Bootstrap | null;
     }));
   }, []);
 
-  return { overview, sessionsError, sessionsLoading, refreshSessions, markSession };
+  /** Show a hand-made order at once; the server keeps it for every device. */
+  const orderSessions = useCallback((key: string, ids: string[]) => {
+    setOverview((o) => ({ ...o, orders: { ...o.orders, [key]: ids } }));
+  }, []);
+
+  return { overview, sessionsError, sessionsLoading, refreshSessions, markSession, orderSessions };
 }

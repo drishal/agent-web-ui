@@ -368,6 +368,18 @@
   white-space: nowrap;
 }
 
+/* A repository's projects sit together: each says its branch. */
+.project-branch {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
 .group-chevron {
   flex: none;
   color: var(--muted);
@@ -511,6 +523,31 @@
    row, and a long press on any row. */
 .session-item {
   position: relative;
+}
+
+/* Dragging a row inside its date section: it dims, and a line marks where it will land. */
+.session-item.is-dragging {
+  opacity: 0.45;
+}
+
+.session-item.is-drop-before::before,
+.session-item.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.session-item.is-drop-before::before {
+  top: -1px;
+}
+
+.session-item.is-drop-after::after {
+  bottom: -1px;
 }
 
 .session-more {

@@ -66,6 +66,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { id: "list-move", keys: ["↑", "↓"], label: "Move in a picker or search's results" },
       { id: "list-pick", keys: ["Enter"], label: "Pick the highlighted result" },
       { id: "search-open", keys: ["Alt+Enter"], label: "Open a project search result in the file viewer" },
+      { id: "session-move", keys: ["Alt+↑", "Alt+↓"], label: "Move a sidebar session up or down inside its date section" },
     ],
   },
 ];

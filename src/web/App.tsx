@@ -91,7 +91,7 @@ export function App() {
     setRecent,
     setChat,
   });
-  const { overview, sessionsError, sessionsLoading, refreshSessions, markSession } = useSessions({ boot, workspace, chat });
+  const { overview, sessionsError, sessionsLoading, refreshSessions, markSession, orderSessions } = useSessions({ boot, workspace, chat });
   const {
     sidebarWidth,
     setSidebarWidth,
@@ -1215,6 +1215,14 @@ export function App() {
         onWarmSession={warmSession}
         onOpenBeside={wide ? (s) => void openBeside(s) : undefined}
         onMarkSession={(s, change) => void markSessionAs(s, change)}
+        onReorderSessions={(harnessId, workspaceId, ids) => {
+          const before = overview.orders?.[`${harnessId}:${workspaceId}`];
+          orderSessions(`${harnessId}:${workspaceId}`, ids);
+          api<{ ids: string[] }>("/api/sessions/order", { body: { harnessId, workspaceId, ids } }).catch((e: unknown) => {
+            orderSessions(`${harnessId}:${workspaceId}`, before ?? []);
+            fail(e);
+          });
+        }}
         onNotice={(text) => setBanner({ level: "info", text })}
         onRefresh={() => void refreshSessions()}
         onSettings={() => {

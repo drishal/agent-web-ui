@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -448,6 +449,47 @@ describe("sessions across projects", () => {
     expect((await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1", archived: false }).expect(200)).body).toEqual({});
     expect(await marks()).toEqual([["fake:a1", undefined, undefined]]);
     await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1" }).expect(400);
+  });
+
+  it("keeps a hand-made order per project and harness, bounded", async () => {
+    const { agent, ws } = await setup();
+    const saved = await agent.post("/api/sessions/order").send({ harnessId: "fake", workspaceId: ws.id, ids: ["fake:b", "fake:a", "fake:b"] }).expect(200);
+    expect(saved.body).toEqual({ ids: ["fake:b", "fake:a"] });
+    const body = (await agent.get("/api/sessions").expect(200)).body as SessionsOverview;
+    expect(body.orders).toEqual({ [`fake:${ws.id}`]: ["fake:b", "fake:a"] });
+    await agent.post("/api/sessions/order").send({ harnessId: "fake", workspaceId: ws.id, ids: "fake:a" }).expect(400);
+    await agent.post("/api/sessions/order").send({ harnessId: "fake", workspaceId: ws.id, ids: Array.from({ length: 501 }, (_, i) => `fake:${i}`) }).expect(400);
+  });
+
+  it("says which repository and branch each git project is on, a worktree included", async () => {
+    const { agent, t } = await setup();
+    const run = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, stdio: "ignore" });
+    run(t.project, "init", "-b", "main");
+    run(t.project, "commit", "--allow-empty", "-m", "start");
+    const worktree = path.join(t.root, "proj-feat");
+    run(t.project, "worktree", "add", "-b", "feat", worktree);
+    const plain = path.join(t.root, "plain");
+    mkdirSync(plain);
+    for (const [nativeId, cwd] of [["m", t.project], ["f", worktree], ["p", plain]] as const) t.fake.sessions.set(nativeId, { nativeId, cwd, title: nativeId, messages: [{}], updatedAt: new Date() });
+    const body = (await agent.get("/api/sessions").expect(200)).body as SessionsOverview;
+    const byName = Object.fromEntries(body.workspaces.map((w) => [w.name, body.checkouts?.[w.id]]));
+    expect(byName.proj).toMatchObject({ branch: "main", primary: true });
+    expect(byName["proj-feat"]).toMatchObject({ branch: "feat", primary: false, repo: byName.proj?.repo });
+    expect(byName.plain).toBeUndefined();
+  });
+
+  it("keeps an old session's place when it is only opened, and lifts it once someone talks in it", async () => {
+    const { agent, ws, t } = await setup();
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    t.fake.sessions.set("o1", { nativeId: "o1", cwd: t.project, title: "Old one", messages: [{}], updatedAt: old });
+    const updated = async () => ((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.find((s) => s.id === "fake:o1")?.updatedAt;
+    const chat = (await agent.post("/api/chats/resume").send({ harnessId: "fake", workspaceId: ws.id, sessionId: "fake:o1" }).expect(200)).body as ChatSnapshot;
+    expect(await updated()).toBe(old.toISOString());
+    const sse = openSse(t, chat.chatId, agent.cookie);
+    await agent.post(`/api/chats/${chat.chatId}/messages`).send({ text: "back again" });
+    await sse.waitFor(() => t.manager.get(chat.chatId).status === "idle" && t.manager.get(chat.chatId).talkedAt !== null);
+    sse.close();
+    expect(Date.parse((await updated()) ?? "")).toBeGreaterThan(Date.now() - 60_000);
   });
 });
 

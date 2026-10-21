@@ -105,14 +105,28 @@ export interface ProjectSession extends SessionSummary {
   workspaceId: string;
 }
 
+/** A project folder's place in its git repository, for the order of the sidebar's projects. */
+export interface Checkout {
+  /** Opaque, and the same for every worktree of one repository. */
+  repo: string;
+  /** The branch checked out; null when HEAD is detached. */
+  branch: string | null;
+  /** The repository's own working tree, not a linked worktree. */
+  primary: boolean;
+}
+
 /** The sidebar's list: recent sessions from every project, plus all of the current one's. */
 export interface SessionsOverview {
   /** Every project referenced by `sessions`, and the current project. */
   workspaces: WorkspaceInfo[];
-  /** Newest first. */
+  /** Newest activity first. */
   sessions: ProjectSession[];
   /** One line per harness that could not list its sessions. */
   errors: string[];
+  /** Each project's git checkout, by workspace id; projects outside git are absent. */
+  checkouts?: Record<string, Checkout>;
+  /** Hand-made session orders (the sidebar's drag), by `harnessId:workspaceId`, first to last. */
+  orders?: Record<string, string[]>;
 }
 
 export type ChatStatus = "starting" | "idle" | "running" | "stopping" | "compacting" | "error" | "disposed";
@@ -948,6 +962,13 @@ export const sessionMarkSchema = z
   });
 
 /** The marks a session can carry, as the server keeps them. */
+/** A project's sessions in a hand-made order, for one harness: the whole list, first to last. */
+export const sessionOrderSchema = z.object({
+  harnessId: z.string().min(1).max(64),
+  workspaceId: z.string().min(1).max(64),
+  ids: z.array(z.string().min(1).max(512)).max(500),
+});
+
 export interface SessionMarkState {
   pinned?: true;
   archived?: true;
