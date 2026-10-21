@@ -13,6 +13,7 @@ import { ago } from "../turns.js";
 import { cacheShare, dayBars, dayLabels, dollars, shortTokens, tokensOf } from "../usage.js";
 import { Dialog } from "./Dialog.js";
 import { LimitsPanel } from "./LimitsMeter.js";
+import { dotted } from "./Dot.js";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -194,7 +195,7 @@ export function UsageDialog({
                         <span className="usage-chat-title">{session.title || "New chat"}</span>
                         <span className="usage-chat-meta">
                           <span className="badge badge-harness">{name(session.harnessId)}</span>
-                          {[project(session.workspaceId)?.name, session.updatedAt ? ago(Date.parse(session.updatedAt)) : null].filter(Boolean).join(" · ")}
+                          {dotted([project(session.workspaceId)?.name, session.updatedAt ? ago(Date.parse(session.updatedAt)) : null])}
                         </span>
                         <span className="usage-chat-tokens">{shortTokens(tokensOf(totals))}</span>
                         <span className="usage-chat-cost">{cost(totals)}</span>

@@ -10,6 +10,7 @@ import { ago } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { IconBranch, IconCheck, IconChevronDown, IconChevronRight, IconRefresh, IconX } from "../icons.js";
 import { DiffBadge, DiffView } from "./ToolBody.js";
+import { Dot, dotted } from "./Dot.js";
 
 function Sync({ git }: { git: GitStatus }) {
   if (!git.upstream) return <span className="git-sync is-none">not pushed</span>;
@@ -156,7 +157,9 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
               <IconBranch size={16} /> Git
             </h2>
             <p className="muted" title={git.root}>
-              {git.root} · updated {ago(at, now)}
+              {git.root}
+              <Dot />
+              updated {ago(at, now)}
             </p>
           </div>
           <div className="git-head-actions">
@@ -191,7 +194,7 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
                 <>
                   <code>{git.upstream}</code>
                   <span className="git-fact-meta">
-                    {git.ahead === 0 && git.behind === 0 ? "up to date" : `${git.ahead} ahead · ${git.behind} behind`}
+                    {git.ahead === 0 && git.behind === 0 ? "up to date" : dotted([`${git.ahead} ahead`, `${git.behind} behind`])}
                   </span>
                 </>
               ) : (
@@ -218,14 +221,12 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
                 <span className="muted">working tree clean</span>
               ) : (
                 <span className="git-fact-counts">
-                  {[
+                  {dotted([
                     counts.conflicts ? `${counts.conflicts} conflicted` : "",
                     counts.staged ? `${counts.staged} staged` : "",
                     counts.changed ? `${counts.changed} changed` : "",
                     counts.untracked ? `${counts.untracked} untracked` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  ])}
                   <DiffBadge added={git.added} removed={git.removed} />
                 </span>
               )}

@@ -7,6 +7,7 @@ import { useNow } from "../hooks.js";
 import { IconStop } from "../icons.js";
 import { approvalAnswers, isApproval } from "../../shared/approval.js";
 import { choicesOf, splitStep } from "../questions.js";
+import { Dot } from "./Dot.js";
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
   const now = useNow(true);
@@ -177,7 +178,13 @@ export function ApprovalStack({
                 <IconStop size={11} /> {stopping ? "Stopping…" : "Stop"}
               </button>
               <span className="approval-hint">
-                {(request.options?.length ?? 0) > 1 ? `1–${Math.min(9, request.options?.length ?? 0)} to choose · ` : ""}↑↓ to move
+                {(request.options?.length ?? 0) > 1 ? (
+                  <>
+                    1–{Math.min(9, request.options?.length ?? 0)} to choose
+                    <Dot />
+                  </>
+                ) : null}
+                ↑↓ to move
               </span>
               <button type="button" className="btn btn-small btn-ghost" disabled={busy} onClick={() => onAnswer(request, { kind: "cancel" })}>
                 Dismiss

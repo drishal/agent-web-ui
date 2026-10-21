@@ -9,6 +9,7 @@ import { api } from "../api.js";
 import { IconAgents, IconCheck, IconChevronDown, IconX, Spinner } from "../icons.js";
 import { formatDuration } from "../turns.js";
 import { Markdown } from "./Markdown.js";
+import { Dot, dotted } from "./Dot.js";
 
 /** The chat whose transcript is on screen, for fetching a run's own transcript. */
 export const ChatIdContext = createContext<string | null>(null);
@@ -43,7 +44,7 @@ export function RunStatus({ status, size = 13 }: { status: SubagentRun["status"]
 }
 
 /** "3 agents · 1 running, 2 done" for the tool row's line. */
-export function runsSummary(info: SubagentsInfo): string {
+export function runsSummary(info: SubagentsInfo): React.ReactNode {
   const counts = new Map<SubagentRun["status"], number>();
   for (const r of info.runs) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
   const states = (["running", "pending", "done", "failed", "stopped"] as const)
@@ -52,9 +53,9 @@ export function runsSummary(info: SubagentsInfo): string {
     .join(", ");
   if (info.runs.length === 1) {
     const run = info.runs[0] as SubagentRun;
-    return `${run.agent} · ${firstLine(run.task) || LABEL[run.status]}`;
+    return dotted([run.agent, firstLine(run.task) || LABEL[run.status]]);
   }
-  return `${info.runs.length} agents${states ? ` · ${states}` : ""}`;
+  return dotted([`${info.runs.length} agents`, states]);
 }
 
 function RunRow({ run, onOpen }: { run: SubagentRun; onOpen: () => void }) {
@@ -67,7 +68,7 @@ function RunRow({ run, onOpen }: { run: SubagentRun; onOpen: () => void }) {
         {!/^\d+$/.test(run.id) ? <span className="run-name">{run.id}</span> : null}
         <span className="run-agent">{run.agent}</span>
         <span className="run-task">{firstLine(run.task)}</span>
-        {facts.length > 0 ? <span className="run-meta">{facts.join(" · ")}</span> : null}
+        {facts.length > 0 ? <span className="run-meta">{dotted(facts)}</span> : null}
         <IconChevronDown size={13} className="run-chevron" />
       </button>
       {run.status === "running" && run.activity?.length ? (
@@ -135,7 +136,9 @@ export function AgentsCard({ item, renderItem }: { item: ToolItem; renderItem: (
         </span>
         <span className="tool-card-title">
           <span className="tool-card-prose">
-            {mode} · {info.runs.length} agent{info.runs.length === 1 ? "" : "s"}
+            {mode}
+            <Dot />
+            {info.runs.length} agent{info.runs.length === 1 ? "" : "s"}
           </span>
           {info.background ? <span className="tool-chip is-quiet">background</span> : null}
         </span>
@@ -217,7 +220,7 @@ function TranscriptPanel({ toolId, run, renderItem, onClose }: { toolId: string;
           <div className="run-panel-title">
             <strong>{/^\d+$/.test(run.id) ? run.agent : run.id}</strong>
             <span>
-              {[run.agent !== run.id && !/^\d+$/.test(run.id) ? run.agent : null, run.model, ...facts].filter(Boolean).join(" · ")}
+              {dotted([run.agent !== run.id && !/^\d+$/.test(run.id) ? run.agent : null, run.model, ...facts])}
             </span>
           </div>
           <button type="button" className="icon-btn" aria-label="Close" onClick={close}>

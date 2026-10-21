@@ -131,3 +131,18 @@
   gap: 6px;
   font-size: 13px;
 }
+
+/* The separator dot between facts on a line (Dot.tsx); its " · " text is kept but not drawn. */
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 2.5px;
+  height: 2.5px;
+  margin: 0 8px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+  font-size: 0;
+  vertical-align: middle;
+}

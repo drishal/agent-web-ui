@@ -8,6 +8,7 @@ import { collectChanges, commentable, commentKey, reviewPrompt, type ReviewComme
 import { load, save } from "../storage.js";
 import { FileLink } from "./FileLink.js";
 import { DiffBadge, DiffView } from "./ToolBody.js";
+import { Dot } from "./Dot.js";
 
 interface Editing {
   key: string;
@@ -130,7 +131,9 @@ export function ReviewPanel({
           <div>
             <h2>Review changes</h2>
             <p className="muted">
-              {files.length} {files.length === 1 ? "file" : "files"} <DiffBadge added={added} removed={removed} /> · click a line to comment
+              {files.length} {files.length === 1 ? "file" : "files"} <DiffBadge added={added} removed={removed} />
+              <Dot />
+              click a line to comment
             </p>
           </div>
           <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
@@ -177,7 +180,12 @@ export function ReviewPanel({
                 return (
                   <div key={tool.id} className="review-edit">
                     <div className="review-edit-head muted">
-                      {turn > 0 ? `Turn ${turn} · ` : ""}
+                      {turn > 0 ? (
+                        <>
+                          Turn {turn}
+                          <Dot />
+                        </>
+                      ) : null}
                       {tool.name}
                     </div>
                     <DiffView

@@ -10,6 +10,7 @@ import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
+import { Dot } from "./Dot.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { QuoteButton } from "./QuoteButton.js";
@@ -82,7 +83,7 @@ function DisclosureRow({
         <span className="drow-title">{title}</span>
         {summary && !(open && hideSummaryWhenOpen) ? (
           <>
-            <span className="drow-sep" aria-hidden="true" />
+            <Dot />
             <span className="drow-summary">{summary}</span>
           </>
         ) : null}
@@ -126,7 +127,12 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
         summary={
           <>
             {summary}
-            {failed ? <span className="drow-suffix"> · failed</span> : null}
+            {failed ? (
+              <span className="drow-suffix">
+                <Dot />
+                failed
+              </span>
+            ) : null}
           </>
         }
         aside={item.diffStat ? <DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /> : null}
@@ -644,8 +650,18 @@ function ProcessFold({
         {live ? <Spinner size={13} /> : null}
         <span className="process-label">
           {label}
-          {live && duration ? <span className="process-time"> · {duration}</span> : null}
-          {counts && (live || leading) ? <span className="process-counts"> · {counts}</span> : null}
+          {live && duration ? (
+            <span className="process-time">
+              <Dot />
+              {duration}
+            </span>
+          ) : null}
+          {counts && (live || leading) ? (
+            <span className="process-counts">
+              <Dot />
+              {counts}
+            </span>
+          ) : null}
         </span>
         <IconChevronDown size={14} className="process-chevron" />
       </button>

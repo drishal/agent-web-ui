@@ -2,6 +2,7 @@
 // model, project, version. Desktop only; phones get a header banner instead.
 import type { ChatState } from "../chat-state.js";
 import type { ConnectionState } from "../stream.js";
+import { dotted } from "./Dot.js";
 
 const CONN_LABEL: Record<ConnectionState, string> = {
   connecting: "Connecting",
@@ -33,9 +34,7 @@ export function StatusBar({
       )}
       {chat && harnessName ? (
         <span className="sb-item">
-          {harnessName}
-          {model ? ` · ${model}` : ""}
-          {chat.config.thinkingLevel ? ` · ${chat.config.thinkingLevel}` : ""}
+          {dotted([harnessName, model, chat.config.thinkingLevel])}
         </span>
       ) : null}
       {chat ? <span className="sb-item sb-path" title={chat.workspace.path}>{chat.workspace.path}</span> : null}
