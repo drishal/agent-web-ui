@@ -11,6 +11,7 @@ import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
+import { Rolling } from "./Rolling.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
 import { Markdown } from "./Markdown.js";
 import { QuoteButton } from "./QuoteButton.js";
@@ -154,7 +155,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
           time ? (
             <span className="drow-time">
               <Dot />
-              {time}
+              <Rolling text={time} />
             </span>
           ) : null
         }
@@ -676,7 +677,7 @@ function ProcessFold({
           {live && duration ? (
             <span className="process-time">
               <Dot />
-              {duration}
+              <Rolling text={duration} />
             </span>
           ) : null}
           {counts && (live || leading) ? (
