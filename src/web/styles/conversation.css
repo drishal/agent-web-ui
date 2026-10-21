@@ -583,12 +583,13 @@
 }
 
 .process-chevron {
-  margin-left: 2px;
+  flex: none;
+  transform: rotate(-90deg);
   transition: transform 0.12s ease;
 }
 
 .process.is-open .process-chevron {
-  transform: rotate(180deg);
+  transform: none;
 }
 
 .process.is-live .process-label {

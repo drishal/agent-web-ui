@@ -671,6 +671,7 @@ function ProcessFold({
   return (
     <div className={`process${open ? " is-open" : ""}${live ? " is-live" : ""}`}>
       <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(turn.id)} data-testid="process-toggle">
+        <IconChevronDown size={14} className="process-chevron" />
         {live ? <Spinner size={13} /> : null}
         <span className="process-label">
           {label}
@@ -687,7 +688,6 @@ function ProcessFold({
             </span>
           ) : null}
         </span>
-        <IconChevronDown size={14} className="process-chevron" />
       </button>
       {thought ? (
         <div className="process-thought" data-testid="live-thought">
