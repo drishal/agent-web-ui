@@ -9,6 +9,7 @@ import { addToDraft } from "../draft-bus.js";
 import { IconCheck, IconCopy, IconTerminal, IconX, Spinner } from "../icons.js";
 import { formatDuration } from "../turns.js";
 import { ChatIdContext } from "./Subagents.js";
+import { dotted } from "./Dot.js";
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false);
@@ -66,8 +67,7 @@ export function CodeBlock({ lang, code, children, allowRun }: { lang: string | n
             <code className="run-cmd">$ {run?.command}</code>
             {result ? (
               <span className="run-meta">
-                {status} · {formatDuration(result.durationMs)}
-                {result.truncated ? " · cut short" : ""}
+                {dotted([status, formatDuration(result.durationMs), result.truncated ? "cut short" : null])}
               </span>
             ) : null}
             {result ? (

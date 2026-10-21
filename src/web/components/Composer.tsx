@@ -29,6 +29,7 @@ import { useDismiss, useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
+import { Dot, dotted } from "./Dot.js";
 
 /** Paste larger than this many UTF-16 chars offers "attach as file" instead of filling the box. */
 const PASTE_FILE_OFFER = 12_000;
@@ -512,7 +513,12 @@ export function Composer({
           <Spinner size={13} />
           <span className="thumb-bar-label">
             {stopping ? "Stopping" : chat.status === "compacting" ? "Compacting" : "Working"}
-            {runStart ? ` · ${formatDuration(Math.max(0, now - runStart))}` : ""}
+            {runStart ? (
+              <>
+                <Dot />
+                {formatDuration(Math.max(0, now - runStart))}
+              </>
+            ) : null}
           </span>
           {running ? (
             <button type="button" className="btn btn-small thumb-stop" onClick={onStop} aria-label="Stop now">
@@ -583,7 +589,9 @@ export function Composer({
               {pastes.map((paste, i) => (
                 <li key={paste.id} className="composer-paste">
                   <span className="paste-label" title={paste.path}>
-                    <strong>paste-{i + 1}.txt</strong> {paste.lines.toLocaleString("en-US")} lines · {(paste.bytes / 1024).toFixed(1)} KB
+                    <strong>paste-{i + 1}.txt</strong> {paste.lines.toLocaleString("en-US")} lines
+                    <Dot />
+                    {(paste.bytes / 1024).toFixed(1)} KB
                   </span>
                   <button
                     type="button"
@@ -663,7 +671,7 @@ export function Composer({
               aria-label={menuKind === "skill" ? "Skills" : menuKind === "prompt" ? "Saved prompts" : "Commands"}
             >
               <div className="command-menu-head" aria-hidden="true">
-                {menuKind === "skill" ? `Skills · ${skillCount}` : menuKind === "prompt" ? `Saved prompts · ${savedPrompts?.length ?? 0}` : "Commands"}
+                {menuKind === "skill" ? dotted(["Skills", skillCount]) : menuKind === "prompt" ? dotted(["Saved prompts", savedPrompts?.length ?? 0]) : "Commands"}
               </div>
               {menuItems.length === 0 ? (
                 <div className="command-empty">
@@ -818,7 +826,12 @@ export function Composer({
                           <span className="stash-text">{entry.text.trim().split("\n")[0] || `${entry.images.length} image${entry.images.length === 1 ? "" : "s"}`}</span>
                           <span className="stash-meta muted">
                             {entry.from}
-                            {entry.images.length > 0 ? ` · ${entry.images.length} image${entry.images.length === 1 ? "" : "s"}` : ""}
+                            {entry.images.length > 0 ? (
+                              <>
+                                <Dot />
+                                {`${entry.images.length} image${entry.images.length === 1 ? "" : "s"}`}
+                              </>
+                            ) : null}
                           </span>
                         </button>
                         <button type="button" className="icon-btn stash-drop" aria-label={`Drop stashed “${entry.text.trim().slice(0, 40)}”`} onClick={() => dropStashed(entry.id)}>

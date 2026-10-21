@@ -11,6 +11,7 @@ import { IconUndo, IconX, Spinner } from "../icons.js";
 import { ago } from "../turns.js";
 import { FileLink } from "./FileLink.js";
 import { DiffBadge, DiffView } from "./ToolBody.js";
+import { Dot } from "./Dot.js";
 
 type End = number | "now";
 
@@ -132,7 +133,7 @@ export function TimelineDialog({ chatId, onUndo, onClose }: { chatId: string; on
               From <b>{label(from)}</b> to <b>{label(to)}</b>
               {result && !loading ? (
                 <>
-                  {" · "}
+                  <Dot />
                   {files.length + (result.data.more ?? 0)} {files.length + result.data.more === 1 ? "file" : "files"} <DiffBadge added={added} removed={removed} />
                 </>
               ) : null}

@@ -8,6 +8,7 @@ import { useDismiss } from "../hooks.js";
 import { IconCheck, IconChevronDown, IconRefresh, IconSearch, Spinner } from "../icons.js";
 import { groupModels, type ModelGroup } from "../model-search.js";
 import { load, save } from "../storage.js";
+import { Dot } from "./Dot.js";
 
 const MAX_RECENT = 5;
 
@@ -233,7 +234,9 @@ export function ModelPicker({
             </div>
             {currentModel ? (
               <div className="model-current">
-                Current <strong>{currentModel.name}</strong> · {currentModel.provider}
+                Current <strong>{currentModel.name}</strong>
+                <Dot />
+                {currentModel.provider}
               </div>
             ) : null}
             <div className="model-list" id={listId} role="listbox" aria-label="Models">

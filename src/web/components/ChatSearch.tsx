@@ -11,6 +11,7 @@ import { harnessColor } from "../harness-colors.js";
 import { IconSearch, IconTerminal } from "../icons.js";
 import { ago } from "../turns.js";
 import { Dialog } from "./Dialog.js";
+import { dotted } from "./Dot.js";
 
 const KIND_LABEL: Record<ChatSearchHit["kind"], string> = { title: "Title", prompt: "You", answer: "Reply", tool: "Tool" };
 
@@ -198,7 +199,7 @@ export function ChatSearch({
               <span className="badge badge-harness">{name(r.session.harnessId)}</span>
               <ResultTitle result={r} />
               <span className="chat-result-meta">
-                {[project.get(r.session.workspaceId), r.session.updatedAt ? ago(Date.parse(r.session.updatedAt)) : null].filter(Boolean).join(" · ")}
+                {dotted([project.get(r.session.workspaceId), r.session.updatedAt ? ago(Date.parse(r.session.updatedAt)) : null])}
               </span>
             </div>
             {r.hits

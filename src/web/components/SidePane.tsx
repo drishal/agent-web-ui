@@ -18,6 +18,7 @@ import { isBusy } from "../session-groups.js";
 import { ago } from "../turns.js";
 import { Composer } from "./Composer.js";
 import { Conversation } from "./Conversation.js";
+import { Dot, dotted } from "./Dot.js";
 
 /** Sessions the picker lists at first; a search reaches the rest. */
 const PICKS = 30;
@@ -63,7 +64,7 @@ function Picker({
                 <span className="side-pick-title">{s.title || "New chat"}</span>
                 <span className="side-pick-meta">
                   <span className="badge badge-harness">{name(s.harnessId)}</span>
-                  {[project(s.workspaceId), s.updatedAt ? ago(Date.parse(s.updatedAt)) : null].filter(Boolean).join(" · ")}
+                  {dotted([project(s.workspaceId), s.updatedAt ? ago(Date.parse(s.updatedAt)) : null])}
                 </span>
               </button>
             </li>
@@ -150,7 +151,10 @@ export function SidePane({
               <span className={`status status-${chat.status}`} data-testid="side-status">
                 {STATUS_LABEL[chat.status] ?? chat.status}
               </span>
-              {conn !== "connected" && conn !== "connecting" ? <span className="muted">· {conn}</span> : null}
+              {conn !== "connected" && conn !== "connecting" ? <span className="muted">
+                  <Dot />
+                  {conn}
+                </span> : null}
               <span className="chat-path">{chat.workspace.name}</span>
             </div>
           </div>

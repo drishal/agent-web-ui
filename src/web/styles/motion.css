@@ -187,6 +187,10 @@
   animation: shimmer 1.8s linear infinite;
 }
 
+.process.is-live .process-label .dot {
+  background: var(--muted);
+}
+
 /* Tool cards ease their live output in. */
 .term-output,
 .tool-card-note {

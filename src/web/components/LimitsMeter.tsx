@@ -4,6 +4,7 @@
 // panel, a bar per window with when it resets.
 import type { UsageLimits } from "../../shared/protocol.js";
 import { accountName, level, percent, resetsIn, tightest } from "../limits.js";
+import { dotted } from "./Dot.js";
 
 /** The fullest window in one line ("Claude 7 days · 86%"), coloured by how full; null with no limits. */
 export function LimitsSummary({ limits }: { limits: UsageLimits | null }) {
@@ -11,7 +12,7 @@ export function LimitsSummary({ limits }: { limits: UsageLimits | null }) {
   if (!limits || !top) return null;
   const anyLimited = limits.accounts.some((a) => a.limited);
   return (
-    <span className={`limits-top is-${level(top.window.used, anyLimited)}`}>{anyLimited ? "Limited" : `${accountName(top.account)} ${top.window.label} · ${percent(top.window.used)}`}</span>
+    <span className={`limits-top is-${level(top.window.used, anyLimited)}`}>{anyLimited ? "Limited" : dotted([`${accountName(top.account)} ${top.window.label}`, percent(top.window.used)])}</span>
   );
 }
 

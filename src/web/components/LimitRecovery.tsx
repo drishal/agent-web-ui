@@ -8,6 +8,7 @@ import type { LimitStop } from "../limit-stop.js";
 import { resetsIn } from "../limits.js";
 import { useNow } from "../hooks.js";
 import { load, save } from "../storage.js";
+import { Dot } from "./Dot.js";
 
 /** A little after the reset, so the first request does not race it. */
 const AFTER_RESET_MS = 20_000;
@@ -46,11 +47,8 @@ export function LimitRecovery({ chatId, stop, idle, onContinue }: { chatId: stri
       <span className="limit-recovery-text">
         <strong>Usage limit reached</strong>
         <span className="muted">
-          {mine
-            ? ` · continues at ${when} — keep this tab open`
-            : when
-              ? ` · resets ${when} (${resetsIn(stop.resetsAt, now) ?? "soon"})`
-              : " · reset time unknown"}
+          <Dot />
+          {mine ? `continues at ${when} — keep this tab open` : when ? `resets ${when} (${resetsIn(stop.resetsAt, now) ?? "soon"})` : "reset time unknown"}
         </span>
       </span>
       {stop.resetsAt !== null ? (

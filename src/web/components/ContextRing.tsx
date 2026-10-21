@@ -5,6 +5,7 @@
 import { useRef, useState } from "react";
 import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 import { useDismiss } from "../hooks.js";
+import { Dot } from "./Dot.js";
 
 function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
@@ -139,7 +140,9 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
               <div className="usage-head">
                 <span>Session</span>
                 <span className="usage-value">
-                  {used.turns} {used.turns === 1 ? "turn" : "turns"} · {used.steps} {used.steps === 1 ? "step" : "steps"}
+                  {used.turns} {used.turns === 1 ? "turn" : "turns"}
+                  <Dot />
+                  {used.steps} {used.steps === 1 ? "step" : "steps"}
                 </span>
               </div>
               <Row label="LLM time" value={used.llmMs !== null ? duration(used.llmMs) : "—"} />

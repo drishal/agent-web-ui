@@ -692,16 +692,6 @@
   white-space: nowrap;
 }
 
-.drow-sep {
-  flex: none;
-  width: 2.5px;
-  height: 2.5px;
-  margin: 0 8px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
-}
-
 .drow-summary {
   flex: 1 1 auto;
   min-width: 0;
