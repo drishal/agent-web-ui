@@ -2,7 +2,9 @@
 // stops from Faster to Smarter, one per level the harness offers (weakest
 // first), with a knob that is dragged, clicked to, or moved with the arrow
 // keys. A change applies once the knob settles, so dragging across levels
-// sends one change, not one per stop.
+// sends one change, not one per stop. When the harness's route sends a lower
+// level than the one picked (Hermes's "ultra" sends "max"), the pill and the
+// popover say so.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useDismiss } from "../hooks.js";
 import { IconChevronDown } from "../icons.js";
@@ -16,11 +18,14 @@ const title = (level: string) => level.charAt(0).toUpperCase() + level.slice(1);
 export function ThinkingPicker({
   levels,
   current,
+  sent,
   disabled,
   onSelect,
 }: {
   levels: string[];
   current: string | null;
+  /** What the route actually sends for `current`, when that differs. */
+  sent: string | null;
   disabled: boolean;
   onSelect: (level: string) => void;
 }) {
@@ -129,13 +134,16 @@ export function ThinkingPicker({
         className="pill-trigger"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Thinking: ${current ?? "default"}`}
+        aria-label={`Thinking: ${current ?? "default"}${sent ? `, sends ${sent} on this route` : ""}`}
         title="Thinking effort"
         disabled={disabled}
         data-testid="thinking-picker"
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <span className="pill-label">{title(current ?? "default")}</span>
+        <span className="pill-label">
+          {title(current ?? "default")}
+          {sent ? ` → ${title(sent)}` : ""}
+        </span>
         <IconChevronDown size={12} />
       </button>
       {open ? (
@@ -146,6 +154,7 @@ export function ThinkingPicker({
               <span className="effort-label">Effort</span>
               <span className="effort-value">{title(shown)}</span>
             </div>
+            {sent && shown === current ? <p className="effort-note">Sends {title(sent)} on this route</p> : null}
             <div className="effort-ends" aria-hidden="true">
               <span>Faster</span>
               <span>Smarter</span>

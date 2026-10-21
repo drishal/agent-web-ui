@@ -146,6 +146,8 @@ export interface ChatConfig {
   thinkingLevel: string | null;
   models: ModelInfo[];
   thinkingLevels: string[];
+  /** What the harness actually sends for thinkingLevel when its route clamps it (Hermes's "ultra" sends "max"); absent or null when it sends the level as named. */
+  thinkingSent?: string | null;
   /** The permission mode in force; absent when the harness has none (supportsPermissionMode). */
   permissionMode?: string | null;
   /** The modes it can switch to, in the harness's order. */

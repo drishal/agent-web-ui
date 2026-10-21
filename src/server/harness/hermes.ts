@@ -66,7 +66,13 @@ const PROBE_TTL_MS = 60_000;
 /** How long a discovered gateway endpoint is trusted: its port and instance change only on a restart. */
 const ENDPOINT_TTL_MS = 15_000;
 /** Hermes's effort ladder (agent/reasoning_effort.py); the route clamps to what it accepts. */
-const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+const REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+/** The level the route sends for the session's effort, when its clamp changes it (session.info's reasoning_effort_wire). */
+function sentEffort(info: Obj): string | null {
+  const wire = str(info.reasoning_effort_wire);
+  return wire && wire !== str(info.reasoning_effort) ? wire : null;
+}
 
 
 /**
@@ -595,7 +601,7 @@ class HermesLiveChat implements LiveChat {
         type: "config",
         config: {
           ...(qualified ? { model: qualified } : {}),
-          ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort) } : {}),
+          ...(str(info.reasoning_effort) ? { thinkingLevel: str(info.reasoning_effort), thinkingSent: sentEffort(info) } : {}),
         },
       });
       // The key needs the catalog to tell a real pick from a stranded name; once it is read, say it again.
@@ -867,6 +873,7 @@ class HermesLiveChat implements LiveChat {
       thinkingLevel: str(this.info.reasoning_effort) || null,
       models,
       thinkingLevels: REASONING_LEVELS,
+      thinkingSent: sentEffort(this.info),
     };
   }
 
