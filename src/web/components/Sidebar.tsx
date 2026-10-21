@@ -1,14 +1,14 @@
 // The sessions sidebar: the harness and project pickers, search, and every
-// project's sessions in date sections (the current project's first, with
-// "Show N more" past a few), from the server's sessions overview. Rows warm
-// their chat on hover, show a hover card, and carry a menu (new tab, resume
-// command, pin, snooze, archive). On phones it is the drawer.
+// project's sessions in date sections ("Show N more" past a few), from the
+// server's sessions overview. Rows warm their chat on hover, show a hover card,
+// carry a menu (new tab, resume command, pin, snooze, archive, move), and drag
+// to a new place inside their date section. On phones it is the drawer.
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
-import { dateBucket, groupByProject, historySections, isBusy, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
+import { groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
@@ -42,6 +42,20 @@ function relativeTime(iso: string | null): string {
 
 export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boolean; snoozedUntil?: number | null };
 
+/** A row's moves inside its date section: whether it can go up or down, and the move. */
+type Mover = { up: boolean; down: boolean; by: (delta: -1 | 1) => void };
+
+/** A row's part in a drag: its handlers, and how it shows (being dragged, or the drop above or below it). */
+type RowDrag = {
+  dragging: boolean;
+  drop: "before" | "after" | null;
+  onStart: (e: React.DragEvent<HTMLLIElement>) => void;
+  onOver: (e: React.DragEvent<HTMLLIElement>) => void;
+  onLeave: () => void;
+  onDrop: (e: React.DragEvent<HTMLLIElement>) => void;
+  onEnd: () => void;
+};
+
 /**
  * Start opening a session before its click: App fetches it on a hover (live
  * chats) or a mouse press, so the click finds it loaded. A context, so the
@@ -73,6 +87,7 @@ function RowMenu({
   markable,
   onOpenNewTab,
   onMark,
+  onMove,
   onClose,
 }: {
   s: ProjectSession;
@@ -80,6 +95,7 @@ function RowMenu({
   markable: boolean;
   onOpenNewTab: () => void;
   onMark: (change: MarkChange) => void;
+  onMove?: Mover;
   onClose: () => void;
 }) {
   const list = useRef<HTMLUListElement>(null);
@@ -191,6 +207,36 @@ function RowMenu({
             </li>
           </>
         ) : null}
+        {onMove ? (
+          <>
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!onMove.up}
+                onClick={() => {
+                  onClose();
+                  onMove.by(-1);
+                }}
+              >
+                <IconChevronUp size={14} /> Move up
+              </button>
+            </li>
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!onMove.down}
+                onClick={() => {
+                  onClose();
+                  onMove.by(1);
+                }}
+              >
+                <IconChevronDown size={14} /> Move down
+              </button>
+            </li>
+          </>
+        ) : null}
       </ul>
     </>
   );
@@ -204,6 +250,8 @@ function SessionRow({
   project,
   onOpen,
   onMark,
+  move,
+  drag,
 }: {
   s: ProjectSession;
   active: boolean;
@@ -214,6 +262,10 @@ function SessionRow({
   /** `newTab`: Ctrl/⌘-click or middle-click, as in a browser. */
   onOpen: (newTab: boolean) => void;
   onMark: (change: MarkChange) => void;
+  /** Moving it inside its date section (menu, Alt+↑/↓); absent where the list has no hand order. */
+  move?: Mover;
+  /** Dragging it inside its date section. */
+  drag?: RowDrag;
 }) {
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -242,7 +294,15 @@ function SessionRow({
     return () => window.removeEventListener("scroll", hideCard, { capture: true });
   }, [cardAt]);
   return (
-    <li className={`session-item${menuAt ? " is-menu-open" : ""}`}>
+    <li
+      className={`session-item${menuAt ? " is-menu-open" : ""}${drag?.dragging ? " is-dragging" : ""}${drag?.drop ? ` is-drop-${drag.drop}` : ""}`}
+      draggable={drag ? true : undefined}
+      onDragStart={drag?.onStart}
+      onDragOver={drag?.onOver}
+      onDragLeave={drag?.onLeave}
+      onDrop={drag?.onDrop}
+      onDragEnd={drag?.onEnd}
+    >
       <button
         type="button"
         className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}${s.archived || s.settled || (s.snoozedUntil ?? 0) > Date.now() ? " is-archived" : ""}`}
@@ -277,6 +337,11 @@ function SessionRow({
           e.preventDefault();
           hideCard();
           setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
+        }}
+        onKeyDown={(e) => {
+          if (!move || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          if (e.key === "ArrowUp" ? move.up : move.down) move.by(e.key === "ArrowUp" ? -1 : 1);
         }}
         aria-current={active ? "true" : undefined}
         title={project ? `${s.title} · ${project}` : undefined}
@@ -317,7 +382,9 @@ function SessionRow({
         <IconMore size={14} />
       </button>
       {cardAt && !menuAt ? <SessionCard s={s} anchor={cardAt} harnessName={harnessName} project={project ?? ""} id={cardId} /> : null}
-      {menuAt ? <RowMenu s={s} anchor={menuAt} markable={markable} onOpenNewTab={() => onOpen(true)} onMark={onMark} onClose={() => setMenuAt(null)} /> : null}
+      {menuAt ? (
+        <RowMenu s={s} anchor={menuAt} markable={markable} onOpenNewTab={() => onOpen(true)} onMark={onMark} {...(move ? { onMove: move } : {})} onClose={() => setMenuAt(null)} />
+      ) : null}
     </li>
   );
 }
@@ -370,43 +437,66 @@ function SectionList({
 function ProjectGroupView({
   group,
   searching,
+  order,
+  now,
   isActive,
   isWorking,
   harnessName,
   canStartChat,
   onOpen,
   onMark,
+  onReorder,
   onNewChat,
 }: {
   group: ProjectGroup;
   searching: boolean;
+  /** The project's hand-made order, first to last. */
+  order: string[] | undefined;
+  now: number;
   isActive: (s: ProjectSession) => boolean;
   isWorking: (s: ProjectSession) => boolean;
   harnessName: (id: string) => string;
   canStartChat: boolean;
   onOpen: (s: ProjectSession, newTab: boolean) => void;
   onMark: (s: ProjectSession, change: MarkChange) => void;
+  onReorder: (ids: string[]) => void;
   onNewChat: (ws: WorkspaceInfo) => void;
 }) {
   const [open, setOpen] = useState(true);
   const [showAll, setShowAll] = useState(false);
-  const { workspace, sessions, current } = group;
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; place: "before" | "after" } | null>(null);
+  const { workspace, sessions, current, checkout, sharesRepo } = group;
   const limit = current ? VISIBLE_CURRENT : VISIBLE_OTHER;
-  const shown = searching || showAll ? sessions : sessions.slice(0, limit);
-  const hidden = sessions.length - shown.length;
+  const weekStart = useMemo(localeWeekStart, []);
+  const all = useMemo(() => projectRows(sessions, { now, weekStartsOn: weekStart, ...(order ? { order } : {}) }), [sessions, now, weekStart, order]);
+  // A search lists matches, not a hand order.
+  const arranging = !searching;
+  const groupOf = (id: string) => all.flatMap((r) => (r.kind === "session" && r.s.id === id ? [r.group] : []))[0];
+  const reorder = (ids: string[] | null) => {
+    if (ids) onReorder(ids);
+  };
 
   const rows: React.ReactNode[] = [];
-  let bucket = "";
-  for (const s of shown) {
-    const b = s.liveChatId && !s.updatedAt ? "Open" : dateBucket(s.updatedAt);
-    if (b !== bucket) {
-      bucket = b;
-      rows.push(
-        <li key={`d-${b}`} className="date-divider" role="presentation">
-          {b}
-        </li>,
-      );
+  let count = 0;
+  for (const [i, r] of all.entries()) {
+    if (r.kind === "divider") {
+      // A divider shows only when a session under it does.
+      const next = all[i + 1];
+      if (next?.kind === "session" && (searching || showAll || count < limit))
+        rows.push(
+          <li key={`d-${r.key}`} className="date-divider" role="presentation">
+            {r.label}
+          </li>,
+        );
+      continue;
     }
+    if (!searching && !showAll && count >= limit) break;
+    count++;
+    const { s, group: section } = r;
+    const markable = !s.id.includes(":live-");
+    const up = movedOrder(all, s.id, { delta: -1 }) !== null;
+    const down = movedOrder(all, s.id, { delta: 1 }) !== null;
     rows.push(
       <SessionRow
         key={s.id}
@@ -416,9 +506,43 @@ function ProjectGroupView({
         harnessName={harnessName(s.harnessId)}
         onOpen={(newTab) => onOpen(s, newTab)}
         onMark={(change) => onMark(s, change)}
+        {...(arranging && markable && (up || down) ? { move: { up, down, by: (delta) => reorder(movedOrder(all, s.id, { delta })) } } : {})}
+        {...(arranging && markable
+          ? {
+              drag: {
+                dragging: dragged === s.id,
+                drop: drop?.id === s.id ? drop.place : null,
+                onStart: (e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", s.title);
+                  setDragged(s.id);
+                },
+                onOver: (e) => {
+                  if (!dragged || dragged === s.id || groupOf(dragged) !== section) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  const box = e.currentTarget.getBoundingClientRect();
+                  const place = e.clientY < box.top + box.height / 2 ? "before" : "after";
+                  if (drop?.id !== s.id || drop.place !== place) setDrop({ id: s.id, place });
+                },
+                onLeave: () => setDrop((d) => (d?.id === s.id ? null : d)),
+                onDrop: (e) => {
+                  e.preventDefault();
+                  if (dragged && drop?.id === s.id) reorder(movedOrder(all, dragged, { target: s.id, place: drop.place }));
+                  setDragged(null);
+                  setDrop(null);
+                },
+                onEnd: () => {
+                  setDragged(null);
+                  setDrop(null);
+                },
+              },
+            }
+          : {})}
       />,
     );
   }
+  const hidden = sessions.length - count;
 
   return (
     <li className={`project-group${open ? " is-open" : ""}${current ? " is-current" : ""}`} data-testid="project-group">
@@ -427,6 +551,7 @@ function ProjectGroupView({
           <IconChevronDown size={12} className="group-chevron" />
           <IconFolder size={14} />
           <span className="project-name">{workspace.name}</span>
+          {sharesRepo && checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
           {!open && sessions.some(isWorking) ? <WorkingRing colored={false} /> : null}
           <span className="group-count">{sessions.length}</span>
         </button>
@@ -488,6 +613,8 @@ export function Sidebar(props: {
   onOpenBeside?: (s: ProjectSession) => void;
   /** Pin or archive a session. */
   onMarkSession: (s: ProjectSession, change: MarkChange) => void;
+  /** A project's sessions in a hand-made order (a drag, Move up/down), for the shown harness. */
+  onReorderSessions: (harnessId: string, workspaceId: string, ids: string[]) => void;
   /** Say something in the app's banner (a copied resume command). */
   onNotice: (text: string) => void;
   onRefresh: () => void;
@@ -695,12 +822,15 @@ export function Sidebar(props: {
                   key={g.workspace.id}
                   group={g}
                   searching={searching}
+                  order={props.overview.orders?.[`${props.harnessId}:${g.workspace.id}`]}
+                  now={now}
                   isActive={isActive}
                   isWorking={isWorking}
                   harnessName={(id) => names.get(id) ?? id}
                   canStartChat={props.canStartChat}
                   onOpen={props.onOpenSession}
                   onMark={props.onMarkSession}
+                  onReorder={(ids) => props.harnessId && props.onReorderSessions(props.harnessId, g.workspace.id, ids)}
                   onNewChat={props.onNewChatIn}
                 />
               ))

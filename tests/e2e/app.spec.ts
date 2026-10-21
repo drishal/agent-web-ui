@@ -694,11 +694,12 @@ test("the sidebar scopes sessions to the selected harness and opens them across 
   // From another project, the selected harness's sessions are still listed under their own folder.
   await signInAndOpen(page, "alpha");
   await chooseHarness(page, "Fake");
+  // Projects go by their newest session, wherever you are; the run of what was done last has no date label.
   const groups = page.getByTestId("project-group");
-  await expect(groups.first().locator(".project-name")).toHaveText("alpha");
+  await expect(groups.first().locator(".project-name")).toHaveText("beta");
   const beta = groups.filter({ has: page.locator(".project-name", { hasText: /^beta$/ }) });
   await expect(beta.locator(".session-title").first()).toHaveText("xproj six");
-  await expect(beta.locator(".date-divider").first()).toHaveText("Today");
+  await expect(beta.locator(".session-sublist > li").first()).toHaveClass(/session-item/);
 
   // Only the Fake sessions: the Fake B one is another harness's, so it stays hidden.
   await expect(beta.locator(".session")).toHaveCount(4);
@@ -730,6 +731,13 @@ test("the sidebar scopes sessions to the selected harness and opens them across 
   await expect(prompts(page)).toHaveText(["xproj four"]);
   await expect(page.locator(".workspace-name")).toHaveText("beta");
   await expect(groups.first().locator(".project-name")).toHaveText("beta");
+
+  // A session moves inside its date section from its menu, and keeps its place for every device.
+  await beta.getByRole("button", { name: "More for xproj five" }).click();
+  await page.getByRole("menuitem", { name: "Move up" }).click();
+  await expect(beta.locator(".session-title").first()).toHaveText("xproj five");
+  await page.reload();
+  await expect(beta.locator(".session-title").first()).toHaveText("xproj five");
 });
 
 test("a working session spins in the sidebar, also while another chat is open", async ({ page }) => {

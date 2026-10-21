@@ -881,7 +881,8 @@ export class OpenCodeAdapter implements HarnessAdapter {
 
   private summary(s: Obj): NativeSessionSummary {
     const time = isObj(s.time) ? s.time : {};
-    return { nativeId: str(s.id), title: str(s.title) || "Untitled", updatedAt: num(time.updated) ? new Date(num(time.updated)) : null };
+    const at = num(time.updated) || num(time.created);
+    return { nativeId: str(s.id), title: str(s.title) || "Untitled", updatedAt: at ? new Date(at) : null };
   }
 
   async listSessions(cwd: string): Promise<NativeSessionSummary[]> {

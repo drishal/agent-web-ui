@@ -610,6 +610,8 @@ export class Chat implements CheckpointHost {
   generation = 0;
   /** Last real conversation (a prompt sent, a turn finished): sidebar order. */
   lastActivity = Date.now();
+  /** When someone last talked in it here (a prompt sent, a turn finished); null until then. */
+  talkedAt: number | null = null;
   /** Last sign of use of any kind (events, sends, a viewer leaving): what the reaper's idle clock reads. */
   lastSeen = Date.now();
   onSession?: (chat: Chat) => void;
@@ -785,7 +787,7 @@ export class Chat implements CheckpointHost {
     // Viewing must not promote the chat: only real conversation (a prompt sent
     // or a turn finished) counts as activity for sidebar ordering. Replay on
     // open, status flaps, config/title/usage refreshes all stay quiet.
-    if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = Date.now();
+    if (event.type === "user_message" || event.type === "assistant_end") this.lastActivity = this.talkedAt = Date.now();
     this.lastSeen = Date.now();
     this.reducer.apply(event.type === "user_message" ? this.withSentImages(event) : event);
     if (event.type === "user_message") this.checkpoints?.onUserTurn(event.text, event.command === true);

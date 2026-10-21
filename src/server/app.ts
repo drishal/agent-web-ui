@@ -31,12 +31,14 @@ import {
   runCommandSchema,
   savedPromptSchema,
   sessionMarkSchema,
+  sessionOrderSchema,
   pushSubscriptionSchema,
   pushTestSchema,
   putBackSchema,
   restoreSchema,
   type CheckpointPreview,
   type CheckpointRestored,
+  type Checkout,
   type ProjectSession,
   sendMessageSchema,
   fileSearchSchema,
@@ -71,6 +73,8 @@ import { readAwuiConfig, writeAwuiConfig } from "./awui-settings.js";
 import { readUserConfig, uiSettings } from "./user-config.js";
 import { HerdrError, type Herdr } from "./herdr.js";
 import { SessionMarks } from "./session-marks.js";
+import { SessionOrder } from "./session-order.js";
+import { checkoutOf } from "./checkouts.js";
 import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
@@ -103,6 +107,8 @@ export interface AppDeps {
   heartbeatMs?: number;
   /** Pinned and archived sessions; in memory when absent. */
   marks?: SessionMarks;
+  /** Hand-made session orders; in memory when absent. */
+  order?: SessionOrder;
   /** Saved prompts, for every device; in memory when absent (tests). */
   prompts?: SavedPrompts;
   /** Subscription limits; in memory when absent. */
@@ -151,16 +157,23 @@ function toSession(
     id: `${adapter.id}:${s.nativeId}`,
     harnessId: adapter.id,
     title: s.title,
-    updatedAt: s.updatedAt ? s.updatedAt.toISOString() : null,
+    updatedAt: latest(s.updatedAt, live?.talkedAt ?? null),
     ...(s.messageCount !== undefined ? { messageCount: s.messageCount } : {}),
     ...(live ? { liveChatId: live.chatId, status: live.status, ...(live.pendingCount > 0 ? { asking: true as const } : {}) } : {}),
   };
   return ws ? { ...summary, workspaceId: ws.id } : summary;
 }
 
+/** A session's last activity: its file's, or a live chat's newer conversation here. */
+function latest(saved: Date | null, talkedAt: number | null): string | null {
+  const at = Math.max(saved?.getTime() ?? 0, talkedAt ?? 0);
+  return at > 0 ? new Date(at).toISOString() : null;
+}
+
 export function createApp(deps: AppDeps) {
   const { registry, manager, workspaces, security, theme } = deps;
   const marks = deps.marks ?? SessionMarks.inMemory();
+  const order = deps.order ?? SessionOrder.inMemory();
   const prompts = deps.prompts ?? SavedPrompts.inMemory();
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
@@ -556,10 +569,19 @@ export function createApp(deps: AppDeps) {
       const pane = inHerdr?.get(id);
       if (mark || pane) sessions.set(id, { ...s, ...mark, ...(pane ? { herdr: { paneId: pane.paneId, status: pane.status } } : {}) });
     }
+    const checkouts: Record<string, Checkout> = {};
+    await Promise.all(
+      [...projects.values()].map(async (ws) => {
+        const checkout = await checkoutOf(ws.path);
+        if (checkout) checkouts[ws.id] = checkout;
+      }),
+    );
     return {
       workspaces: [...projects.values()],
       sessions: [...sessions.values()].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
       errors,
+      checkouts,
+      orders: order.all(),
     };
   };
   app.get("/api/sessions", async (req, res) => {
@@ -623,6 +645,11 @@ export function createApp(deps: AppDeps) {
     const { sessionId, ...change } = body(sessionMarkSchema, req);
     if (change.snoozedUntil !== undefined && change.snoozedUntil !== null && change.snoozedUntil <= Date.now()) throw new ChatError(400, "bad_snooze", "Snooze until a time to come");
     res.json(await marks.set(sessionId, change));
+  });
+
+  app.post("/api/sessions/order", async (req, res) => {
+    const { harnessId, workspaceId, ids } = body(sessionOrderSchema, req);
+    res.json({ ids: await order.set(harnessId, workspaceId, ids) });
   });
 
   app.post("/api/chats", async (req, res) => {

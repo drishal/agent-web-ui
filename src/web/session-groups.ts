@@ -1,6 +1,9 @@
-// Sidebar grouping (Hermes Desktop style): sessions by project, the current
-// project first, then projects by their newest session.
-import type { ChatStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
+// Sidebar grouping (Hermes Desktop style): sessions by project, newest activity
+// first; projects by their newest session, a repository's projects together
+// (the one you are in, then its main branch, then other branches and
+// worktrees); and inside a project, an unlabelled run of what you did last,
+// then calendar groups, each in the order a drag left it.
+import type { ChatStatus, Checkout, ProjectSession, SessionsOverview, WorkspaceInfo } from "../shared/protocol.js";
 
 const BUSY: ReadonlySet<ChatStatus> = new Set(["starting", "running", "stopping", "compacting"]);
 
@@ -11,10 +14,23 @@ export function isBusy(status: ChatStatus | null | undefined): boolean {
 
 export interface ProjectGroup {
   workspace: WorkspaceInfo;
-  /** Newest first. */
+  /** Newest activity first. */
   sessions: ProjectSession[];
   current: boolean;
+  /** Its git checkout, when the project is in a repository. */
+  checkout?: Checkout;
+  /** Another project of the same repository is listed too: its branch tells them apart. */
+  sharesRepo: boolean;
 }
+
+/** A session's last activity (its last turn, else when it began), in ms; 0 when unknown. */
+export const recency = (s: ProjectSession): number => (s.updatedAt ? Date.parse(s.updatedAt) || 0 : 0);
+
+const TRUNK_BRANCHES: ReadonlySet<string> = new Set(["main", "master", "trunk", "develop"]);
+
+/** Inside a repository: the project you are in, then its main branch, then the other branches and worktrees. */
+const tier = (g: ProjectGroup): number => (g.current ? 0 : g.checkout?.branch && TRUNK_BRANCHES.has(g.checkout.branch) ? 1 : 2);
+const activity = (g: ProjectGroup): number => g.sessions.reduce((max, s) => Math.max(max, recency(s)), 0);
 
 export interface GroupOptions {
   currentId: string | null;
@@ -59,7 +75,10 @@ function visible(overview: SessionsOverview, opts: GroupOptions): ProjectSession
 export function groupByProject(overview: SessionsOverview, opts: GroupOptions): ProjectGroup[] {
   const searching = opts.query.trim() !== "";
   const groups = new Map<string, ProjectGroup>();
-  for (const ws of overview.workspaces) groups.set(ws.id, { workspace: ws, sessions: [], current: ws.id === opts.currentId });
+  for (const ws of overview.workspaces) {
+    const checkout = overview.checkouts?.[ws.id];
+    groups.set(ws.id, { workspace: ws, sessions: [], current: ws.id === opts.currentId, ...(checkout ? { checkout } : {}), sharesRepo: false });
+  }
   for (const s of visible(overview, opts)) {
     const place = placeOf(s, opts);
     const shown =
@@ -70,10 +89,23 @@ export function groupByProject(overview: SessionsOverview, opts: GroupOptions): 
       (place === "snoozed" && opts.showSnoozed);
     if (shown) groups.get(s.workspaceId)?.sessions.push(s);
   }
-  const newest = (g: ProjectGroup) => g.sessions[0]?.updatedAt ?? "";
-  return [...groups.values()]
-    .filter((g) => g.sessions.length > 0 || (g.current && !searching))
-    .sort((a, b) => Number(b.current) - Number(a.current) || newest(b).localeCompare(newest(a)));
+  const shown = [...groups.values()].filter((g) => g.sessions.length > 0 || (g.current && !searching));
+  for (const g of shown) g.sessions.sort((a, b) => recency(b) - recency(a));
+  // A repository's projects stay together, placed by the newest of them; empty ones sink.
+  const repos = new Map<string, ProjectGroup[]>();
+  for (const g of shown) {
+    const key = g.checkout ? `repo:${g.checkout.repo}` : `ws:${g.workspace.id}`;
+    const list = repos.get(key);
+    if (list) list.push(g);
+    else repos.set(key, [g]);
+  }
+  const byName = (a: ProjectGroup, b: ProjectGroup) => a.workspace.name.localeCompare(b.workspace.name);
+  const clusters = [...repos.values()].map((list) => {
+    for (const g of list) g.sharesRepo = list.length > 1;
+    return list.sort((a, b) => tier(a) - tier(b) || activity(b) - activity(a) || byName(a, b));
+  });
+  const newest = (list: ProjectGroup[]) => Math.max(...list.map(activity));
+  return clusters.sort((a, b) => newest(b) - newest(a) || byName(a[0] as ProjectGroup, b[0] as ProjectGroup)).flat();
 }
 
 export interface SidebarSections {
@@ -182,19 +214,139 @@ export function historySections(overview: SessionsOverview, opts: GroupOptions):
   return out;
 }
 
-/** Hermes-style divider: Today, Yesterday, Earlier this week, then the month. */
-export function dateBucket(iso: string | null, now = new Date()): string {
-  if (!iso) return "Older";
-  const then = new Date(iso);
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const day = 86_400_000;
-  const t = then.getTime();
-  if (t >= today.getTime()) return "Today";
-  if (t >= today.getTime() - day) return "Yesterday";
-  if (t >= today.getTime() - 6 * day) return "Earlier this week";
-  const month = then.toLocaleDateString("en-US", { month: "long" });
-  return then.getFullYear() === now.getFullYear() ? month : `${month} ${then.getFullYear()}`;
+/** The locale's first day of the week (0 Sunday … 6 Saturday); Monday when the browser does not say. */
+export function localeWeekStart(): number {
+  try {
+    if (typeof navigator === "undefined") return 1;
+    const locale = new Intl.Locale(navigator.language) as Intl.Locale & { getWeekInfo?: () => { firstDay: number }; weekInfo?: { firstDay: number } };
+    const first = locale.getWeekInfo?.().firstDay ?? locale.weekInfo?.firstDay;
+    return typeof first === "number" ? first % 7 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+const startOfDay = (ms: number): Date => {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+/** A date group, by the calendar (Hermes Desktop's): Today, Yesterday, Earlier this week, Last week, Earlier this month, then months. */
+export function dateGroup(ms: number, now = Date.now(), weekStartsOn = 1): { key: string; label: string } {
+  if (ms <= 0) return { key: "undated", label: "Older" };
+  const day = startOfDay(ms);
+  const today = startOfDay(now);
+  const days = Math.round((today.getTime() - day.getTime()) / 86_400_000);
+  if (days <= 0) return { key: "today", label: "Today" };
+  if (days === 1) return { key: "yesterday", label: "Yesterday" };
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() - weekStartsOn + 7) % 7));
+  if (day >= weekStart) return { key: "this-week", label: "Earlier this week" };
+  const lastWeek = new Date(weekStart);
+  lastWeek.setDate(weekStart.getDate() - 7);
+  if (day >= lastWeek) return { key: "last-week", label: "Last week" };
+  const sameYear = day.getFullYear() === today.getFullYear();
+  if (sameYear && day.getMonth() === today.getMonth()) return { key: "this-month", label: "Earlier this month" };
+  const month = day.toLocaleDateString("en-US", { month: "long" });
+  return { key: `m-${day.getFullYear()}-${day.getMonth()}`, label: sameYear ? month : `${month} ${day.getFullYear()}` };
+}
+
+const HEAD_SESSIONS = 5;
+const MIN_BREAK_MS = 30 * 60_000;
+const MAX_RUN_GAP_MS = 8 * 3_600_000;
+
+/**
+ * Where the unlabelled run of what you did last ends (Hermes Desktop's head
+ * run): the oldest time still in it. The run is cut at a real pause (30
+ * minutes or more) near five sessions down, never mid-burst, and a silence
+ * over 8 hours always ends it. -Infinity: the whole list is one run;
+ * Infinity: no run (it would only be the top of its own date group).
+ */
+export function headCutoff(times: number[], now = Date.now(), weekStartsOn = 1): number {
+  const t = [...times].sort((a, b) => b - a);
+  let best = -1;
+  let bestScore = Infinity;
+  let ended = false;
+  for (let i = 1; i < t.length; i++) {
+    const gap = (t[i - 1] as number) - (t[i] as number);
+    const ends = gap > MAX_RUN_GAP_MS;
+    if (gap >= MIN_BREAK_MS || ends) {
+      const score = Math.abs(Math.log(i / HEAD_SESSIONS));
+      if (score < bestScore) {
+        bestScore = score;
+        best = i;
+        ended = ends;
+      }
+    }
+    if (ends) break;
+  }
+  if (best === -1) return -Infinity;
+  if (ended && dateGroup(t[0] as number, now, weekStartsOn).key === dateGroup(t[best] as number, now, weekStartsOn).key) return Infinity;
+  return t[best - 1] as number;
+}
+
+/** A project's list: date dividers between its sessions. `group` is what a drag may stay inside. */
+export type ProjectRow = { kind: "divider"; key: string; label: string } | { kind: "session"; s: ProjectSession; group: string };
+
+/**
+ * A project's sessions as the sidebar lists them: newest activity first, the
+ * run of what you did last unlabelled, then a divider before each calendar
+ * group (never before the first row), and inside each group the hand-made
+ * `order` where it names sessions (the rest keep the places recency gave them).
+ */
+export function projectRows(sessions: ProjectSession[], opts: { now?: number; weekStartsOn?: number; order?: string[] } = {}): ProjectRow[] {
+  const now = opts.now ?? Date.now();
+  const weekStartsOn = opts.weekStartsOn ?? 1;
+  const sorted = [...sessions].sort((a, b) => recency(b) - recency(a));
+  const cutoff = headCutoff(sorted.map(recency).filter((t) => t > 0), now, weekStartsOn);
+  const runs: Array<{ key: string; label: string; sessions: ProjectSession[] }> = [];
+  for (const s of sorted) {
+    const at = recency(s);
+    const group = at > 0 && at >= cutoff ? { key: "recent", label: "" } : dateGroup(at, now, weekStartsOn);
+    const last = runs[runs.length - 1];
+    if (last && last.key === group.key) last.sessions.push(s);
+    else runs.push({ ...group, sessions: [s] });
+  }
+  const rank = new Map((opts.order ?? []).map((id, i) => [id, i]));
+  const rows: ProjectRow[] = [];
+  for (const run of runs) {
+    // The sessions the order names swap among the places they already hold.
+    const slots = run.sessions.flatMap((s, i) => (rank.has(s.id) ? [i] : []));
+    const ranked = slots.map((i) => run.sessions[i] as ProjectSession).sort((a, b) => (rank.get(a.id) as number) - (rank.get(b.id) as number));
+    slots.forEach((slot, j) => (run.sessions[slot] = ranked[j] as ProjectSession));
+    if (rows.length > 0 && run.key !== "recent") rows.push({ kind: "divider", key: run.key, label: run.label });
+    for (const s of run.sessions) rows.push({ kind: "session", s, group: run.key });
+  }
+  return rows;
+}
+
+/**
+ * The project's hand-made order after moving session `id` next to `target`
+ * (both in one group), or by `delta` places within its group: the whole list
+ * as shown, with the move. Null when the move would leave its group.
+ */
+export function movedOrder(rows: ProjectRow[], id: string, to: { target: string; place: "before" | "after" } | { delta: -1 | 1 }): string[] | null {
+  const sessions = rows.flatMap((r) => (r.kind === "session" ? [r] : []));
+  const from = sessions.findIndex((r) => r.s.id === id);
+  const moving = sessions[from];
+  if (!moving) return null;
+  let target: string;
+  let place: "before" | "after";
+  if ("delta" in to) {
+    const next = sessions[from + to.delta];
+    if (!next || next.group !== moving.group) return null;
+    target = next.s.id;
+    place = to.delta < 0 ? "before" : "after";
+  } else {
+    const other = sessions.find((r) => r.s.id === to.target);
+    if (!other || other.group !== moving.group || to.target === id) return null;
+    ({ target, place } = to);
+  }
+  const ids = sessions.map((r) => r.s.id).filter((x) => x !== id);
+  const at = ids.indexOf(target) + (place === "after" ? 1 : 0);
+  ids.splice(at, 0, id);
+  return ids;
 }
 
 /** An answer's Markdown as plain text for a hover card's few lines: marks off, list bullets as •. */
