@@ -693,7 +693,7 @@
 }
 
 .drow-summary {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -711,6 +711,22 @@
   font-family: var(--font-sans);
 }
 
+.drow-after {
+  display: flex;
+  align-items: center;
+  flex: none;
+  font-size: calc(var(--chat-small) - 0.6px);
+}
+
+/* The tool row's elapsed/duration stopwatch: quiet, tabular so it ticks in place. */
+.drow-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+
 .diff-stat {
   flex: none;
   font-family: var(--font-mono);
@@ -719,7 +735,8 @@
 
 .drow-aside {
   flex: none;
-  margin-left: 8px;
+  margin-left: auto;
+  padding-left: 8px;
   font-size: calc(var(--chat-small) - 0.6px);
 }
 

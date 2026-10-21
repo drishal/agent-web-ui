@@ -42,6 +42,7 @@ function DisclosureRow({
   icon,
   title,
   summary,
+  after,
   aside,
   tone,
   children,
@@ -52,6 +53,8 @@ function DisclosureRow({
   icon: React.ReactNode;
   title: React.ReactNode;
   summary?: React.ReactNode;
+  /** Kept whole right after the summary (a call's time), however long the summary. */
+  after?: React.ReactNode;
   /** Kept whole at the end of the line (a diff count), however long the summary. */
   aside?: React.ReactNode;
   tone?: "error" | "warn";
@@ -87,6 +90,7 @@ function DisclosureRow({
             <span className="drow-summary">{summary}</span>
           </>
         ) : null}
+        {after ? <span className="drow-after">{after}</span> : null}
         {aside ? <span className="drow-aside">{aside}</span> : null}
       </button>
       {open && expandable ? <div className="drow-body">{children}</div> : null}
@@ -112,8 +116,19 @@ const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking:
   );
 });
 
+/** A call shows its time only once it has run this long — a flash of "1s" on a
+ *  200ms call is noise, not feedback (neat-render does the same). */
+const TIMER_AFTER_MS = 1500;
 const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; workspace: string }) {
   const failed = item.status === "error";
+  const running = item.status === "running";
+  // Stopwatch: ticks while the call runs and stays as the call's duration once
+  // it settles, either only past TIMER_AFTER_MS.
+  const now = useNow(running && item.at !== undefined);
+  const elapsedMs = running && item.at !== undefined ? Math.max(0, now - item.at) : undefined;
+  const tookMs = !running && item.at !== undefined && item.endedAt !== undefined ? item.endedAt - item.at : undefined;
+  const ms = elapsedMs ?? tookMs;
+  const time = ms !== undefined && ms >= TIMER_AFTER_MS ? formatDuration(ms) : null;
   const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
   const summary = item.subagents ? runsSummary(item.subagents) : item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
   const arrival = useArrival(item.id);
@@ -134,6 +149,14 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
               </span>
             ) : null}
           </>
+        }
+        after={
+          time ? (
+            <span className="drow-time">
+              <Dot />
+              {time}
+            </span>
+          ) : null
         }
         aside={item.diffStat ? <DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /> : null}
         {...(failed ? { tone: "error" as const } : {})}
