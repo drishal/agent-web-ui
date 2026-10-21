@@ -30,6 +30,7 @@ import { formatDuration } from "../turns.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
 import { Dot, dotted } from "./Dot.js";
+import { Rolling } from "./Rolling.js";
 
 /** Paste larger than this many UTF-16 chars offers "attach as file" instead of filling the box. */
 const PASTE_FILE_OFFER = 12_000;
@@ -516,7 +517,7 @@ export function Composer({
             {runStart ? (
               <>
                 <Dot />
-                {formatDuration(Math.max(0, now - runStart))}
+                <Rolling text={formatDuration(Math.max(0, now - runStart))} />
               </>
             ) : null}
           </span>

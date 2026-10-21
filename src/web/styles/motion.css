@@ -191,6 +191,10 @@
   background: var(--muted);
 }
 
+.process.is-live .process-label .roll {
+  color: var(--muted);
+}
+
 /* Tool cards ease their live output in. */
 .term-output,
 .tool-card-note {
@@ -237,4 +241,46 @@
     color 0.12s ease,
     transform 0.12s var(--ease-out),
     box-shadow 0.12s ease;
+}
+
+/* Rolling numbers (Rolling.tsx): a changed digit slides up and out as the new one rises in. */
+.roll {
+  font-variant-numeric: tabular-nums;
+}
+
+.roll-col {
+  position: relative;
+  display: inline-block;
+}
+
+.roll-in {
+  display: inline-block;
+  animation: roll-in 0.32s var(--ease-out);
+}
+
+.roll-col[data-from]::before {
+  content: attr(data-from);
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  animation: roll-out 0.32s var(--ease-out);
+}
+
+@keyframes roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em);
+  }
+}
+
+@keyframes roll-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.55em);
+  }
 }
