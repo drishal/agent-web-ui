@@ -255,7 +255,9 @@ rl.on("line", (line) => {
       }
       if (params.key === "reasoning") {
         effort = String(params.value);
-        event("session.info", { model, provider, reasoning_effort: effort, running: false, stored_session_id: storedId, title });
+        // As tui_gateway's session info does: the level the route's clamp sends (no wire takes "ultra").
+        const wire = effort === "none" ? "" : effort === "ultra" ? "max" : effort;
+        event("session.info", { model, provider, reasoning_effort: effort, reasoning_effort_wire: wire, running: false, stored_session_id: storedId, title });
         return ok(id, { key: "reasoning", value: params.value });
       }
       // The owner's session flag (gateway/session_busy_controls.py): not an effort, and not a config write.

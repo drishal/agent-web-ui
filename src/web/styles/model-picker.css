@@ -227,6 +227,12 @@
   font-weight: 600;
 }
 
+.effort-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .effort-ends {
   display: flex;
   justify-content: space-between;

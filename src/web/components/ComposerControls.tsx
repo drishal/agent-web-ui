@@ -79,6 +79,7 @@ export function ComposerControls({
         <ThinkingPicker
           levels={config.thinkingLevels}
           current={config.thinkingLevel}
+          sent={config.thinkingSent ?? null}
           disabled={!idle}
           onSelect={(thinkingLevel) => void onConfig({ thinkingLevel })}
         />

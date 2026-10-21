@@ -202,6 +202,18 @@ describe("hermes adapter (scripted gateway)", () => {
     expect(config).toMatchObject({ model: "fake/fake-mini", thinkingLevel: "high" });
   });
 
+  it("offers ultra, and says when the route sends a lower level for it", async () => {
+    const { chat, live } = await openChat("20261002_120000_fake1");
+    expect((await live.getConfig()).thinkingLevels.at(-1)).toBe("ultra");
+    await chat.setConfig({ thinkingLevel: "ultra" });
+    await until(() => chat.snapshot().config.thinkingLevel === "ultra");
+    expect(chat.snapshot().config.thinkingSent).toBe("max");
+    expect(await live.getConfig()).toMatchObject({ thinkingLevel: "ultra", thinkingSent: "max" });
+    await chat.setConfig({ thinkingLevel: "high" });
+    await until(() => chat.snapshot().config.thinkingLevel === "high");
+    expect(chat.snapshot().config.thinkingSent).toBeNull();
+  });
+
   it("switches to a model on another provider with --provider, as Hermes's picker does", async () => {
     const { chat } = await openChat();
     await chat.send("multimodel check", "normal");
