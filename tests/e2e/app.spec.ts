@@ -1079,6 +1079,6 @@ test("a chat's link opens it in its own project, in a browser that never chose o
   await fresh.goto(`/${hash}`);
   await expect(fresh.getByTestId("answer").last()).toContainText("Echo: hello from beta");
   await showSidebar(fresh);
-  await expect(fresh.locator(".workspace-btn")).toContainText("beta");
+  await expect(fresh.locator(".project-name", { hasText: "beta" })).toBeVisible();
   await context.close();
 });

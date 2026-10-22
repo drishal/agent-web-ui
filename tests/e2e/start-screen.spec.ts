@@ -14,7 +14,9 @@ test("a fresh browser lands on the start screen: a box, and a folder chip asking
   const chip = folderChip(page);
   await expect(chip).toHaveText(/Choose a folder/);
   await expect(chip).toHaveClass(/is-needed/);
+  // No folder is needed to show the start screen, so New chat works at once.
   await showSidebar(page);
+  await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
   await page.keyboard.press("Escape");
   // The agent chip lists every harness this server knows.
   await page.getByRole("button", { name: "Agent for this chat" }).click();

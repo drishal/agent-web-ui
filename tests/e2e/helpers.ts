@@ -18,17 +18,16 @@ export async function showSidebar(page: Page): Promise<void> {
 export async function signInAndOpen(page: Page, project = "alpha"): Promise<void> {
   await page.goto("/");
   await showSidebar(page);
-  // Nothing on screen: the start screen's folder chip opens the browser. A restored tab
-  // shows its chat instead, and the sidebar's folder row is the way in.
-  const chip = page.getByRole("button", { name: /^Folder: / });
-  if (await chip.isVisible()) {
-    // On a phone the drawer covers the start screen; close it to reach the folder chip.
-    if (await page.locator(".sidebar").evaluate((el) => el.classList.contains("is-open"))) await page.keyboard.press("Escape");
-    await chip.click();
-    await page.getByRole("menuitem", { name: "Choose another folder…" }).click();
-  } else {
-    await page.locator(".workspace-btn").click();
+  // The folder chip lives on the start screen; "New chat" shows it (a restored
+  // tab shows its chat instead, and New chat leaves that tab open).
+  if (!(await page.getByRole("button", { name: /^Folder: / }).isVisible())) {
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
   }
+  await expect(page.getByRole("button", { name: /^Folder: / })).toBeVisible();
+  // On a phone the drawer covers it; close the drawer first.
+  if (await page.locator(".sidebar").evaluate((el) => el.classList.contains("is-open"))) await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Folder: / }).click();
+  await page.getByRole("menuitem", { name: "Choose another folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
   await dialog.locator(".picker-scroll .picker-item").first().click();
   await dialog.getByRole("button", { name: project, exact: false }).click();
@@ -56,8 +55,13 @@ export async function newChat(page: Page, harness?: string): Promise<void> {
   // A fresh chat always opens as the hero; wait for it rather than for "Idle",
   // which the previous chat may already show.
   await expect(page.getByRole("heading", { name: /^What should .*(do in|work on)/ })).toBeVisible();
-  await expect(page.getByTestId("chat-status")).toHaveText("Idle");
-  await expect(page.getByTestId("connection")).toHaveText("Connected");
+  // A chat exists here (a restored tab, or the box already sent once), so the
+  // status and the stream are live; the start screen has neither.
+  const status = page.getByTestId("chat-status");
+  if (await status.isVisible()) {
+    await expect(status).toHaveText("Idle");
+    await expect(page.getByTestId("connection")).toHaveText("Connected");
+  }
 }
 
 export async function send(page: Page, text: string): Promise<void> {
