@@ -15,7 +15,9 @@ async function openFold(page: Page, index = -1) {
 
 test("this machine opens straight into the app: no token, no sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+  // The start screen: a box to type in, no sign-in on this machine.
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Folder: / })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in" })).toHaveCount(0);
   const res = await page.request.get("/api/bootstrap");
   expect(res.status()).toBe(200);
@@ -648,9 +650,7 @@ for (const viewport of [
   test(`mobile ${viewport.width}px: drawer, composer, no horizontal scroll`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await signInAndOpen(page, "beta");
-    // On phones the drawer stays open after picking a project so its sessions show.
-    await expect(page.locator(".sidebar")).toBeInViewport();
-    await page.keyboard.press("Escape");
+    // Picking a project lands on the start screen; the drawer closed behind it.
     await expect(page.locator(".sidebar")).not.toBeInViewport();
     await newChat(page);
     await expect(page.locator(".sidebar")).not.toBeInViewport();

@@ -32,6 +32,7 @@ import { Conversation } from "./components/Conversation.js";
 import { LimitsSummary } from "./components/LimitsMeter.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
+import { StartScreen } from "./components/StartScreen.js";
 import { Sidebar, type MarkChange } from "./components/Sidebar.js";
 import { SidebarResizer } from "./components/SidebarResizer.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -67,7 +68,7 @@ import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
 import { isBusy, wakeLabel } from "./session-groups.js";
-import { sentAttachments } from "./images.js";
+import { pendingImage, sentAttachments, type PendingImage } from "./images.js";
 import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
@@ -104,6 +105,9 @@ export function App() {
     narrow,
     openedWhileNarrow,
   } = useSidebarLayout();
+
+  /** What a share or prompt link put into the start screen's box (it waits there until Send). */
+  const [startSeed, setStartSeed] = useState<{ text?: string; images?: PendingImage[]; hidden?: number } | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -391,6 +395,8 @@ export function App() {
       setWorkspace(ws);
       setRecent(rememberWorkspace(ws.path));
       setPickerOpen(false);
+      // The start screen's chip is the main way in now; picking a folder lands on it, so the drawer closes (as showChat does).
+      if (!chatRef.current) setDrawerOpen(false);
     } catch (e) {
       if (e instanceof ApiError && e.code === "missing_project") setRecent(forgetWorkspace(path));
       setPickerError(errorText(e));
@@ -417,6 +423,69 @@ export function App() {
     return opened;
   };
 
+  /** Show the start screen: no chat on screen; the open tabs stay, none active. Nothing starts until a send. */
+  const showStart = () => {
+    rememberShown();
+    setStartSeed(null);
+    setTabState((st) => ({ ...st, active: -1 }));
+    setChat(null);
+    setHash(null);
+    setBanner(null);
+    beginOpen(null);
+    setDrawerOpen(false);
+  };
+
+  /** The start screen's Send: create the chat, then post the message to its id (the render closure still holds no chat). */
+  const [startBusy, setStartBusy] = useState(false);
+  const startingRef = useRef(false);
+  const startSend = async (text: string, images: PendingImage[]): Promise<boolean> => {
+    // Two quick presses (a double Enter) must make one chat: the ref guards before state can re-render.
+    if (!harnessId || startingRef.current) return false;
+    startingRef.current = true;
+    const target = harnessId === "awui" && boot && boot.home ? ({ id: "__home", path: boot.home, name: "home" } as WorkspaceInfo) : workspace;
+    if (!target) {
+      startingRef.current = false;
+      return false;
+    }
+    const token = beginOpen(null);
+    setStartBusy(true);
+    setBanner(null);
+    try {
+      const ws = await enterWorkspace(target);
+      const snapshot = await api<ChatSnapshot>("/api/chats", { body: { harnessId, workspaceId: ws.id } });
+      if (token !== nav.current) {
+        api(`/api/chats/${snapshot.chatId}/dispose`, { body: {} }).catch(() => undefined);
+        return false;
+      }
+      try {
+        await api(`/api/chats/${snapshot.chatId}/messages`, {
+          body: {
+            text: text || (images.length > 0 ? "Look at the attached image." : " "),
+            mode: "normal",
+            ...(images.length > 0 ? { images: images.map(({ mimeType, data }) => ({ mimeType, data })) } : {}),
+          },
+        });
+      } catch (e) {
+        // The chat exists but has no message: open it with the text as its draft, so the words are not lost.
+        save(`draft.${snapshot.chatId}`, text);
+        showChat(snapshot);
+        fail(e);
+        return false;
+      }
+      setStartSeed(null);
+      showChat(snapshot);
+      void refreshSessions();
+      return true;
+    } catch (e) {
+      if (token === nav.current) fail(e);
+      return false;
+    } finally {
+      startingRef.current = false;
+      setStartBusy(false);
+    }
+  };
+
+  /** An immediate new chat (Ctrl+Alt+Enter from a composer): the start screen is the ordinary path, this one skips it. */
   const newChat = async (target: WorkspaceInfo | null = workspace, { newTab = false }: { newTab?: boolean } = {}) => {
     // The Awui harness's history is global; a new chat belongs on the home workspace, not wherever a coding chat left the picker.
     if (harnessId === "awui" && boot && target?.path !== boot.home) {
@@ -442,7 +511,7 @@ export function App() {
   };
 
   // The installed app's shortcuts and shares (?new, ?sessions, ?share), and phones' swipe for the drawer.
-  useLaunchActions({ booted: Boolean(boot), ready: Boolean(boot && workspace && harnessId), newChat: () => newChat(), openSessions: () => setDrawerOpen(true) });
+  useLaunchActions({ booted: Boolean(boot), ready: Boolean(boot && workspace && harnessId), hasChat: chat !== null, newChat: () => newChat(), openSessions: () => setDrawerOpen(true), seed: (s) => setStartSeed(s) });
   useEdgeSwipe(drawerOpen, setDrawerOpen);
 
   /**
@@ -1521,35 +1590,33 @@ export function App() {
                   limits={limits}
                 />
               </>
-            ) : (
+            ) : available.length === 0 ? (
               <div className="empty empty-main">
-                {!workspace && harnessId !== "awui" ? (
-                  <>
-                    <h2>Choose a project</h2>
-                    <p className="muted">Pick a folder to start a chat, or resume a recent session from the sidebar.</p>
-                    <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-                      Choose folder
-                    </button>
-                  </>
-                ) : available.length === 0 ? (
-                  <>
-                    <h2>No harness installed</h2>
-                    <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
-                  </>
-                ) : (
-                  <>
-                    <h2>{harnessId === "awui" ? "Awui" : workspace?.name}</h2>
-                    <p className="muted">Start a new chat or resume one from the list.</p>
-                    <button type="button" className="btn btn-primary" onClick={() => void newChat()} disabled={newChatDisabled !== null}>
-                      New {currentHarness?.displayName ?? ""} chat
-                    </button>
-                    {newChatDisabled && newChatDisabled !== "Opening…" ? <p className="muted">{newChatDisabled}</p> : null}
-                    <button type="button" className="btn btn-ghost drawer-open-inline" onClick={() => setDrawerOpen(true)}>
-                      Show sessions
-                    </button>
-                  </>
-                )}
+                <h2>No harness installed</h2>
+                <p className="muted">Install Pi or omp, run it once in a terminal, and log in.</p>
               </div>
+            ) : (
+              <StartScreen
+                key={startSeed ? "seeded" : "plain"}
+                harnesses={boot.harnesses}
+                harnessId={harnessId}
+                onHarness={chooseHarness}
+                workspace={harnessId === "awui" ? null : workspace}
+                recent={recent}
+                onPickFolder={() => {
+                  setPickerError(null);
+                  setPickerOpen(true);
+                }}
+                onOpenRecent={(p) => void openWorkspace(p)}
+                onShowSessions={narrow ? () => setDrawerOpen(true) : undefined}
+                autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+                maxChars={boot.limits.maxMessageChars}
+                busy={startBusy}
+                initialText={startSeed?.text ?? ""}
+                initialImages={startSeed?.images}
+                initialLinkedHidden={startSeed?.hidden ?? null}
+                onSend={startSend}
+              />
             )}
             {splash ? <SwitchSplash target={splash.target} leaving={splash.leaving} /> : null}
           </div>

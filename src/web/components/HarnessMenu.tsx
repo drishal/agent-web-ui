@@ -25,6 +25,7 @@ export function HarnessMenu({
   menuLabel,
   triggerText,
   disabled = false,
+  ariaKeyShortcuts,
   onPick,
 }: {
   choices: HarnessChoice[];
@@ -37,6 +38,8 @@ export function HarnessMenu({
   /** Replaces the harness name on the trigger (e.g. while a handoff runs). */
   triggerText?: string;
   disabled?: boolean;
+  /** What a key press on the trigger does (the start screen's agent chip: Enter opens the menu). */
+  ariaKeyShortcuts?: string;
   onPick: (harnessId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -123,7 +126,7 @@ export function HarnessMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={!canOpen}
-        title={variant === "chip" ? "Hand off to another harness" : undefined}
+        {...(ariaKeyShortcuts ? { "aria-keyshortcuts": ariaKeyShortcuts } : {})}
         onClick={() => (open ? close(false) : show())}
         onKeyDown={onTriggerKey}
       >

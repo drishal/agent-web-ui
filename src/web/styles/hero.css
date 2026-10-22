@@ -35,3 +35,110 @@
 .hero-notices {
   margin: 0 32px 16px;
 }
+
+/* ---- start screen (no chat shown) -------------------------------------------------- */
+
+.start-screen .composer {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.start-screen .composer-input {
+  min-height: 52px;
+}
+
+/* The row of chips wraps on narrow screens instead of overflowing. */
+.start-screen .composer-bar {
+  flex-wrap: wrap;
+}
+
+/* The folder chip: like the composer's pills (32 px, round), in the folder's accent. */
+.folder-chip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+button.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  max-width: 240px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+button.folder-chip:hover {
+  background: var(--hover-strong, var(--hover));
+}
+
+.folder-chip-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No folder chosen yet: it is the one missing choice, so it asks for attention. */
+button.folder-chip.is-needed {
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* The menu opens down from the chip (it sits in the middle of the pane). */
+.menu-list.folder-menu {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(320px, 50dvh);
+  overflow-y: auto;
+  transform-origin: top left;
+}
+
+.folder-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-menu-name {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-menu-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  direction: rtl;
+  text-align: left;
+}
+
+.folder-menu-other {
+  border-top: 1px solid var(--hairline);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+/* Phones only: the drawer of sessions from the screen itself (the app passes
+   the handler on narrow screens alone). */
+.start-sessions {
+  display: inline-flex;
+  margin: 14px auto 0;
+}

@@ -1,11 +1,13 @@
 // What the app is opened to do, from its URL: the home-screen shortcuts
 // (?new=1 a new chat, ?sessions=1 the session list), a share from another app
 // (?share=1: the service worker kept the shared text and images in its cache;
-// they go into a new chat's composer), and a prompt link (?prompt=…: its text
-// goes into a new chat's composer to be read; a link never sends). The query
-// is dropped once read, so a reload does not do it again.
+// they go into the start screen's box when no chat is shown, else a new
+// chat's composer), and a prompt link (?prompt=…: its text goes to the same
+// place to be read; a link never sends). The query is dropped once read, so a
+// reload does not do it again.
 import { useEffect, useRef } from "react";
 import { addImagesToDraft, addLinkedPrompt, addToDraft } from "./draft-bus.js";
+import { prepareImage, type PendingImage } from "./images.js";
 import { linkedPrompt } from "./prompt-link.js";
 import { worker } from "./notify.js";
 
@@ -29,10 +31,30 @@ async function takeShare(): Promise<{ text: string; images: File[] }> {
 }
 
 /**
+ * What a share or prompt link brought, for the start screen's box while no
+ * chat is shown. `hasChat`: a chat is on screen right now.
+ */
+export interface LaunchSeed {
+  text?: string;
+  images?: PendingImage[];
+  /** Hidden characters taken out of a prompt link's text. */
+  hidden?: number;
+}
+
+/**
  * `booted`: the app is up (enough to show the sessions). `ready`: a chat can
  * be started too (a project is open), which a new chat or a share waits for.
+ * While no chat is shown, a share or prompt link seeds the start screen
+ * instead of creating a chat.
  */
-export function useLaunchActions(opts: { booted: boolean; ready: boolean; newChat: () => Promise<unknown> | void; openSessions: () => void }): void {
+export function useLaunchActions(opts: {
+  booted: boolean;
+  ready: boolean;
+  hasChat: boolean;
+  newChat: () => Promise<unknown> | void;
+  openSessions: () => void;
+  seed: (seed: LaunchSeed) => void;
+}): void {
   const done = useRef(false);
   const latest = useRef(opts);
   latest.current = opts;
@@ -48,18 +70,29 @@ export function useLaunchActions(opts: { booted: boolean; ready: boolean; newCha
       done.current = true;
       return;
     }
-    if (action !== "sessions" && !opts.ready) return;
+    // A share only needs the app up while no chat is shown (the start screen takes it).
+    if (action !== "sessions" && opts.hasChat && !opts.ready) return;
     done.current = true;
     window.history.replaceState(window.history.state, "", window.location.pathname + window.location.hash);
     if (action === "sessions") return latest.current.openSessions();
     void (async () => {
       const shared = action === "share" ? await takeShare() : null;
       const linked = action === "prompt" ? linkedPrompt(params.get("prompt") ?? "") : null;
+      if (!latest.current.hasChat) {
+        // The start screen: its box waits for the user's send; nothing spawns.
+        const images = shared?.images.length ? await Promise.all(shared.images.map((f) => prepareImage(f))) : undefined;
+        latest.current.seed({
+          ...(linked?.text.trim() ? { text: linked.text, hidden: linked.hidden } : {}),
+          ...(shared?.text ? { text: shared.text } : {}),
+          ...(images?.length ? { images } : {}),
+        });
+        return;
+      }
       await latest.current.newChat();
       // The new chat's composer, not the one it replaces, takes it: wait for it to mount.
       if (linked?.text.trim()) window.requestAnimationFrame(() => window.requestAnimationFrame(() => addLinkedPrompt(linked)));
       if (shared?.text) addToDraft(shared.text);
       if (shared?.images.length) addImagesToDraft(shared.images);
     })();
-  }, [opts.booted, opts.ready]);
+  }, [opts.booted, opts.ready, opts.hasChat]);
 }
