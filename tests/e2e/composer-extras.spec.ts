@@ -163,14 +163,17 @@ test("resting on a session row shows its hover card", async ({ page }) => {
   await expect(card).toBeHidden();
 });
 
-test("a prompt link opens a new chat with the text ready to read, hidden characters taken out", async ({ page }) => {
+test("a prompt link fills the start screen's box, hidden characters taken out", async ({ page }) => {
   await signInAndOpen(page);
   await page.goto(`/?prompt=${encodeURIComponent("look at the logs​ please")}`);
   await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
   await expect(box(page)).toHaveValue("look at the logs please");
   await expect(page.getByText("From a link: read it before you send it. 1 hidden character was taken out.")).toBeVisible();
   await expect(page).not.toHaveURL(/prompt=/);
+  // Nothing spawns until the user sends.
   await expect(page.getByTestId("user-prompt")).toHaveCount(0);
+  await box(page).press("Enter");
+  await expect(page.getByTestId("user-prompt")).toHaveText(["look at the logs please"]);
 });
 
 test("the page title and favicon count a chat that finished out of sight", async ({ page }) => {

@@ -84,7 +84,7 @@ test.describe("other devices (HOST=0.0.0.0)", () => {
     await expect(page.getByRole("alert")).toHaveText("Wrong username or password");
     await page.getByLabel("Password").fill("lan-password-123");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.getByRole("button", { name: "Pair phone" }).click();
@@ -101,7 +101,7 @@ test.describe("other devices (HOST=0.0.0.0)", () => {
 
   test("this machine's own localhost still needs no sign-in", async ({ page }) => {
     await page.goto(`http://127.0.0.1:${PORT}/`);
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
   });
 });
 
@@ -131,12 +131,12 @@ test.describe("settings and login from config.yml", () => {
     await page.getByLabel("Username").fill("bob");
     await page.getByLabel("Password").fill("env password 123");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 
     await stopServer(server);
     server = await startServer(withFile, ENV_PORT);
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 
     // A changed password signs that device out.
     await stopServer(server);

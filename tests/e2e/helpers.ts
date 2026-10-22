@@ -18,7 +18,17 @@ export async function showSidebar(page: Page): Promise<void> {
 export async function signInAndOpen(page: Page, project = "alpha"): Promise<void> {
   await page.goto("/");
   await showSidebar(page);
-  await page.locator(".workspace-btn").click();
+  // Nothing on screen: the start screen's folder chip opens the browser. A restored tab
+  // shows its chat instead, and the sidebar's folder row is the way in.
+  const chip = page.getByRole("button", { name: /^Folder: / });
+  if (await chip.isVisible()) {
+    // On a phone the drawer covers the start screen; close it to reach the folder chip.
+    if (await page.locator(".sidebar").evaluate((el) => el.classList.contains("is-open"))) await page.keyboard.press("Escape");
+    await chip.click();
+    await page.getByRole("menuitem", { name: "Choose another folder…" }).click();
+  } else {
+    await page.locator(".workspace-btn").click();
+  }
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
   await dialog.locator(".picker-scroll .picker-item").first().click();
   await dialog.getByRole("button", { name: project, exact: false }).click();
@@ -45,7 +55,7 @@ export async function newChat(page: Page, harness?: string): Promise<void> {
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   // A fresh chat always opens as the hero; wait for it rather than for "Idle",
   // which the previous chat may already show.
-  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^What should .*(do in|work on)/ })).toBeVisible();
   await expect(page.getByTestId("chat-status")).toHaveText("Idle");
   await expect(page.getByTestId("connection")).toHaveText("Connected");
 }

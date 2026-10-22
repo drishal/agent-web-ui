@@ -55,7 +55,7 @@ test.describe("shared look in config.yml", () => {
   test("theme and text size save to config.yml and apply at once", async ({ page }) => {
     const { base, configFile } = ctx as NonNullable<typeof ctx>;
     await page.goto(`${base}/`);
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const settings = page.getByRole("dialog", { name: "Settings" });
     await expect(settings).toBeVisible();
@@ -75,7 +75,7 @@ test.describe("shared look in config.yml", () => {
     await settings.getByRole("button", { name: "Close" }).click();
     // And on the next page load, including the text scale.
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Choose a project" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
     const scale = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--chat-scale").trim());
     expect(scale).toBe("1.22");
   });
