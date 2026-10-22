@@ -589,7 +589,6 @@ export function Sidebar(props: {
   harnessId: string | null;
   onHarness: (id: string) => void;
   workspace: WorkspaceInfo | null;
-  onPickWorkspace: () => void;
   onNewChat: () => void;
   newChatDisabled: string | null;
   /** A chat can start in some project (harness available, nothing opening). */
@@ -734,16 +733,7 @@ export function Sidebar(props: {
             {w}
           </p>
         ))}
-
-        {props.harnessId !== "awui" ? (
-          <button type="button" className="workspace-btn" onClick={props.onPickWorkspace} title={props.workspace?.path}>
-            <IconFolder size={15} />
-            <span className="workspace-text">
-              <span className="workspace-name">{props.workspace?.name ?? "Choose a folder…"}</span>
-              {props.workspace ? <span className="workspace-path">{`‎${props.workspace.path}‎`}</span> : null}
-            </span>
-          </button>
-        ) : null}
+        <p className="sidebar-note harness-note">Filters the list; new chats start with this agent.</p>
 
         <div className="sessions">
           <div className="sessions-head">
@@ -855,7 +845,7 @@ export function Sidebar(props: {
               </li>
             ) : null}
             {!props.sessionsLoading && groups.length === 0 && pinned.length === 0 && needs.length === 0 && working.length === 0 && !props.sessionsError ? (
-              <li className="sidebar-note">{searching ? "No matching sessions" : "No sessions yet. Choose a folder and start a chat."}</li>
+              <li className="sidebar-note">{searching ? "No matching sessions" : "No chats yet. Start one on the right."}</li>
             ) : null}
           </ul>
         </div>

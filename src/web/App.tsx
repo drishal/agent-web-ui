@@ -796,7 +796,10 @@ export function App() {
   const runAppCommand = async (name: string, arg: string): Promise<boolean> => {
     if (!chat) return false;
     try {
-      if (name === "new") await newChat();
+      if (name === "new") {
+        showStart();
+        return true;
+      }
       else if (name === "compact") await api(`/api/chats/${chat.chatId}/compact`, { body: arg ? { instructions: arg } : {} });
       else if (name === "rename") {
         if (arg) await api(`/api/chats/${chat.chatId}/rename`, { body: { name: arg } });
@@ -1016,7 +1019,7 @@ export function App() {
     const busy = chat ? isBusy(chat.status) : false;
     const idle = chat ? chat.status === "idle" || chat.status === "error" : false;
     const waitIdle = idle ? undefined : "Wait until the agent is idle";
-    items.push({ id: "new", section: "Actions", label: "New chat", hint: workspace?.name, disabled: newChatDisabled ?? undefined, run: () => void newChat() });
+    items.push({ id: "new", section: "Actions", label: "New chat", hint: workspace?.name, run: () => showStart() });
     items.push({
       id: "new-tab",
       section: "Actions",
@@ -1191,15 +1194,12 @@ export function App() {
   }
 
   const currentHarness = boot.harnesses.find((h) => h.id === harnessId);
+  // The start screen needs no folder to show; only a missing harness keeps a new chat from starting.
   const newChatDisabled = !currentHarness
     ? "No harness is available."
     : !currentHarness.available
       ? (currentHarness.reason ?? `${currentHarness.displayName} is not installed.`)
-      : !workspace
-        ? "Choose a project folder first."
-        : opening
-          ? "Opening…"
-          : null;
+      : null;
   const chatHarness = chat ? boot.harnesses.find((h) => h.id === chat.harnessId) : undefined;
   const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
   /** The chat being opened names the header until it is shown. */
@@ -1259,11 +1259,7 @@ export function App() {
         harnessId={harnessId}
         onHarness={chooseHarness}
         workspace={workspace}
-        onPickWorkspace={() => {
-          setPickerError(null);
-          setPickerOpen(true);
-        }}
-        onNewChat={() => void newChat()}
+        onNewChat={showStart}
         newChatDisabled={newChatDisabled}
         canStartChat={Boolean(currentHarness?.available) && !opening}
         onNewChatIn={(ws) => void newChat(ws)}
@@ -1330,7 +1326,7 @@ export function App() {
             harnessName={(id) => boot.harnesses.find((h) => h.id === id)?.displayName ?? id}
             onActivate={activateTab}
             onClose={closeTabAt}
-            onNew={() => void newChat(workspace, { newTab: true })}
+            onNew={showStart}
             newDisabled={newChatDisabled !== null}
           />
         ) : null}
