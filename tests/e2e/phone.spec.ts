@@ -97,6 +97,7 @@ test("open tabs move into the drawer, and the home-screen shortcuts open a new c
   await newChat(page);
   await sendAndWait(page, "first tab");
   await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await sendAndWait(page, "second tab");
   await expect(page.getByRole("tab")).toHaveCount(2);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator(".tab-strip")).toBeHidden();

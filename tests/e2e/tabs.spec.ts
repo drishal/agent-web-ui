@@ -6,13 +6,11 @@ import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helper
 const prompts = (page: Page) => page.getByTestId("user-prompt");
 const tabs = (page: Page) => page.getByRole("tablist", { name: "Open chats" }).getByRole("tab");
 const tab = (page: Page, title: string) => page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: new RegExp(title) });
-/** + on the strip, then wait for the new chat's hero composer. */
+/** + on the strip: the start screen. The tab comes at the first send. */
 async function newTab(page: Page): Promise<void> {
-  const before = await tabs(page).count();
   await page.getByRole("button", { name: "New chat in a new tab" }).click();
-  await expect(tabs(page)).toHaveCount(before + 1);
-  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
-  await expect(page.getByTestId("connection")).toHaveText("Connected");
+  await expect(page.getByRole("heading", { name: /^What should .*(do in|work on)/ })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 }
 const session = (page: Page, title: string) => page.getByRole("complementary", { name: "Sessions" }).locator(".session", { hasText: title }).first();
 
@@ -45,9 +43,13 @@ test("a sidebar click shows a session in the current tab, Ctrl-click in a new on
   await sendAndWait(page, "session one");
   await newChat(page);
   await sendAndWait(page, "session two");
-  // "New chat" from the sidebar took over the shown tab.
-  await expect(tabs(page)).toHaveCount(1);
+  // Sending from the start screen adds the new chat's tab; nothing was active to take over.
+  await expect(tabs(page)).toHaveCount(2);
 
+  // Close session one's tab so Ctrl+click has one to make; it opens beside the shown one.
+  await tab(page, "session one").hover();
+  await tab(page, "session one").getByRole("button", { name: /^Close / }).click();
+  await expect(tabs(page)).toHaveCount(1);
   await showSidebar(page);
   await session(page, "session one").click({ modifiers: ["Control"] });
   await expect(prompts(page)).toHaveText(["session one"]);
@@ -164,6 +166,10 @@ test("a row's menu opens its session in a new tab, next to the shown one", async
   await signInAndOpen(page);
   await newChat(page);
   await sendAndWait(page, "menu tab one");
+  // Closed so the row's "Open in new tab" has a tab to make (the chat keeps running).
+  await tab(page, "menu tab one").hover();
+  await tab(page, "menu tab one").getByRole("button", { name: /^Close / }).click();
+  await expect(tabs(page)).toHaveCount(0);
   await newChat(page);
   await sendAndWait(page, "menu tab two");
   await expect(tabs(page)).toHaveCount(1);
@@ -212,14 +218,10 @@ test("Copy resume command puts the line that resumes a session in a terminal on 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await signInAndOpen(page);
   await newChat(page);
+  // No chat exists until a send, so its actions menu appears only after one.
+  await sendAndWait(page, "resume me in a terminal");
   const menu = page.getByRole("button", { name: "Chat actions" });
   const item = page.getByRole("menuitem", { name: "Copy resume command" });
-  // Nothing is saved to resume before the first message.
-  await menu.click();
-  await expect(item).toBeDisabled();
-  // A click outside closes the menu.
-  await page.locator(".menu-backdrop").click();
-  await sendAndWait(page, "resume me in a terminal");
   await menu.click();
   await item.click();
   const line = /^cd \S+alpha && fake --resume \S+$/;
@@ -242,6 +244,9 @@ test("a session opens at once: its tab, title, and a loading screen show while i
   await signInAndOpen(page);
   await newChat(page);
   await sendAndWait(page, "slow to load");
+  // Its tab closes, so the sidebar's click opens it again (the chat still runs on the server).
+  await tab(page, "slow to load").hover();
+  await tab(page, "slow to load").getByRole("button", { name: /^Close / }).click();
   await newChat(page);
   await sendAndWait(page, "shown meanwhile");
   // Hold the chat's snapshot back, as a slow link would.
