@@ -18,16 +18,9 @@ export async function showSidebar(page: Page): Promise<void> {
 export async function signInAndOpen(page: Page, project = "alpha"): Promise<void> {
   await page.goto("/");
   await showSidebar(page);
-  // The folder chip lives on the start screen; "New chat" shows it (a restored
-  // tab shows its chat instead, and New chat leaves that tab open).
-  if (!(await page.getByRole("button", { name: /^Folder: / }).isVisible())) {
-    await page.getByRole("button", { name: "New chat", exact: true }).click();
-  }
-  await expect(page.getByRole("button", { name: /^Folder: / })).toBeVisible();
-  // On a phone the drawer covers it; close the drawer first.
-  if (await page.locator(".sidebar").evaluate((el) => el.classList.contains("is-open"))) await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /^Folder: / }).click();
-  await page.getByRole("menuitem", { name: "Choose another folder…" }).click();
+  // "New chat" shows the start screen with the folder picker open over it (a
+  // restored tab shows its chat instead, and New chat leaves that tab open).
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
   await dialog.locator(".picker-scroll .picker-item").first().click();
   await dialog.getByRole("button", { name: project, exact: false }).click();
@@ -52,6 +45,11 @@ export async function newChat(page: Page, harness?: string): Promise<void> {
   await showSidebar(page);
   if (harness) await chooseHarness(page, harness);
   await page.getByRole("button", { name: "New chat", exact: true }).click();
+  // The folder picker opens over the start screen; Escape keeps the current folder.
+  const picker = page.getByRole("dialog", { name: "Choose a project folder" });
+  await expect(picker).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
   // A fresh chat always opens as the hero; wait for it rather than for "Idle",
   // which the previous chat may already show.
   await expect(page.getByRole("heading", { name: /^What should .*(do in|work on)/ })).toBeVisible();
