@@ -601,6 +601,80 @@
   cursor: default;
 }
 
+
+/* The focused project (Hermes Desktop's one-folder view): a head that switches projects,
+   an "All projects" back row, then its sessions grouped by date under a rail. */
+.focus-group .project-head {
+  position: relative;
+}
+
+.focus-group .project-toggle {
+  cursor: pointer;
+}
+
+/* In the focused head the "+" is always within reach (there is no other folder row for it). */
+.focus-group .project-head .project-new {
+  opacity: 1;
+}
+
+/* The switch's chevron does not collapse; it opens the project menu, so it tips up. */
+.focus-group .group-chevron {
+  margin-left: 2px;
+  transition: transform 0.12s ease;
+}
+
+.focus-group .project-toggle[aria-expanded="true"] .group-chevron {
+  transform: rotate(180deg);
+}
+
+/* The menu opens down from the head it sits in. */
+.menu-list.focus-menu {
+  top: calc(100% + 4px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+  width: min(300px, calc(100vw - 32px));
+  max-height: min(320px, 50dvh);
+  overflow-y: auto;
+  transform-origin: top left;
+}
+
+.focus-menu-all {
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+}
+
+/* A folder's row in the switch menu: name, path, count. */
+.project-menu-name {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-menu-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  direction: rtl;
+  text-align: left;
+}
+
+/* The back row returns to every folder: a quiet line above the sessions. */
+button.all-projects {
+  color: var(--text-2);
+  font-weight: 550;
+  min-height: 28px;
+}
+
+button.all-projects .group-count {
+  margin-left: auto;
+}
 .pinned-group .session-sublist {
   border-left-color: transparent;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectSession, SessionsOverview, WorkspaceInfo } from "../../src/shared/protocol.js";
 import { asHarnessId } from "../../src/shared/protocol.js";
-import { archivedCount, dateGroup, groupByProject, headCutoff, movedOrder, pinnedSessions, plainPreview, projectRows } from "../../src/web/session-groups.js";
+import { archivedCount, dateGroup, focusProject, groupByProject, headCutoff, movedOrder, pinnedSessions, plainPreview, projectRows, sessionScope } from "../../src/web/session-groups.js";
 
 const ws = (id: string): WorkspaceInfo => ({ id, path: `/home/u/${id}`, name: id });
 const s = (id: string, workspaceId: string, harness: string, updatedAt: string, title = id): ProjectSession => ({
@@ -196,6 +196,49 @@ describe("a project's rows", () => {
     expect(movedOrder(rows, "lw1", { delta: -1 })).toBeNull();
     expect(movedOrder(rows, "lw1", { target: "lw3", place: "after" })).toEqual(["today", "lw2", "lw3", "lw1", "sep"]);
     expect(movedOrder(rows, "lw1", { target: "sep", place: "before" })).toBeNull();
+  });
+});
+
+describe("the current project's focused view", () => {
+  const now = new Date(2026, 9, 21, 15, 0).getTime(); // Wed 21 Oct 2026
+  const iso = (m: number, d: number, h = 12) => new Date(2026, m, d, h).toISOString();
+  const ov: SessionsOverview = {
+    workspaces: [ws("dotfiles"), ws("webui"), ws("notes")],
+    sessions: [
+      s("today", "dotfiles", "pi", new Date(now - 10 * 60_000).toISOString(), "Today one"),
+      s("lw", "dotfiles", "pi", iso(9, 15), "Last week one"),
+      s("other", "webui", "pi", iso(9, 20), "Elsewhere"),
+      s("omp", "dotfiles", "omp", iso(9, 20), "Another agent"),
+    ],
+    errors: [],
+  };
+  const opts = { currentId: "dotfiles", query: "", harnessId: "pi", now };
+
+  it("lists the focused project's sessions as date sections, newest first", () => {
+    const f = focusProject(ov, "dotfiles", opts);
+    expect(f?.workspace.name).toBe("dotfiles");
+    expect(f?.sections.map((sec) => [sec.label, sec.sessions.map((x) => x.id)])).toEqual([
+      ["", ["today"]],
+      ["Last week", ["lw"]],
+    ]);
+  });
+
+  it("counts and lists the projects an All-projects view would show", () => {
+    const f = focusProject(ov, "dotfiles", opts);
+    // The other agent's session in dotfiles is out (the harness filter), the rest count.
+    expect(f?.allCount).toBe(3);
+    expect(f?.rest.map((g) => g.workspace.name)).toEqual(["webui"]);
+  });
+
+  it("is null for a project the overview does not have", () => {
+    expect(focusProject(ov, "ghost", opts)).toBeNull();
+  });
+
+  it("marks the current project in the scope switcher", () => {
+    expect(sessionScope(ov, opts).map((x) => [x.workspace.name, x.count, x.current])).toEqual([
+      ["dotfiles", 2, true],
+      ["webui", 1, false],
+    ]);
   });
 });
 
