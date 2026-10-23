@@ -109,6 +109,30 @@ test("the folder chip switches between recent folders without the dialog", async
   await expect(page.getByRole("dialog", { name: "Choose a project folder" })).toBeVisible();
 });
 
+test("New chat opens the folder picker over the start screen, and the picked folder lands in the box", async ({ page }) => {
+  await signInAndOpen(page);
+  await sendAndWait(page, "first chat");
+  await showSidebar(page);
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
+  await expect(dialog).toBeVisible();
+  // Escape keeps the folder the start screen already had.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: /What should Fake do in alpha\?/ })).toBeVisible();
+  // Picking another folder switches the start screen to it, with the cursor in the box.
+  await showSidebar(page);
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await dialog.locator(".picker-scroll .picker-item").first().click();
+  await dialog.getByRole("button", { name: "beta", exact: false }).click();
+  await dialog.getByRole("button", { name: "Open this folder" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: /What should Fake do in beta\?/ })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: box })).toBeFocused();
+  // The first chat's tab is still open.
+  await expect(tabs(page)).toHaveCount(1);
+});
+
 test("a share's text and image wait in the start screen's box and go with the first message", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");

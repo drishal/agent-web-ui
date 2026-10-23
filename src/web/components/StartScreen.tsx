@@ -22,6 +22,7 @@ export function StartScreen({
   onOpenRecent,
   onShowSessions,
   autoFocus,
+  focusKey = 0,
   maxChars,
   busy,
   onSend,
@@ -40,6 +41,8 @@ export function StartScreen({
   /** Phones only: the drawer of open sessions from the screen itself. */
   onShowSessions?: () => void;
   autoFocus: boolean;
+  /** A change puts the focus back in the box (a folder was just picked). */
+  focusKey?: number;
   maxChars: number;
   /** A send is in flight: the box is read-only and Send shows it. */
   busy: boolean;
@@ -72,7 +75,7 @@ export function StartScreen({
   // Focus once on desktop (a phone would open the keyboard at it).
   useEffect(() => {
     if (autoFocus) area.current?.focus();
-  }, [autoFocus]);
+  }, [autoFocus, focusKey]);
 
   const submit = async () => {
     if (busy) return;

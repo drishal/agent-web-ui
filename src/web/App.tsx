@@ -108,6 +108,8 @@ export function App() {
 
   /** What a share or prompt link put into the start screen's box (it waits there until Send). */
   const [startSeed, setStartSeed] = useState<{ text?: string; images?: PendingImage[]; hidden?: number } | null>(null);
+  /** Bumped when a folder is picked from the start screen: its box takes the focus again. */
+  const [startFocus, setStartFocus] = useState(0);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -396,7 +398,10 @@ export function App() {
       setRecent(rememberWorkspace(ws.path));
       setPickerOpen(false);
       // The start screen's chip is the main way in now; picking a folder lands on it, so the drawer closes (as showChat does).
-      if (!chatRef.current) setDrawerOpen(false);
+      if (!chatRef.current) {
+        setDrawerOpen(false);
+        setStartFocus((n) => n + 1);
+      }
     } catch (e) {
       if (e instanceof ApiError && e.code === "missing_project") setRecent(forgetWorkspace(path));
       setPickerError(errorText(e));
@@ -433,6 +438,14 @@ export function App() {
     setBanner(null);
     beginOpen(null);
     setDrawerOpen(false);
+  };
+
+  /** The sidebar's New chat: the start screen, with the folder picker open over it. */
+  const newChatInFolder = () => {
+    showStart();
+    if (harnessId === "awui") return;
+    setPickerError(null);
+    setPickerOpen(true);
   };
 
   /** The start screen's Send: create the chat, then post the message to its id (the render closure still holds no chat). */
@@ -1259,7 +1272,7 @@ export function App() {
         harnessId={harnessId}
         onHarness={chooseHarness}
         workspace={workspace}
-        onNewChat={showStart}
+        onNewChat={newChatInFolder}
         newChatDisabled={newChatDisabled}
         canStartChat={Boolean(currentHarness?.available) && !opening}
         onNewChatIn={(ws) => void newChat(ws)}
@@ -1606,6 +1619,7 @@ export function App() {
                 onOpenRecent={(p) => void openWorkspace(p)}
                 onShowSessions={narrow ? () => setDrawerOpen(true) : undefined}
                 autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+                focusKey={startFocus}
                 maxChars={boot.limits.maxMessageChars}
                 busy={startBusy}
                 initialText={startSeed?.text ?? ""}
