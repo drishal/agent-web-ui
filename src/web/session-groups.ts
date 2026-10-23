@@ -42,6 +42,8 @@ export interface GroupOptions {
   showSnoozed?: boolean;
   /** The session on screen: it stays in its project whatever it is doing. */
   isActive?: (s: ProjectSession) => boolean;
+  /** The focused project's hand-made order (the sidebar's drags), first to last. */
+  order?: string[];
   now?: number;
 }
 
@@ -182,10 +184,54 @@ export function conversationBucket(iso: string | null, now = new Date()): string
   return "Older";
 }
 
-/** One labelled rung of the history list, in display order. */
+/** One labelled rung of a history or focused list, in display order; a blank label is the unlabelled recent run. */
 export interface HistorySection {
   label: string;
   sessions: ProjectSession[];
+}
+
+/**
+ * The current project's focused view (Hermes Desktop's): its sessions of the
+ * selected harness as date-grouped sections, and the other projects that an
+ * "All projects" list would show. The header row and the back row are the
+ * caller's (Sidebar's). Like groupByProject, archived, settled, and snoozed
+ * sessions stay out unless shown; a search is the caller's unscoped list.
+ */
+export function focusProject(
+  overview: SessionsOverview,
+  workspaceId: string,
+  opts: GroupOptions,
+): { workspace: WorkspaceInfo; checkout?: Checkout; sections: HistorySection[]; allCount: number; rest: ProjectGroup[] } | null {
+  const workspace = overview.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return null;
+  const checkout = overview.checkouts?.[workspaceId];
+  const groups = groupByProject(overview, { ...opts, currentId: workspaceId });
+  const here = groups.find((g) => g.workspace.id === workspaceId);
+  const sessions = (here?.sessions ?? []).filter((s) => placeOf(s, opts) === "project");
+  const out: HistorySection[] = [];
+  let run: HistorySection | null = null;
+  let label = "";
+  for (const r of projectRows(sessions, { now: opts.now, weekStartsOn: localeWeekStart(), ...(opts.order ? { order: opts.order } : {}) })) {
+    if (r.kind === "divider") {
+      // The divider's label is the date group of the run it introduces.
+      run = null;
+      label = r.label;
+      continue;
+    }
+    if (!run) {
+      run = { label, sessions: [] };
+      out.push(run);
+    }
+    run.sessions.push(r.s);
+  }
+  const rest = groups.filter((g) => g.workspace.id !== workspaceId && g.sessions.length > 0);
+  const allCount = visible(overview, opts).length;
+  return { workspace, ...(checkout ? { checkout } : {}), sections: out, allCount, rest };
+}
+
+/** What the focused header's switch shows: every project of the overview, by newest session; `current` first. */
+export function sessionScope(overview: SessionsOverview, opts: GroupOptions): Array<{ workspace: WorkspaceInfo; count: number; current: boolean }> {
+  return groupByProject(overview, opts).map((g) => ({ workspace: g.workspace, count: g.sessions.length, current: g.current }));
 }
 
 /**
@@ -213,6 +259,7 @@ export function historySections(overview: SessionsOverview, opts: GroupOptions):
   for (const [label, list] of byBucket) out.push({ label, sessions: list });
   return out;
 }
+
 
 /** The locale's first day of the week (0 Sunday … 6 Saturday); Monday when the browser does not say. */
 export function localeWeekStart(): number {

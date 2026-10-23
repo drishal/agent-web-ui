@@ -4,11 +4,11 @@
 // carry a menu (new tab, resume command, pin, snooze, archive, move), and drag
 // to a new place inside their date section. On phones it is the drawer.
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ChatStatus, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
+import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
-import { groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
+import { focusProject, groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
@@ -583,6 +583,246 @@ function ProjectGroupView({
   );
 }
 
+/** A folder's place in a project menu: its name, path, and count on one row. */
+function ProjectMenuItem({ name, path, count, onPick }: { name: string; path: string; count?: number; onPick: () => void }) {
+  return (
+    <button type="button" role="menuitem" title={path} onClick={onPick}>
+      <IconFolder size={13} />
+      <span className="project-menu-name">{name}</span>
+      <span className="project-menu-path muted">{path}</span>
+      {count !== undefined ? <span className="group-count">{count}</span> : null}
+    </button>
+  );
+}
+
+/** The head of a focused project: "All projects" back, the project (a switch to another), new chat. */
+function FocusedHeader({
+  workspace,
+  checkout,
+  total,
+  canStartChat,
+  onNewChat,
+  onShowAll,
+  onFocus,
+  scope,
+}: {
+  workspace: WorkspaceInfo;
+  checkout?: Checkout;
+  total: number;
+  canStartChat: boolean;
+  onNewChat: (ws: WorkspaceInfo) => void;
+  onShowAll: () => void;
+  onFocus: (workspaceId: string) => void;
+  scope: Array<{ workspace: WorkspaceInfo; count: number; current: boolean }>;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const headWrap = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLUListElement>(null);
+  useDismiss(headWrap, menuOpen, () => setMenuOpen(false));
+  const other = scope.filter((p) => p.workspace.id !== workspace.id);
+  const pick = (run: () => void) => {
+    setMenuOpen(false);
+    run();
+  };
+  // Menu keys: Escape closes (useDismiss's outside click too), arrows move, the first item takes the focus on open.
+  const onMenuKey = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key === "Escape") {
+      setMenuOpen(false);
+      return;
+    }
+    const buttons = menu.current?.querySelectorAll<HTMLButtonElement>("button");
+    if (!buttons?.length) return;
+    const index = [...buttons].findIndex((b) => b === document.activeElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      (buttons[(index + 1) % buttons.length] as HTMLButtonElement).focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      (buttons[(index - 1 + buttons.length) % buttons.length] as HTMLButtonElement).focus();
+    }
+  };
+  useEffect(() => {
+    if (menuOpen) menu.current?.querySelector("button")?.focus();
+  }, [menuOpen]);
+  return (
+    <div className="project-head focus-head" ref={headWrap} data-testid="focused-project">
+      <button type="button" className="icon-btn focus-back" aria-label="All projects" title="All projects" onClick={() => pick(onShowAll)}>
+        <IconChevronLeft size={14} />
+      </button>
+      <button
+        type="button"
+        className="project-toggle focus-switch"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title={workspace.path}
+        onClick={() => setMenuOpen((v) => !v)}
+      >
+        <IconFolder size={14} />
+        <span className="project-name">{workspace.name}</span>
+        {checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
+        <span className="group-count">{total}</span>
+        <IconChevronDown size={12} className="group-chevron" />
+      </button>
+      <button type="button" className="icon-btn project-new" aria-label={`New chat in ${workspace.name}`} title={`New chat in ${workspace.name}`} disabled={!canStartChat} onClick={() => onNewChat(workspace)}>
+        <IconPlus size={13} />
+      </button>
+      {menuOpen ? (
+        <>
+          <div className="menu-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <ul ref={menu} className="menu-list focus-menu" role="menu" aria-label="Project" onKeyDown={onMenuKey}>
+            <li role="none" className="focus-menu-all">
+              <button type="button" role="menuitem" onClick={() => pick(onShowAll)}>
+                <IconChevronLeft size={13} /> All projects
+              </button>
+            </li>
+            {other.map((p) => (
+              <li key={p.workspace.id} role="none">
+                <ProjectMenuItem name={p.workspace.name} path={p.workspace.path} count={p.count} onPick={() => pick(() => onFocus(p.workspace.id))} />
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The focused project (Hermes Desktop's one-folder view): a header that names it (and switches
+ * project), an "All projects" row that goes back, then its sessions of the selected harness in
+ * date sections. The sections reuse the unscoped list's row (session-sublist, history-group), so
+ * it reads the same; the rows keep their open, mark, and drag moves.
+ */
+function FocusedProjectView({
+  focused,
+  order,
+  now,
+  isActive,
+  isWorking,
+  harnessName,
+  canStartChat,
+  onOpen,
+  onMark,
+  onReorder,
+  onNewChat,
+  onShowAll,
+  onFocus,
+  scope,
+}: {
+  focused: NonNullable<ReturnType<typeof focusProject>>;
+  order: string[] | undefined;
+  now: number;
+  isActive: (s: ProjectSession) => boolean;
+  isWorking: (s: ProjectSession) => boolean;
+  harnessName: (id: string) => string;
+  canStartChat: boolean;
+  onOpen: (s: ProjectSession, newTab: boolean) => void;
+  onMark: (s: ProjectSession, change: MarkChange) => void;
+  onReorder: (ids: string[]) => void;
+  onNewChat: (ws: WorkspaceInfo) => void;
+  onShowAll: () => void;
+  onFocus: (workspaceId: string) => void;
+  scope: Array<{ workspace: WorkspaceInfo; count: number; current: boolean }>;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const { workspace, checkout, sections } = focused;
+  const total = sections.reduce((n, sec) => n + sec.sessions.length, 0);
+  // The VISIBLE_CURRENT cap spreads over the date sections as they come, newest first.
+  const allSessions = sections.flatMap((sec) => sec.sessions);
+  const projRows = projectRows(allSessions, { now, weekStartsOn: localeWeekStart(), ...(order ? { order } : {}) });
+
+  // Each row's group (its date key) bounds a drag or a Move up/down, as in the unscoped list.
+  const groupOf = (id: string) => projRows.flatMap((r) => (r.kind === "session" && r.s.id === id ? [r.group] : []))[0];
+  const reorder = (ids: string[] | null) => {
+    if (ids) onReorder(ids);
+  };
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; place: "before" | "after" } | null>(null);
+  const rows: React.ReactNode[] = [];
+  let count = 0;
+  for (const sec of sections) {
+    const list = showAll ? sec.sessions : sec.sessions.slice(0, Math.max(0, VISIBLE_CURRENT - count));
+    if (list.length === 0) continue;
+    if (sec.label !== "") {
+      rows.push(
+        <li key={`d-${sec.label}`} className="date-divider" role="presentation">
+          {sec.label}
+        </li>,
+      );
+    }
+    for (const s of list) {
+      count++;
+      const markable = !s.id.includes(":live-");
+      const up = movedOrder(projRows, s.id, { delta: -1 }) !== null;
+      const down = movedOrder(projRows, s.id, { delta: 1 }) !== null;
+      const section = groupOf(s.id) ?? "recent";
+      rows.push(
+        <SessionRow
+          key={s.id}
+          s={s}
+          active={isActive(s)}
+          working={isWorking(s)}
+          harnessName={harnessName(s.harnessId)}
+          onOpen={(newTab) => onOpen(s, newTab)}
+          onMark={(change) => onMark(s, change)}
+          {...(markable && (up || down) ? { move: { up, down, by: (delta) => reorder(movedOrder(projRows, s.id, { delta })) } } : {})}
+          {...(markable
+            ? {
+                drag: {
+                  dragging: dragged === s.id,
+                  drop: drop?.id === s.id ? drop.place : null,
+                  onStart: (e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", s.title);
+                    setDragged(s.id);
+                  },
+                  onOver: (e) => {
+                    if (!dragged || dragged === s.id || groupOf(dragged) !== section) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    const box = e.currentTarget.getBoundingClientRect();
+                    const place = e.clientY < box.top + box.height / 2 ? "before" : "after";
+                    if (drop?.id !== s.id || drop.place !== place) setDrop({ id: s.id, place });
+                  },
+                  onLeave: () => setDrop((d) => (d?.id === s.id ? null : d)),
+                  onDrop: (e) => {
+                    e.preventDefault();
+                    if (dragged && drop?.id === s.id) reorder(movedOrder(projRows, dragged, { target: s.id, place: drop.place }));
+                    setDragged(null);
+                    setDrop(null);
+                  },
+                  onEnd: () => {
+                    setDragged(null);
+                    setDrop(null);
+                  },
+                },
+              }
+            : {})}
+        />,
+      );
+    }
+  }
+  const hidden = total - count;
+  return (
+    <li className="project-group is-open is-current focus-group">
+      <FocusedHeader workspace={workspace} {...(checkout ? { checkout } : {})} total={total} canStartChat={canStartChat} onNewChat={onNewChat} onShowAll={onShowAll} onFocus={onFocus} scope={scope} />
+      <button type="button" className="show-more all-projects" onClick={onShowAll}>
+        <IconChevronLeft size={13} /> All projects
+      </button>
+      <ul className="session-sublist">
+        {sections.length === 0 ? <li className="sidebar-note">No past sessions here yet</li> : rows}
+        {hidden > 0 ? (
+          <li>
+            <button type="button" className="show-more" onClick={() => setShowAll(true)}>
+              <IconMore size={13} /> Show {hidden} more in {workspace.name}
+            </button>
+          </li>
+        ) : null}
+      </ul>
+    </li>
+  );
+}
+
 export function Sidebar(props: {
   open: boolean;
   harnesses: HarnessStatus[];
@@ -660,6 +900,23 @@ export function Sidebar(props: {
   );
   const { pinned, needs, working } = sections;
   const projectName = (s: ProjectSession) => props.overview.workspaces.find((w) => w.id === s.workspaceId)?.name ?? "";
+
+  // The focused project (Hermes Desktop's one-folder view). "auto" follows the current folder;
+  // "all" is the back row's choice, kept until a folder is picked elsewhere or the header names one.
+  const [focus, setFocus] = useState<string | "all" | "auto">("auto");
+  const currentId = props.workspace?.id ?? null;
+  const [lastCurrent, setLastCurrent] = useState(currentId);
+  if (currentId !== lastCurrent) {
+    setLastCurrent(currentId);
+    setFocus("auto");
+  }
+  // The flat awui history has no projects to focus.
+  const focusId = props.harnessId === "awui" || focus === "all" ? null : focus === "auto" ? currentId : focus;
+  const focused = useMemo(() => {
+    if (!focusId) return null;
+    const order = props.harnessId ? props.overview.orders?.[`${props.harnessId}:${focusId}`] : undefined;
+    return focusProject(props.overview, focusId, { ...groupOptions, ...(order ? { order } : {}) });
+  }, [props.overview, focusId, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now]);
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
 
@@ -806,6 +1063,23 @@ export function Sidebar(props: {
                     </ul>
                   </li>
                 ))
+            ) : focused && !searching ? (
+              <FocusedProjectView
+                focused={focused}
+                order={props.overview.orders?.[`${props.harnessId}:${focused.workspace.id}`]}
+                now={now}
+                isActive={isActive}
+                isWorking={isWorking}
+                harnessName={(id) => names.get(id) ?? id}
+                canStartChat={props.canStartChat}
+                onOpen={props.onOpenSession}
+                onMark={props.onMarkSession}
+                onReorder={(ids) => props.harnessId && props.onReorderSessions(props.harnessId, focused.workspace.id, ids)}
+                onNewChat={props.onNewChatIn}
+                onShowAll={() => setFocus("all")}
+                onFocus={(id) => setFocus(id)}
+                scope={groups.map((g) => ({ workspace: g.workspace, count: g.sessions.length, current: g.workspace.id === focusId }))}
+              />
             ) : (
               groups.map((g) => (
                 <ProjectGroupView
