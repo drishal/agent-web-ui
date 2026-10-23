@@ -660,6 +660,17 @@ for (const viewport of [
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeInViewport();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+    // The ring can wrap to the start of the control row; its panel stays on screen.
+    await page.getByTestId("context-ring").click();
+    const panel = page.getByRole("dialog", { name: "Context and usage" });
+    await expect(panel).toBeVisible();
+    const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
     await expect(page.getByRole("navigation", { name: "Jump to turn" })).toBeHidden();
     await showSidebar(page);
     await page.keyboard.press("Escape");

@@ -2,7 +2,7 @@
 // whole picture, in DeepSeek Harness's sections: what fills the context
 // window, the session's tokens, and model timing. Hidden until the harness
 // reports a percentage.
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 import { useDismiss } from "../hooks.js";
 import { Dot } from "./Dot.js";
@@ -50,8 +50,27 @@ function Row({ label, value, color, title }: { label: string; value: string; col
 export function ContextRing({ context, usage }: { context: ContextUsage | null; usage: SessionUsage | null }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
 
   useDismiss(wrap, open, () => setOpen(false), { escape: true });
+
+  // The ring sits anywhere in the composer's wrapped control row, so the panel
+  // pulls itself back inside the viewport and inside the room above the ring.
+  // Measured from the layout box, since the opening animation scales the
+  // painted one.
+  useLayoutEffect(() => {
+    const el = pop.current;
+    const anchor = wrap.current?.getBoundingClientRect();
+    if (!open || !el || !anchor) return;
+    el.style.removeProperty("--usage-shift");
+    el.style.removeProperty("--usage-max-h");
+    const room = anchor.top - 16; // its gap above the pill, then its own margin
+    if (el.offsetHeight > room) el.style.setProperty("--usage-max-h", `${Math.max(120, room)}px`);
+    const left = anchor.right - el.offsetWidth;
+    const slack = window.innerWidth - 8 - anchor.right;
+    const shift = Math.min(Math.max(0, 8 - left), Math.max(0, slack));
+    if (shift > 0) el.style.setProperty("--usage-shift", `${shift}px`);
+  }, [open]);
 
   // Hidden until there is real usage: an empty ring reads like a spinner.
   if (!context || context.percent === null || context.percent < 0.5) return null;
@@ -97,7 +116,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
         <span className="context-pct">{Math.round(pct)}%</span>
       </button>
       {open ? (
-        <div className="usage-pop" role="dialog" aria-label="Context and usage" data-testid="usage-panel">
+        <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
           <section className="usage-section" aria-label="Context">
             <div className="usage-head">
               <span>

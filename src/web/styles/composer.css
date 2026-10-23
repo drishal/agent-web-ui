@@ -480,6 +480,12 @@
   color: var(--text-2);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  /* Room above the ring and the viewport's edges, measured when it opens: the
+     ring can sit at either end of the composer's wrapped control row. */
+  max-height: var(--usage-max-h, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  translate: var(--usage-shift, 0) 0;
 }
 
 .usage-section {
