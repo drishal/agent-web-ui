@@ -12,6 +12,8 @@ export interface Turn {
   /** Everything before the answer: thinking, intermediate text, tools, notices, requests. */
   process: ChatItem[];
   answer: AssistantItem | null;
+  /** Work that came after the answer — tools the agent called after writing its reply — drawn below it, in order. */
+  workAfter: ChatItem[];
   /** Error notices stay visible under the answer instead of inside the fold. */
   errors: NoticeItem[];
   /** Notices that arrived while the agent was idle, shown after the turn. */
@@ -25,7 +27,10 @@ export interface Turn {
   renders: HtmlRenderRef[];
   /** Plans this turn's calls handed over for review (ExitPlanMode, plan_mode_complete), shown as cards above the answer. */
   plans: Array<{ id: string; plan: string }>;
-  /** How many process items came before the answer: work can follow a reply, and its thought belongs in order. */
+  /**
+   * How many process items came before the answer: the answer's own thought belongs at the end of them.
+   * Anything the agent did after writing the answer is in `workAfter`, drawn below the reply.
+   */
   answerAt: number;
   /** The model that answered (its last model call), when the harness says. */
   model?: string;
@@ -84,6 +89,9 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     }
     const answer = answerIndex >= 0 ? (rest[answerIndex] as AssistantItem) : null;
     const process: ChatItem[] = [];
+    // Work that came after the answer: an agent can call tools after writing its reply (a todo, a
+    // render, a memory note), and those calls belong below it, not in the fold drawn above it.
+    const afterWork: ChatItem[] = [];
     const errors: NoticeItem[] = [];
     const after: NoticeItem[] = [];
     let answerAt = -1;
@@ -94,6 +102,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       }
       if (item.kind === "notice" && item.ambient) after.push(item);
       else if (item.kind === "notice" && item.level === "error") errors.push(item);
+      else if (answerIndex >= 0 && i > answerIndex) afterWork.push(item);
       else process.push(item);
     });
 
@@ -127,6 +136,7 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       through,
       prompt,
       process,
+      workAfter: afterWork,
       answer,
       errors,
       after,
@@ -176,17 +186,14 @@ export interface WorkSegment {
 export function workSegments(turn: Turn): WorkSegment[] {
   const segments: WorkSegment[] = [];
   let items: ChatItem[] = [];
-  let counts: Partial<Record<ToolCategory, number>> = {};
   let answerAt = -1;
   const close = (reply: AssistantItem | null) => {
-    segments.push({ key: `${turn.id}#${segments.length}`, items, reply, counts, answerAt });
+    segments.push({ key: `${turn.id}#${segments.length}`, items, reply, counts: workCounts(items), answerAt });
     items = [];
-    counts = {};
     answerAt = -1;
   };
   turn.process.forEach((item, i) => {
     if (i === turn.answerAt) answerAt = items.length;
-    if (item.kind === "tool") counts[item.category] = (counts[item.category] ?? 0) + 1;
     if (item.kind === "assistant" && saysSomething(item.text)) {
       if (item.thinking.trim()) items.push(item);
       close(item);
@@ -197,6 +204,19 @@ export function workSegments(turn: Turn): WorkSegment[] {
   if (turn.answerAt >= turn.process.length) answerAt = items.length;
   if (items.length > 0 || segments.length === 0 || answerAt >= 0) close(null);
   return segments;
+}
+
+/** The work the agent did after writing its answer, as a fold of its own below the reply (null when it did none). */
+export function workAfterSegment(turn: Turn): WorkSegment | null {
+  if (turn.workAfter.length === 0) return null;
+  return { key: `${turn.id}#after`, items: turn.workAfter, reply: null, counts: workCounts(turn.workAfter), answerAt: -1 };
+}
+
+/** What a stretch of work ran, by kind: the fold's summary line. */
+export function workCounts(items: ChatItem[]): Partial<Record<ToolCategory, number>> {
+  const counts: Partial<Record<ToolCategory, number>> = {};
+  for (const item of items) if (item.kind === "tool") counts[item.category] = (counts[item.category] ?? 0) + 1;
+  return counts;
 }
 
 export function countSummary(counts: Turn["counts"]): string {
@@ -293,7 +313,7 @@ export function readsAsNarration(thinking: string): boolean {
 
 /** A live turn's latest thought as one line: the first sentence of the newest thinking (T3 Code's live row). */
 export function latestThought(turn: Turn): string | null {
-  const steps = turn.answer ? [...turn.process.slice(0, turn.answerAt), turn.answer, ...turn.process.slice(turn.answerAt)] : turn.process;
+  const steps = [...turn.process, ...(turn.answer ? [turn.answer] : []), ...turn.workAfter];
   for (let i = steps.length - 1; i >= 0; i--) {
     const item = steps[i];
     if (item?.kind !== "assistant") continue;

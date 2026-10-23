@@ -29,7 +29,7 @@ export const commentKey = (toolId: string, index: number): string => `${toolId}:
 
 export function collectChanges(items: ChatItem[], workspace: string): FileChanges[] {
   const turnOf = new Map<string, number>();
-  for (const turn of buildTurns(items, "idle")) for (const item of turn.process) turnOf.set(item.id, turn.through);
+  for (const turn of buildTurns(items, "idle")) for (const item of [...turn.process, ...turn.workAfter]) turnOf.set(item.id, turn.through);
   const files = new Map<string, FileChanges>();
   for (const item of items) {
     if (item.kind !== "tool" || (item.category !== "edit" && item.category !== "write") || item.status !== "done" || !item.diff) continue;

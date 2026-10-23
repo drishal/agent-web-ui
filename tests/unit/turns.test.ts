@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workSegments, toolLabel } from "../../src/web/turns.js";
+import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -81,8 +81,13 @@ describe("buildTurns", () => {
     for (const status of ["running", "idle"] as const) {
       const [turn] = buildTurns(items, status);
       expect(turn?.answer?.id).toBe("a2");
-      expect(turn?.process.map((i) => i.id)).toEqual(["a1", "t1", "t2"]);
+      // The fold above the reply holds the work before it; the call after it keeps its place below.
+      expect(turn?.process.map((i) => i.id)).toEqual(["a1", "t1"]);
+      expect(turn?.workAfter.map((i) => i.id)).toEqual(["t2"]);
       expect(turn?.answerAt).toBe(2);
+      const after = turn ? workAfterSegment(turn) : null;
+      expect(after?.items.map((i) => i.id)).toEqual(["t2"]);
+      expect(after?.counts).toEqual({ command: 1 });
     }
   });
 
@@ -95,6 +100,7 @@ describe("buildTurns", () => {
     ];
     const [turn] = buildTurns(items, "running");
     expect(turn?.answer?.id).toBe("a1");
+    expect(turn?.workAfter.map((i) => i.id)).toEqual(["t1", "a2"]);
     expect(turn && latestThought(turn)).toBe("Now tidying up.");
   });
 

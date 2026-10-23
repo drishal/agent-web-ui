@@ -369,6 +369,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       const map = new Map<string, boolean>();
       for (const turn of buildTurns(c.items, c.status)) {
         for (let i = 0; i < 16; i++) map.set(`${turn.id}#${i}`, next);
+        map.set(`${turn.id}#after`, next);
       }
       setFolds(map);
     };

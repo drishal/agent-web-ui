@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workSegments, type WorkSegment } from "../turns.js";
+import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -739,11 +739,13 @@ function InterimReply({ item }: { item: AssistantItem }) {
  * reply after it. All the stretches open and close together.
  */
 function SegmentedWork({ turn, segments, open, onToggle, workspace }: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: (id: string) => void; workspace: string }) {
-  // While the turn runs on after a reply, a live fold follows it for what comes next.
+  // While the turn runs on after a reply, a live fold follows it for what comes next — unless the work
+  // after the answer already owns the spinner below the reply.
   const ended = segments[segments.length - 1]?.reply !== null;
-  const all: WorkSegment[] = turn.live && ended ? [...segments, { key: `${turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : segments;
+  const all: WorkSegment[] =
+    turn.live && ended && turn.workAfter.length === 0 ? [...segments, { key: `${turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : segments;
   const lastIndex = all.length - 1;
-  const live = (n: number) => turn.live && n === lastIndex;
+  const live = (n: number) => turn.live && n === lastIndex && turn.workAfter.length === 0;
   const shape = all.map((segment, n) =>
     segment.items.length === 0 && !live(n) ? "none" : segment.items.every((item) => item.kind === "assistant") && !live(n) ? "thought" : "fold",
   );
@@ -793,6 +795,7 @@ function turnUnchanged(a: Turn, b: Turn): boolean {
     a.prompt === b.prompt &&
     a.answer === b.answer &&
     sameArray(a.process, b.process) &&
+    sameArray(a.workAfter, b.workAfter) &&
     sameArray(a.errors, b.errors) &&
     sameArray(a.after, b.after) &&
     sameArray(a.changedFiles, b.changedFiles) &&
@@ -834,11 +837,11 @@ const TurnView = memo(function TurnView({
     // reply among them in its place (buildTurns takes it out of the process, so it is drawn here or not at all).
     return (
       <section className="turn turn-preamble">
-        {turn.process.slice(0, turn.answerAt).map((item) => (
+        {turn.process.map((item) => (
           <ProcessItem key={item.id} item={item} workspace={workspace} />
         ))}
         {turn.answer ? <Answer item={turn.answer} through={turn.through} canFork={false} onFork={onFork} canRestore={false} onRestore={onRestore} /> : null}
-        {[...turn.process.slice(turn.answerAt), ...turn.errors, ...turn.after].map((item) => (
+        {[...turn.workAfter, ...turn.errors, ...turn.after].map((item) => (
           <ProcessItem key={item.id} item={item} workspace={workspace} />
         ))}
       </section>
@@ -848,13 +851,15 @@ const TurnView = memo(function TurnView({
   const chatId = useContext(ChatIdContext);
   const segments = hasProcess ? workSegments(turn) : [];
   const split = segments.some((segment) => segment.reply !== null);
+  // Work the agent did after writing its reply draws below it, as its own fold.
+  const afterWork = workAfterSegment(turn);
   return (
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} through={turn.through} canBranch={canBranch} hasCheckpoint={hasCheckpoint} actions={promptActions} />
       {split ? (
         <SegmentedWork turn={turn} segments={segments} open={open} onToggle={onToggle} workspace={workspace} />
       ) : hasProcess ? (
-        <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} />
+        <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} {...(afterWork ? { place: "first" as const } : {})} />
       ) : null}
       {turn.renders.length > 0 && chatId !== null ? (
         <div className="turn-renders">
@@ -868,6 +873,11 @@ const TurnView = memo(function TurnView({
       ))}
       {turn.answer ? (
         <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
+      ) : null}
+      {afterWork ? (
+        <div className="turn-work-after" data-testid="work-after">
+          <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} segment={afterWork} place="last" />
+        </div>
       ) : null}
       {!hasProcess && !turn.answer && turn.live ? (
         <div className="process is-live">

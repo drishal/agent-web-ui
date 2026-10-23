@@ -1,7 +1,7 @@
 // A chat as a Markdown file: each turn's prompt, the tools it ran (with edit
 // diffs), and its answer. Thinking is left out; so are images, which are noted.
-import type { ChatSnapshot, DiffLine, ToolItem } from "../shared/protocol.js";
-import { buildTurns, countSummary, relativePath } from "./turns.js";
+import type { ChatItem, ChatSnapshot, DiffLine, ToolItem } from "../shared/protocol.js";
+import { buildTurns, countSummary, relativePath, workCounts } from "./turns.js";
 
 /** A fence longer than any backtick run inside, so code in the text cannot close it. */
 function fence(text: string, lang = ""): string {
@@ -36,14 +36,17 @@ export function chatMarkdown(chat: ChatSnapshot, harnessName: string, now = new 
     const images = turn.prompt.imageCount ?? turn.prompt.images?.length ?? 0;
     if (images > 0) out.push("", `_${images} ${images === 1 ? "image" : "images"} attached_`);
     out.push("");
-    const tools = turn.process.filter((i): i is ToolItem => i.kind === "tool");
-    if (tools.length > 0) {
-      out.push(`### Work · ${countSummary(turn.counts)}`, "");
+    const write = (items: ChatItem[]) => {
+      const tools = items.filter((i): i is ToolItem => i.kind === "tool");
+      if (tools.length === 0) return;
+      out.push(`### Work · ${countSummary(workCounts(items))}`, "");
       for (const tool of tools) out.push(...toolLines(tool, chat.workspace.path));
       out.push("");
-    }
+    };
+    write(turn.process);
     for (const e of turn.errors) out.push(`> **Error:** ${e.text}`, "");
     if (turn.answer?.text) out.push(`## ${harnessName}`, "", turn.answer.text, "");
+    write(turn.workAfter);
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }

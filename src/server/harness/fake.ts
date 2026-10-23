@@ -9,6 +9,7 @@
 //   "planned" hand a ten-step plan over for review (an ExitPlanMode call)
 //   "ratelimit" stop on a usage limit that resets in an hour
 //   "interleaved" reply, run a command, then answer (a reply between tool calls)
+//   "afterreply" the answer first, then a tool call after it
 //   "ticking" run a command whose output arrives a line at a time
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -503,6 +504,12 @@ class FakeLiveChat implements LiveChat {
         // A reply to the user, then a command, then the answer: the reply is not process text.
         await this.reply("this is reply block 1", signal);
         await this.call({ name: "bash", args: { command: "sleep 1" }, output: "" }, signal);
+      }
+      if (/\bafterreply\b/i.test(text)) {
+        // The answer, then a tool call after it: that work keeps its place below the reply.
+        await this.reply("The answer comes first.\n\nThen the agent keeps working.", signal);
+        await this.call({ name: "bash", args: { command: "npm run lint" }, output: "clean" }, signal);
+        return;
       }
       if (/\bticking\b/i.test(text)) {
         // A test run printing a line a file, as a long command does while you watch it.

@@ -13,7 +13,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Index, Mat
 import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opentui/core";
 import { useRenderer, useTerminalDimensions } from "@opentui/solid";
 import type { AssistantItem, ChatItem, ImageRef, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../../shared/protocol.js";
-import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
+import { buildTurns, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, workAfterSegment, workCounts, workSegments, type Turn, type WorkSegment } from "../../web/turns.js";
 import { clip, fileUrl, foldLabel, outputTail, unifiedDiff } from "../format.js";
 import { easeOut, flashAt, mix, unrollCounts } from "../fx.js";
 import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
@@ -637,10 +637,12 @@ function WorkItems(p: { items: ChatItem[]; answerAt: number; answer: AssistantIt
 function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: () => void; workspace: string; fade?: number }) {
   const t = useTheme();
   const all = createMemo(() => {
+    // A live fold follows the last reply for what comes next — unless the work after the answer
+    // already owns the spinner below it.
     const ended = p.segments[p.segments.length - 1]?.reply != null;
-    return p.turn.live && ended ? [...p.segments, { key: `${p.turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : p.segments;
+    return p.turn.live && ended && p.turn.workAfter.length === 0 ? [...p.segments, { key: `${p.turn.id}#live`, items: [], reply: null, counts: {}, answerAt: -1 }] : p.segments;
   });
-  const live = (n: number) => p.turn.live && n === all().length - 1;
+  const live = (n: number) => p.turn.live && n === all().length - 1 && p.turn.workAfter.length === 0;
   const shape = (n: number) => {
     const s = all()[n] as WorkSegment;
     return s.items.length === 0 && !live(n) ? "none" : s.items.every((item) => item.kind === "assistant") && !live(n) ? "thought" : "fold";
@@ -699,6 +701,8 @@ function Answer(p: { item: AssistantItem }) {
 function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; onToggle: () => void; switchedTo: string | null }) {
   const t = useTheme();
   const hasProcess = () => p.turn().process.length > 0 || Boolean(p.turn().answer?.thinking.trim());
+  // Work the agent did after writing its reply draws below it, as its own fold.
+  const afterWork = () => workAfterSegment(p.turn());
   const segments = createMemo(() => workSegments(p.turn()));
   const split = () => segments().some((s) => s.reply);
   // A run that ends while you watch: the prompt's edge flashes in the harness's colour once, and "Worked for" comes up.
@@ -742,7 +746,7 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         when={split()}
         fallback={
           <Show when={hasProcess() || p.turn().live}>
-            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} fade={fade()} />
+            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={afterWork() ? { counts: workCounts(p.turn().process), place: "first" } : undefined} fade={fade()} />
             <Show when={p.open}>
               <WorkItems items={p.turn().process} answerAt={p.turn().answerAt} answer={p.turn().answer} workspace={p.workspace} />
             </Show>
@@ -752,6 +756,16 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         <SegmentedWork turn={p.turn()} segments={segments()} open={p.open} onToggle={p.onToggle} workspace={p.workspace} fade={fade()} />
       </Show>
       <Show when={p.turn().answer}>{(a) => <Answer item={a()} />}</Show>
+      <Show when={afterWork()}>
+        {(segment) => (
+          <>
+            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: "last" }} fade={fade()} />
+            <Show when={p.open}>
+              <WorkItems items={segment().items} answerAt={-1} answer={null} workspace={p.workspace} />
+            </Show>
+          </>
+        )}
+      </Show>
       <For each={p.turn().errors}>{(item) => <Notice item={item} />}</For>
       <Show when={files().length > 0 && !p.turn().live}>
         <box marginTop={1}>

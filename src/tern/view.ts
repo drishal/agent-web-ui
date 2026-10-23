@@ -7,7 +7,7 @@
 // handlers it attaches, which call back into the app.
 import { span, ui, html, type Node, type Span } from "@stencil-hq/tern";
 import type { AssistantItem, ChatItem, HarnessStatus, NoticeItem, RequestItem, SubagentRun, ToolItem, UserItem } from "../shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, latestThought, workSegments, type Turn, type WorkSegment } from "../web/turns.js";
+import { buildTurns, countSummary, formatDuration, latestThought, workAfterSegment, workSegments, type Turn, type WorkSegment } from "../web/turns.js";
 import { isBusy } from "../web/session-groups.js";
 import type { ChatState } from "../web/chat-state.js";
 import { fileUrl, STATUS_LABEL, unifiedDiff } from "../atui/format.js";
@@ -269,9 +269,9 @@ function preambleNode(turn: Turn, cx: ConversationCx): Node {
   const answer = turn.answer;
   return ui.col(
     { key: turn.id, role: "awui.turn", gap: "md" },
-    rows(turn.process.slice(0, turn.answerAt)),
+    rows(turn.process),
     answer?.text.trim() ? ui.md({ key: "answer", role: "awui.reply", stream: answer.streaming }, answer.text) : null,
-    rows([...turn.process.slice(turn.answerAt), ...turn.errors, ...turn.after]),
+    rows([...turn.workAfter, ...turn.errors, ...turn.after]),
     turn.live ? workingNode(turn, cx, true) : null,
   );
 }
@@ -285,7 +285,7 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
   let liveOpen = false;
   segments.forEach((segment, i) => {
     const place = segments.length === 1 ? "only" : i === 0 ? "first" : i === segments.length - 1 ? "last" : "middle";
-    const live = turn.live && (place === "last" || place === "only");
+    const live = turn.live && (place === "last" || place === "only") && turn.workAfter.length === 0;
     const work = segment.items.filter((item) => !(item.kind === "assistant" && !item.thinking.trim() && !item.text.trim()));
     const answerThought = segment.answerAt >= 0 && turn.answer?.thinking.trim() ? turn.answer : null;
     if (work.length > 0 || answerThought) {
@@ -330,6 +330,29 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
 
   const answer = turn.answer;
   if (answer?.text.trim()) parts.push(ui.md({ key: "answer", role: "awui.reply", stream: answer.streaming, actions: { menu: ["copy"] } }, answer.text));
+  // Work the agent did after writing its reply: its own fold below it.
+  const after = workAfterSegment(turn);
+  if (after) {
+    const open = cx.folds.get(after.key) ?? turn.live;
+    if (turn.live) liveOpen = open;
+    const children = after.items.flatMap((item) => {
+      const n = workItem(item, cx);
+      return n === null ? [] : Array.isArray(n) ? n : [n];
+    });
+    parts.push(
+      ui.section(
+        {
+          key: "after",
+          role: turn.live ? "awui.fold-live" : "awui.fold",
+          head: [span(foldHead(turn, after, "last"), "muted")],
+          collapsible: true,
+          collapsed: !open,
+          onToggle: (e) => cx.on.fold(after.key, !e.collapsed),
+        },
+        ui.col({ key: "items", gap: "sm" }, children),
+      ),
+    );
+  }
   if (answer?.error) parts.push(ui.card({ key: "failed", tone: "error", head: [span("The run failed", "error")] }, ui.text({ key: "e", text: answer.error })));
   for (const e of turn.errors) parts.push(ui.text({ key: e.id, role: "awui.note" }, span(e.text, "error")));
 

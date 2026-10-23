@@ -554,6 +554,21 @@ test("a reply written before a tool call shows as a reply, in order, with only t
   await expect(turn.getByTestId("answer")).toContainText("Echo: interleaved please");
 });
 
+test("work the agent runs after its answer keeps its place below the reply", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "do it afterreply please");
+  const turn = page.getByTestId("turn").last();
+  const answer = turn.getByTestId("answer");
+  await expect(answer).toContainText("The answer comes first");
+  // The command that ran after the reply is a fold below it, not above.
+  const after = turn.getByTestId("work-after");
+  await expect(after).toBeVisible();
+  await expect(after.getByTestId("process-toggle")).toContainText("1 command");
+  const top = (l: ReturnType<typeof page.locator>) => l.boundingBox().then((b) => b?.y ?? 0);
+  expect(await top(after)).toBeGreaterThan(await top(answer));
+});
+
 test("todos from the harness show in the status stack, which can be hidden", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

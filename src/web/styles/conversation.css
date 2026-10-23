@@ -1358,6 +1358,11 @@
   margin-top: 8px;
 }
 
+/* Work the agent ran after writing its answer: its fold below the reply, set off from it a little. */
+.turn-work-after {
+  margin-top: 10px;
+}
+
 .turn-after {
   margin-top: 14px;
   padding-top: 8px;
