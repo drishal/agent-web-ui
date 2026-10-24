@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +10,19 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const base = mkdtempSync(path.join(tmpdir(), "awui-e2e-"));
   const root = path.join(base, "workspaces");
   for (const name of ["alpha", "beta", ".hidden-proj"]) mkdirSync(path.join(root, name), { recursive: true });
+  // A repository for the git panel's writes (git.spec.ts): one commit, one changed
+  // file, one new one. Nothing else in the suite runs in it.
+  const gitProject = path.join(root, "gamma");
+  mkdirSync(gitProject, { recursive: true });
+  const runGit = (...args: string[]) => execFileSync("git", args, { cwd: gitProject, stdio: "ignore" });
+  runGit("init", "-q", "-b", "main");
+  runGit("config", "user.name", "E2E");
+  runGit("config", "user.email", "e2e@example.com");
+  writeFileSync(path.join(gitProject, "hello.txt"), "one\n");
+  runGit("add", "-A");
+  runGit("commit", "-qm", "first");
+  writeFileSync(path.join(gitProject, "hello.txt"), "one\ntwo\n");
+  writeFileSync(path.join(gitProject, "new.txt"), "new\n");
   const themeFile = path.join(base, "theme.yaml");
   copyFileSync(path.join(import.meta.dirname, "..", "fixtures", "themes", "stylix.yaml"), themeFile);
   // A stand-in herdr instead of the developer's: its panes are what a test writes to agents.json, and

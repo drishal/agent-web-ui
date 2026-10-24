@@ -350,6 +350,40 @@
   font-size: 12px;
 }
 
+/* Writing git from the panel: a message, a commit, and the two bulk moves. */
+.git-write {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--card);
+}
+
+.git-write-message {
+  flex: 1;
+  min-width: 160px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.git-write-message:disabled {
+  opacity: 0.6;
+}
+
+.git-write-error {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 12.5px;
+}
 .git-commit {
   display: flex;
   align-items: baseline;
@@ -419,6 +453,47 @@
 
 .git-file + .git-file {
   border-top: 1px solid var(--hairline);
+}
+
+/* The row's own Stage / Unstage: a sibling of the disclosure button, not inside it. */
+.git-file {
+  position: relative;
+}
+
+.git-file > .git-file-head {
+  padding-right: 84px;
+}
+
+.git-file-write {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.git-file:hover .git-file-write,
+.git-file-write:focus-visible {
+  opacity: 1;
+}
+
+/* A thumb has no hover: the row's action stays visible. */
+@media (pointer: coarse) {
+  .git-file-write {
+    opacity: 1;
+  }
+}
+
+.git-file-write:disabled {
+  opacity: 0.45;
 }
 
 .git-file-head {

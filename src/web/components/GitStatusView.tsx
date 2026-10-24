@@ -77,7 +77,17 @@ export function GitRow({ git, onOpen }: { git: GitStatus; onOpen: () => void }) 
   );
 }
 
-function FileRow({ chatId, entry }: { chatId: string; entry: GroupedFile }) {
+function FileRow({
+  chatId,
+  entry,
+  onWrite,
+  busy,
+}: {
+  chatId: string;
+  entry: GroupedFile;
+  onWrite: (kind: "stage" | "unstage", paths: string[]) => void;
+  busy: boolean;
+}) {
   const { file, state, lines, side } = entry;
   const [open, setOpen] = useState(false);
   const [diff, setDiff] = useState<GitFileDiff | null>(null);
@@ -113,6 +123,16 @@ function FileRow({ chatId, entry }: { chatId: string; entry: GroupedFile }) {
           <span className="git-file-note">{state === "untracked" ? "new" : state === "conflict" ? "conflict" : lines ? "binary" : ""}</span>
         )}
       </button>
+      <button
+        type="button"
+        className="git-file-write"
+        title={side === "staged" ? `Unstage ${file.path}` : `Stage ${file.path}`}
+        aria-label={`${side === "staged" ? "Unstage" : "Stage"} ${file.path}`}
+        disabled={busy}
+        onClick={() => onWrite(side === "staged" ? "unstage" : "stage", [file.path])}
+      >
+        {side === "staged" ? "Unstage" : "Stage"}
+      </button>
       {open ? (
         <div className="git-file-body">
           {error ? <p className="git-file-msg is-error">{error}</p> : null}
@@ -136,6 +156,28 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
   }, []);
   const { counts } = git;
   const groups = groupFiles(git.files);
+
+  // Writing git: stage or unstage files, then commit what is staged. The server
+  // answers with the fresh status; the row re-reads from it.
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const write = async (kind: "stage" | "unstage" | "commit", body: object) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await api(`/api/chats/${chatId}/git/${kind}`, { body });
+      if (kind === "commit") setMessage("");
+      await onRefresh();
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const canCommit = counts.staged > 0 && message.trim().length > 0 && busy === null;
+  const unstaged = git.files.filter((f) => f.unstaged || f.staged === "conflict");
+  const staged = git.files.filter((f) => f.staged);
 
   return (
     <dialog
@@ -181,6 +223,47 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
             </button>
           </div>
         </header>
+        <div className="git-write" data-testid="git-write">
+          <input
+            className="git-write-message"
+            aria-label="Commit message"
+            placeholder={counts.staged > 0 ? "Commit message" : "Stage a change, then commit"}
+            value={message}
+            disabled={counts.staged === 0 || busy !== null}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || !canCommit) return;
+              e.preventDefault();
+              void write("commit", { message });
+            }}
+          />
+          <button type="button" className="btn btn-small" disabled={!canCommit} onClick={() => void write("commit", { message })}>
+            Commit{counts.staged > 0 ? ` ${counts.staged}` : ""}
+          </button>
+          <button
+            type="button"
+            className="btn btn-small btn-ghost"
+            disabled={busy !== null || unstaged.length === 0}
+            onClick={() => void write("stage", { paths: unstaged.map((f) => f.path) })}
+          >
+            Stage all
+          </button>
+          {staged.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn-small btn-ghost"
+              disabled={busy !== null}
+              onClick={() => void write("unstage", { paths: staged.map((f) => f.path) })}
+            >
+              Unstage all
+            </button>
+          ) : null}
+        </div>
+        {error ? (
+          <p className="git-write-error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="review-files">
           <dl className="git-facts">
             <dt>Branch</dt>
@@ -250,7 +333,7 @@ export function GitPanel({ chatId, git, at, onRefresh, onClose }: { chatId: stri
               </h3>
               <ul className="git-files">
                 {files.map((entry) => (
-                  <FileRow key={`${group}:${entry.file.path}`} chatId={chatId} entry={entry} />
+                  <FileRow key={`${group}:${entry.file.path}`} chatId={chatId} entry={entry} busy={busy !== null} onWrite={(kind, paths) => void write(kind, { paths })} />
                 ))}
               </ul>
             </section>

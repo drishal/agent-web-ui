@@ -30,6 +30,8 @@ import {
   herdrFocusSchema,
   rewindSchema,
   runCommandSchema,
+  gitPathsSchema,
+  gitCommitSchema,
   savedPromptSchema,
   sessionMarkSchema,
   sessionOrderSchema,
@@ -49,6 +51,7 @@ import {
   type SessionPreview,
   resumeCommandSchema,
   type ResumeCommand,
+  type GitStatus,
   uploadPasteSchema,
   usageReportSchema,
   type SessionsOverview,
@@ -84,6 +87,7 @@ import { viewFile } from "./file-view.js";
 import { UsageReader, type UsageTarget } from "./usage-report.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
+import { commitStaged, GitActionError, stageFiles, unstageFiles } from "./git-actions.js";
 import { runCommand } from "./run-command.js";
 import { shellLine } from "./shell-line.js";
 import type { Workspaces } from "./workspaces.js";
@@ -881,6 +885,29 @@ export function createApp(deps: AppDeps) {
     });
     if (!diff) throw new ChatError(404, "not_changed", "That file has no changes now");
     res.json(diff);
+  });
+
+  const gitWrite = async (req: Request<{ id: string }>, run: (cwd: string) => Promise<GitStatus>) => {
+    const chat = manager.get(req.params.id);
+    try {
+      return await run(chat.workspace.path);
+    } catch (error) {
+      if (error instanceof GitActionError) throw new ChatError(error.status, error.code, error.message);
+      throw error;
+    }
+  };
+  /** Stage, unstage, or commit from the git panel: every write this app makes to a repository, by hand. */
+  app.post("/api/chats/:id/git/stage", async (req, res) => {
+    const { paths } = body(gitPathsSchema, req);
+    res.json({ status: await gitWrite(req, (cwd) => stageFiles(cwd, paths)) });
+  });
+  app.post("/api/chats/:id/git/unstage", async (req, res) => {
+    const { paths } = body(gitPathsSchema, req);
+    res.json({ status: await gitWrite(req, (cwd) => unstageFiles(cwd, paths)) });
+  });
+  app.post("/api/chats/:id/git/commit", async (req, res) => {
+    const { message } = body(gitCommitSchema, req);
+    res.json({ status: await gitWrite(req, (cwd) => commitStaged(cwd, message)) });
   });
 
   // File checkpoints: what restoring a turn would do, doing it, and putting the files back again.

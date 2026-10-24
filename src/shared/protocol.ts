@@ -941,6 +941,12 @@ export const runCommandSchema = z.object({
   shell: z.enum(RUN_SHELLS).default("bash"),
 });
 
+/** Files for a git action: relative to the project, and only ones its status lists. */
+export const gitPathsSchema = z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) });
+
+/** A commit message; the commit takes whatever is staged. */
+export const gitCommitSchema = z.object({ message: z.string().trim().min(1).max(4000) });
+
 export interface RunResult {
   /** Null when the shell could not start or a signal ended it. */
   exitCode: number | null;
