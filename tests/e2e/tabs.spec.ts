@@ -277,5 +277,8 @@ test("a long chat draws its end first, then the rest above it", async ({ page })
   await tab(page, "long chat turn 1").click();
   await expect(prompts(page)).toHaveCount(9);
   await expect(prompts(page).last()).toHaveText("long chat turn 9");
-  await expect(prompts(page).last()).toBeInViewport();
+  // The end is what you see first: the scroller lands at its bottom, not partway down.
+  await expect
+    .poll(() => page.locator(".conversation").evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), { timeout: 10_000 })
+    .toBeLessThanOrEqual(1);
 });

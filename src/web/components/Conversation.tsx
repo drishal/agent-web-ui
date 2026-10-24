@@ -1118,8 +1118,24 @@ export function Conversation({
       turnCountRef.current = turnsRef.current.length;
       if (!jumpingRef.current) setShowJump(true);
     }
-  }, [items, glide]);
+    // A chat that opens with its turns already in hand (a restored tab, a switch) changes no
+    // items, and drawing the turns before `from` re-renders the ones above: both are reasons
+    // to land at the end again, before the browser reports the shifted content as a scroll.
+  }, [items, glide, chatId, from]);
 
+  // The thread's own height keeps the end in view while pinned: rows arrive, images load, a
+  // call's panel opens. Attached by the node's ref, since a loading chat replaces the thread
+  // and an element observed once would never report the new one's growth.
+  const reflow = useRef<ResizeObserver | null>(null);
+  const watchThread = useCallback((node: HTMLDivElement | null) => {
+    reflow.current ??= new ResizeObserver(() => {
+      const el = scroller.current;
+      if (el && pinned.current && !jumpingRef.current) el.scrollTop = el.scrollHeight;
+    });
+    reflow.current.disconnect();
+    if (node) reflow.current.observe(node);
+  }, []);
+  useEffect(() => () => reflow.current?.disconnect(), []);
   useEffect(() => {
     const el = scroller.current;
     const outer = wrap.current;
@@ -1128,8 +1144,6 @@ export function Conversation({
       if (pinned.current && !jumpingRef.current) el.scrollTop = el.scrollHeight;
     });
     observer.observe(el);
-    const inner = el.firstElementChild;
-    if (inner) observer.observe(inner);
     // Listen on the wrap so a turn-rail click also takes over from a glide.
     const takeOver = () => {
       jumpingRef.current = false;
@@ -1289,7 +1303,7 @@ export function Conversation({
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <ChatIdContext.Provider value={chatId}>
           <ArrivalsContext.Provider value={arrivals}>
-            <div className="thread">
+            <div className="thread" ref={watchThread}>
               {(from > 0 ? turns.slice(from) : turns).map((turn) => (
                 <Fragment key={turn.id}>
                   {switches.has(turn.id) ? (
