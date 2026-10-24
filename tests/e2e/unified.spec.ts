@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, sendAndWait, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, sendAndWait, signInAndOpen } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
@@ -34,7 +34,7 @@ test("? opens the keyboard shortcuts, which a word narrows, and Escape closes th
 
 test("$ lists the harness's skills, which leave the / menu, and Tab puts one in", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   await box(page).fill("/");
   const commands = page.getByRole("listbox", { name: "Commands" });
   await expect(commands.getByRole("option", { name: /fake-status/ })).toBeVisible();
@@ -115,7 +115,7 @@ test("a changed file opens in the viewer, coloured, its added lines marked, and 
 
 test("a saved prompt goes in with # and its blanks are filled in with Tab; any device sees it", async ({ page, browser }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   // Saved from a draft, through the stash menu.
   await box(page).fill("Review {{file}} for {{risk}}");
   await page.getByRole("button", { name: /^Stash/ }).click();
@@ -140,7 +140,7 @@ test("a saved prompt goes in with # and its blanks are filled in with Tab; any d
   // Another browser (another device) has it too.
   const other = await browser.newPage();
   await signInAndOpen(other);
-  await newChat(other);
+  await openChat(other);
   await other.getByRole("textbox", { name: "Message" }).fill("#");
   await expect(other.getByRole("listbox", { name: "Saved prompts" })).toContainText("#risky");
   await other.close();

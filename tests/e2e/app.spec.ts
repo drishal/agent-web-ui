@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { chooseHarness, newChat, openSettings, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { chooseHarness, commandChat, newChat, openChat, openSettings, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const status = (page: Page) => page.getByTestId("chat-status");
 const answers = (page: Page) => page.getByTestId("answer");
@@ -121,7 +121,7 @@ test("an expanded thought shows its text once, not in the header and the body", 
 
 test("switch harness without reloading; capabilities change the composer", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page, "Fake B");
+  await openChat(page, "Fake B");
   await expect(page.locator(".chat-sub .badge")).toHaveText("Fake B");
   await expect(page.getByTestId("permission-picker")).toHaveCount(0);
   await send(page, "slow please");
@@ -406,7 +406,7 @@ test("reload re-attaches, and the session list resumes the same live chat", asyn
 
 test("model and thinking changes apply while idle", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   await page.getByTestId("model-picker").click();
   await page.getByRole("combobox", { name: "Search models" }).fill("slow");
   await expect(page.getByRole("dialog", { name: "Choose a model" }).getByRole("option")).toHaveCount(1);
@@ -436,7 +436,7 @@ test("model and thinking changes apply while idle", async ({ page }) => {
 
 test("the permission mode changes mid-run, from its picker, by keyboard, and from the palette", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   const picker = page.getByTestId("permission-picker");
   await expect(picker).toHaveAccessibleName("Permissions: Ask first");
   // While a run goes the model and thinking wait for it; the permission mode does not.
@@ -469,7 +469,7 @@ test("the permission mode changes mid-run, from its picker, by keyboard, and fro
 
 test("the model picker searches across providers, remembers recents, and works by keyboard", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   const picker = page.getByTestId("model-picker");
   await picker.click();
   const dialog = page.getByRole("dialog", { name: "Choose a model" });
@@ -514,7 +514,7 @@ test("the model picker opens as a bottom sheet on phones", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
-  await newChat(page);
+  await openChat(page);
   await page.getByTestId("model-picker").click();
   const dialog = page.getByRole("dialog", { name: "Choose a model" });
   await expect(dialog).toBeInViewport();
@@ -596,7 +596,7 @@ test("a long Working says why: the harness's own status line shows above the com
 
 test("context ring, edited files, and the turn rail", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await commandChat(page);
   // A fresh chat shows what fills the window, not zero-filled token and timing sections.
   await page.getByTestId("context-ring").click();
   await expect(page.getByRole("dialog", { name: "Context and usage" }).getByRole("region")).toHaveCount(1);
@@ -621,8 +621,8 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await sendAndWait(page, "second turn");
   await sendAndWait(page, "third turn");
   const rail = page.getByRole("navigation", { name: "Jump to turn" });
-  await expect(rail.getByRole("button")).toHaveCount(3);
-  await rail.getByRole("button", { name: /Turn 1: please edit the app/ }).click();
+  await expect(rail.getByRole("button")).toHaveCount(await prompts(page).count());
+  await rail.getByRole("button").first().click();
   await expect(prompts(page).first()).toBeInViewport();
 });
 
@@ -726,6 +726,9 @@ test("several pending requests stack; answering the front one reveals the next",
 
 test("the sidebar focuses the current project and opens its sessions across harnesses", async ({ page }) => {
   await signInAndOpen(page, "beta");
+  // Other specs share this server and this folder, so count what this one adds to it.
+  await chooseHarness(page, "Fake");
+  const otherFake = await page.locator(".focus-group .session").count();
   await newChat(page, "Fake B");
   await sendAndWait(page, "xproj one");
   for (const text of ["xproj two", "xproj three", "xproj four", "xproj five", "xproj six"]) {
@@ -738,7 +741,7 @@ test("the sidebar focuses the current project and opens its sessions across harn
   const focused = page.getByTestId("focused-project");
   await expect(focused.locator(".project-name")).toHaveText("beta");
   await expect(list.locator(".session-title").first()).toHaveText("xproj six");
-  await expect(list.locator(".session")).toHaveCount(5);
+  await expect(list.locator(".session")).toHaveCount(otherFake + 5);
 
   // The harness filter scopes it: only that harness's sessions of this folder show.
   await expect(list.locator(".session", { hasText: "xproj one" })).toHaveCount(0);
@@ -770,7 +773,7 @@ test("the sidebar focuses the current project and opens its sessions across harn
   await expect(prompts(page)).toHaveText(["xproj four"]);
   await expect(page.locator(".chat-header .chat-path")).toHaveText("beta");
   await expect(focused.locator(".project-name")).toHaveText("beta");
-  await expect(list.locator(".session")).toHaveCount(5);
+  await expect(list.locator(".session")).toHaveCount(otherFake + 5);
 
   // A session moves inside its date section from its menu, and keeps its place for every device.
   await list.getByRole("button", { name: "More for xproj five" }).click();
@@ -801,7 +804,7 @@ test("a working session spins in the sidebar, also while another chat is open", 
 
 test("/ opens the command menu: it filters, completes, runs, and closes", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   const box = page.getByRole("textbox", { name: "Message" });
   const menu = page.getByRole("listbox", { name: "Commands" });
   await box.fill("/");
@@ -814,7 +817,7 @@ test("/ opens the command menu: it filters, completes, runs, and closes", async 
   await expect(box).toHaveValue("/fake-status ");
   await expect(menu).toBeHidden();
   await box.press("Enter");
-  await expect(prompts(page)).toHaveText(["/fake-status"]);
+  await expect(prompts(page).last()).toHaveText("/fake-status");
   await expect(page.getByText("fake status: all good")).toBeVisible();
   await expect(status(page)).toHaveText("Idle");
   // An app command, the same on every harness.
@@ -864,7 +867,7 @@ const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9
 
 test("images can be pasted, dropped, or picked, then removed or sent with the prompt", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   const box = page.getByRole("textbox", { name: "Message" });
   const strip = page.getByRole("list", { name: "Attached images" });
   const fire = (type: "paste" | "drop", selector: string) =>
@@ -1045,7 +1048,7 @@ test("the model picker keeps its search and Current line intact when the list ov
   // A short window forces the list to scroll inside the minimum-height popover.
   await page.setViewportSize({ width: 1360, height: 420 });
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   await page.getByTestId("model-picker").click();
   const dialog = page.getByRole("dialog", { name: "Choose a model" });
   await expect(dialog).toBeVisible();

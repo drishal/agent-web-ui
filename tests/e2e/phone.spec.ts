@@ -6,7 +6,7 @@
 // app arriving in a new chat's composer, and the permission list kept on
 // screen from the end of the composer's row.
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -144,7 +144,7 @@ test("a share from another app opens a new chat with the text and image in its c
 test("the permission list opens on screen from the end of the composer's row", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
-  await newChat(page);
+  await openChat(page);
   await page.getByTestId("permission-picker").click();
   const list = page.getByRole("listbox", { name: "Permission mode" });
   await expect(list.getByRole("option", { name: "Accept edits" })).toBeVisible();

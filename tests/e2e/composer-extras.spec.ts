@@ -3,7 +3,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
@@ -24,7 +24,7 @@ test("↑ and ↓ walk this chat's prompts", async ({ page }) => {
 
 test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   await box(page).pressSequentially("1. one");
   await page.keyboard.press("Shift+Enter");
   await expect(box(page)).toHaveValue("1. one\n2. ");
@@ -36,7 +36,7 @@ test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", 
 
 test("the stash parks a draft and gives it back in another chat", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   await box(page).fill("park this for later");
   await page.keyboard.press("Alt+KeyS");
   await expect(box(page)).toHaveValue("");
@@ -47,7 +47,7 @@ test("the stash parks a draft and gives it back in another chat", async ({ page 
   await expect(page.getByRole("menu", { name: "Stash" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu", { name: "Stash" })).toBeHidden();
-  await newChat(page);
+  await openChat(page);
   await page.getByRole("button", { name: /^Stash/ }).click();
   await page.getByRole("menuitem", { name: /park this for later/ }).click();
   await expect(box(page)).toHaveValue("park this for later");
@@ -130,7 +130,7 @@ test("a queued follow-up can be edited or removed before it runs", async ({ page
 
 test("search in project finds a line and puts it into the message as @path:line", async ({ page }) => {
   await signInAndOpen(page);
-  await newChat(page);
+  await openChat(page);
   const root = await page.locator(".chat-path").getAttribute("title");
   expect(root).toBeTruthy();
   writeFileSync(path.join(root as string, "search-me.txt"), "nothing\nthe zebra-quartz line\n");

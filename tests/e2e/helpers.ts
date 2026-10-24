@@ -76,3 +76,20 @@ export async function sendAndWait(page: Page, text: string): Promise<void> {
   await expect(turns.last().getByTestId("answer")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
 }
+
+/**
+ * A chat, so its composer exists: New chat shows the start screen (agent and
+ * folder chips only), and the model, thinking, permission, stash, and menu
+ * controls belong to a chat. One prompt makes one.
+ */
+export async function openChat(page: Page, harness?: string): Promise<void> {
+  await newChat(page, harness);
+  await sendAndWait(page, "hello");
+}
+
+/** A chat with no model call in it yet: a harness command answers, so its usage panel has no token sections. */
+export async function commandChat(page: Page): Promise<void> {
+  await newChat(page);
+  await send(page, "/fake-status");
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle");
+}
