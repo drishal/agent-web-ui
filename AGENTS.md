@@ -241,7 +241,8 @@ if every test passes.
   `interleaved` (a reply, a command, then the answer), `ticking` (a command
   whose output arrives a line at a time), `afterreply` (the answer, then a tool
   call after it), `unfinished` (a call whose result never comes: the run
-  settles with it open). Add a word there when a
+  settles with it open), `midcompact` (compact inside a run, then carry on),
+  `contended` (refuse a prompt while a run is going). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give

@@ -236,6 +236,10 @@ class EventReducer {
   private currentModel: string | undefined;
   private pendingDeltas: Array<{ itemId: string; field: "text" | "thinking" | "output"; append: string }> = [];
   private dirtyTools = new Set<string>();
+  /** How many times the harness has said a run is going: a rejected prompt reads it to know the run is. */
+  private busySignals = 0;
+  /** A harness can compact the context inside a run and carry on; this remembers the run was going. */
+  private ranBeforeCompact = false;
   private flushTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -254,6 +258,10 @@ class EventReducer {
     return namespacedSessionId(this.harnessId, this.nativeId);
   }
 
+  /** Counts the harness saying a run is going (its `busy`), so a rejected prompt can tell. */
+  busyCount(): number {
+    return this.busySignals;
+  }
   /** Drop user turn `turn` (1-based, commands not counted) and every item after it. */
   truncateBeforeUserTurn(turn: number): void {
     this.finishStreaming();
@@ -407,20 +415,28 @@ class EventReducer {
         this.applyReports(event.reports);
         break;
       case "busy":
+        this.busySignals++;
         if (this.fx.status() !== "stopping") this.fx.setStatus("running");
         break;
       case "settled":
         this.finishStreaming();
         this.closeRunningTools();
+        this.ranBeforeCompact = false;
         if (this.fx.status() !== "error") this.fx.setStatus("idle");
         this.fx.refreshContext();
         this.fx.refreshUsage();
         this.fx.refreshTodos();
         break;
       case "compacting":
-        if (event.active) this.fx.setStatus("compacting");
-        else {
-          if (this.fx.status() === "compacting") this.fx.setStatus("idle");
+        if (event.active) {
+          // pi compacts the context inside a run and carries on with it: remember the run was going,
+          // since it sends no second start when the compaction ends.
+          const at = this.fx.status();
+          if (at !== "compacting") this.ranBeforeCompact = at === "running";
+          this.fx.setStatus("compacting");
+        } else {
+          if (this.fx.status() === "compacting") this.fx.setStatus(this.ranBeforeCompact ? "running" : "idle");
+          this.ranBeforeCompact = false;
           this.fx.refreshContext();
         }
         break;
@@ -963,12 +979,15 @@ export class Chat implements CheckpointHost {
     await this.checkpoints?.beforePrompt(text);
     if (this.status !== "running") return;
     this.timing.markHandoff();
+    const busyBefore = this.reducer.busyCount();
     try {
       await this.live.prompt(text, images);
     } catch (error) {
       this.reducer.notice("error", `Prompt rejected: ${errorMessage(error)}`, true);
       this.quiet = true;
-      this.setStatus("idle");
+      // A harness that answered "already processing" says the run is going (its adapter sends the
+      // busy event with that answer), so the chat stays running instead of inviting another send.
+      if (this.reducer.busyCount() === busyBefore) this.setStatus("idle");
       this.quiet = false;
       throw new ChatError(422, "prompt_rejected", errorMessage(error));
     }

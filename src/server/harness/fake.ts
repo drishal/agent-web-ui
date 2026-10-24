@@ -11,6 +11,8 @@
 //   "interleaved" reply, run a command, then answer (a reply between tool calls)
 //   "afterreply" the answer first, then a tool call after it
 //   "unfinished" a call whose result never comes; the run settles with it open
+//   "midcompact" compact the context inside the run, then carry on
+//   "contended" refuse a prompt because a run is going (pi's "already processing")
 //   "ticking" run a command whose output arrives a line at a time
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -349,6 +351,11 @@ class FakeLiveChat implements LiveChat {
       this.emit({ type: "settled" });
       return;
     }
+    // pi's own refusal while a run is going, verbatim: the run carries on, so this says so.
+    if (/\bcontended\b/i.test(text)) {
+      this.emit({ type: "busy" });
+      throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
+    }
     if (this.running) throw new Error("Agent is busy");
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
@@ -511,6 +518,13 @@ class FakeLiveChat implements LiveChat {
         await this.reply("The answer comes first.\n\nThen the agent keeps working.", signal);
         await this.call({ name: "bash", args: { command: "npm run lint" }, output: "clean" }, signal);
         return;
+      }
+      if (/\bmidcompact\b/i.test(text)) {
+        // A harness that compacts the context inside a run (pi does, when the window fills) and goes on with it.
+        this.emit({ type: "compacting", active: true });
+        await this.pause(signal, 60);
+        this.emit({ type: "compacting", active: false });
+        await this.pause(signal, 60);
       }
       if (/\bunfinished\b/i.test(text)) {
         // A call whose result never comes, as a cancelled question leaves it: the run settles with it open.

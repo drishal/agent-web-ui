@@ -899,10 +899,18 @@ class PiLiveChat implements LiveChat {
   async prompt(text: string, images?: ImageAttachment[]): Promise<void> {
     // The response resolves on preflight (acceptance); the run streams as events.
     // A "handled" disposition (slash command ran locally) still resolves: settle here.
-    const data = await this.live.command<Obj>("prompt", {
-      message: text,
-      ...(images?.length ? { images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : {}),
-    });
+    let data: Obj | undefined;
+    try {
+      data = await this.live.command<Obj>("prompt", {
+        message: text,
+        ...(images?.length ? { images: images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })) } : {}),
+      });
+    } catch (error) {
+      // pi refuses a prompt while a run is going with "Agent is already processing…". It is right, and
+      // the run carries on: say so, so the chat stays running instead of calling itself idle.
+      if (/already processing/i.test(error instanceof Error ? error.message : String(error))) this.hub.emit({ type: "busy" });
+      throw error;
+    }
     if (isObj(data) && String(data.disposition ?? "") === "handled") this.hub.emit({ type: "settled" });
   }
 
