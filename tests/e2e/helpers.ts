@@ -26,6 +26,8 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
   await dialog.getByRole("button", { name: project, exact: false }).click();
   await dialog.getByRole("button", { name: "Open this folder" }).click();
   await expect(dialog).toBeHidden();
+  // The folder picked, not the one the dialog started in: a chat sent now belongs to it.
+  await expect(page.getByRole("heading", { name: new RegExp(`^What should .* (do in|work on) ${project}\\?$`) })).toBeVisible();
 }
 /** Pick the sidebar's harness from its menu. */
 export async function chooseHarness(page: Page, harness: string): Promise<void> {
