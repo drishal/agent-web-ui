@@ -10,6 +10,7 @@
 //   "ratelimit" stop on a usage limit that resets in an hour
 //   "interleaved" reply, run a command, then answer (a reply between tool calls)
 //   "afterreply" the answer first, then a tool call after it
+//   "unfinished" a call whose result never comes; the run settles with it open
 //   "ticking" run a command whose output arrives a line at a time
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -509,6 +510,13 @@ class FakeLiveChat implements LiveChat {
         // The answer, then a tool call after it: that work keeps its place below the reply.
         await this.reply("The answer comes first.\n\nThen the agent keeps working.", signal);
         await this.call({ name: "bash", args: { command: "npm run lint" }, output: "clean" }, signal);
+        return;
+      }
+      if (/\bunfinished\b/i.test(text)) {
+        // A call whose result never comes, as a cancelled question leaves it: the run settles with it open.
+        this.emit({ type: "tool_start", toolCallId: "unfinished-1", name: "ask_user", args: { questions: [{ id: "q1", prompt: "Tea?" }] } });
+        await this.pause(signal);
+        this.emit({ type: "settled" });
         return;
       }
       if (/\bticking\b/i.test(text)) {

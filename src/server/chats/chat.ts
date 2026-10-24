@@ -28,7 +28,7 @@ import type {
   WorkspaceInfo,
 } from "../../shared/protocol.js";
 import { promises as fs } from "node:fs";
-import { boundText, editShape, historyToItems, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
+import { boundText, editShape, historyToItems, NO_RESULT_TEXT, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
 import { applyReports, detailReports, runsFromArgs, runsFromDetails, settleRuns, transcriptFile, transcriptRecords, type AgentReport } from "../harness/subagents.js";
 import { htmlRenderRef, isHtmlRenderCall } from "../harness/render-token.js";
@@ -411,6 +411,7 @@ class EventReducer {
         break;
       case "settled":
         this.finishStreaming();
+        this.closeRunningTools();
         if (this.fx.status() !== "error") this.fx.setStatus("idle");
         this.fx.refreshContext();
         this.fx.refreshUsage();
@@ -601,6 +602,17 @@ class EventReducer {
     const current = this.currentAssistant ? this.get(this.currentAssistant) : undefined;
     if (current && current.kind === "assistant" && current.streaming) this.put({ ...current, streaming: false, endedAt: Date.now() });
     this.currentAssistant = null;
+  }
+
+  /**
+   * A run that ends with calls still open leaves no spinner: a cancelled question, or a
+   * harness that lost the result, must read as ended once it says the run is over.
+   */
+  closeRunningTools(note = NO_RESULT_TEXT): void {
+    for (const item of this.items) {
+      if (item.kind !== "tool" || item.status !== "running") continue;
+      this.put({ ...item, status: "done", output: item.output || note, endedAt: item.endedAt ?? Date.now() });
+    }
   }
 }
 

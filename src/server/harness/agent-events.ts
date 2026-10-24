@@ -501,6 +501,9 @@ export function normalizeAgentEvent(event: unknown, settledType: string): Harnes
 const withRuns = (runs: ToolItem["subagents"] | null) => (runs ? { subagents: runs } : {});
 const withPlan = (plan: string | null) => (plan ? { plan } : {});
 
+/** What a call that never got a result says, in place of its output: a cancelled question, an interrupted run. */
+export const NO_RESULT_TEXT = "No result: the run ended before this call answered.";
+
 /** Rebuild display items from the active branch's message list. */
 export function historyToItems(messages: unknown[]): ChatItem[] {
   const items: ChatItem[] = [];
@@ -622,7 +625,11 @@ export function historyToItems(messages: unknown[]): ChatItem[] {
         break;
     }
   }
-  // A tool call without a result in a settled transcript was interrupted.
-  for (const tool of tools.values()) if (tool.status === "running") tool.status = "error";
+  // A tool call without a result in a settled transcript was interrupted: no spinner, and a note where its output was.
+  for (const tool of tools.values()) {
+    if (tool.status !== "running") continue;
+    tool.status = "done";
+    if (!tool.output) tool.output = NO_RESULT_TEXT;
+  }
   return items;
 }

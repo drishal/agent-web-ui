@@ -240,7 +240,8 @@ if every test passes.
   usage limit), `wait` (a provider wait on the harness's status line),
   `interleaved` (a reply, a command, then the answer), `ticking` (a command
   whose output arrives a line at a time), `afterreply` (the answer, then a tool
-  call after it). Add a word there when a
+  call after it), `unfinished` (a call whose result never comes: the run
+  settles with it open). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig, migrateStateDir } from "../../src/server/config.js";
-import { boundText, extensionMessage, historyToItems, normalizeAgentEvent, outputDiffStat, piTodos, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
+import { boundText, extensionMessage, historyToItems, NO_RESULT_TEXT, normalizeAgentEvent, outputDiffStat, piTodos, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../../src/server/harness/agent-events.js";
 import { buildOmpEnv } from "../../src/server/harness/omp.js";
 
 describe("the state folder", () => {
@@ -112,7 +112,8 @@ describe("agent event normalization", () => {
     ]);
     expect(items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "notice", "tool"]);
     expect(items[2]).toMatchObject({ status: "done", output: "data" });
-    expect(items[4]).toMatchObject({ status: "error" });
+    // A call the transcript never got a result for is over, and says why instead of spinning.
+    expect(items[4]).toMatchObject({ status: "done", output: NO_RESULT_TEXT });
   });
 
   it("categorizes tools for per-turn counts", () => {
