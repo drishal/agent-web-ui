@@ -278,3 +278,27 @@ test("Then queues a message on the server for after the run, and a stop pauses t
   await page.getByTestId("chain").getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("turn").last()).toContainText("not yet", { timeout: 20_000 });
 });
+
+test("a Markdown file opens as source, then as the page it describes", async ({ page, request }) => {
+  const root = process.env.AWUI_E2E_ROOT as string;
+  const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
+  const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
+  await page.goto(`/#chat=${chat.chatId}`);
+
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
+  await page.keyboard.press("Enter");
+  const picker = page.getByRole("dialog", { name: "Open a file" });
+  await picker.getByRole("searchbox", { name: "Go to file" }).fill("notes");
+  await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
+  const viewer = page.getByRole("dialog", { name: "File notes.md" });
+  await expect(viewer).toBeVisible();
+  // Source first: the Markdown is text.
+  await expect(viewer).toContainText("**bold**");
+  await viewer.getByRole("button", { name: "Preview" }).click();
+  await expect(viewer.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
+  await expect(viewer.locator("strong")).toHaveText("bold");
+  await viewer.getByRole("button", { name: "Code" }).click();
+  await expect(viewer.getByRole("heading", { name: "Notes", exact: true })).toHaveCount(0);
+  await expect(viewer).toContainText("**bold**");
+});

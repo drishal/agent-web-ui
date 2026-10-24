@@ -187,6 +187,46 @@
   border-bottom: 1px solid var(--hairline);
 }
 
+/* The same file as the page it describes (Markdown): a Code / Preview switch,
+   and the rendered page in place of the coloured source. */
+.viewer-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.viewer-toggle button {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.viewer-toggle button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+
+.viewer-code.is-prose {
+  padding: 0;
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.viewer-prose {
+  max-width: 860px;
+  padding: 18px 22px 48px;
+}
+
 .viewer-chip {
   display: inline-flex;
   align-items: center;

@@ -14,6 +14,8 @@ import { highlightLines, languageOf } from "../highlight.js";
 import { IconCheck, IconCopy, IconFile, IconSearch, IconX, Spinner } from "../icons.js";
 import type { FileChanges } from "../review.js";
 import { DiffBadge } from "./ToolBody.js";
+import { Markdown } from "./Markdown.js";
+import { previewKind } from "../preview.js";
 
 /** Rows drawn per block; a block off screen is skipped by the browser (content-visibility). */
 const CHUNK = 200;
@@ -148,6 +150,9 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
   const [file, setFile] = useState<{ path: string; view: FileView } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // The path shown rendered rather than as source (the toggle): keyed by path, so
+  // another file opens as source.
+  const [rendered, setRendered] = useState<string | null>(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -197,6 +202,8 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
   }, [loading, view, shown]);
 
   const path = view?.path ?? shown?.path ?? "";
+  const preview = view ? previewKind(view.path) : null;
+  const showPreview = preview === "markdown" && rendered === path && Boolean(view?.text) && !view?.binary;
   const cut = path.lastIndexOf("/") + 1;
   const mention = () => {
     addToDraft(`@${path}${marked ? `:${marked}` : ""}`);
@@ -252,6 +259,16 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
               </span>
             ) : null}
             <span className="viewer-actions">
+              {preview === "markdown" ? (
+                <span className="viewer-toggle" role="group" aria-label="View">
+                  <button type="button" aria-pressed={!showPreview} onClick={() => setRendered(null)}>
+                    Code
+                  </button>
+                  <button type="button" aria-pressed={showPreview} onClick={() => setRendered(path)}>
+                    Preview
+                  </button>
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="btn btn-small btn-ghost"
@@ -270,7 +287,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
             </span>
           </div>
         ) : null}
-        <div className="viewer-code" ref={code} role="region" aria-label={path ? `Contents of ${path}` : "File"} aria-busy={loading}>
+        <div className={`viewer-code${showPreview ? " is-prose" : ""}`} ref={code} role="region" aria-label={path ? `Contents of ${path}` : "File"} aria-busy={loading}>
           {shown === null ? (
             <p className="viewer-empty muted">Type a name above to open one of the project's files.</p>
           ) : error ? (
@@ -279,6 +296,10 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
             <p className="viewer-empty muted">
               <Spinner size={13} /> Opening…
             </p>
+          ) : showPreview ? (
+            <div className="viewer-prose">
+              <Markdown text={view.text ?? ""} />
+            </div>
           ) : view.binary ? (
             <p className="viewer-empty muted">A binary file ({bytes(view.size)}): nothing to show as text.</p>
           ) : (

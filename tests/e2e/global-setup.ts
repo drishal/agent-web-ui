@@ -23,6 +23,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   runGit("commit", "-qm", "first");
   writeFileSync(path.join(gitProject, "hello.txt"), "one\ntwo\n");
   writeFileSync(path.join(gitProject, "new.txt"), "new\n");
+  // A Markdown file for the viewer's rendered preview (unified.spec.ts).
+  writeFileSync(path.join(gitProject, "notes.md"), "# Notes\n\nSome **bold** words and a [link](https://example.com).\n");
   const themeFile = path.join(base, "theme.yaml");
   copyFileSync(path.join(import.meta.dirname, "..", "fixtures", "themes", "stylix.yaml"), themeFile);
   // A stand-in herdr instead of the developer's: its panes are what a test writes to agents.json, and
