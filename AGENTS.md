@@ -239,7 +239,8 @@ if every test passes.
   mid-run), `fail`, `planned` (an ExitPlanMode plan), `ratelimit` (a stop on a
   usage limit), `wait` (a provider wait on the harness's status line),
   `interleaved` (a reply, a command, then the answer), `ticking` (a command
-  whose output arrives a line at a time). Add a word there when a
+  whose output arrives a line at a time), `afterreply` (the answer, then a tool
+  call after it). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give

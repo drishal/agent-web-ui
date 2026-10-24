@@ -18,7 +18,7 @@ export function findOffsets(haystack: string, needle: string): number[] {
 /** The text a turn's fold holds: what is hidden while it is closed. */
 function processText(turn: Turn): string {
   const parts: string[] = [];
-  for (const item of turn.process) {
+  for (const item of [...turn.process, ...turn.workAfter]) {
     if (item.kind === "assistant") parts.push(item.text, item.thinking);
     else if (item.kind === "tool") parts.push(item.name, item.summary);
     else if (item.kind === "notice") parts.push(item.text);

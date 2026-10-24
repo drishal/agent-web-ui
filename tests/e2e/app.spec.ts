@@ -693,6 +693,21 @@ for (const viewport of [
   });
 }
 
+test("work the agent does after writing its reply stays below the reply", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "the reply comes first, then afterreply");
+  const turn = page.getByTestId("turn").last();
+  const answer = turn.getByTestId("answer");
+  const after = turn.getByTestId("work-after");
+  await expect(answer).toContainText("The answer comes first.");
+  await expect(after).toContainText("1 command");
+  // In the page, not in the fold above.
+  const reply = await answer.boundingBox();
+  const work = await after.boundingBox();
+  expect(work!.y).toBeGreaterThan(reply!.y);
+});
+
 test("several pending requests stack; answering the front one reveals the next", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

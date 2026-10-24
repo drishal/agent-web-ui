@@ -859,7 +859,8 @@ const TurnView = memo(function TurnView({
       {split ? (
         <SegmentedWork turn={turn} segments={segments} open={open} onToggle={onToggle} workspace={workspace} />
       ) : hasProcess ? (
-        <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} {...(afterWork ? { place: "first" as const } : {})} />
+        // With work after the reply, this fold holds only what came before it, so its counts are its own.
+        <ProcessFold turn={turn} open={open} onToggle={onToggle} workspace={workspace} {...(afterWork ? { segment: segments[0], place: "first" as const } : {})} />
       ) : null}
       {turn.renders.length > 0 && chatId !== null ? (
         <div className="turn-renders">
