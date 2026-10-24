@@ -38,6 +38,7 @@ import { rememberImage } from "../image-store.js";
 import type { HarnessAdapter, HarnessEvent, HarnessUsage, LiveChat } from "../harness/types.js";
 import type { ChatCheckpoints, CheckpointHost } from "../checkpoints.js";
 import { REWIND_COMMAND } from "../harness/rewind-extension.js";
+import { CONTINUE_TEXT } from "../../shared/limit-stop.js";
 
 export class ChatError extends Error {
   constructor(
@@ -661,6 +662,9 @@ export class Chat implements CheckpointHost {
   private chain: ChainStep[] = [];
   /** Why the chain waits: a run was stopped, or failed, or a step could not start. */
   private chainPaused: string | null = null;
+  /** When the user asked this chat to carry on after a usage limit resets; the timer is the server's, so it fires with no browser open. */
+  continueAt: number | null = null;
+  private continueTimer?: NodeJS.Timeout;
   /**
    * Where this chat's render_html/MCP tool publishes pages. Set by the manager once,
    * before the harness child is spawned; carries the random token this chat's child
@@ -786,6 +790,7 @@ export class Chat implements CheckpointHost {
       checkpoints: [...this.checkpointTurns],
       chain: this.chain.map((s) => ({ ...s })),
       chainPaused: this.chainPaused,
+      continueAt: this.continueAt,
       generation: this.generation,
       lastEventId: this.log.lastEventId,
     };
@@ -940,6 +945,8 @@ export class Chat implements CheckpointHost {
 
   async send(text: string, mode: SendMode, images: ImageAttachment[] = [], options: { compactFirst?: boolean } = {}): Promise<void> {
     this.assertOpen();
+    // A prompt of the user's own takes the place of a scheduled continuation.
+    this.clearContinue(true);
     if (options.compactFirst && mode === "normal" && this.adapter.capabilities.supportsCompact && this.status === "idle") {
       // Compaction reports its own failure as a notice; the message goes either way.
       await this.compact();
@@ -1012,6 +1019,57 @@ export class Chat implements CheckpointHost {
     if (this.chain.length === 0 || this.chainPaused) return;
     this.chainPaused = reason;
     this.emitChain();
+  }
+
+  /** setTimeout's ceiling; a longer wait re-arms when it fires. */
+  private static readonly MAX_TIMER_MS = 2 ** 31 - 1;
+
+  /**
+   * Carry this chat on once a usage limit resets (and once the limit's own window
+   * has passed, in the caller's read of it). The timer lives here, so it fires with
+   * every browser closed; any prompt of the user's own, a stop, or null calls it off.
+   */
+  scheduleContinue(at: number | null): void {
+    this.assertOpen();
+    this.clearContinue(false);
+    if (at === null) {
+      this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
+      return;
+    }
+    if (at <= Date.now()) throw new ChatError(400, "bad_continue", "That time has passed");
+    this.continueAt = at;
+    const wait = Math.min(at - Date.now(), Chat.MAX_TIMER_MS);
+    this.continueTimer = setTimeout(() => void this.runContinue(at), wait);
+    // A service that outlives its last browser must not be held open by this timer.
+    this.continueTimer.unref?.();
+    this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+
+  private async runContinue(at: number): Promise<void> {
+    this.continueTimer = undefined;
+    if (this.status === "disposed") return;
+    // setTimeout's ceiling, or a clock that moved: wait again rather than continue early.
+    if (Date.now() < at) {
+      this.scheduleContinue(at);
+      return;
+    }
+    this.continueAt = null;
+    this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
+    if (this.status !== "idle" && this.status !== "error") return;
+    try {
+      await this.send(CONTINUE_TEXT, "normal");
+    } catch (error) {
+      this.reducer.notice("error", `Could not continue: ${errorMessage(error)}`, true);
+    }
+  }
+
+  /** Drop a scheduled continuation, telling the clients when one was pending. */
+  private clearContinue(notify: boolean): void {
+    const pending = this.continueAt !== null || this.continueTimer !== undefined;
+    if (this.continueTimer) clearTimeout(this.continueTimer);
+    this.continueTimer = undefined;
+    this.continueAt = null;
+    if (pending && notify) this.reducer.emit({ type: "snapshot", snapshot: this.snapshot() });
   }
 
   /** The next step, once the events of the run that ended have gone out. */
@@ -1090,6 +1148,8 @@ export class Chat implements CheckpointHost {
 
   async abort(): Promise<void> {
     this.assertOpen();
+    // A stop calls off a continuation the user scheduled.
+    this.clearContinue(true);
     if (this.status !== "running" && this.status !== "compacting" && this.status !== "stopping") return;
     this.pauseChain("Stopped");
     this.setStatus("stopping");
@@ -1219,6 +1279,8 @@ export class Chat implements CheckpointHost {
 
   async dispose(reason: string): Promise<void> {
     if (this.status === "disposed") return;
+    // A closed chat keeps no timer.
+    this.clearContinue(false);
     for (const id of this.reducer.pendingIds()) this.reducer.resolveRequest(id, "Cancelled");
     this.reducer.flushNow();
     this.status = "disposed";

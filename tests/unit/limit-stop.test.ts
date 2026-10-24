@@ -1,7 +1,7 @@
 // A run stopped on a usage limit (limit-stop.ts), and when the limit resets.
 import { describe, expect, it } from "vitest";
 import type { ChatItem, UsageLimits } from "../../src/shared/protocol.js";
-import { limitStop, resetFromText } from "../../src/web/limit-stop.js";
+import { limitStop, resetFromText } from "../../src/shared/limit-stop.js";
 
 const user = (id: string, text: string): ChatItem => ({ kind: "user", id, text });
 const reply = (id: string, text: string, extra: Partial<ChatItem> = {}): ChatItem => ({ kind: "assistant", id, text, thinking: "", streaming: false, ...extra }) as ChatItem;

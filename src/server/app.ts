@@ -13,6 +13,7 @@ import {
   chatSearchSchema,
   checkpointCompareSchema,
   type CheckpointComparison,
+  continueAtSchema,
   compactSchema,
   createChatSchema,
   fileViewSchema,
@@ -846,6 +847,18 @@ export function createApp(deps: AppDeps) {
     res.status(202).json({ accepted: true });
   });
 
+  /**
+   * Carry a chat on after a usage limit resets. The timer is the server's, so it
+   * fires with every browser closed; the route is bounded a little under
+   * setTimeout's own ceiling (24.8 days), which is longer than any limit window.
+   */
+  app.post("/api/chats/:id/continue-at", (req, res) => {
+    const chat = manager.get(req.params.id);
+    const { at } = body(continueAtSchema, req);
+    if (at !== null && at > Date.now() + 24 * 86_400_000) throw new ChatError(400, "bad_continue", "That is further away than a month");
+    chat.scheduleContinue(at);
+    res.json({ ok: true, continueAt: chat.continueAt });
+  });
   app.post("/api/chats/:id/run", async (req, res) => {
     const chat = manager.get(req.params.id);
     const { command, shell } = body(runCommandSchema, req);

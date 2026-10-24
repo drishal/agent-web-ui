@@ -566,6 +566,8 @@ export interface ChatSnapshot {
   chain: ChainStep[];
   /** Why the chain waits (a run stopped or failed); null when it goes on by itself. */
   chainPaused: string | null;
+  /** When this chat was told to carry on after a usage limit resets: the timer is the server's, so no tab has to stay open. */
+  continueAt: number | null;
   generation: number;
   lastEventId: number;
 }
@@ -836,6 +838,9 @@ const chainStepSchema = z.discriminatedUnion("kind", [
 ]);
 
 /** A chat's whole chain, replaced; `resume` lets a paused one go on. */
+/** A usage-limit continuation: when to send "continue", or null to call it off. */
+export const continueAtSchema = z.object({ at: z.number().int().nullable() });
+
 export const chainSchema = z.object({
   steps: z.array(chainStepSchema).max(MAX_CHAIN_STEPS),
   resume: z.boolean().optional(),

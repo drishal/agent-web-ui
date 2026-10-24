@@ -3,7 +3,7 @@
 // (Claude Code's "…|<epoch>" or "resets 5pm") or, failing that, from the limits
 // the harness reports for its account. The composer shows when it resets and
 // can send "continue" then.
-import type { ChatItem, ChatStatus, UsageLimits } from "../shared/protocol.js";
+import type { ChatItem, ChatStatus, UsageLimits } from "./protocol.js";
 
 const LIMIT_TEXT = /usage limit|rate[ -]?limit|limit reached|hit your limit|out of (?:credits|quota)|quota exceeded|too many requests|\b429\b|resource[_ ]exhausted/i;
 /** What goes when it resets: the harness carries on from the cut. */

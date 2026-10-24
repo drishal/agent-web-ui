@@ -98,9 +98,14 @@ test("a run stopped on a usage limit says when it resets and can continue", asyn
   await expect(banner).toContainText("Usage limit reached");
   await expect(banner).toContainText("resets");
   await banner.getByRole("button", { name: "Continue when it resets" }).click();
-  await expect(banner).toContainText("keep this tab open");
-  await banner.getByRole("button", { name: "Cancel" }).click();
-  await banner.getByRole("button", { name: "Continue now" }).click();
+  // The appointment is the server's: it survives a reload, with no local state.
+  await expect(banner).toContainText("no tab has to stay open");
+  await page.reload();
+  const again = page.getByTestId("limit-recovery");
+  await expect(again).toContainText("no tab has to stay open");
+  await again.getByRole("button", { name: "Cancel" }).click();
+  await expect(again).toContainText("resets");
+  await again.getByRole("button", { name: "Continue now" }).click();
   await expect(page.getByTestId("user-prompt").last()).toHaveText("Continue from where you stopped.");
   await expect(banner).toBeHidden();
 });

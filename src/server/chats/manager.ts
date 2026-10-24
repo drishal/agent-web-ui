@@ -199,7 +199,8 @@ export class ChatManager {
     const now = Date.now();
     for (const chat of this.chats.values()) {
       const idle = chat.status === "idle" || chat.status === "error";
-      if (idle && chat.subscriberCount === 0 && now - chat.lastSeen > this.idleDisposeMs) {
+      // A chat waiting to continue after a usage limit stays open until it does.
+      if (idle && chat.continueAt === null && chat.subscriberCount === 0 && now - chat.lastSeen > this.idleDisposeMs) {
         await chat.dispose("Closed after being idle with no viewers").catch(() => undefined);
       }
     }

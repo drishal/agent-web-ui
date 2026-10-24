@@ -1,10 +1,10 @@
 // A run that stopped on a usage limit (T3 Code's recovery banner), above the
-// composer: when the limit resets, and a choice to send "continue" then, or
-// now. The scheduled continue lives in this browser (a timer and storage), so
-// it fires only while a tab of the chat is open; the banner says so.
-import { useEffect, useState } from "react";
+// composer: when the limit resets, and a choice to send "continue" then, or now.
+// The scheduled continue lives in the server (chat.scheduleContinue), so it fires
+// with every browser closed, and every device sees the same appointment.
+import { useState } from "react";
 import { IconGauge, IconX } from "../icons.js";
-import type { LimitStop } from "../limit-stop.js";
+import type { LimitStop } from "../../shared/limit-stop.js";
 import { resetsIn } from "../limits.js";
 import { useNow } from "../hooks.js";
 import { load, save } from "../storage.js";
@@ -12,33 +12,44 @@ import { Dot } from "./Dot.js";
 
 /** A little after the reset, so the first request does not race it. */
 const AFTER_RESET_MS = 20_000;
-/** setTimeout's ceiling; a longer wait re-arms. */
-const MAX_TIMER_MS = 2 ** 31 - 1;
 
-export function LimitRecovery({ chatId, stop, idle, onContinue }: { chatId: string; stop: LimitStop; idle: boolean; onContinue: () => void }) {
+export function LimitRecovery({
+  chatId,
+  stop,
+  idle,
+  continueAt,
+  onContinue,
+  onSchedule,
+}: {
+  chatId: string;
+  stop: LimitStop;
+  idle: boolean;
+  /** The server's appointment for this chat, if any (chat.scheduleContinue). */
+  continueAt: number | null;
+  onContinue: () => void;
+  onSchedule: (at: number | null) => Promise<void>;
+}) {
   const key = `recover.${chatId}`;
-  const [scheduled, setScheduled] = useState<{ id: string; at: number } | null>(() => load<{ id: string; at: number } | null>(key, null));
   const [dismissed, setDismissed] = useState(() => load<string | null>(`${key}.dismissed`, null) === stop.id);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const now = useNow(true, 30_000);
-  const mine = scheduled?.id === stop.id ? scheduled : null;
 
-  const schedule = (next: { id: string; at: number } | null) => {
-    setScheduled(next);
-    save(key, next);
+  const schedule = async (at: number | null) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSchedule(at);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  useEffect(() => {
-    if (!mine) return;
-    const timer = window.setTimeout(() => {
-      if (Date.now() < mine.at) return;
-      schedule(null);
-      if (idle) onContinue();
-    }, Math.min(MAX_TIMER_MS, Math.max(0, mine.at - Date.now())));
-    return () => window.clearTimeout(timer);
-  }, [mine?.at, now, idle]);
-
   if (dismissed) return null;
-  const when = stop.resetsAt === null ? null : new Date(stop.resetsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const at = continueAt ?? stop.resetsAt;
+  const when = at === null ? null : new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return (
     <div className="limit-recovery" role="status" data-testid="limit-recovery">
       <span className="limit-recovery-icon">
@@ -48,19 +59,22 @@ export function LimitRecovery({ chatId, stop, idle, onContinue }: { chatId: stri
         <strong>Usage limit reached</strong>
         <span className="muted">
           <Dot />
-          {mine ? `continues at ${when} — keep this tab open` : when ? `resets ${when} (${resetsIn(stop.resetsAt, now) ?? "soon"})` : "reset time unknown"}
+          {continueAt !== null
+            ? `continues at ${when} — no tab has to stay open`
+            : when
+              ? `resets ${when} (${resetsIn(stop.resetsAt as number, now) ?? "soon"})`
+              : "reset time unknown"}
+          {error ? ` · ${error}` : null}
         </span>
       </span>
-      {stop.resetsAt !== null ? (
-        mine ? (
-          <button type="button" className="btn btn-small btn-ghost" onClick={() => schedule(null)}>
-            Cancel
-          </button>
-        ) : (
-          <button type="button" className="btn btn-small" onClick={() => schedule({ id: stop.id, at: (stop.resetsAt as number) + AFTER_RESET_MS })}>
-            Continue when it resets
-          </button>
-        )
+      {continueAt !== null ? (
+        <button type="button" className="btn btn-small btn-ghost" disabled={busy} onClick={() => void schedule(null)}>
+          Cancel
+        </button>
+      ) : stop.resetsAt !== null ? (
+        <button type="button" className="btn btn-small" disabled={busy} onClick={() => void schedule((stop.resetsAt as number) + AFTER_RESET_MS)}>
+          Continue when it resets
+        </button>
       ) : null}
       <button type="button" className="btn btn-small btn-ghost" disabled={!idle} onClick={onContinue}>
         Continue now
@@ -72,7 +86,7 @@ export function LimitRecovery({ chatId, stop, idle, onContinue }: { chatId: stri
         onClick={() => {
           setDismissed(true);
           save(`${key}.dismissed`, stop.id);
-          schedule(null);
+          if (continueAt !== null) void schedule(null);
         }}
       >
         <IconX size={12} />

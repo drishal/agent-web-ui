@@ -24,7 +24,7 @@ import { useAddImagesToDraft, useAddToDraft, useLinkedPrompt } from "../draft-bu
 import { recallStep, sentPrompts, type Recall } from "../prompt-history.js";
 import { continueList, indentList } from "../list-continue.js";
 import { loadStash, saveStash, stashDraft, takeFromStash, type StashEntry } from "../stash.js";
-import { CONTINUE_TEXT, limitStop } from "../limit-stop.js";
+import { CONTINUE_TEXT, limitStop } from "../../shared/limit-stop.js";
 import { LimitRecovery } from "./LimitRecovery.js";
 import { useDismiss, useNow } from "../hooks.js";
 import { formatDuration } from "../turns.js";
@@ -560,7 +560,17 @@ export function Composer({
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
       {stopped && !busy && pending.length === 0 && !closed ? (
-        <LimitRecovery key={stopped.id} chatId={chat.chatId} stop={stopped} idle={!busy} onContinue={() => void onSend(CONTINUE_TEXT, "normal", [])} />
+        <LimitRecovery
+          key={stopped.id}
+          chatId={chat.chatId}
+          stop={stopped}
+          idle={!busy}
+          continueAt={chat.continueAt}
+          onContinue={() => void onSend(CONTINUE_TEXT, "normal", [])}
+          onSchedule={async (at) => {
+            await api<{ ok: boolean }>(`/api/chats/${chat.chatId}/continue-at`, { body: { at } });
+          }}
+        />
       ) : null}
       {pending.length > 0 ? (
         <ApprovalStack
