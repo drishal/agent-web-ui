@@ -225,6 +225,12 @@ export const IconImage = (p: IconProps) => (
     <path d="M2.5 11.5l3.25-3 2.5 2.25 2-1.75 3.25 2.75" />
   </Svg>
 );
+export const IconScreen = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1.5" />
+    <path d="M6 14h4M8 11v3" />
+  </Svg>
+);
 export const IconPlus = (p: IconProps) => (
   <Svg {...p}>
     <path d="M8 3v10M3 8h10" />

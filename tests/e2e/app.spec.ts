@@ -940,6 +940,66 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   await expect.poll(() => loaded(again)).toBe(true);
 });
 
+test("a window is captured straight into the composer, and a refusal is one line", async ({ page }) => {
+  // The real picker would hang the test: a canvas stream stands in for the screen.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+      configurable: true,
+      value: async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 32;
+        canvas.height = 18;
+        const context = canvas.getContext("2d") as CanvasRenderingContext2D;
+        context.fillStyle = "#7daea3";
+        context.fillRect(0, 0, 32, 18);
+        return canvas.captureStream(5);
+      },
+    });
+  });
+  await signInAndOpen(page);
+  await openChat(page);
+  const strip = page.getByRole("list", { name: "Attached images" });
+  const box = page.getByRole("textbox", { name: "Message" });
+  await page.getByRole("button", { name: "Capture a screenshot" }).click();
+  await expect(strip.getByRole("img")).toHaveCount(1);
+  await expect(strip.locator(".image-label strong")).toHaveText("#1");
+  await expect(strip.locator(".image-label span")).toHaveText("32×18");
+  await expect(box).toHaveAttribute("placeholder", "Say what to do with the image…");
+
+  // A capture that fails says why; closing the picker leaves no note at all.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+      configurable: true,
+      value: async () => {
+        throw new DOMException("Could not start video source", "NotReadableError");
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Capture a screenshot" }).click();
+  await expect(page.locator(".composer-note", { hasText: "Could not start video source" })).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+      configurable: true,
+      value: async () => {
+        throw new DOMException("closed", "NotAllowedError");
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Capture a screenshot" }).click();
+  await expect(page.locator(".composer-note")).toHaveCount(0);
+  await expect(strip.getByRole("img")).toHaveCount(1);
+});
+
+test("the capture button stays out of a browser that cannot capture", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", { configurable: true, value: undefined });
+  });
+  await signInAndOpen(page);
+  await openChat(page);
+  await expect(page.getByRole("button", { name: "Capture a screenshot" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Attach images" })).toBeVisible();
+});
+
 test("buttons show a Material ripple from the press point; reduced motion turns it off", async ({ page }) => {
   await signInAndOpen(page);
   const btn = page.getByRole("button", { name: "Refresh sessions" });

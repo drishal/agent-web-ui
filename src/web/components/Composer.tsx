@@ -11,8 +11,9 @@ import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
 import { blanks, matchPrompts, nextBlank, promptGist } from "../prompt-blanks.js";
 import { managePrompts, useSavedPrompts } from "../saved-prompts.js";
-import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconSpark, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconSpark, IconScreen, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
+import { canCaptureScreen, captureScreen } from "../screen-capture.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
@@ -85,6 +86,7 @@ export function Composer({
   const [gitOpen, setGitOpen] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState(false);
   // A big pasted blob the user chose to send as a file instead of inline text.
   const [pastes, setPastes] = useState<PasteAttachment[]>([]);
   // The oversized paste awaiting the user's choice (inline vs file).
@@ -103,6 +105,8 @@ export function Composer({
   const now = useNow(running);
   const runStart = running ? [...chat.items].reverse().find((i) => i.kind === "user")?.at : undefined;
   const closed = chat.status === "disposed";
+  // Capturing a window is a desktop gesture; on a phone the picker would offer the phone itself.
+  const canCapture = useMemo(() => canCaptureScreen() && !coarsePointer(), []);
 
   useEffect(() => {
     save(draftKey, text);
@@ -241,6 +245,20 @@ export function Composer({
     if (files.length > room) setImageError(`Up to ${MAX_IMAGES} images per message`);
     setImages((current) => [...current, ...added].slice(0, MAX_IMAGES));
     area.current?.focus();
+  };
+
+  // A window or screen, captured straight into the draft (screen-capture.ts).
+  const captureIntoComposer = async () => {
+    setImageError(null);
+    setCapturing(true);
+    try {
+      const file = await captureScreen();
+      if (file) await addImages([file]);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCapturing(false);
+    }
   };
   // Images from elsewhere: what another app shared to awui.
   useAddImagesToDraft((files) => void addImages(files), !side);
@@ -781,6 +799,19 @@ export function Composer({
                 e.target.value = "";
               }}
             />
+            {canCapture ? (
+              <button
+                type="button"
+                className="icon-btn composer-capture"
+                aria-label="Capture a screenshot"
+                title="Capture a window or screen into the message"
+                aria-busy={capturing || undefined}
+                disabled={closed || capturing || images.length >= MAX_IMAGES}
+                onClick={() => void captureIntoComposer()}
+              >
+                <IconScreen size={16} />
+              </button>
+            ) : null}
             <div className="stash" ref={stashRef}>
               <button
                 type="button"
