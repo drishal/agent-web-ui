@@ -60,6 +60,7 @@ import { HerdrDialog } from "./components/HerdrDialog.js";
 import { collectChanges } from "./review.js";
 import { copyResumeCommand, useResumeCommand } from "./resume-command.js";
 import { chatMarkdown, downloadText, exportFileName } from "./export.js";
+import { RoutinesDialog } from "./components/RoutinesDialog.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar, IconSplit } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
@@ -139,6 +140,7 @@ export function App() {
   /** The saved prompts' manager: open, perhaps starting a new prompt from a draft. */
   const [promptsOpen, setPromptsOpen] = useState<{ draft?: string } | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [routinesOpen, setRoutinesOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   /** A chat beside the main one (SidePane): what it starts on (null: its picker); `n` remounts it for a new one. */
   const [side, setSide] = useState<{ initial: ChatSnapshot | null; n: number } | null>(null);
@@ -1085,6 +1087,7 @@ export function App() {
       run: () => (side ? setSide(null) : void openBeside()),
     });
     items.push({ id: "usage", section: "Actions", label: "Usage across chats", hint: "tokens, cost", keywords: "spend dashboard stats", run: () => setUsageOpen(true) });
+    items.push({ id: "routines", section: "Actions", label: "Routines…", hint: "scheduled prompts", keywords: "schedule cron jobs recurring", run: () => setRoutinesOpen(true) });
     items.push({ id: "prompts", section: "Actions", label: "Saved prompts…", hint: "#", keywords: "templates snippets", run: () => setPromptsOpen({}) });
     items.push({ id: "open-file", section: "Actions", label: "Open a file…", hint: searchWorkspace?.name, keywords: "view read go to", disabled: searchWorkspace ? undefined : "Choose a project first", run: () => setViewer({ request: null }) });
     items.push({ id: "search-all", section: "Actions", label: "Search every chat", hint: shortcutHint("history-search"), keywords: "history find", run: () => setChatSearch("") });
@@ -1328,6 +1331,7 @@ export function App() {
         onClose={() => setDrawerOpen(false)}
         onCollapse={() => collapseSidebar(true)}
       />
+      {routinesOpen && boot ? <RoutinesDialog harnesses={available} workspaces={overview.workspaces} onClose={() => setRoutinesOpen(false)} /> : null}
       {settingsOpen ? (
         <SettingsDialog
           scheme={themeInfo?.source === "file" ? { name: themeInfo.name } : null}

@@ -1,0 +1,196 @@
+// Routines: a prompt on a cadence, in a project, on a harness. The server runs
+// them (the 30 s tick in index.ts) with no browser open; this dialog is how they
+// are made, turned off, and removed.
+import { useEffect, useState } from "react";
+import type { HarnessStatus, Routine, WorkspaceInfo } from "../../shared/protocol.js";
+import type { RoutineCadence } from "../../shared/routine-schedule.js";
+import { cadenceLabel } from "../../shared/routine-schedule.js";
+import { api, errorText } from "../api.js";
+import { IconX } from "../icons.js";
+import { Dialog } from "./Dialog.js";
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+type Kind = RoutineCadence["kind"];
+
+export function RoutinesDialog({ harnesses, workspaces, onClose }: { harnesses: HarnessStatus[]; workspaces: WorkspaceInfo[]; onClose: () => void }) {
+  const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [harnessId, setHarnessId] = useState(harnesses[0]?.id ?? "");
+  const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
+  const [kind, setKind] = useState<Kind>("daily");
+  const [time, setTime] = useState("09:00");
+  const [minute, setMinute] = useState(0);
+  const [weekday, setWeekday] = useState(1);
+
+  const load = async () => {
+    try {
+      setRoutines((await api<{ routines: Routine[] }>("/api/routines")).routines);
+    } catch (failure) {
+      setError(errorText(failure));
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const cadence = (): RoutineCadence => {
+    if (kind === "hourly") return { kind: "hourly", minute };
+    const [h, m] = time.split(":").map(Number);
+    const hour = h ?? 9;
+    const at = m ?? 0;
+    return kind === "weekly" ? { kind: "weekly", weekday, hour, minute: at } : { kind, hour, minute: at };
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api<Routine>("/api/routines", { method: "PUT", body: { name: name.trim(), prompt: prompt.trim(), harnessId, workspaceId, cadence: cadence() } });
+      setName("");
+      setPrompt("");
+      await load();
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** The PUT replaces the whole routine, so the row's fields go back with a new flag. */
+  const setEnabled = async (routine: Routine, enabled: boolean) => {
+    setError(null);
+    // The checkbox answers at once; the PUT confirms it, and a failure reloads the
+    // truth rather than leaving the row saying something the server does not.
+    setRoutines((current) => current?.map((r) => (r.id === routine.id ? { ...r, enabled } : r)) ?? current);
+    try {
+      await api("/api/routines", { method: "PUT", body: { id: routine.id, name: routine.name, prompt: routine.prompt, harnessId: routine.harnessId, workspaceId: routine.workspaceId, cadence: routine.cadence, enabled } });
+      await load();
+    } catch (failure) {
+      setError(errorText(failure));
+      await load();
+    }
+  };
+
+  const remove = async (routine: Routine) => {
+    setError(null);
+    try {
+      await api(`/api/routines/${encodeURIComponent(routine.id)}`, { method: "DELETE" });
+      await load();
+    } catch (failure) {
+      setError(errorText(failure));
+    }
+  };
+
+  const canSave = Boolean(name.trim() && prompt.trim() && harnessId && workspaceId) && !busy;
+
+  return (
+    <Dialog title="Routines" onClose={onClose} className="routines">
+      <div className="routines-body">
+        {routines === null ? <p className="muted">Loading…</p> : null}
+        {routines?.length === 0 ? <p className="muted">No routines yet.</p> : null}
+        {routines && routines.length > 0 ? (
+          <ul className="routines-list" aria-label="Routines">
+            {routines.map((routine) => (
+              <li key={routine.id} className="routine-row">
+                <label className="routine-main">
+                  <input type="checkbox" checked={routine.enabled} aria-label={`Enable ${routine.name}`} onChange={(e) => void setEnabled(routine, e.target.checked)} />
+                  <span className="routine-name">{routine.name}</span>
+                  <span className="routine-when">
+                    {cadenceLabel(routine.cadence)} · next {new Date(routine.nextRunAt).toLocaleString()}
+                  </span>
+                </label>
+                <button type="button" className="icon-btn" aria-label={`Delete ${routine.name}`} onClick={() => void remove(routine)}>
+                  <IconX size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <form
+          className="routines-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSave) void save();
+          }}
+        >
+          <h3>New routine</h3>
+          <input className="input" aria-label="Routine name" placeholder="Nightly review" value={name} onChange={(e) => setName(e.target.value)} />
+          <textarea className="input" aria-label="Prompt" rows={3} placeholder="Review today's commits and list what needs me." value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+          <div className="routines-picks">
+            <label>
+              Project
+              <select aria-label="Project" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Agent
+              <select aria-label="Agent" value={harnessId} onChange={(e) => setHarnessId(e.target.value)}>
+                {harnesses.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="routines-picks">
+            <label>
+              When
+              <select aria-label="When" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+                <option value="weekdays">Weekdays</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </label>
+            {kind === "hourly" ? (
+              <label>
+                Minute
+                <input type="number" min={0} max={59} aria-label="Minute" value={minute} onChange={(e) => setMinute(Math.max(0, Math.min(59, Number(e.target.value) || 0)))} />
+              </label>
+            ) : (
+              <label>
+                At
+                <input type="time" aria-label="At" value={time} onChange={(e) => setTime(e.target.value)} />
+              </label>
+            )}
+            {kind === "weekly" ? (
+              <label>
+                Day
+                <select aria-label="Day" value={weekday} onChange={(e) => setWeekday(Number(e.target.value))}>
+                  {WEEKDAYS.map((day, index) => (
+                    <option key={day} value={index}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+          {error ? (
+            <p className="routines-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="dialog-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              Close
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={!canSave}>
+              Add routine
+            </button>
+          </div>
+        </form>
+      </div>
+    </Dialog>
+  );
+}
