@@ -1572,3 +1572,29 @@
 .rail-mark:focus-visible .rail-preview {
   opacity: 1;
 }
+
+/* A tool's whole output, in a sheet of its own (OutputPanel). */
+.tool-full {
+  margin-top: 6px;
+}
+
+.output-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.output-body {
+  margin: 0;
+  max-height: 70dvh;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--code-bg);
+  font: 12.5px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1186,3 +1186,30 @@ test("a chat's link opens it in its own project, in a browser that never chose o
   await expect(fresh.locator(".project-name", { hasText: "beta" })).toBeVisible();
   await context.close();
 });
+
+test("a tool's full output opens in its own sheet, with Copy", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "hello tool");
+  await openFold(page);
+  // A tool row's body (and its button) shows once that row is opened; take the first with output.
+  const rows = page.getByTestId("tool-row");
+  const count = await rows.count();
+  let opened = false;
+  for (let i = 0; i < count && !opened; i++) {
+    const row = rows.nth(i);
+    await row.getByRole("button").first().click();
+    const button = row.getByRole("button", { name: "Full output" });
+    if ((await button.count()) > 0) {
+      await button.click();
+      opened = true;
+    }
+  }
+  expect(opened).toBe(true);
+  const sheet = page.getByRole("dialog", { name: /^Output · / });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator(".output-body")).not.toBeEmpty();
+  await expect(sheet.getByRole("button", { name: "Copy" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+});

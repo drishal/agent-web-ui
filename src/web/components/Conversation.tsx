@@ -19,6 +19,7 @@ import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
 import { useLongPress } from "../gestures.js";
 import { ActionSheet, type SheetAction } from "./ActionSheet.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
+import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
@@ -135,6 +136,8 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const arrival = useArrival(item.id);
   // Seen running: its icon change (spinner to done) animates.
   const [live] = useState(item.status === "running");
+  // The full-output sheet, which follows the item as its output streams in.
+  const [full, setFull] = useState(false);
   return (
     <div className={`tool-row${arrival}${live ? " is-live" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
       <DisclosureRow
@@ -167,9 +170,24 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
         {item.subagents ? (
           <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
         ) : (
-          <ToolBody item={item} workspace={workspace} />
+          <>
+            <ToolBody item={item} workspace={workspace} />
+            {item.output ? (
+              <button
+                type="button"
+                className="btn btn-small btn-ghost tool-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFull(true);
+                }}
+              >
+                Full output
+              </button>
+            ) : null}
+          </>
         )}
       </DisclosureRow>
+      {full ? <OutputPanel title={toolLabel(item.name)} output={item.output ?? ""} onClose={() => setFull(false)} /> : null}
     </div>
   );
 });
