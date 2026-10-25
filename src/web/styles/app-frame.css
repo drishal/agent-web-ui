@@ -16,6 +16,11 @@
   background: var(--bg);
 }
 
+/* Settings can hide the bar; the grid's last row then takes no height. */
+.app.no-status-bar .status-bar {
+  display: none;
+}
+
 .status-bar {
   grid-column: 1 / -1;
   display: flex;

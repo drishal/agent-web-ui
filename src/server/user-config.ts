@@ -17,6 +17,8 @@ export interface UiSettings {
   /** null: no preference, so a theme.yml is used when present. */
   theme: ThemeChoice | null;
   autocollapseSidebar: boolean;
+  /** Show the bar under the conversation (connection, harness, model, folder, version). */
+  showStatusBar: boolean;
   /** Shared chat text size; null: the 100% default. */
   textScale: number | null;
   /** Shared conversation width; null: comfortable. */
@@ -50,6 +52,8 @@ const schema = z
     allowed_tailscale_users: z.array(z.string()).optional(),
     theme: themeChoiceSchema.optional(),
     autocollapse_sidebar: z.boolean().optional(),
+    /** Show the bar under the conversation; on unless false. */
+    show_status_bar: z.boolean().optional(),
     /** Shared chat text size (a scale on the 14.5px base); null when unset. */
     text_scale: z.number().min(0.5).max(2).optional(),
     /** Shared conversation width: comfortable (960px), wide (1400px), or full. */
@@ -178,5 +182,12 @@ export function herdrEnabled(c: UserConfig | undefined, env: NodeJS.ProcessEnv =
 
 export function uiSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv = process.env): UiSettings {
   const theme = c?.theme === "custom" ? "base16" : (c?.theme ?? null);
-  return { theme, autocollapseSidebar: c?.autocollapse_sidebar ?? true, textScale: c?.text_scale ?? null, chatWidth: c?.chat_width ?? null, herdr: herdrEnabled(c, env) };
+  return {
+    theme,
+    autocollapseSidebar: c?.autocollapse_sidebar ?? true,
+    showStatusBar: c?.show_status_bar ?? true,
+    textScale: c?.text_scale ?? null,
+    chatWidth: c?.chat_width ?? null,
+    herdr: herdrEnabled(c, env),
+  };
 }

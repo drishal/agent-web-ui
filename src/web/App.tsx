@@ -1325,7 +1325,7 @@ export function App() {
 
   return (
     <div
-      className={`app${collapsed ? " is-collapsed" : ""}${sidebarToggling ? " is-toggling" : ""}`}
+      className={`app${collapsed ? " is-collapsed" : ""}${sidebarToggling ? " is-toggling" : ""}${boot && !boot.ui.showStatusBar ? " no-status-bar" : ""}`}
       style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}
     >
       <Sidebar

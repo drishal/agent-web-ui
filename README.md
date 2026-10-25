@@ -80,7 +80,7 @@ then restart. Other devices get a sign-in form; this machine still opens directl
 
 ### Configuration (`~/.config/awui`)
 
-**`config.yml`** (YAML, so it can carry comments; every key optional). It is read at startup; `theme`, `text_scale`, `chat_width`, `autocollapse_sidebar`, and `herdr` are re-read on every page load. An unknown key or a wrong type stops the server with the key named (exit 78, which the autostart unit does not retry), rather than being guessed at.
+**`config.yml`** (YAML, so it can carry comments; every key optional). It is read at startup; `theme`, `text_scale`, `chat_width`, `autocollapse_sidebar`, `show_status_bar`, and `herdr` are re-read on every page load. An unknown key or a wrong type stops the server with the key named (exit 78, which the autostart unit does not retry), rather than being guessed at.
 
 The **Settings** dialog (gear left of the collapse button) edits the same file: the shared look (theme, chat text size, chat width), pairing and sign-out, and every key below but `harnesses`. The server checks a save exactly as startup checks the file, so it can never leave a server that will not start; port, host, login, roots, and allowed hosts/users wait for a restart (with a Restart button when systemd supervises). Any signed-in device may change them, except a change that would shut that device out once it applies (a LAN phone switching `host` to `127.0.0.1`, a Tailscale Serve device dropping its own host name or login from the allow lists): that one is refused and has to be made on the machine running the server. A setting an environment variable overrides is shown as such and cannot be changed from the file.
 
@@ -96,6 +96,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
 | `text_scale` | `1` | Shared chat text size (a scale on the 14.5px base, 0.5–2). |
 | `chat_width` | `comfortable` | How wide the conversation and composer run: `comfortable` (960 px), `wide` (1400 px), or `full` (the whole pane). Review drawers keep their own width. |
 | `autocollapse_sidebar` | `true` | Fold the sidebar away below 1200 px wide (phones use the drawer anyway); a sidebar collapsed with its button stays collapsed at any width. |
+| `show_status_bar` | `true` | Show the bar under the conversation (connection, harness, model, folder, version); `false` hides it, as phones do already. |
 | `herdr` | `true` | Work with [herdr](#with-herdr): mark the sessions open in its panes (and show one there rather than start a second harness on it), and let atui in a herdr pane report its chats. Nothing happens where herdr does not run. |
 | `herdr_socket` | herdr's default session's | herdr's API socket (`~/` is expanded), for a named herdr session: `~/.config/herdr/sessions/<name>/herdr.sock`. File-only, read at startup. |
 | `harnesses.<pi\|omp\|claude\|hermes\|opencode\|grok>.command` | the name on `PATH` | The harness's executable (`~/` is expanded), e.g. a dev build. The Awui harness runs Pi's. |

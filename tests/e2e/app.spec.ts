@@ -40,6 +40,25 @@ test("settings opens from the sidebar gear and shows pairing plus the server", a
   await expect(settings).toBeHidden();
 });
 
+test("the status bar can be hidden", async ({ page }) => {
+  await signInAndOpen(page);
+  const bar = page.locator(".status-bar");
+  await expect(bar).toBeVisible();
+  // Settings' show_status_bar reaches the page in the bootstrap. The e2e server's
+  // config.yml is read-only, so the flag arrives stubbed here; the file's round trip
+  // is settings.test.ts's.
+  await page.route("**/api/bootstrap", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { ui: Record<string, unknown> };
+    await route.fulfill({ response: res, json: { ...body, ui: { ...body.ui, showStatusBar: false } } });
+  });
+  await page.reload();
+  await expect(bar).toBeHidden();
+  await page.unroute("**/api/bootstrap");
+  await page.reload();
+  await expect(bar).toBeVisible();
+});
+
 test("a new chat opens as a hero composer; a turn folds its work above a plain answer", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

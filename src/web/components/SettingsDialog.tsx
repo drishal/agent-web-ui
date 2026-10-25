@@ -84,6 +84,7 @@ interface Draft {
   textScale: number;
   chatWidth: ChatWidth;
   autocollapseSidebar: boolean;
+  showStatusBar: boolean;
   herdr: boolean;
 }
 
@@ -101,6 +102,7 @@ function draftOf(v: ServerSettingsValues): Draft {
     textScale: v.textScale ?? 1,
     chatWidth: v.chatWidth ?? "comfortable",
     autocollapseSidebar: v.autocollapseSidebar,
+    showStatusBar: v.showStatusBar,
     herdr: v.herdr,
   };
 }
@@ -124,6 +126,7 @@ function patchOf(d: Draft, v: ServerSettingsValues): SettingsPatch {
   const width = d.chatWidth === "comfortable" ? null : d.chatWidth;
   if (width !== v.chatWidth) p.chatWidth = width;
   if (d.autocollapseSidebar !== v.autocollapseSidebar) p.autocollapseSidebar = d.autocollapseSidebar;
+  if (d.showStatusBar !== v.showStatusBar) p.showStatusBar = d.showStatusBar;
   if (d.herdr !== v.herdr) p.herdr = d.herdr;
   return p;
 }
@@ -193,12 +196,20 @@ export function SettingsDialog({
       setServer(next);
       setDraft(draftOf(next.values));
       setSaved(true);
-      if (patch.theme !== undefined || patch.textScale !== undefined || patch.chatWidth !== undefined || patch.autocollapseSidebar !== undefined || patch.herdr !== undefined) {
+      if (
+        patch.theme !== undefined ||
+        patch.textScale !== undefined ||
+        patch.chatWidth !== undefined ||
+        patch.autocollapseSidebar !== undefined ||
+        patch.showStatusBar !== undefined ||
+        patch.herdr !== undefined
+      ) {
         onUiSaved({
           theme: next.values.theme,
           textScale: next.values.textScale,
           chatWidth: next.values.chatWidth,
           autocollapseSidebar: next.values.autocollapseSidebar,
+          showStatusBar: next.values.showStatusBar,
           ...(patch.herdr !== undefined ? { herdr: next.values.herdr } : {}),
         });
       }
@@ -346,7 +357,7 @@ export function SettingsDialog({
             ? "This server runs without a settings folder, so there is nothing to save to."
             : server && !server.editable
               ? "These live in config.yml on the machine running the server; change them there."
-              : "Saved to config.yml for every device. Theme, text size, chat width, sidebar, and herdr apply here at once and on other devices on their next page load (atui on its next start); the rest when the server restarts."}
+              : "Saved to config.yml for every device. Theme, text size, chat width, sidebar, status bar, and herdr apply here at once and on other devices on their next page load (atui on its next start); the rest when the server restarts."}
         </p>
         {!draft ? (
           error ? null : <p className="settings-note">Loading…</p>
@@ -421,6 +432,10 @@ export function SettingsDialog({
             <label className="settings-row settings-check">
               <input type="checkbox" disabled={!editable} checked={draft.autocollapseSidebar} onChange={(e) => update({ autocollapseSidebar: e.target.checked })} />
               <span>Fold the sidebar away in narrow windows</span>
+            </label>
+            <label className="settings-row settings-check">
+              <input type="checkbox" disabled={!editable} checked={draft.showStatusBar} onChange={(e) => update({ showStatusBar: e.target.checked })} />
+              <span>Show the status bar under the conversation (connection, harness, model, folder, version)</span>
             </label>
             <label className="settings-row settings-check">
               <input type="checkbox" disabled={field("herdr")} checked={draft.herdr} onChange={(e) => update({ herdr: e.target.checked })} />

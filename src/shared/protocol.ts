@@ -623,7 +623,7 @@ export interface Bootstrap {
   home: string;
   theme: { active: string; problem?: string };
   /** From config.yml: the shared look (theme null lets theme.yml decide, scale null is 100%). Re-read on every page load. */
-  ui: { theme: ThemeChoice | null; textScale: number | null; chatWidth: ChatWidth | null; autocollapseSidebar: boolean; herdr: boolean };
+  ui: { theme: ThemeChoice | null; textScale: number | null; chatWidth: ChatWidth | null; autocollapseSidebar: boolean; showStatusBar: boolean; herdr: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -1054,6 +1054,8 @@ export interface ServerSettingsValues {
   /** null is comfortable. */
   chatWidth: ChatWidth | null;
   autocollapseSidebar: boolean;
+  /** Show the bar under the conversation (connection, harness, model, folder, version). */
+  showStatusBar: boolean;
   /** Work with herdr: mark the sessions open in its panes, and let atui report to them. */
   herdr: boolean;
 }
@@ -1090,6 +1092,7 @@ export const settingsPatchSchema = z
     textScale: z.number().min(0.5).max(2).nullable().optional(),
     chatWidth: chatWidthSchema.nullable().optional(),
     autocollapseSidebar: z.boolean().optional(),
+    showStatusBar: z.boolean().optional(),
     herdr: z.boolean().optional(),
   })
   .strict();
