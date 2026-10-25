@@ -9,6 +9,8 @@ describe("the viewer's preview offer", () => {
     expect(previewKind("docs/Guide.MD")).toBe("markdown");
     expect(previewKind("notes/a.markdown")).toBe("markdown");
     expect(previewKind("dir.with.dots/x.md")).toBe("markdown");
+    expect(previewKind("page.html")).toBe("html");
+    expect(previewKind("a/b/Index.HTM")).toBe("html");
   });
 
   it("is nothing for source, a dotfile, or a name ending in a dot", () => {

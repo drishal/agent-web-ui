@@ -302,3 +302,22 @@ test("a Markdown file opens as source, then as the page it describes", async ({ 
   await expect(viewer.getByRole("heading", { name: "Notes", exact: true })).toHaveCount(0);
   await expect(viewer).toContainText("**bold**");
 });
+
+test("an HTML file previews with its scripts switched off", async ({ page, request }) => {
+  const root = process.env.AWUI_E2E_ROOT as string;
+  const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
+  const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
+  await page.goto(`/#chat=${chat.chatId}`);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
+  await page.keyboard.press("Enter");
+  const picker = page.getByRole("dialog", { name: "Open a file" });
+  await picker.getByRole("searchbox", { name: "Go to file" }).fill("page");
+  await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
+  const viewer = page.getByRole("dialog", { name: "File page.html" });
+  await viewer.getByRole("button", { name: "Preview" }).click();
+  const frame = viewer.frameLocator("iframe");
+  await expect(frame.getByRole("heading", { name: "Preview" })).toBeVisible();
+  // sandbox="" has no allow-scripts: the page's own script never runs.
+  await expect(frame.locator("body")).not.toHaveAttribute("data-ran", "1");
+});

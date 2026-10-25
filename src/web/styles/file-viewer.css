@@ -222,6 +222,13 @@
   line-height: 1.6;
 }
 
+.viewer-frame {
+  width: 100%;
+  height: 70dvh;
+  border: 0;
+  background: var(--surface);
+}
+
 .viewer-prose {
   max-width: 860px;
   padding: 18px 22px 48px;

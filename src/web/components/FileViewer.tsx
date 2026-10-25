@@ -203,7 +203,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
 
   const path = view?.path ?? shown?.path ?? "";
   const preview = view ? previewKind(view.path) : null;
-  const showPreview = preview === "markdown" && rendered === path && Boolean(view?.text) && !view?.binary;
+  const showPreview = preview !== null && rendered === path && Boolean(view?.text) && !view?.binary;
   const cut = path.lastIndexOf("/") + 1;
   const mention = () => {
     addToDraft(`@${path}${marked ? `:${marked}` : ""}`);
@@ -259,7 +259,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
               </span>
             ) : null}
             <span className="viewer-actions">
-              {preview === "markdown" ? (
+              {preview !== null ? (
                 <span className="viewer-toggle" role="group" aria-label="View">
                   <button type="button" aria-pressed={!showPreview} onClick={() => setRendered(null)}>
                     Code
@@ -297,9 +297,14 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
               <Spinner size={13} /> Opening…
             </p>
           ) : showPreview ? (
-            <div className="viewer-prose">
-              <Markdown text={view.text ?? ""} />
-            </div>
+            preview === "html" ? (
+              // No allow-scripts: a project page must not run with this origin.
+              <iframe className="viewer-frame" sandbox="" title={path} srcDoc={view.text ?? ""} />
+            ) : (
+              <div className="viewer-prose">
+                <Markdown text={view.text ?? ""} />
+              </div>
+            )
           ) : view.binary ? (
             <p className="viewer-empty muted">A binary file ({bytes(view.size)}): nothing to show as text.</p>
           ) : (

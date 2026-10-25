@@ -24,6 +24,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   writeFileSync(path.join(gitProject, "hello.txt"), "one\ntwo\n");
   writeFileSync(path.join(gitProject, "new.txt"), "new\n");
   // A Markdown file for the viewer's rendered preview (unified.spec.ts).
+  writeFileSync(path.join(gitProject, "page.html"), '<!doctype html><h1>Preview</h1><script>document.body.dataset.ran = "1";</script>\n');
   writeFileSync(path.join(gitProject, "notes.md"), "# Notes\n\nSome **bold** words and a [link](https://example.com).\n");
   const themeFile = path.join(base, "theme.yaml");
   copyFileSync(path.join(import.meta.dirname, "..", "fixtures", "themes", "stylix.yaml"), themeFile);
