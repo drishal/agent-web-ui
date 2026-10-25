@@ -115,6 +115,8 @@ describe("buildTurns", () => {
 
   it("formats counts, durations, and workspace-relative paths", () => {
     expect(countSummary({ read: 3, edit: 1, command: 2 })).toBe("3 reads, 1 edit, 2 commands");
+    // More than three reads as one line: the open fold lists the rest.
+    expect(countSummary({ read: 1, search: 1, edit: 2, write: 1, command: 1, web: 1, other: 2 })).toBe("1 read, 1 search, 2 edits, …");
     expect(formatDuration(65_000)).toBe("1m 5s");
     expect(formatDuration(3_720_000)).toBe("1h 2m");
     expect(relativePath("/w/src/a.ts", "/w")).toBe("src/a.ts");

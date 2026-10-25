@@ -1265,6 +1265,9 @@ export function App() {
   const hasPrompt = chat ? chat.items.some((i) => i.kind === "user") : false;
   /** The chat being opened names the header until it is shown. */
   const heading = splash && !splash.leaving ? splash.target : null;
+  // The app's name is the sidebar's; the header names what is open, or nothing on
+  // the start screen (its own heading is right below).
+  const headerTitle = chat ? chat.title || "New chat" : harnessId === "awui" || !workspace ? "" : workspace.name;
 
   return (
     <div
@@ -1417,7 +1420,7 @@ export function App() {
               </>
             ) : (
               <>
-                <h1>{chat ? chat.title || "New chat" : harnessId === "awui" ? "awui" : workspace ? workspace.name : "awui"}</h1>
+                {headerTitle ? <h1>{headerTitle}</h1> : null}
                 {chat ? (
                   <div className="chat-sub">
                     <span className="badge badge-harness" style={harnessColor(chat.harnessId)}>

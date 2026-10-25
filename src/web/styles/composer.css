@@ -334,6 +334,23 @@
   margin-top: 6px;
 }
 
+/* A phone: the actions ride with the icons, so the four flags take one row rather
+   than making a third. The card loses ~34 px of height on a 390 px screen. */
+@media (max-width: 600px) {
+  .composer-bar {
+    row-gap: 6px;
+  }
+
+  .composer-bar .composer-actions {
+    order: 1;
+  }
+
+  .composer-bar .composer-controls {
+    order: 2;
+    flex-basis: 100%;
+  }
+}
+
 .composer-controls {
   display: flex;
   align-items: center;
@@ -432,7 +449,9 @@
 }
 
 .round-btn:disabled {
-  opacity: 0.28;
+  background: var(--hover);
+  color: var(--muted-text);
+  cursor: default;
 }
 
 .context-ring-wrap {

@@ -225,7 +225,8 @@ export function countSummary(counts: Turn["counts"]): string {
     const n = counts[key] ?? 0;
     if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`);
   }
-  return parts.join(", ");
+  // One quiet line: the first three counts, and the open fold for everything else.
+  return parts.length > 3 ? `${parts.slice(0, 3).join(", ")}, …` : parts.join(", ");
 }
 
 export function formatDuration(ms: number): string {

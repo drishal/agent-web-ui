@@ -103,7 +103,7 @@ test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", a
   await expect(tool("TodoWrite").locator(".todo-card-row.is-done")).toHaveText("Normalize each harness's diff");
   await expect(tool("TodoWrite").locator(".todo-card-row.is-active")).toHaveText("Ship the diff view");
   await expect(tool("todo_write").locator(".drow-summary")).toHaveText("Done: Normalize each harness's diff, Ship the diff view");
-  await expect(page.getByTestId("process-toggle").last()).toContainText("1 file written");
+  await expect(page.getByTestId("process-toggle").last()).toContainText("1 read, 1 search, 1 edit, …");
 });
 
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
