@@ -220,10 +220,13 @@ test("a chat's harness can be restarted without losing the conversation", async 
   await signInAndOpen(page);
   await newChat(page);
   await sendAndWait(page, "restart me");
+  const before = await page.evaluate(() => location.hash);
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("restart agent");
   await page.keyboard.press("Enter");
-  // The same conversation, now on a new harness process, still takes a prompt.
+  // The restart replaces the chat: its URL names the new one, and the old chat is
+  // "Idle" too, so wait for the id rather than for the status.
+  await expect.poll(() => page.evaluate(() => location.hash), { timeout: 20_000 }).not.toBe(before);
   await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
   await expect(page.getByTestId("user-prompt").last()).toHaveText("restart me");
   await sendAndWait(page, "after the restart");
