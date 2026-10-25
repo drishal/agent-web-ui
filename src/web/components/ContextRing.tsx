@@ -24,8 +24,8 @@ function duration(ms: number): string {
 
 /** Category colours: the system prompt grey, tools purple, messages blue (DeepSeek Harness), the rest after. */
 const SWATCH: Record<string, string> = {
-  system: "var(--muted)",
-  "system-prompt": "var(--muted)",
+  system: "var(--muted-text)",
+  "system-prompt": "var(--muted-text)",
   tools: "var(--thinking)",
   "system-tools": "var(--thinking)",
   messages: "var(--link)",
@@ -100,7 +100,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
         onClick={() => setOpen((v) => !v)}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-          <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeOpacity="0.22" strokeWidth="2" />
+          <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="2" />
           <circle
             cx="8"
             cy="8"
