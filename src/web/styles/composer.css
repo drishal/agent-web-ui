@@ -336,6 +336,33 @@
 
 /* A phone: the actions ride with the icons, so the four flags take one row rather
    than making a third. The card loses ~34 px of height on a 390 px screen. */
+
+/* On a wide screen the pickers sit on this row; a phone hides it for one chip. */
+.composer-pickers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Two classes: `.pill-trigger` in the pickers' stylesheet also sets a display. */
+.composer-controls .composer-config-chip {
+  display: none;
+  gap: 8px;
+  min-width: 0;
+  max-width: none;
+  padding: 0 10px 0 12px;
+}
+
+.composer-config-chip .config-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @media (max-width: 600px) {
   .composer-bar {
     row-gap: 6px;
@@ -349,6 +376,16 @@
     order: 2;
     flex-basis: 100%;
   }
+  .composer-pickers {
+    display: none;
+  }
+
+  /* One chip in their place: the values on one line, the settings sheet behind it. */
+  .composer-controls .composer-config-chip {
+    display: inline-flex;
+    width: 100%;
+    height: 40px;
+  }
 }
 
 .composer-controls {
@@ -357,6 +394,80 @@
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+}
+
+/* The sheet the chip opens: the harness list, then one row per picker, and each
+   picker keeps its own phone sheet. */
+.config-section-title {
+  margin: 2px 0 6px;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.config-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.config-choice:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.config-choice:disabled {
+  opacity: 0.55;
+}
+
+/* The chat's own harness is disabled (no handoff to itself) but still the one
+   being described, so it stays at full strength. */
+.config-choice[aria-current="true"] {
+  opacity: 1;
+}
+
+.config-choice .harness-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.config-choice-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.config-choice-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.config-choice-note {
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  border-top: 1px solid var(--hairline);
+}
+
+.config-row-label {
+  font-size: 14px;
 }
 
 .pill-select {

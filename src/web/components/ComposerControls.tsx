@@ -4,19 +4,16 @@
 import { useState } from "react";
 import type { ChatState } from "../chat-state.js";
 import type { ConfigPatch, HarnessStatus } from "../../shared/protocol.js";
+import { configSummary } from "../config-summary.js";
+import { handoffChoice } from "../handoff.js";
+import { harnessColor } from "../harness-colors.js";
+import { IconChevronDown } from "../icons.js";
+import { ConfigSheet } from "./ConfigSheet.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { PermissionPicker } from "./PermissionPicker.js";
 import { ThinkingPicker } from "./ThinkingPicker.js";
 
-/**
- * A handoff target: a harness that keeps past turns gets a copy of the
- * conversation; any other continues from a summary sent as its first prompt.
- */
-function handoffChoice(h: HarnessStatus) {
-  if (!h.available) return { harness: h, blocked: h.reason ?? "Not available" };
-  return { harness: h, blocked: null, note: h.capabilities.supportsHandoff ? "Copies the conversation" : "Continues from a summary" };
-}
 
 /**
  * The composer's harness chip: the chat's harness, and a menu of the others to
@@ -61,35 +58,61 @@ export function ComposerControls({
   const caps = chat.capabilities;
   const idle = chat.status === "idle" || chat.status === "error";
   const { config } = chat;
+  const [settings, setSettings] = useState(false);
 
   return (
     <div className="composer-controls">
-      <HandoffChip chat={chat} harnesses={harnesses} onHandoff={onHandoff} />
-      {caps.supportsModelSelection ? (
-        <ModelPicker
-          models={config.models}
-          current={config.model}
-          harnessId={chat.harnessId}
-          disabled={!idle}
-          onSelect={(model) => void onConfig({ model })}
-          onRefresh={onRefreshModels}
-        />
-      ) : null}
-      {caps.supportsThinkingLevel && config.thinkingLevels.length > 0 ? (
-        <ThinkingPicker
-          levels={config.thinkingLevels}
-          current={config.thinkingLevel}
-          sent={config.thinkingSent ?? null}
-          disabled={!idle}
-          onSelect={(thinkingLevel) => void onConfig({ thinkingLevel })}
-        />
-      ) : null}
-      {caps.supportsPermissionMode && config.permissionModes?.length ? (
-        <PermissionPicker
-          modes={config.permissionModes}
-          current={config.permissionMode ?? null}
-          disabled={chat.status === "disposed"}
-          onSelect={(permissionMode) => void onConfig({ permissionMode })}
+      <div className="composer-pickers">
+        <HandoffChip chat={chat} harnesses={harnesses} onHandoff={onHandoff} />
+        {caps.supportsModelSelection ? (
+          <ModelPicker
+            models={config.models}
+            current={config.model}
+            harnessId={chat.harnessId}
+            disabled={!idle}
+            onSelect={(model) => void onConfig({ model })}
+            onRefresh={onRefreshModels}
+          />
+        ) : null}
+        {caps.supportsThinkingLevel && config.thinkingLevels.length > 0 ? (
+          <ThinkingPicker
+            levels={config.thinkingLevels}
+            current={config.thinkingLevel}
+            sent={config.thinkingSent ?? null}
+            disabled={!idle}
+            onSelect={(thinkingLevel) => void onConfig({ thinkingLevel })}
+          />
+        ) : null}
+        {caps.supportsPermissionMode && config.permissionModes?.length ? (
+          <PermissionPicker
+            modes={config.permissionModes}
+            current={config.permissionMode ?? null}
+            disabled={chat.status === "disposed"}
+            onSelect={(permissionMode) => void onConfig({ permissionMode })}
+          />
+        ) : null}
+      </div>
+      <button
+        type="button"
+        className="pill-trigger composer-config-chip"
+        aria-haspopup="dialog"
+        aria-expanded={settings}
+        title="Chat settings"
+        data-testid="config-chip"
+        onClick={() => setSettings(true)}
+      >
+        <span className="harness-dot" style={harnessColor(chat.harnessId)} />
+        <span className="config-summary">{configSummary(chat, harnesses)}</span>
+        <IconChevronDown size={12} />
+      </button>
+      {settings ? (
+        <ConfigSheet
+          chat={chat}
+          harnesses={harnesses}
+          onConfig={onConfig}
+          onHandoff={onHandoff}
+          onRefreshModels={onRefreshModels}
+          onClose={() => setSettings(false)}
         />
       ) : null}
     </div>

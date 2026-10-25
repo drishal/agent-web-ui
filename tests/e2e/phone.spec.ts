@@ -3,8 +3,8 @@
 // actions, a swipe from the left edge opens the drawer, a drag down on a
 // sheet's handle closes it. Also the thumb bar's Stop, Search in the chat
 // menu, tabs in the drawer, the home-screen shortcuts, a share from another
-// app arriving in a new chat's composer, and the permission list kept on
-// screen from the end of the composer's row.
+// app arriving in a new chat's composer, the composer's settings folded into
+// one chip, and the permission list kept on screen from its row in that sheet.
 import { expect, test, type Page } from "@playwright/test";
 import { newChat, openChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
@@ -143,11 +143,36 @@ test("a share from another app opens a new chat with the text and image in its c
   await expect(page.getByRole("list", { name: "Attached images" }).getByRole("listitem")).toHaveCount(1);
 });
 
-test("the permission list opens on screen from the end of the composer's row", async ({ page }) => {
+test("a phone composer folds its pickers into one settings chip", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
   await openChat(page);
-  await page.getByTestId("permission-picker").click();
+  const chip = page.getByTestId("config-chip");
+  await expect(chip).toBeVisible();
+  await expect(page.locator(".composer-pickers")).toBeHidden();
+  await expect(chip).toContainText("Fake");
+  await chip.click();
+  const sheet = page.getByRole("dialog", { name: "Chat settings" });
+  await expect(sheet).toBeVisible();
+  // The harness is inline (changing it is a handoff); the chat's own one is checked.
+  await expect(sheet.getByRole("button", { name: /^Fake This chat/ })).toBeDisabled();
+  await expect(sheet.getByRole("button", { name: /Fake B/ })).toContainText("Copies the conversation");
+  // A row opens that picker's own sheet over this one; picking closes both.
+  await sheet.getByRole("button", { name: /Fake Echo/ }).click();
+  const models = page.getByRole("listbox", { name: "Models" });
+  await expect(models.getByRole("option", { name: /Fake Slow/ })).toBeVisible();
+  await models.getByRole("option", { name: /Fake Slow/ }).click();
+  await expect(sheet).toBeHidden();
+  await expect(chip).toContainText("Fake Slow");
+});
+
+test("the permission list opens on screen from the settings sheet", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await openChat(page);
+  // On a phone the composer's pickers live behind one chip.
+  await page.getByTestId("config-chip").click();
+  await page.getByRole("dialog", { name: "Chat settings" }).getByTestId("permission-picker").click();
   const list = page.getByRole("listbox", { name: "Permission mode" });
   await expect(list.getByRole("option", { name: "Accept edits" })).toBeVisible();
   // It pops in scaled (the placement must not depend on that): measure it where it settles.

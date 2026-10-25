@@ -515,14 +515,16 @@ test("the model picker opens as a bottom sheet on phones", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
   await openChat(page);
-  await page.getByTestId("model-picker").click();
+  // A phone folds the composer's pickers into one chip; the model lives in its sheet.
+  await page.getByTestId("config-chip").click();
+  await page.getByRole("dialog", { name: "Chat settings" }).getByTestId("model-picker").click();
   const dialog = page.getByRole("dialog", { name: "Choose a model" });
   await expect(dialog).toBeInViewport();
   const box = (await dialog.boundingBox()) as { x: number; y: number; width: number; height: number };
   expect(box.x).toBeLessThanOrEqual(9);
   expect(box.x + box.width).toBeGreaterThanOrEqual(381);
   await dialog.getByRole("option", { name: /GLM-5\.3-Flash/ }).click();
-  await expect(page.getByTestId("model-picker")).toHaveAccessibleName("Model: GLM-5.3-Flash");
+  await expect(page.getByTestId("config-chip")).toContainText("GLM-5.3-Flash");
 });
 
 test("markdown never renders raw HTML or unsafe links", async ({ page }) => {
