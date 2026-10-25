@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionMarks } from "../../src/server/session-marks.js";
 import { asHarnessId, type ProjectSession, type SessionsOverview } from "../../src/shared/protocol.js";
-import { groupByProject, placeOf, sidebarSections, snoozeOptions } from "../../src/web/session-groups.js";
+import { focusProject, groupByProject, placeOf, sidebarSections, snoozeInputAt, snoozeInputDefault, snoozeOptions } from "../../src/web/session-groups.js";
 
 describe("session marks", () => {
   it("keeps a session in one place: pin, archive, settle, and snooze each clear the others", async () => {
@@ -53,6 +53,25 @@ describe("the sidebar's places", () => {
     expect(sections.counts).toEqual({ snoozed: 1, settled: 1, archived: 1 });
     expect(groupByProject(overview, opts)[0]?.sessions.map((x) => x.id)).toEqual(["open", "woke", "plain"]);
     expect(groupByProject(overview, { ...opts, showSettled: true, showSnoozed: true })[0]?.sessions.map((x) => x.id)).toEqual(["open", "done", "later", "woke", "plain"]);
+  });
+
+  it("reads a picked snooze time, and refuses one that has passed", () => {
+    const now = new Date(2026, 9, 9, 15, 30).getTime();
+    expect(snoozeInputDefault(now)).toBe("2026-10-10T09:00");
+    expect(snoozeInputAt("2026-10-10T09:00", now)).toBe(new Date(2026, 9, 10, 9, 0).getTime());
+    expect(snoozeInputAt("2026-10-09T15:29", now)).toBeNull();
+    expect(snoozeInputAt("", now)).toBeNull();
+    expect(snoozeInputAt("tomorrow", now)).toBeNull();
+  });
+
+  it("the focused folder shows settled, snoozed, and archived rows when their toggles are on", () => {
+    const shown = { ...opts, showSettled: true, showSnoozed: true, showArchived: true };
+    const ids = (focused: ReturnType<typeof focusProject>) => (focused?.sections ?? []).flatMap((section) => section.sessions.map((x) => x.id));
+    expect(ids(focusProject(overview, "w", shown))).toEqual(expect.arrayContaining(["done", "later", "old", "plain"]));
+    // Needs you, Working, and Pinned keep their own sections above.
+    expect(ids(focusProject(overview, "w", shown))).toEqual(expect.not.arrayContaining(["asks", "busy", "pin"]));
+    // And they stay out of the date list until their toggle is on.
+    expect(ids(focusProject(overview, "w", opts))).not.toContain("later");
   });
 
   it("offers an hour, tomorrow at 9, and next Monday at 9", () => {

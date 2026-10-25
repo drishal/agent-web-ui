@@ -14,6 +14,7 @@ import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
 import { SessionCard } from "./SessionCard.js";
+import { SnoozeUntil } from "./SnoozeUntil.js";
 
 /** Sessions shown per project before "Show N more". */
 const VISIBLE_CURRENT = 8;
@@ -89,6 +90,7 @@ function RowMenu({
   onMark,
   onMove,
   onClose,
+  onSnoozeAt,
 }: {
   s: ProjectSession;
   anchor: DOMRect;
@@ -97,6 +99,8 @@ function RowMenu({
   onMark: (change: MarkChange) => void;
   onMove?: Mover;
   onClose: () => void;
+  /** Wake it again at a time the user picks (the dialog's own item). */
+  onSnoozeAt: () => void;
 }) {
   const list = useRef<HTMLUListElement>(null);
   // Its height, measured before the first paint: the layout's, since it pops in scaled.
@@ -205,6 +209,18 @@ function RowMenu({
                 <IconArchive size={14} /> {s.archived ? "Unarchive" : "Archive"}
               </button>
             </li>
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onClose();
+                  onSnoozeAt();
+                }}
+              >
+                <IconClock size={14} /> Snooze until a time…
+              </button>
+            </li>
           </>
         ) : null}
         {onMove ? (
@@ -268,6 +284,8 @@ function SessionRow({
   drag?: RowDrag;
 }) {
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
+  // The snooze dialog: opened from the row's menu, which closes as it does.
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   // A session not saved yet has nothing to mark.
   const markable = !s.id.includes(":live-");
@@ -383,7 +401,25 @@ function SessionRow({
       </button>
       {cardAt && !menuAt ? <SessionCard s={s} anchor={cardAt} harnessName={harnessName} project={project ?? ""} id={cardId} /> : null}
       {menuAt ? (
-        <RowMenu s={s} anchor={menuAt} markable={markable} onOpenNewTab={() => onOpen(true)} onMark={onMark} {...(move ? { onMove: move } : {})} onClose={() => setMenuAt(null)} />
+        <RowMenu
+          s={s}
+          anchor={menuAt}
+          markable={markable}
+          onOpenNewTab={() => onOpen(true)}
+          onMark={onMark}
+          onSnoozeAt={() => setSnoozeOpen(true)}
+          {...(move ? { onMove: move } : {})}
+          onClose={() => setMenuAt(null)}
+        />
+      ) : null}
+      {snoozeOpen ? (
+        <SnoozeUntil
+          onPick={(at) => {
+            setSnoozeOpen(false);
+            onMark({ snoozedUntil: at });
+          }}
+          onClose={() => setSnoozeOpen(false)}
+        />
       ) : null}
     </li>
   );

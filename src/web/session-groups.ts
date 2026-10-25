@@ -167,6 +167,26 @@ export function snoozeOptions(now = Date.now()): Array<{ label: string; until: n
   ];
 }
 
+/** Tomorrow at 9:00 as a datetime-local value: the snooze dialog's default. */
+export function snoozeInputDefault(now = Date.now()): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return localSnoozeInput(d);
+}
+
+/** A datetime-local value as epoch ms; null for one that is not a time in the future. */
+export function snoozeInputAt(value: string, now = Date.now()): number | null {
+  const at = new Date(value).getTime();
+  return Number.isFinite(at) && at > now ? at : null;
+}
+
+/** `YYYY-MM-DDTHH:mm` in this browser's zone, which is what a datetime-local input reads and writes. */
+function localSnoozeInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** Claude.ai's sidebar bucket: Today, Yesterday, this week, then a short date, then Older. */
 export function conversationBucket(iso: string | null, now = new Date()): string {
   if (!iso) return "Older";
@@ -207,7 +227,11 @@ export function focusProject(
   const checkout = overview.checkouts?.[workspaceId];
   const groups = groupByProject(overview, { ...opts, currentId: workspaceId });
   const here = groups.find((g) => g.workspace.id === workspaceId);
-  const sessions = (here?.sessions ?? []).filter((s) => placeOf(s, opts) === "project");
+  // Needs you, Working, and Pinned have their own sections above; everything else
+  // sits in the date list, including settled, snoozed, and archived rows when
+  // their toggle is on (groupByProject has already applied those).
+  const elsewhere = new Set(["needs", "working", "pinned"]);
+  const sessions = (here?.sessions ?? []).filter((s) => !elsewhere.has(placeOf(s, opts)));
   const out: HistorySection[] = [];
   let run: HistorySection | null = null;
   let label = "";

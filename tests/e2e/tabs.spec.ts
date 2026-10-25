@@ -282,3 +282,27 @@ test("a long chat draws its end first, then the rest above it", async ({ page })
     .poll(() => page.locator(".conversation").evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), { timeout: 10_000 })
     .toBeLessThanOrEqual(1);
 });
+
+test("a session can be snoozed until a time you pick", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "snooze me later");
+  await showSidebar(page);
+  const row = page.locator(".session-item", { hasText: "snooze me later" }).first();
+  await row.locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Snooze until a time…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Snooze until" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Wake it at").fill("2027-03-04T09:30");
+  await dialog.getByRole("button", { name: "Snooze", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId("toast")).toContainText("snooze me later");
+  await expect(page.locator(".session-item", { hasText: "snooze me later" })).toHaveCount(0);
+  // Under "N snoozed" until then, and waking it puts it back for good.
+  await page.getByRole("button", { name: "1 snoozed" }).click();
+  const back = page.locator(".session-item", { hasText: "snooze me later" });
+  await expect(back).toHaveCount(1);
+  await back.first().locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Wake now" }).click();
+  await expect(page.getByRole("button", { name: "1 snoozed" })).toHaveCount(0);
+});

@@ -398,6 +398,48 @@
   margin-top: 14px;
 }
 
+/* Snoozing until a time you pick: one field and the two buttons. */
+.snooze-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+
+.snooze-form label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.snooze-form input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.snooze-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.snooze-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.snooze-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .dialog code {
   overflow-wrap: anywhere;
 }
