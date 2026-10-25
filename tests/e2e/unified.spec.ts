@@ -338,3 +338,23 @@ test("an image file shows as the picture it is", async ({ page, request }) => {
   // It came through the confined media route and decoded, not a broken link.
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 });
+
+test("a file dropped on the viewer is added to the project and opens", async ({ page, request }) => {
+  const root = process.env.AWUI_E2E_ROOT as string;
+  const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
+  const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
+  await page.goto(`/#chat=${chat.chatId}`);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Open a file" })).toBeVisible();
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(["dropped\n"], "dropped.txt", { type: "text/plain" }));
+    const dialog = document.querySelector("dialog.viewer") as HTMLElement;
+    for (const type of ["dragover", "drop"]) dialog.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  const viewer = page.getByRole("dialog", { name: "File dropped.txt" });
+  await expect(viewer).toBeVisible();
+  await expect(viewer).toContainText("dropped");
+});

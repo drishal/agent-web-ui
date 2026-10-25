@@ -150,6 +150,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
   const [file, setFile] = useState<{ path: string; view: FileView } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [uploading, setUploading] = useState(false);
   // The path shown rendered rather than as source (the toggle): keyed by path, so
   // another file opens as source.
   const [rendered, setRendered] = useState<string | null>(null);
@@ -205,6 +206,30 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
   const preview = view ? previewKind(view.path) : null;
   const showPreview = (preview === "markdown" || preview === "html") && rendered === path && Boolean(view?.text) && !view?.binary;
   const cut = path.lastIndexOf("/") + 1;
+  /** A file dropped on the viewer: added to the project (new names only), then opened. */
+  const upload = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/upload?name=${encodeURIComponent(file.name)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+      if (!res.ok || !body.path) throw new Error(body.error ?? `Upload failed (${res.status})`);
+      setShown({ path: body.path });
+      setMarked(null);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const mention = () => {
     addToDraft(`@${path}${marked ? `:${marked}` : ""}`);
     onClose();
@@ -215,6 +240,11 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
       ref={ref}
       className="viewer"
       aria-label={path ? `File ${path}` : "Open a file"}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        void upload(e.dataTransfer.files);
+      }}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -289,7 +319,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
         ) : null}
         <div className={`viewer-code${showPreview ? " is-prose" : ""}`} ref={code} role="region" aria-label={path ? `Contents of ${path}` : "File"} aria-busy={loading}>
           {shown === null ? (
-            <p className="viewer-empty muted">Type a name above to open one of the project's files.</p>
+            <p className="viewer-empty muted">{uploading ? "Adding the file to the project…" : "Type a name above, or drop a file here."}</p>
           ) : error ? (
             <p className="viewer-empty is-error">{error}</p>
           ) : loading || !view ? (
