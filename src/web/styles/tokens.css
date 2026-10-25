@@ -96,6 +96,9 @@
 
 :root {
   /* Derived tokens: any palette, light or dark. */
+  /* Muted as text: 4.5:1 against the page, cards, and chips. `--muted` stays the
+     dimmer chrome colour (icons, hairlines); a theme file overrides both. */
+  --muted-text: var(--muted);
   --hairline: color-mix(in srgb, var(--text) 10%, transparent);
   --hairline-strong: color-mix(in srgb, var(--text) 18%, transparent);
   --hover: color-mix(in srgb, var(--text) 6%, transparent);
@@ -180,7 +183,7 @@ pre {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .icon {

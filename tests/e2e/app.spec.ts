@@ -655,6 +655,27 @@ test("the stylix theme file drives colors and passes contrast", async ({ page })
     return (Math.max(fg, back) + 0.05) / (Math.min(fg, back) + 0.05);
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
+  // Secondary text is readable where it actually sits: the page, cards, and chips.
+  const muted = await page.evaluate(() => {
+    const hex = (name: string) => {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace("#", "");
+      return [0, 2, 4].map((i) => Number.parseInt(value.slice(i, i + 2), 16));
+    };
+    const lum = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      }) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: number[], b: number[]) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number];
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    const fg = hex("--muted-text");
+    return ["--bg", "--surface", "--surface-2"].map((name) => ratio(fg, hex(name)));
+  });
+  for (const value of muted) expect(value).toBeGreaterThanOrEqual(4.5);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1d2021");
 });
 

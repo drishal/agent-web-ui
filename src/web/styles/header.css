@@ -30,7 +30,7 @@
   gap: 8px;
   margin-top: 2px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .chat-path {
@@ -98,5 +98,5 @@
 }
 
 .menu-list button:disabled {
-  color: var(--muted);
+  color: var(--muted-text);
 }

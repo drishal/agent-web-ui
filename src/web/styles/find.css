@@ -13,7 +13,7 @@
   border-radius: var(--r-md);
   background: var(--card);
   box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
-  color: var(--muted);
+  color: var(--muted-text);
   animation: pop-down 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 

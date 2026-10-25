@@ -50,10 +50,18 @@ describe("buildThemeVars", () => {
       const { vars } = buildThemeVars(parseScheme(fixture(name)));
       const bg = vars["--bg"] as string;
       const surface = vars["--surface"] as string;
-      for (const role of ["--text", "--text-2", "--link", "--danger", "--warn", "--ok", "--info"]) {
+      for (const role of ["--text", "--text-2", "--muted-text", "--link", "--danger", "--warn", "--ok", "--info"]) {
         expect(contrast(vars[role] as string, bg), `${name} ${role}`).toBeGreaterThanOrEqual(4.5);
         expect(contrast(vars[role] as string, surface), `${name} ${role} on surface`).toBeGreaterThanOrEqual(4.5);
       }
+      // The chip surface is where secondary and muted text sit most of the time.
+      for (const role of ["--text-2", "--muted-text"]) {
+        expect(contrast(vars[role] as string, vars["--surface-2"] as string), `${name} ${role} on chips`).toBeGreaterThanOrEqual(4.5);
+      }
+      // The hierarchy still reads: primary louder than secondary, secondary than muted.
+      const onChips = (role: string) => contrast(vars[role] as string, vars["--surface-2"] as string);
+      expect(onChips("--text")).toBeGreaterThan(onChips("--text-2"));
+      expect(onChips("--text-2")).toBeGreaterThanOrEqual(onChips("--muted-text"));
       for (const role of ["--accent", "--muted", "--thinking"]) {
         expect(contrast(vars[role] as string, bg), `${name} ${role}`).toBeGreaterThanOrEqual(3);
       }

@@ -29,7 +29,7 @@
   align-items: center;
   gap: 4px 10px;
   margin: 5px 0 8px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .session-card-model {
@@ -65,7 +65,7 @@
   padding: 6px 0 0;
   border-top: 1px solid var(--hairline);
   list-style: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-family: var(--font-mono);
   font-size: 11px;
 }

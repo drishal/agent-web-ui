@@ -129,7 +129,7 @@ body {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--muted-text);
   }
 
   .drawer-tabs ul {
@@ -170,7 +170,7 @@ body {
 
   .drawer-tab-harness {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--muted-text);
   }
 
   /* While a run goes: how long, and Stop where a thumb rests. */
@@ -223,7 +223,7 @@ body {
 
   .action-sheet-icon {
     display: inline-flex;
-    color: var(--muted);
+    color: var(--muted-text);
   }
 }
 

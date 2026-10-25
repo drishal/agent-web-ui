@@ -24,7 +24,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 13px;
   white-space: nowrap;
 }
@@ -71,7 +71,7 @@
 
 .search-line {
   min-width: 3.5em;
-  color: var(--muted);
+  color: var(--muted-text);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

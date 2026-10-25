@@ -22,7 +22,7 @@
   font-weight: 650;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .settings-form {
@@ -155,14 +155,14 @@
   min-width: 44px;
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  color: var(--muted-text);
   text-align: right;
 }
 
 .settings-note {
   margin: 0;
   font-size: 12.5px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .settings-restart {
@@ -185,7 +185,7 @@
 .settings-version {
   margin: 4px 0 0;
   font-size: 11.5px;
-  color: var(--muted);
+  color: var(--muted-text);
   text-align: right;
 }
 

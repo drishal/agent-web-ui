@@ -48,7 +48,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .command-item {
@@ -58,7 +58,7 @@
   min-height: 30px;
   padding: 0 8px;
   border-radius: var(--r-sm);
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 13px;
   cursor: pointer;
 }
@@ -92,7 +92,7 @@
 .command-empty {
   padding: 8px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 /* The "$" menu: the skills, each with a spark in the thinking colour. */
@@ -111,7 +111,7 @@
   margin-top: 4px;
   padding: 7px 8px 3px;
   border-top: 1px solid var(--hairline);
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
 }
 
@@ -148,7 +148,7 @@
   border-radius: 10px;
   background: var(--bg);
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-text);
   animation: settle-in 0.24s var(--ease-out);
 }
 
@@ -175,7 +175,7 @@
   border-radius: 10px;
   background: var(--bg);
   font-size: 12.5px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .composer-images {
@@ -319,7 +319,7 @@
 }
 
 .composer-input::placeholder {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .composer.is-hero .composer-input {
@@ -448,7 +448,7 @@
   border: 0;
   border-radius: 999px;
   background: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -562,7 +562,7 @@
 .usage-note {
   margin: 6px 0 0;
   font-size: 11.5px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 /* The divider above the card: drag it up for a taller prompt box. */

@@ -115,6 +115,12 @@ export function buildThemeVars(scheme: Scheme): { vars: Record<string, string>; 
   const accentFgCandidates = [bg, p.base07 as string, "#000000", "#ffffff"];
   const accentFg = accentFgCandidates.reduce((best, c) => (contrast(c, accent) > contrast(best, accent) ? c : best));
   const bright = (key: string, fallback: string) => p[key] ?? mix(fallback, p.base05 as string, 0.18);
+  const surface2 = p.base02 as string;
+  // Secondary text is checked against the chip surface as well, where most of it
+  // sits; muted *text* is then a step below it, still 4.5:1. base03 alone is
+  // base16's comment colour (3:1 by design), so it is never used for text as is.
+  const text2 = role("text-2", p.base04 as string, 5, [bg, surface, surface2]);
+  const mutedText = role("muted-text", mix(text2, bg, 0.18), 4.5, [bg, surface, surface2]);
   const vars: Record<string, string> = {
     "--bg": bg,
     "--surface": surface,
@@ -122,8 +128,9 @@ export function buildThemeVars(scheme: Scheme): { vars: Record<string, string>; 
     "--selection": p.base02 as string,
     "--border": p.base02 as string,
     "--control-border": role("control-border", p.base03 as string, 3, [bg]),
-    "--text": role("text", p.base05 as string, 4.5, [bg, surface, p.base02 as string]),
-    "--text-2": role("text-2", p.base04 as string, 4.5),
+    "--text": role("text", p.base05 as string, 4.5, [bg, surface, surface2]),
+    "--text-2": text2,
+    "--muted-text": mutedText,
     "--muted": role("muted", p.base03 as string, 3),
     "--inverse-bg": p.base07 as string,
     "--inverse-fg": bg,

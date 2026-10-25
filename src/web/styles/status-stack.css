@@ -22,7 +22,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 10.5px;
 }
 
@@ -70,12 +70,12 @@
 
 .stack-icon {
   display: inline-flex;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .stack-kind {
   flex: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -96,12 +96,12 @@
 
 .stack-meta {
   margin-left: auto;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 11.5px;
 }
 
 .todo-completed .stack-text {
-  color: var(--muted);
+  color: var(--muted-text);
   text-decoration: line-through;
 }
 
@@ -122,7 +122,7 @@
   padding: 0 8px;
   border: 0;
   background: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -228,7 +228,7 @@
 }
 
 .git-sync.is-none {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 11px;
 }
 
@@ -264,7 +264,7 @@
 }
 
 .git-count.is-untracked {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .git-count.is-conflict {
@@ -272,7 +272,7 @@
 }
 
 .git-count.is-clean {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .git-count.is-clean::before {
@@ -285,7 +285,7 @@
 
 .git-open {
   flex: none;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 @media (max-width: 520px) {
@@ -326,7 +326,7 @@
 }
 
 .git-facts dt {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
   line-height: 20px;
 }
@@ -346,7 +346,7 @@
 }
 
 .git-fact-meta {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
 }
 
@@ -426,7 +426,7 @@
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .git-group.is-conflicts .git-group-head {
@@ -516,7 +516,7 @@
 
 .git-file-chevron {
   flex: none;
-  color: var(--muted);
+  color: var(--muted-text);
   transform: rotate(-90deg);
   transition: transform 0.12s ease;
 }
@@ -569,7 +569,7 @@
 
 .git-file-from,
 .git-file-dir {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .git-file-name {
@@ -579,7 +579,7 @@
 
 .git-file-note {
   flex: none;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 11px;
 }
 
@@ -594,7 +594,7 @@
 .git-file-msg {
   margin: 0;
   padding: 10px 14px;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12.5px;
 }
 

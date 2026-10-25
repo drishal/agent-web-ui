@@ -31,7 +31,7 @@
   width: clamp(120px, 14vw, 210px);
   padding: 0 6px 0 12px;
   border-right: 1px solid var(--hairline);
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12.5px;
   font-weight: 550;
   cursor: pointer;
@@ -85,7 +85,7 @@
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
-  color: var(--muted);
+  color: var(--muted-text);
   opacity: 0;
   cursor: pointer;
 }

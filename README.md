@@ -466,7 +466,7 @@ The built-in light and dark themes follow your system. A base16 or base24 scheme
 
 - **Accepted formats:** tinted-theming (`system`, `name`, `variant`, nested `palette:`), the stylix-generated shape (`name` + `palette:`, hex without `#`), and legacy flat base16 (`scheme:` + top-level `base00`…).
 - **Validation:** only exact 6-digit hex is accepted, because colors become CSS custom properties applied through the CSSOM.
-- **Contrast:** roles are checked against WCAG AA (4.5:1 for text, 3:1 for controls and focus) and nudged if needed. Adjustments are logged.
+- **Contrast:** roles are checked against WCAG AA (4.5:1 for text, 3:1 for controls and focus) and nudged if needed, against the page, the cards, and the chip surface where text sits; secondary text (`--muted-text`) is derived a step below `--text-2`, never from base16's comment colour as is. Adjustments are logged.
 - **Live updates:** the file is re-resolved (realpath and mtime) on each request, so a home-manager switch shows up the next time a tab becomes visible.
 - **Fonts:** an optional `fonts.sans` / `fonts.mono` goes first in the font stacks, with system fallbacks.
 
