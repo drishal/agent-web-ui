@@ -84,7 +84,10 @@ export function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClo
                 move(step);
               } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                run(shown[active]);
+                // The row pointer is reset to the first match by an effect, so a query
+                // typed a moment before Enter can still point past the shorter list:
+                // run its first row rather than nothing at all.
+                run(shown[active] ?? shown.find((item) => !item.disabled));
               }
             }}
           />

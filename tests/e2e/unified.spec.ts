@@ -9,6 +9,18 @@ import { newChat, openChat, sendAndWait, signInAndOpen } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
+/**
+ * Ctrl+K → "Open a file…" → Enter. The action stays disabled ("Choose a project
+ * first") until the chat's workspace has loaded, and under load that can happen
+ * after the query is typed, so wait for it instead of racing the app.
+ */
+async function openFile(page: Page): Promise<void> {
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
+  await expect(page.getByRole("option", { name: /^Open a file/ })).not.toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Enter");
+}
+
 test("? opens the keyboard shortcuts, which a word narrows, and Escape closes them", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
@@ -104,9 +116,7 @@ test("a changed file opens in the viewer, coloured, its added lines marked, and 
   await expect(viewer).toBeHidden();
   await expect(box(page)).toHaveValue("@src/app.ts:2");
   // The palette's Open a file: Go to file finds one by name; what git would not list is refused.
-  await page.keyboard.press("Control+k");
-  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
-  await page.keyboard.press("Enter");
+  await openFile(page);
   const picker = page.getByRole("dialog", { name: "Open a file" });
   await picker.getByRole("searchbox", { name: "Go to file" }).fill("app");
   await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
@@ -285,9 +295,7 @@ test("a Markdown file opens as source, then as the page it describes", async ({ 
   const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
   await page.goto(`/#chat=${chat.chatId}`);
 
-  await page.keyboard.press("Control+k");
-  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
-  await page.keyboard.press("Enter");
+  await openFile(page);
   const picker = page.getByRole("dialog", { name: "Open a file" });
   await picker.getByRole("searchbox", { name: "Go to file" }).fill("notes");
   await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
@@ -308,9 +316,7 @@ test("an HTML file previews with its scripts switched off", async ({ page, reque
   const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
   const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
   await page.goto(`/#chat=${chat.chatId}`);
-  await page.keyboard.press("Control+k");
-  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
-  await page.keyboard.press("Enter");
+  await openFile(page);
   const picker = page.getByRole("dialog", { name: "Open a file" });
   await picker.getByRole("searchbox", { name: "Go to file" }).fill("page");
   await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
@@ -327,9 +333,7 @@ test("an image file shows as the picture it is", async ({ page, request }) => {
   const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
   const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
   await page.goto(`/#chat=${chat.chatId}`);
-  await page.keyboard.press("Control+k");
-  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
-  await page.keyboard.press("Enter");
+  await openFile(page);
   const picker = page.getByRole("dialog", { name: "Open a file" });
   await picker.getByRole("searchbox", { name: "Go to file" }).fill("pic");
   await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
@@ -344,9 +348,7 @@ test("a file dropped on the viewer is added to the project and opens", async ({ 
   const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
   const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
   await page.goto(`/#chat=${chat.chatId}`);
-  await page.keyboard.press("Control+k");
-  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
-  await page.keyboard.press("Enter");
+  await openFile(page);
   await expect(page.getByRole("dialog", { name: "Open a file" })).toBeVisible();
   await page.evaluate(() => {
     const dt = new DataTransfer();
