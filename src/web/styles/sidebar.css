@@ -790,3 +790,23 @@ body.is-resizing {
   text-align: center;
   font-size: 18px;
 }
+
+/* Bulk selection: rows tinted while the bar is up, and the bar itself. */
+.session.is-selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.selection-count {
+  margin-right: auto;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}

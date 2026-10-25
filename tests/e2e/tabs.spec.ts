@@ -370,3 +370,32 @@ test("a project's icon can be set on this device", async ({ page }) => {
   await showSidebar(page);
   await expect(page.locator(".project-badge").first()).toHaveText("★");
 });
+
+test("a selection of sessions can be settled at once, and undone", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first selectable");
+  await newTab(page);
+  await sendAndWait(page, "second selectable");
+  await showSidebar(page);
+  const row = (name: string) => page.locator(".session-item", { hasText: name }).first();
+
+  await row("first selectable").locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Select sessions" }).click();
+  const bar = page.locator(".selection-bar");
+  await expect(bar).toContainText("1 selected");
+  // Shift extends from the anchor to the row clicked, in the order shown.
+  await row("second selectable").locator(".session").click({ modifiers: ["Shift"] });
+  await expect(bar).toContainText("2 selected");
+  await bar.getByRole("button", { name: "Settle" }).click();
+  await expect(page.getByTestId("toast")).toContainText("2 sessions updated");
+  await expect(page.locator(".session-item", { hasText: "first selectable" })).toHaveCount(0);
+  await expect(page.locator(".session-item", { hasText: "second selectable" })).toHaveCount(0);
+  await expect(bar).toHaveCount(0);
+
+  // One undo puts both back.
+  await page.locator(".chat-header h1").click();
+  await page.keyboard.press("Control+KeyZ");
+  await expect(page.locator(".session-item", { hasText: "first selectable" })).toHaveCount(1);
+  await expect(page.locator(".session-item", { hasText: "second selectable" })).toHaveCount(1);
+});

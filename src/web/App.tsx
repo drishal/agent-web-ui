@@ -1026,6 +1026,34 @@ export function App() {
     }
   };
 
+  /** One change for a selection: one bulk call, one toast, and an undo that puts each back. */
+  const markMany = async (ids: string[], change: MarkChange) => {
+    if (ids.length === 0) return;
+    const before = ids.map((id) => overview.sessions.find((x) => x.id === id));
+    try {
+      const result = await api<{ marks: Record<string, SessionMarkState> }>("/api/sessions/marks/bulk", { body: { ids, ...change } });
+      for (const [id, mark] of Object.entries(result.marks)) markSession(id, mark);
+      showToast(`${ids.length} ${ids.length === 1 ? "session" : "sessions"} updated`, () => {
+        setToast(null);
+        // A bulk replace cannot restore different before-marks, so undo is one call each.
+        ids.forEach((id, index) => {
+          const s = before[index];
+          const mark: SessionMarkState = {
+            ...(s?.pinned ? { pinned: true } : {}),
+            ...(s?.archived ? { archived: true } : {}),
+            ...(s?.settled ? { settled: true } : {}),
+            ...(s?.snoozedUntil ? { snoozedUntil: s.snoozedUntil } : {}),
+          };
+          void api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: id, ...mark, replace: true } })
+            .then((restored) => markSession(id, restored))
+            .catch(() => undefined);
+        });
+      });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   const exportChat = () => {
     setMenuOpen(false);
     if (!chat) return;
@@ -1245,6 +1273,7 @@ export function App() {
     >
       <Sidebar
         limits={limits}
+        onMarkMany={(ids, change) => void markMany(ids, change)}
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
         footer={
           <button

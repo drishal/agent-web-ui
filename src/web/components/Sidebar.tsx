@@ -19,6 +19,7 @@ import { SessionCard } from "./SessionCard.js";
 import { ProjectBadge } from "./ProjectBadge.js";
 import { ProjectIconDialog } from "./ProjectIconDialog.js";
 import { setProjectIcon, useProjectIcons } from "../project-icons.js";
+import { enterSelection, leaveSelection, setSelectionOrder, toggleSelection, useSelectionMode } from "../selection-mode.js";
 import { SnoozeUntil } from "./SnoozeUntil.js";
 
 /** Sessions shown per project before "Show N more". */
@@ -110,6 +111,7 @@ function RowMenu({
   onSnoozeAt: () => void;
 }) {
   const { snoozeReset } = useContext(RowActions);
+  const selection = useSelectionMode();
   const list = useRef<HTMLUListElement>(null);
   // Its height, measured before the first paint: the layout's, since it pops in scaled.
   const [height, setHeight] = useState(300);
@@ -200,6 +202,18 @@ function RowMenu({
             <li role="none">
               <button type="button" role="menuitem" onClick={() => pick({ unread: !s.unread })}>
                 <IconDot size={14} /> {s.unread ? "Mark read" : "Mark unread"}
+              </button>
+            </li>
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onClose();
+                  enterSelection(s.id);
+                }}
+              >
+                Select sessions
               </button>
             </li>
             {s.snoozedUntil && s.snoozedUntil > Date.now() ? (
@@ -308,6 +322,7 @@ function SessionRow({
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   // The snooze dialog: opened from the row's menu, which closes as it does.
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const selection = useSelectionMode();
   const moreRef = useRef<HTMLButtonElement>(null);
   // A session not saved yet has nothing to mark.
   const markable = !s.id.includes(":live-");
@@ -345,8 +360,14 @@ function SessionRow({
     >
       <button
         type="button"
-        className={`session${active ? " is-active" : ""}${working ? " is-working" : ""}${s.archived || s.settled || (s.snoozedUntil ?? 0) > Date.now() ? " is-archived" : ""}`}
-        onClick={(e) => onOpen(e.ctrlKey || e.metaKey)}
+        className={`session${active ? " is-active" : ""}${selection.ids.has(s.id) ? " is-selected" : ""}${working ? " is-working" : ""}${s.archived || s.settled || (s.snoozedUntil ?? 0) > Date.now() ? " is-archived" : ""}`}
+        onClick={(e) => {
+          if (selection.on) {
+            toggleSelection(s.id, e.shiftKey);
+            return;
+          }
+          onOpen(e.ctrlKey || e.metaKey);
+        }}
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault();
         }}
@@ -894,6 +915,8 @@ export function Sidebar(props: {
   open: boolean;
   /** Every account limits, whose reset the row menu can snooze until. */
   limits: UsageLimits | null;
+  /** One bulk change for a selection of sessions (the endpoint takes them together). */
+  onMarkMany: (ids: string[], change: MarkChange) => void;
   harnesses: HarnessStatus[];
   harnessId: string | null;
   onHarness: (id: string) => void;
@@ -986,6 +1009,14 @@ export function Sidebar(props: {
     const order = props.harnessId ? props.overview.orders?.[`${props.harnessId}:${focusId}`] : undefined;
     return focusProject(props.overview, focusId, { ...groupOptions, ...(order ? { order } : {}) });
   }, [props.overview, focusId, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now]);
+  const selection = useSelectionMode();
+  // The ids in the order the sections show them, for a Shift-click run.
+  const selectionOrder = useMemo(
+    () => (focused ? focused.sections.flatMap((sec) => sec.sessions.map((x) => x.id)) : groups.flatMap((g) => g.sessions.map((x) => x.id))),
+    [focused, groups],
+  );
+  useEffect(() => setSelectionOrder(selectionOrder), [selectionOrder]);
+
   const asideRef = useRef<HTMLElement>(null);
   const { open } = props;
 
@@ -1020,7 +1051,18 @@ export function Sidebar(props: {
   return (
     <RowActions.Provider value={{ warm: props.onWarmSession, snoozeReset: limitResetAt(props.limits), ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}), resumable, notice: props.onNotice }}>
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
-      <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
+      <aside
+        ref={asideRef}
+        className={`sidebar${props.open ? " is-open" : ""}`}
+        aria-label="Sessions"
+        {...(props.open ? { role: "dialog", "aria-modal": true } : {})}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && selection.on) {
+            e.stopPropagation();
+            leaveSelection();
+          }
+        }}
+      >
         <div className="sidebar-head">
           <span className="brand">awui</span>
           <button type="button" className="icon-btn sidebar-settings" aria-label="Settings" title="Settings" onClick={props.onSettings}>
@@ -1063,13 +1105,45 @@ export function Sidebar(props: {
 
         <div className="sessions">
           <div className="sessions-head">
-            <label className="search-field">
-              <IconSearch size={14} />
-              <input type="search" placeholder="Search sessions" value={props.query} onChange={(e) => props.onQuery(e.target.value)} aria-label="Search sessions" />
-            </label>
-            <button type="button" className="icon-btn" aria-label="Refresh sessions" onClick={props.onRefresh}>
-              ↻
-            </button>
+            {selection.on ? (
+              <div className="selection-bar" role="group" aria-label="Selected sessions">
+                <span className="selection-count">
+                  {selection.ids.size} selected
+                </span>
+                {[
+                  ["Settle", { settled: true }],
+                  ["Archive", { archived: true }],
+                  ["Pin", { pinned: true }],
+                  ["Snooze an hour", { snoozedUntil: Date.now() + 3_600_000 }],
+                ].map(([label, change]) => (
+                  <button
+                    key={label as string}
+                    type="button"
+                    className="btn btn-small"
+                    disabled={selection.ids.size === 0}
+                    onClick={() => {
+                      props.onMarkMany([...selection.ids], change as MarkChange);
+                      leaveSelection();
+                    }}
+                  >
+                    {label as string}
+                  </button>
+                ))}
+                <button type="button" className="btn btn-small btn-ghost" onClick={() => leaveSelection()}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <label className="search-field">
+                  <IconSearch size={14} />
+                  <input type="search" placeholder="Search sessions" value={props.query} onChange={(e) => props.onQuery(e.target.value)} aria-label="Search sessions" />
+                </label>
+                <button type="button" className="icon-btn" aria-label="Refresh sessions" onClick={props.onRefresh}>
+                  ↻
+                </button>
+              </>
+            )}
           </div>
           {props.onSearchAll && props.query.trim().length >= 2 ? (
             <button type="button" className="search-all" onClick={() => props.onSearchAll?.(props.query.trim())}>
