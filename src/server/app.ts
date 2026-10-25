@@ -35,6 +35,7 @@ import {
   gitCommitSchema,
   savedPromptSchema,
   sessionMarkSchema,
+  routineSchema,
   sessionBulkMarkSchema,
   sessionOrderSchema,
   pushSubscriptionSchema,
@@ -82,6 +83,7 @@ import { SessionMarks } from "./session-marks.js";
 import { SessionOrder } from "./session-order.js";
 import { checkoutOf } from "./checkouts.js";
 import { SavedPrompts } from "./saved-prompts.js";
+import { Routines } from "./routines.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
@@ -119,6 +121,8 @@ export interface AppDeps {
   order?: SessionOrder;
   /** Saved prompts, for every device; in memory when absent (tests). */
   prompts?: SavedPrompts;
+  /** Scheduled runs; in memory when absent. */
+  routines?: Routines;
   /** Subscription limits; in memory when absent. */
   limits?: Limits;
   /** Notes and Web Push for devices that turned notifications on; in memory when absent. */
@@ -183,6 +187,7 @@ export function createApp(deps: AppDeps) {
   const marks = deps.marks ?? SessionMarks.inMemory();
   const order = deps.order ?? SessionOrder.inMemory();
   const prompts = deps.prompts ?? SavedPrompts.inMemory();
+  const routines = deps.routines ?? Routines.inMemory();
   const limits = deps.limits ?? Limits.inMemory(registry);
   manager.onLimits = (account) => limits.report(account);
   const notifier = deps.notifier ?? Notifier.inMemory();
@@ -680,6 +685,26 @@ export function createApp(deps: AppDeps) {
     const { ids, ...change } = body(sessionBulkMarkSchema, req);
     if (change.snoozedUntil !== undefined && change.snoozedUntil !== null && change.snoozedUntil <= Date.now()) throw new ChatError(400, "bad_snooze", "Snooze until a time to come");
     res.json({ marks: await marks.setMany(ids, change) });
+  });
+
+  // Routines: a prompt on a cadence, in a project, on a harness. The timer that
+  // starts them is index.ts's; these are the dialog's reads and writes.
+  app.get("/api/routines", (_req, res) => {
+    res.json({ routines: routines.all() });
+  });
+  app.put("/api/routines", async (req, res) => {
+    const input = body(routineSchema, req);
+    await workspaces.get(input.workspaceId);
+    availableAdapter(input.harnessId);
+    try {
+      res.json(await routines.save(input));
+    } catch (error) {
+      throw new ChatError(409, "too_many_routines", errorMessage(error));
+    }
+  });
+  app.delete("/api/routines/:id", async (req, res) => {
+    if (!(await routines.remove(req.params.id))) throw new ChatError(404, "no_routine", "No such routine");
+    res.json({ ok: true });
   });
 
   app.post("/api/sessions/order", async (req, res) => {
