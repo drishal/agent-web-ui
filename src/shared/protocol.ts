@@ -754,7 +754,9 @@ export const routineSchema = z.object({
   cadence: routineCadenceSchema,
   enabled: z.boolean().default(true),
 });
-export type RoutineInput = z.infer<typeof routineSchema>;
+// What the dialog sends: `enabled` and `id` are optional here and filled in by the
+// schema on parse, so a caller need not spell out the defaults.
+export type RoutineInput = z.input<typeof routineSchema>;
 
 /** A saved routine: its input, plus the id and the times the server keeps. */
 export interface Routine extends Omit<RoutineInput, "enabled"> {
