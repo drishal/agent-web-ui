@@ -166,6 +166,27 @@ test("a phone composer folds its pickers into one settings chip", async ({ page 
   await expect(chip).toContainText("Fake Slow");
 });
 
+test("a phone keeps prompts and tool rows compact", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  // A long prompt clamps at four lines on a phone (six on a wide screen).
+  await newChat(page);
+  const long = Array.from({ length: 10 }, (_, i) => `line ${i + 1} of a prompt long enough to wrap twice over on a phone screen`).join("\n");
+  await sendAndWait(page, long);
+  const bubble = page.getByTestId("user-prompt").last();
+  await expect(bubble).toHaveClass(/is-clamped/);
+  const box = await bubble.evaluate((el) => ({ height: el.getBoundingClientRect().height, line: Number.parseFloat(getComputedStyle(el).lineHeight) }));
+  expect(box.height).toBeLessThanOrEqual(4 * box.line + 16.5);
+  // A tool call is one line, 34 px: ten of them must not be a screen and a half.
+  await newChat(page);
+  await sendAndWait(page, "tool please");
+  const fold = page.getByTestId("process-toggle").last();
+  if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
+  const row = page.locator(".drow-head").first();
+  await expect(row).toBeVisible();
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(35);
+});
+
 test("the permission list opens on screen from the settings sheet", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");

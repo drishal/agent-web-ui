@@ -18,9 +18,11 @@ body {
 }
 
 @media (pointer: coarse) {
+  /* A tool call is one line and read more than aimed at: a 44 px target each
+     turns a process fold into mostly air (ten calls were 450 px of phone). */
   .drow-head {
     height: auto;
-    min-height: 44px;
+    min-height: 34px;
   }
 
   .process-head {
@@ -60,6 +62,20 @@ body {
 }
 
 @media (max-width: 640px) {
+  /* Prompts on a phone: four lines of a long one before Show more (six filled
+     half the screen), and less padding inside the bubble. */
+  .bubble {
+    padding: 8px 14px;
+  }
+
+  .bubble.is-clamped {
+    /* Exactly four lines of the bubble's 1.5 line-height, so no sliver of the
+       fifth shows under the fade. */
+    max-height: calc(1.5em * 4 + 16px);
+    /* Fade only the padding at the bottom: the 4th line must stay readable. */
+    mask-image: linear-gradient(black 90%, transparent);
+  }
+
   /* Dialogs as bottom sheets. */
   .dialog {
     margin: auto 0 0;
