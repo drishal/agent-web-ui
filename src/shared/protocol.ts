@@ -733,6 +733,9 @@ export interface SavedPrompt {
 /** A project file for the file viewer: relative to the project (or absolute inside it). */
 export const fileViewSchema = z.object({ path: z.string().min(1).max(4096) });
 
+/** A file dropped into a project: its name only; the bytes are the body. */
+export const fileUploadSchema = z.object({ name: z.string().min(1).max(120) });
+
 export interface FileView {
   /** Relative to the project, with forward slashes. */
   path: string;

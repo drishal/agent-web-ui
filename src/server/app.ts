@@ -17,6 +17,7 @@ import {
   compactSchema,
   createChatSchema,
   fileViewSchema,
+  fileUploadSchema,
   forkChatSchema,
   handoffSchema,
   MAX_IMAGE_BYTES,
@@ -85,6 +86,7 @@ import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
 import { readMedia, viewFile } from "./file-view.js";
+import { writeProjectFile } from "./project-upload.js";
 import { UsageReader, type UsageTarget } from "./usage-report.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
@@ -362,6 +364,15 @@ export function createApp(deps: AppDeps) {
     const ws = await workspaces.get(req.params.id);
     const { q } = fileSearchSchema.parse(req.query);
     res.json({ files: searchFiles(await projectFiles(ws.path), q) });
+  });
+
+  // A file dropped into the project: new files only, one name, bounded by the body.
+  app.post("/api/workspaces/:id/upload", express.raw({ type: () => true, limit: "8mb" }), async (req, res) => {
+    const ws = await workspaces.get(req.params.id);
+    const { name } = fileUploadSchema.parse(req.query);
+    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (bytes.length === 0) throw new ChatError(400, "empty_file", "That file is empty");
+    res.status(201).json(await writeProjectFile(ws.path, name, bytes));
   });
 
   // Usage across sessions (usage-report.ts): the sidebar's sessions' calls, read from the harnesses' files.
