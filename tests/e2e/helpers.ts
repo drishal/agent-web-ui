@@ -22,9 +22,10 @@ export async function signInAndOpen(page: Page, project = "alpha"): Promise<void
   // restored tab shows its chat instead, and New chat leaves that tab open).
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
-  await dialog.locator(".picker-scroll .picker-item").first().click();
-  await dialog.getByRole("button", { name: project, exact: false }).click();
-  await dialog.getByRole("button", { name: "Open this folder" }).click();
+  // The picker opens wherever the server last had a folder open (shared across
+  // tests), so name the folder outright instead of trusting its start point.
+  await dialog.getByLabel("Or type a path").fill(`${process.env.AWUI_E2E_ROOT as string}/${project}`);
+  await dialog.getByRole("button", { name: "Open", exact: true }).click();
   await expect(dialog).toBeHidden();
   // The folder picked, not the one the dialog started in: a chat sent now belongs to it.
   await expect(page.getByRole("heading", { name: new RegExp(`^What should .* (do in|work on) ${project}\\?$`) })).toBeVisible();
