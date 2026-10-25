@@ -426,7 +426,9 @@ class FakeLiveChat implements LiveChat {
   async compact(): Promise<void> {
     if (this.running) throw new Error("Agent is busy");
     this.emit({ type: "compacting", active: true });
-    await sleep(this.delayMs * 3);
+    // A real compaction takes a while. Three chunks (45 ms) is a flicker no one can
+    // see or assert; hold it long enough that the status is a state, not a frame.
+    await sleep(Math.max(250, this.delayMs * 3));
     this.session.messages = [{ role: "compactionSummary", summary: "fake", tokensBefore: 0 }];
     this.emit({ type: "compacting", active: false });
     this.emit({ type: "notice", level: "info", text: "Compacted conversation" });
