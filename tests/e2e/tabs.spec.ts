@@ -343,3 +343,12 @@ test("a session can be snoozed until the limit resets", async ({ page }) => {
   await expect(page.locator(".session-item", { hasText: "limit snooze me" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "1 snoozed" })).toBeVisible();
 });
+
+test("a project's folder shows its own monogram", async ({ page }) => {
+  await signInAndOpen(page);
+  await showSidebar(page);
+  // alpha is the project here: its badge is A, and the hue is part of the look.
+  const badge = page.locator(".project-badge").first();
+  await expect(badge).toHaveText("A");
+  await expect(badge).toHaveCSS("filter", /hue-rotate/);
+});

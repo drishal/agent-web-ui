@@ -6,7 +6,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import type { UsageLimits } from "../../shared/protocol.js";
 import { limitResetAt } from "../../shared/limit-stop.js";
@@ -16,6 +16,7 @@ import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
 import { SessionCard } from "./SessionCard.js";
+import { ProjectBadge } from "./ProjectBadge.js";
 import { SnoozeUntil } from "./SnoozeUntil.js";
 
 /** Sessions shown per project before "Show N more". */
@@ -605,7 +606,7 @@ function ProjectGroupView({
       <div className="project-head">
         <button type="button" className="project-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={workspace.path}>
           <IconChevronDown size={12} className="group-chevron" />
-          <IconFolder size={14} />
+          <ProjectBadge name={workspace.name} />
           <span className="project-name">{workspace.name}</span>
           {sharesRepo && checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
           {!open && sessions.some(isWorking) ? <WorkingRing colored={false} /> : null}
@@ -643,7 +644,7 @@ function ProjectGroupView({
 function ProjectMenuItem({ name, path, count, onPick }: { name: string; path: string; count?: number; onPick: () => void }) {
   return (
     <button type="button" role="menuitem" title={path} onClick={onPick}>
-      <IconFolder size={13} />
+      <ProjectBadge name={name} size={16} />
       <span className="project-menu-name">{name}</span>
       <span className="project-menu-path muted">{path}</span>
       {count !== undefined ? <span className="group-count">{count}</span> : null}
@@ -713,7 +714,7 @@ function FocusedHeader({
         title={workspace.path}
         onClick={() => setMenuOpen((v) => !v)}
       >
-        <IconFolder size={14} />
+        <ProjectBadge name={workspace.name} />
         <span className="project-name">{workspace.name}</span>
         {checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
         <span className="group-count">{total}</span>

@@ -764,3 +764,18 @@ body.is-resizing {
   border-radius: 50%;
   background: var(--accent);
 }
+
+/* A project's monogram: its first letter, in a hue taken from its name. The
+   hue rotation turns the theme accent, so the badge follows the theme. */
+.project-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  filter: hue-rotate(var(--badge-hue, 0deg));
+}
