@@ -5,7 +5,7 @@
 // to a new place inside their date section. On phones it is the drawer.
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
-import { useDismiss, useNow } from "../hooks.js";
+import { useDismiss, useNow, useViewSlide } from "../hooks.js";
 import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import type { UsageLimits } from "../../shared/protocol.js";
@@ -1007,6 +1007,8 @@ export function Sidebar(props: {
   }
   // The flat awui history has no projects to focus.
   const focusId = props.harnessId === "awui" || focus === "all" ? null : focus === "auto" ? currentId : focus;
+  const sessionList = useRef<HTMLUListElement>(null);
+  useViewSlide(sessionList, focusId ?? "all");
   const focused = useMemo(() => {
     if (!focusId) return null;
     const order = props.harnessId ? props.overview.orders?.[`${props.harnessId}:${focusId}`] : undefined;
@@ -1157,7 +1159,7 @@ export function Sidebar(props: {
             </button>
           ) : null}
           {props.sessionsError ? <p className="sidebar-note is-warning">{props.sessionsError}</p> : null}
-          <ul className="session-list" aria-busy={props.sessionsLoading} aria-label="Sessions by project">
+          <ul ref={sessionList} className="session-list" aria-busy={props.sessionsLoading} aria-label="Sessions by project">
             {props.sessionsLoading && groups.length === 0 ? (
               <li className="skeleton-list" aria-hidden="true">
                 <span className="skeleton-row" />

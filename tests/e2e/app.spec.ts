@@ -807,6 +807,43 @@ test("the sidebar focuses the current project and opens its sessions across harn
   await expect(list.locator(".session-title").first()).toHaveText("xproj five");
 });
 
+/**
+ * Click something in the sidebar and report the transform the session list's
+ * slide starts from. Sampled inside the page: a 190 ms move is gone before a
+ * Playwright round trip can see it.
+ */
+async function slideFrom(page: Page, selector: string): Promise<string> {
+  return page.evaluate(async (sel) => {
+    const el = document.querySelector(".session-list");
+    // A slide already running (the folder opened moments ago) would be read instead.
+    el?.getAnimations().forEach((a) => a.cancel());
+    (document.querySelector(sel) as HTMLElement | null)?.click();
+    // Opening a folder can take a request first; wait up to ~2.5 s for the slide.
+    for (let i = 0; i < 150; i++) {
+      const a = el?.getAnimations()[0];
+      if (a) return String((a.effect as KeyframeEffect | null)?.getKeyframes()[0]?.transform ?? "");
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return "none";
+  }, selector);
+}
+
+test("the sidebar's list slides back when it returns to all projects", async ({ page }) => {
+  await signInAndOpen(page);
+  // Back out to all projects: the list comes from the left.
+  expect(await slideFrom(page, '[data-testid="focused-project"] .focus-back')).toBe("translateX(-22px)");
+  await expect(page.getByTestId("focused-project")).toHaveCount(0);
+  // Into another folder, then ask for reduced motion: it returns the same way, without the slide.
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose a project folder" });
+  await picker.getByLabel("Or type a path").fill(`${process.env.AWUI_E2E_ROOT as string}/beta`);
+  await picker.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(page.getByTestId("focused-project").locator(".project-name")).toHaveText("beta");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await slideFrom(page, '[data-testid="focused-project"] .focus-back')).toBe("none");
+  await expect(page.getByTestId("focused-project")).toHaveCount(0);
+});
+
 test("a working session spins in the sidebar, also while another chat is open", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
