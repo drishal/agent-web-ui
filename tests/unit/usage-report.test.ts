@@ -27,12 +27,15 @@ describe("usage, from the harnesses' files", () => {
       JSON.stringify({ type: "message", id: "2", parentId: "1", timestamp: "2026-10-14T10:00:05Z", message: { role: "assistant", model: "deepseek", usage: { input: 15014, output: 128, cacheRead: 11904, cacheWrite: 0, cost: { total: 0.0023 } } } }),
       // A side branch's call was spent too; one with no tokens is not a call.
       JSON.stringify({ type: "message", id: "3", parentId: "1", timestamp: "2026-10-14T11:00:00Z", message: { role: "assistant", model: "deepseek", timestamp: Date.parse("2026-10-14T11:00:01Z"), usage: { input: 10, output: 5 } } }),
+      // All-zero costs are what pi writes for a model it has no price for: not $0.00.
+      JSON.stringify({ type: "message", id: "3b", parentId: "3", timestamp: "2026-10-14T11:00:01Z", message: { role: "assistant", model: "claude-opus-5-5", usage: { input: 40, output: 60, cost: { input: 0, output: 0, total: 0 } } } }),
       JSON.stringify({ type: "message", id: "4", parentId: "3", timestamp: "2026-10-14T11:00:02Z", message: { role: "assistant", usage: { input: 0, output: 0 } } }),
       '{"type":"message", torn',
     ].join("\n");
     expect(usageEntries(fileMessages(text))).toEqual([
       { at: Date.parse("2026-10-14T10:00:05Z"), model: "deepseek", input: 15014, cachedInput: 11904, cacheWrite: 0, output: 128, cost: 0.0023 },
       { at: Date.parse("2026-10-14T11:00:01Z"), model: "deepseek", input: 10, cachedInput: 0, cacheWrite: 0, output: 5, cost: null },
+      { at: Date.parse("2026-10-14T11:00:01Z"), model: "claude-opus-5-5", input: 40, cachedInput: 0, cacheWrite: 0, output: 60, cost: null },
     ]);
   });
 

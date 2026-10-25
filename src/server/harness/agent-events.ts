@@ -99,6 +99,7 @@ export function usageEntries(messages: Array<{ message: unknown; at: number }>):
   for (const { message, at } of messages) {
     if (!isObj(message) || message.role !== "assistant" || !isObj(message.usage)) continue;
     const u = message.usage;
+    const reported = isObj(u.cost) && typeof u.cost.total === "number" && Number.isFinite(u.cost.total) ? u.cost.total : null;
     const entry: UsageEntry = {
       at: typeof message.timestamp === "number" ? message.timestamp : at,
       model: typeof message.model === "string" && message.model ? message.model : null,
@@ -106,7 +107,11 @@ export function usageEntries(messages: Array<{ message: unknown; at: number }>):
       cachedInput: n(u.cacheRead),
       cacheWrite: n(u.cacheWrite),
       output: n(u.output),
-      cost: isObj(u.cost) && typeof u.cost.total === "number" && Number.isFinite(u.cost.total) ? u.cost.total : null,
+      // Pi and omp write an all-zero cost for a model their route has no price for
+      // (claude-opus-5-5 through the Pi provider, say). A genuinely free model writes
+      // the same zeros, so a zero carries no price at all: counting it as unpriced
+      // keeps the report from charging a paid model $0.00.
+      cost: reported ? reported : null,
     };
     if (entry.input + entry.cachedInput + entry.cacheWrite + entry.output > 0) out.push(entry);
   }
