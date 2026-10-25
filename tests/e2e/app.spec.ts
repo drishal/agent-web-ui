@@ -82,6 +82,16 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await expect(page.getByRole("button", { name: "Copy reply" }).last()).toBeVisible();
 });
 
+test("a lone tilde is an approximation: only two strike the text between them", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "growth of ~5% to ~10%, and ~~this part is gone~~");
+  const answer = answers(page).last();
+  await expect(answer).toContainText("~5% to ~10%");
+  await expect(answer.locator("del")).toHaveCount(1);
+  await expect(answer.locator("del")).toHaveText("this part is gone");
+});
+
 test("an edit row carries its +N −M badge", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

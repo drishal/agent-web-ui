@@ -4,10 +4,16 @@
 // get Copy, and Run on a one-line shell block in a finished answer.
 import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./CodeBlock.js";
 
 const SAFE_SCHEMES = new Set(["http:", "https:", "mailto:"]);
+
+// GFM allows a single tilde to strike (`singleTilde`), but prose uses "~" for
+// "about": "~5% and ~10%" paired two of them and struck the text between.
+// Two tildes still strike; one reads as the approximation it was written as.
+const REMARK: PluggableList = [[remarkGfm, { singleTilde: false }]];
 
 /** Allow only http, https, and mailto links; everything else becomes inert. */
 export function safeUrl(url: string): string {
@@ -73,7 +79,7 @@ function MarkdownImpl({ text, allowRun = false }: { text: string; allowRun?: boo
   const parts = useMemo(() => withCode(allowRun), [allowRun]);
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml urlTransform={safeUrl} components={parts}>
+      <ReactMarkdown remarkPlugins={REMARK} skipHtml urlTransform={safeUrl} components={parts}>
         {text}
       </ReactMarkdown>
     </div>
