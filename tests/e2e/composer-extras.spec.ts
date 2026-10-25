@@ -211,3 +211,16 @@ test("the prompt box can be dragged taller, and a reload keeps it", async ({ pag
   await page.reload();
   await expect.poll(async () => ((await page.getByRole("textbox", { name: "Message" }).boundingBox()) as { height: number }).height).toBeGreaterThan(tall - 6);
 });
+
+test("a chat's harness can be restarted without losing the conversation", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "restart me");
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("restart agent");
+  await page.keyboard.press("Enter");
+  // The same conversation, now on a new harness process, still takes a prompt.
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  await expect(page.getByTestId("user-prompt").last()).toHaveText("restart me");
+  await sendAndWait(page, "after the restart");
+});

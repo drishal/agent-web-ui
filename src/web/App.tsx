@@ -966,6 +966,15 @@ export function App() {
     }
   };
 
+  /** A fresh harness process on the same session (after a config, skill, or MCP change). */
+  const restartChat = async () => {
+    if (!chat) return;
+    try {
+      showChat(await api<ChatSnapshot>(`/api/chats/${chat.chatId}/restart`, { method: "POST" }));
+    } catch (e) {
+      fail(e);
+    }
+  };
   const compact = async () => {
     setMenuOpen(false);
     if (!chat) return;
@@ -1052,6 +1061,7 @@ export function App() {
       if (busy) items.push({ id: "stop", section: "Actions", label: "Stop", run: stop });
       if (chat.capabilities.supportsRename) items.push({ id: "rename", section: "Actions", label: "Rename chat", run: () => setRenameOpen(true) });
       if (chat.capabilities.supportsCompact) items.push({ id: "compact", section: "Actions", label: "Compact context", disabled: chat.status === "idle" ? undefined : "Wait until the agent is idle", run: () => void compact() });
+      items.push({ id: "restart", section: "Actions", label: "Restart agent session", hint: "New process, same conversation", disabled: chat.status === "idle" || chat.status === "error" ? undefined : "Wait until the agent is idle", run: () => void restartChat() });
       items.push({ id: "review", section: "Actions", label: "Review changes", hint: changedFiles > 0 ? `${changedFiles} ${changedFiles === 1 ? "file" : "files"}` : undefined, disabled: changedFiles > 0 ? undefined : "No files changed yet", run: () => setReviewOpen(true) });
       items.push({
         id: "timeline",
