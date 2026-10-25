@@ -19,6 +19,8 @@ import { installService } from "./install-service.js";
 import { runTern } from "./tern-client.js";
 import { SessionMarks } from "./session-marks.js";
 import { Routines } from "./routines.js";
+import { startDue } from "./routines-timer.js";
+import { runRoutine } from "./routine-runner.js";
 import { SessionOrder } from "./session-order.js";
 import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
@@ -154,6 +156,23 @@ async function main(): Promise<void> {
   manager.render = { baseUrl: `http://127.0.0.1:${config.port}` };
   const marks = await SessionMarks.open(config.stateDir);
   const routines = await Routines.open(config.stateDir);
+
+  // Scheduled runs: every 30 seconds, start whatever is due. The store claims a
+  // routine before it starts, so overlapping ticks cannot run one twice; a failure
+  // is logged and the routine's next slot is its retry.
+  const routineTimer = setInterval(() => {
+    void startDue(
+      routines,
+      async (routine) => {
+        const adapter = registry.get(routine.harnessId);
+        if (!adapter) throw new Error(`no ${routine.harnessId} adapter`);
+        await runRoutine(routine, await workspaces.get(routine.workspaceId), adapter, manager);
+      },
+      Date.now(),
+      (routine, error) => console.error(`awui: routine "${routine.name}" did not start: ${error instanceof Error ? error.message : String(error)}`),
+    );
+  }, 30_000);
+  routineTimer.unref();
   const order = await SessionOrder.open(config.stateDir);
   const prompts = await SavedPrompts.open(config.stateDir);
   const limits = await Limits.open(registry, config.stateDir);
@@ -245,6 +264,7 @@ async function main(): Promise<void> {
       console.log(`awui: shutdown hit its deadline; forcing exit`);
       process.exit(0);
     }, 5_000);
+    clearInterval(routineTimer);
     server.close();
     for (const socket of sockets) socket.destroy();
     try {
