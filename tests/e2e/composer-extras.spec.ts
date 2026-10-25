@@ -191,3 +191,23 @@ test("the page title and favicon count a chat that finished out of sight", async
   await page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: /slow please for the title/ }).click();
   await expect(page).not.toHaveTitle(/^\(\d+\) /);
 });
+
+test("the prompt box can be dragged taller, and a reload keeps it", async ({ page }) => {
+  await signInAndOpen(page);
+  // A real chat: the start screen's composer has no card to resize yet.
+  await openChat(page);
+  await page.getByRole("textbox", { name: "Message" }).fill("");
+  const box = page.getByRole("textbox", { name: "Message" });
+  const height = async () => ((await box.boundingBox()) as { height: number }).height;
+  const before = await height();
+  const handle = page.getByRole("separator", { name: "Resize the prompt box" });
+  const grip = (await handle.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y - 90, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(height).toBeGreaterThan(before + 50);
+  const tall = await height();
+  await page.reload();
+  await expect.poll(async () => ((await page.getByRole("textbox", { name: "Message" }).boundingBox()) as { height: number }).height).toBeGreaterThan(tall - 6);
+});

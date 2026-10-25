@@ -33,6 +33,10 @@ import { useGitStatus } from "../git.js";
 import { Dot, dotted } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
 
+/** The prompt box's drag limits: a line, or most of a screen. */
+const MIN_PROMPT_H = 26;
+const MAX_PROMPT_H = 420;
+
 /** Paste larger than this many UTF-16 chars offers "attach as file" instead of filling the box. */
 const PASTE_FILE_OFFER = 12_000;
 
@@ -96,6 +100,17 @@ export function Composer({
   const [viewing, setViewing] = useState<number | null>(null);
   const thumbs = useRef(new Map<number, HTMLElement>());
   const area = useRef<HTMLTextAreaElement>(null);
+  // The divider above the card (pi-vot's): drag it up for a taller prompt. The
+  // height is the textarea's, kept per device; double-click or the keyboard resets.
+  const [promptHeight, setPromptHeight] = useState<number | null>(() => load<number | null>("composerHeight", null));
+  const dragFrom = useRef<{ y: number; height: number } | null>(null);
+  const promptHeightNow = () => promptHeight ?? area.current?.offsetHeight ?? MIN_PROMPT_H;
+  const clampPrompt = (height: number) => Math.min(MAX_PROMPT_H, Math.max(MIN_PROMPT_H, Math.round(height)));
+  const resizeTo = (height: number) => {
+    const next = clampPrompt(height);
+    setPromptHeight(next);
+    save("composerHeight", next);
+  };
   const filePicker = useRef<HTMLInputElement>(null);
   const caps = chat.capabilities;
   const running = chat.status === "running";
@@ -527,6 +542,39 @@ export function Composer({
 
   return (
     <div className={`composer${hero ? " is-hero" : ""}`}>
+      {!closed ? (
+        <div
+          className="composer-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize the prompt box"
+          tabIndex={0}
+          title="Drag for a taller prompt (double-click to reset)"
+          onPointerDown={(e) => {
+            dragFrom.current = { y: e.clientY, height: promptHeightNow() };
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const from = dragFrom.current;
+            if (!from) return;
+            setPromptHeight(clampPrompt(from.height + (from.y - e.clientY)));
+          }}
+          onPointerUp={() => {
+            if (!dragFrom.current) return;
+            dragFrom.current = null;
+            if (promptHeight !== null) save("composerHeight", promptHeight);
+          }}
+          onDoubleClick={() => {
+            setPromptHeight(null);
+            save("composerHeight", null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            e.preventDefault();
+            resizeTo(promptHeightNow() + (e.key === "ArrowUp" ? 24 : -24));
+          }}
+        />
+      ) : null}
       {busy ? (
         <div className="thumb-bar" role="status">
           <Spinner size={13} />
@@ -764,6 +812,7 @@ export function Composer({
           <textarea
             ref={area}
             className="composer-input"
+            style={promptHeight !== null ? { minHeight: promptHeight } : undefined}
             rows={hero ? 2 : 1}
             value={text}
             disabled={closed}

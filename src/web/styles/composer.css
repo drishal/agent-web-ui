@@ -564,3 +564,17 @@
   font-size: 11.5px;
   color: var(--muted);
 }
+
+/* The divider above the card: drag it up for a taller prompt box. */
+.composer-resize {
+  height: 10px;
+  margin: -4px 0 -2px;
+  border-radius: 999px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.composer-resize:hover,
+.composer-resize:focus-visible {
+  background: var(--hover);
+}
