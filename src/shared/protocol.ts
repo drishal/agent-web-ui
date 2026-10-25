@@ -736,6 +736,34 @@ export const fileViewSchema = z.object({ path: z.string().min(1).max(4096) });
 /** A file dropped into a project: its name only; the bytes are the body. */
 export const fileUploadSchema = z.object({ name: z.string().min(1).max(120) });
 
+/** A routine's cadence, mirroring shared/routine-schedule.ts. */
+export const routineCadenceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("hourly"), minute: z.number().int().min(0).max(59) }),
+  z.object({ kind: z.literal("daily"), hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59) }),
+  z.object({ kind: z.literal("weekdays"), hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59) }),
+  z.object({ kind: z.literal("weekly"), weekday: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59) }),
+]);
+
+/** What the Routines dialog saves: a prompt on a cadence, in a project, on a harness. */
+export const routineSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
+  name: z.string().trim().min(1).max(80),
+  prompt: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  harnessId: z.string().min(1).max(64),
+  workspaceId: z.string().min(1).max(64),
+  cadence: routineCadenceSchema,
+  enabled: z.boolean().default(true),
+});
+export type RoutineInput = z.infer<typeof routineSchema>;
+
+/** A saved routine: its input, plus the id and the times the server keeps. */
+export interface Routine extends Omit<RoutineInput, "enabled"> {
+  id: string;
+  enabled: boolean;
+  nextRunAt: number;
+  lastRunAt: number | null;
+}
+
 export interface FileView {
   /** Relative to the project, with forward slashes. */
   path: string;
