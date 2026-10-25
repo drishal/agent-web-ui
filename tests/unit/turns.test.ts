@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
+import { buildTurns, countParts, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -115,6 +115,11 @@ describe("buildTurns", () => {
 
   it("formats counts, durations, and workspace-relative paths", () => {
     expect(countSummary({ read: 3, edit: 1, command: 2 })).toBe("3 reads, 1 edit, 2 commands");
+    // Split for Rolling: the category is the key, so only the number inside a part can move.
+    expect(countParts({ read: 3, command: 2 })).toEqual([
+      { category: "read", n: 3, word: "reads" },
+      { category: "command", n: 2, word: "commands" },
+    ]);
     // More than three reads as one line: the open fold lists the rest.
     expect(countSummary({ read: 1, search: 1, edit: 2, write: 1, command: 1, web: 1, other: 2 })).toBe("1 read, 1 search, 2 edits, …");
     expect(formatDuration(65_000)).toBe("1m 5s");

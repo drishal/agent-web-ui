@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { ago, buildTurns, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
+import { ago, buildTurns, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -702,7 +702,16 @@ function ProcessFold({
           {counts && (live || leading) ? (
             <span className="process-counts">
               <Dot />
-              {counts}
+              {/* Each number rolls like the stopwatch; the word beside it does not, and neither does a part added later. */}
+              {countParts(segment?.counts ?? turn.counts)
+                .slice(0, 3)
+                .map((part, i) => (
+                  <span key={part.category}>
+                    {i ? ", " : null}
+                    <Rolling text={String(part.n)} /> {part.word}
+                  </span>
+                ))}
+              {countParts(segment?.counts ?? turn.counts).length > 3 ? ", …" : null}
             </span>
           ) : null}
         </span>

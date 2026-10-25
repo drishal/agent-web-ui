@@ -219,12 +219,25 @@ export function workCounts(items: ChatItem[]): Partial<Record<ToolCategory, numb
   return counts;
 }
 
-export function countSummary(counts: Turn["counts"]): string {
-  const parts: string[] = [];
-  for (const [key, one, many] of COUNT_LABELS) {
-    const n = counts[key] ?? 0;
-    if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`);
+/** One category's count, as the fold draws it: the number rolls, the word does not. */
+export interface CountPart {
+  category: ToolCategory;
+  n: number;
+  /** "command" for one, "commands" for more. */
+  word: string;
+}
+
+export function countParts(counts: Turn["counts"]): CountPart[] {
+  const parts: CountPart[] = [];
+  for (const [category, one, many] of COUNT_LABELS) {
+    const n = counts[category] ?? 0;
+    if (n > 0) parts.push({ category, n, word: n === 1 ? one : many });
   }
+  return parts;
+}
+
+export function countSummary(counts: Turn["counts"]): string {
+  const parts = countParts(counts).map((p) => `${p.n} ${p.word}`);
   // One quiet line: the first three counts, and the open fold for everything else.
   return parts.length > 3 ? `${parts.slice(0, 3).join(", ")}, …` : parts.join(", ");
 }
