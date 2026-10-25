@@ -1,6 +1,6 @@
 // The start screen's pure decisions (src/web/start-screen.ts).
 import { describe, expect, it } from "vitest";
-import { recentForChip, startAction, startHeading, startSendBlocked, type StartSetup } from "../../src/web/start-screen.js";
+import { recentForChip, startAction, startExamples, startHeading, startSendBlocked, type StartSetup } from "../../src/web/start-screen.js";
 
 const FAKE = { id: "fake", displayName: "Fake", available: true, reason: null };
 const FAKE_B = { id: "fake-b", displayName: "Fake B", available: false, reason: "fake-b is not installed." };
@@ -78,4 +78,15 @@ describe("recentForChip", () => {
   it("is empty for an empty list", () => {
     expect(recentForChip([], "/a/one")).toEqual([]);
   });
+
+describe("startExamples", () => {
+  it("suggests three things the chosen agent can do", () => {
+    const coding = startExamples("pi");
+    expect(coding).toHaveLength(3);
+    expect(coding.every((line) => line.length > 10)).toBe(true);
+    // The read-only harness is not told to edit anything.
+    expect(startExamples("awui").join(" ")).not.toMatch(/edit|fix|test/i);
+    expect(startExamples("awui")).not.toEqual(coding);
+  });
+});
 });

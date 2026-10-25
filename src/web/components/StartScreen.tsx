@@ -9,7 +9,7 @@ import type { HarnessStatus } from "../../shared/protocol.js";
 import { useDismiss } from "../hooks.js";
 import { IconArrowUp, IconChevronDown, IconFolder, IconLink, IconX, Spinner } from "../icons.js";
 import { dataUrl, type PendingImage } from "../images.js";
-import { recentForChip, startAction, startHeading, startSendBlocked, startSetup, type StartSetup } from "../start-screen.js";
+import { recentForChip, startAction, startExamples, startHeading, startSendBlocked, startSetup, type StartSetup } from "../start-screen.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 
 export function StartScreen({
@@ -104,6 +104,14 @@ export function StartScreen({
   return (
     <div className="hero start-screen">
       <div className="hero-inner">
+        <span className="hero-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="44" height="44" fill="none">
+            <rect x="6" y="8" width="52" height="38" rx="11" fill="currentColor" />
+            <path d="M20 46v10l11-10z" fill="currentColor" />
+            <path d="M25 19l8 8-8 8" stroke="var(--accent-fg)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M38 35h7" stroke="var(--accent-fg)" strokeWidth="4.5" strokeLinecap="round" />
+          </svg>
+        </span>
         <h2 className="hero-title">
           {heading.project ? (
             <>
@@ -118,6 +126,22 @@ export function StartScreen({
         <p className="hero-sub muted">
           {awui ? "It reads, searches, and computes — it never edits your files." : workspace ? "It runs with its normal tools, as you, in this folder." : "Choose the folder it should work in."}
         </p>
+        <ul className="hero-examples" aria-label="Example prompts">
+          {startExamples(harnessId).map((example) => (
+            <li key={example}>
+              <button
+                type="button"
+                className="hero-example"
+                onClick={() => {
+                  setText(example);
+                  area.current?.focus();
+                }}
+              >
+                {example}
+              </button>
+            </li>
+          ))}
+        </ul>
         <div className="composer is-hero">
           <div className="composer-card">
             {images.length > 0 ? (

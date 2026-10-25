@@ -14,6 +14,44 @@
   max-width: calc(var(--chat-col) + 8px);
 }
 
+.hero-mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: var(--accent);
+}
+
+.hero-mark svg {
+  display: block;
+}
+
+/* The three things to try: quiet pills that fill the box. */
+.hero-examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 16px 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-example {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.hero-example:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
 .hero-title {
   margin: 0 16px 6px;
   font-size: 22px;

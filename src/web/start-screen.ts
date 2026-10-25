@@ -39,6 +39,12 @@ export function startHeading(s: StartSetup): { title: string; before: string; pr
   return { title: `What should ${name} work on?`, before: `What should ${name} work on?`, project: null, after: "" };
 }
 
+/** Three things to try, by harness: the start screen's only suggestions. */
+export function startExamples(harnessId: string | null): string[] {
+  if (harnessId === "awui") return ["Summarise what this project does", "Find where a setting is read", "Explain one tricky function"];
+  return ["Explain this project's structure", "Review the last change and list risks", "Find a bug and write a failing test"];
+}
+
 /** What the Send button says is wrong, or null when it can send (used for its accessible name and disabled look). */
 export function startSendBlocked(s: StartSetup): string | null {
   if (s.busy) return "Starting the chat…";
