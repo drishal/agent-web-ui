@@ -75,7 +75,7 @@
   margin: 0;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -89,7 +89,7 @@
 
 .viewer-name {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .viewer-goto {
@@ -120,7 +120,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .viewer-goto-box input::-webkit-search-cancel-button {
@@ -150,7 +150,7 @@
   gap: 7px;
   padding: 5px 8px;
   border-radius: var(--r-sm);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -175,7 +175,7 @@
   overflow: hidden;
   color: var(--muted-text);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -206,7 +206,7 @@
   border-radius: 999px;
   background: none;
   color: var(--muted-text);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -253,7 +253,7 @@
   border-radius: 999px;
   background: var(--hover);
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .viewer-chip.is-changed {
@@ -281,7 +281,7 @@
   padding: 8px 0 28px;
   background: var(--code-bg);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
   tab-size: 4;
 }
@@ -342,7 +342,7 @@
 .vl.is-marked .vl-num {
   border-right-color: var(--accent);
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .vl.is-marked .vl-text,

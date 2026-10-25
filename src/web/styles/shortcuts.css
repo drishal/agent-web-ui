@@ -103,7 +103,7 @@
   padding: 0 6px;
   border: 1px solid var(--hairline-strong);
   border-bottom-width: 2px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface-2) 55%, var(--bg));
   color: var(--text);
   font: 500 11.5px var(--font-mono);

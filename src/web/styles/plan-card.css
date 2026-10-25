@@ -24,7 +24,7 @@
   position: relative;
   padding: 2px 14px 4px;
   font-size: var(--chat-font);
-  line-height: 1.65;
+  line-height: 1.6;
 }
 
 /* Folded: its first lines, fading out. */

@@ -85,7 +85,7 @@
 }
 
 .search-text mark {
-  border-radius: 2px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--warn) 35%, transparent);
   color: var(--text);
 }

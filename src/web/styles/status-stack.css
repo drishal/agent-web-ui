@@ -23,13 +23,13 @@
   border: 0;
   background: none;
   color: var(--muted-text);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .ridge-bar {
   width: 34px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--hairline-strong);
 }
 
@@ -97,7 +97,7 @@
 .stack-meta {
   margin-left: auto;
   color: var(--muted-text);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .todo-completed .stack-text {
@@ -175,7 +175,7 @@
   border-radius: var(--r-md);
   background: var(--surface-2);
   color: var(--text-2);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
 }
 
@@ -210,8 +210,8 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   color: var(--warn);
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .git-sync {
@@ -219,7 +219,7 @@
   flex: none;
   gap: 4px;
   color: var(--info, var(--accent));
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -239,7 +239,7 @@
   gap: 10px;
   min-width: 0;
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -280,7 +280,7 @@
 }
 
 .git-row .diff-stat {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .git-open {
@@ -382,7 +382,7 @@
 .git-write-error {
   margin: 0 0 12px;
   color: var(--danger);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .git-commit {
   display: flex;
@@ -423,7 +423,7 @@
   gap: 6px;
   margin: 0 0 4px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted-text);
@@ -437,7 +437,7 @@
   padding: 0 6px;
   border-radius: 999px;
   background: var(--hover);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0;
 }
 
@@ -506,7 +506,7 @@
   border: 0;
   background: none;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
 }
 
@@ -595,7 +595,7 @@
   margin: 0;
   padding: 10px 14px;
   color: var(--muted-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .git-file-msg.is-error {

@@ -51,7 +51,7 @@
 .side-title h2 {
   margin: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -98,7 +98,7 @@
 
 .side-picker h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .side-picker > p {
@@ -191,7 +191,7 @@
 .side-pick-title {
   overflow: hidden;
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

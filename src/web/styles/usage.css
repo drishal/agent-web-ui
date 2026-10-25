@@ -57,7 +57,7 @@
   background: none;
   color: var(--muted-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.14s ease-out, color 0.14s ease-out;
 }
@@ -171,7 +171,7 @@
 
 .usage-card-sub {
   color: var(--muted-text);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .usage-chart {
@@ -222,7 +222,7 @@
 }
 
 .usage-seg:last-child {
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px 3px 0 0;
 }
 
 @keyframes usage-grow {
@@ -240,7 +240,7 @@
   margin-top: 5px;
   overflow: visible;
   color: var(--muted-text);
-  font-size: 10.5px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -270,7 +270,7 @@
 .usage-legend-dot {
   width: 9px;
   height: 9px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--harness, var(--accent));
 }
 
@@ -299,7 +299,7 @@
   align-items: center;
   gap: 10px;
   padding: 5px 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .usage-row-label {
@@ -351,7 +351,7 @@
 
 .usage-none {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .usage-top-chats {
@@ -416,7 +416,7 @@
 
 .usage-foot {
   margin: 14px 0 0;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 @media (max-width: 640px) {

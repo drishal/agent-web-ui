@@ -16,8 +16,8 @@
   border-radius: 999px;
   background: var(--hover);
   color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .pill-trigger:hover:not(:disabled),
@@ -82,7 +82,7 @@
 }
 
 .model-count {
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -129,7 +129,7 @@
   padding: 9px 8px 4px;
   background: var(--card);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted-text);
@@ -143,7 +143,7 @@
   padding: 4px 8px;
   border-radius: var(--r-sm);
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 .model-option.is-active {
@@ -156,7 +156,7 @@
 }
 
 .model-option.is-current .model-name {
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .model-name {
@@ -175,7 +175,7 @@
   white-space: nowrap;
   color: var(--muted-text);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .model-tag {
@@ -185,7 +185,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--thinking) 16%, transparent);
   color: var(--thinking);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 17px;
 }
@@ -238,11 +238,11 @@
   justify-content: space-between;
   margin: 14px 0 6px;
   color: var(--muted-text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .effort-slider {
-  border-radius: 10px;
+  border-radius: 12px;
   outline: none;
 }
 
@@ -254,7 +254,7 @@
   --inset: 14px;
   position: relative;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--surface-2);
   cursor: pointer;
   touch-action: none;
@@ -264,7 +264,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: calc(var(--inset) + var(--pos) * (100% - 2 * var(--inset)));
-  border-radius: 10px 0 0 10px;
+  border-radius: 12px 0 0 10px;
   background: color-mix(in srgb, var(--thinking) 16%, transparent);
   transition: width 0.2s var(--ease-out);
 }
@@ -405,8 +405,8 @@
 
 .harness-row-meta {
   margin-left: auto;
-  font-size: 11.5px;
-  font-weight: 450;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted-text);
   white-space: nowrap;
 }
@@ -428,8 +428,8 @@ button.harness-chip {
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   background: color-mix(in srgb, var(--harness, var(--muted)) 16%, transparent);
   color: var(--harness, var(--text-2));
@@ -507,7 +507,7 @@ button.harness-chip:disabled {
 }
 
 .harness-option-name {
-  font-weight: 550;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -517,7 +517,7 @@ button.harness-chip:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted-text);
 }
 
@@ -570,11 +570,11 @@ button.harness-chip:disabled {
 
 .permission-option-name {
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .permission-option-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--muted-text);
 }

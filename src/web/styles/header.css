@@ -16,8 +16,8 @@
 
 .chat-title h1 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 620;
+  font-size: 16px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,10 +87,10 @@
   width: 100%;
   padding: 8px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   text-align: left;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 .menu-list button:hover:not(:disabled) {

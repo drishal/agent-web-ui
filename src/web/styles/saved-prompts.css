@@ -71,7 +71,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .prompts-filter input::-webkit-search-cancel-button {
@@ -127,7 +127,7 @@
 
 .prompts-none {
   padding: 10px 9px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .prompts-editor {
@@ -210,7 +210,7 @@
   padding: 0 4px;
   border-radius: 4px;
   background: var(--hover);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 /* The prompt as it will read, its blanks as chips to fill in. */
@@ -220,7 +220,7 @@
   background: var(--bubble);
   color: var(--text);
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
@@ -239,7 +239,7 @@
 .prompts-error {
   margin: 0;
   color: var(--danger);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .prompts-actions {
