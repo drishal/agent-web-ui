@@ -41,6 +41,15 @@ function fromSnapshot(snapshot: ChatSnapshot, key: string): Tab {
   };
 }
 
+/**
+ * A tab for a chat nobody has started yet (the strip's +): it shows the start screen,
+ * carrying the harness and folder it will run in. It matches no chat, so placeChat
+ * puts the first prompt's chat into this same tab instead of beside it.
+ */
+export function draftTab(harnessId: string, workspacePath: string): Omit<Tab, "key"> {
+  return { chatId: null, sessionId: null, harnessId, workspacePath, title: "New chat" };
+}
+
 /** The tab already holding this chat or session, if any. */
 export function findTab(state: TabState, chat: { chatId: string | null; sessionId: string | null }): number {
   return state.tabs.findIndex((t) => (chat.chatId !== null && t.chatId === chat.chatId) || (chat.sessionId !== null && t.sessionId === chat.sessionId));

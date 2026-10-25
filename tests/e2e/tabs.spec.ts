@@ -6,7 +6,7 @@ import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helper
 const prompts = (page: Page) => page.getByTestId("user-prompt");
 const tabs = (page: Page) => page.getByRole("tablist", { name: "Open chats" }).getByRole("tab");
 const tab = (page: Page, title: string) => page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: new RegExp(title) });
-/** + on the strip: the start screen. The tab comes at the first send. */
+/** + on the strip: a tab at once, showing the start screen; the first send fills it in. */
 async function newTab(page: Page): Promise<void> {
   await page.getByRole("button", { name: "New chat in a new tab" }).click();
   await expect(page.getByRole("heading", { name: /^What should .*(do in|work on)/ })).toBeVisible();
@@ -20,6 +20,9 @@ test("+ opens another chat in its own tab; tabs switch and close", async ({ page
   await sendAndWait(page, "first tab prompt");
   await expect(tabs(page)).toHaveCount(1);
   await newTab(page);
+  // The tab is there before anything is sent, named for the chat to come.
+  await expect(tabs(page)).toHaveCount(2);
+  await expect(tabs(page).last()).toContainText("New chat");
   await sendAndWait(page, "second tab prompt");
   await expect(tabs(page)).toHaveCount(2);
   await expect(tab(page, "second tab prompt")).toHaveAttribute("aria-selected", "true");
@@ -35,6 +38,27 @@ test("+ opens another chat in its own tab; tabs switch and close", async ({ page
   await expect(prompts(page)).toHaveText(["first tab prompt"]);
   await showSidebar(page);
   await expect(session(page, "second tab prompt")).toBeVisible();
+});
+
+test("a new tab closes like any other, and the start screen comes back when the last one goes", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "only tab");
+  await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await expect(tabs(page)).toHaveCount(2);
+  // A draft closes without leaving anything behind: the chat tab is shown again.
+  await tabs(page).last().getByRole("button", { name: /^Close / }).click();
+  await expect(tabs(page)).toHaveCount(1);
+  await expect(prompts(page)).toHaveText(["only tab"]);
+  // Two drafts are two tabs; closing the last tab shows the start screen, no tab.
+  await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await page.getByRole("button", { name: "New chat in a new tab" }).click();
+  await expect(tabs(page)).toHaveCount(3);
+  await tabs(page).last().getByRole("button", { name: /^Close / }).click();
+  await tabs(page).last().getByRole("button", { name: /^Close / }).click();
+  await tabs(page).last().getByRole("button", { name: /^Close / }).click();
+  await expect(page.getByRole("tablist", { name: "Open chats" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /^What should .* (do in|work on)/ })).toBeVisible();
 });
 
 test("a sidebar click shows a session in the current tab, Ctrl-click in a new one, an open one is switched to", async ({ page }) => {

@@ -66,7 +66,7 @@ import { RoutinesDialog } from "./components/RoutinesDialog.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar, IconSplit } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
-import { closeTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
+import { closeTab, draftTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
 import { isPaletteKey, type PaletteItem } from "./palette.js";
@@ -260,6 +260,22 @@ export function App() {
     });
   }, [chat?.chatId, chat?.title, chat?.sessionId]);
 
+  // A draft tab carries the harness and folder the start screen shows, so the strip's
+  // tint and the tab it becomes stay right until the first send fills it in.
+  useEffect(() => {
+    if (chat) return;
+    setTabState((st) => {
+      const tab = st.tabs[st.active];
+      if (!tab || tab.chatId !== null || tab.sessionId !== null) return st;
+      const harness = harnessId ?? tab.harnessId;
+      const path = workspace?.path ?? tab.workspacePath;
+      if (harness === tab.harnessId && path === tab.workspacePath) return st;
+      const tabs = st.tabs.slice();
+      tabs[st.active] = { ...tab, harnessId: harness, workspacePath: path };
+      return { ...st, tabs };
+    });
+  }, [chat, harnessId, workspace?.path]);
+
   // Background tabs: a tab whose run ended while another was shown gets a dot.
   // Only a run counts; a harness starting up (Starting → Idle) is no news.
   const busyBefore = useRef(new Set<string>());
@@ -452,6 +468,22 @@ export function App() {
     setDrawerOpen(false);
   };
 
+  /**
+   * The strip's +: a tab for a chat nobody has started. The start screen is what the
+   * tab shows, and the first prompt fills the same tab in (placeChat takes the shown
+   * tab's place, since a draft matches no chat).
+   */
+  const newTab = () => {
+    rememberShown();
+    setStartSeed(null);
+    setTabState((st) => placeTab(st, draftTab(harnessId ?? "", workspace?.path ?? ""), { newTab: true }));
+    setChat(null);
+    setHash(null);
+    setBanner(null);
+    beginOpen(null);
+    setDrawerOpen(false);
+  };
+
   /** The sidebar's New chat: the start screen, with the folder picker open over it. */
   const newChatInFolder = () => {
     showStart();
@@ -544,6 +576,17 @@ export function App() {
    * holds the chat (a restart, or the idle reaper). A tab with neither is dropped.
    */
   const loadTab = async (tab: Tab) => {
+    if (!tab.chatId && !tab.sessionId) {
+      // A draft tab (the strip's +): the start screen is what it shows, and it is not a
+      // stale tab to close when its chat is gone.
+      beginOpen(null);
+      setOpening(false);
+      setStartSeed(null);
+      setChat(null);
+      setHash(null);
+      setBanner(null);
+      return;
+    }
     const token = beginOpen(splashFor(tab));
     setOpening(true);
     setBanner(null);
@@ -1404,7 +1447,7 @@ export function App() {
             harnessName={(id) => boot.harnesses.find((h) => h.id === id)?.displayName ?? id}
             onActivate={activateTab}
             onClose={closeTabAt}
-            onNew={showStart}
+            onNew={newTab}
             newDisabled={newChatDisabled !== null}
           />
         ) : null}
