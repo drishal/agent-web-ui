@@ -321,3 +321,20 @@ test("an HTML file previews with its scripts switched off", async ({ page, reque
   // sandbox="" has no allow-scripts: the page's own script never runs.
   await expect(frame.locator("body")).not.toHaveAttribute("data-ran", "1");
 });
+
+test("an image file shows as the picture it is", async ({ page, request }) => {
+  const root = process.env.AWUI_E2E_ROOT as string;
+  const ws = (await (await request.post("/api/workspaces/open", { data: { path: `${root}/gamma` } })).json()) as { id: string };
+  const chat = (await (await request.post("/api/chats", { data: { harnessId: "fake", workspaceId: ws.id } })).json()) as { chatId: string };
+  await page.goto(`/#chat=${chat.chatId}`);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("open a file");
+  await page.keyboard.press("Enter");
+  const picker = page.getByRole("dialog", { name: "Open a file" });
+  await picker.getByRole("searchbox", { name: "Go to file" }).fill("pic");
+  await picker.getByRole("listbox", { name: "Files" }).getByRole("option").first().click();
+  const img = page.getByRole("dialog", { name: "File pic.png" }).getByRole("img", { name: "pic.png" });
+  await expect(img).toBeVisible();
+  // It came through the confined media route and decoded, not a broken link.
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+});

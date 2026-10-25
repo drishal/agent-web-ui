@@ -11,6 +11,9 @@ describe("the viewer's preview offer", () => {
     expect(previewKind("dir.with.dots/x.md")).toBe("markdown");
     expect(previewKind("page.html")).toBe("html");
     expect(previewKind("a/b/Index.HTM")).toBe("html");
+    expect(previewKind("shot.png")).toBe("image");
+    expect(previewKind("b/Photo.JPEG")).toBe("image");
+    expect(previewKind("logo.svg")).toBeNull();
   });
 
   it("is nothing for source, a dotfile, or a name ending in a dot", () => {

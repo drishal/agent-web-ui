@@ -5,7 +5,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FileView } from "../../src/shared/protocol.js";
-import { VIEW_BYTES } from "../../src/server/file-view.js";
+import { readMedia, VIEW_BYTES } from "../../src/server/file-view.js";
 import { makeTestApp, signedIn, tempDir, type TestApp } from "../helpers/app.js";
 
 let t: TestApp | null = null;
@@ -75,5 +75,17 @@ describe("the file viewer's route", () => {
     expect((await get("link.txt")).status).toBe(403);
     writeFileSync(path.join(root, "src", "fresh.ts"), "new\n");
     expect(((await get("src/fresh.ts")).body as FileView).text).toBe("new\n");
+  });
+
+  it("reads an image by its magic bytes, and refuses what is not one", async () => {
+    const app = await makeTestApp();
+    t = app;
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    writeFileSync(path.join(app.project, "pic.png"), png);
+    // A page or a script named .png is refused: the type is sniffed, not trusted.
+    writeFileSync(path.join(app.project, "fake.png"), "<svg xmlns='http://www.w3.org/2000/svg'/>");
+    expect(await readMedia(app.project, "pic.png")).toEqual({ bytes: png, mimeType: "image/png" });
+    await expect(readMedia(app.project, "fake.png")).rejects.toMatchObject({ status: 415 });
+    await expect(readMedia(app.project, "../escape.png")).rejects.toMatchObject({ status: 403 });
   });
 });

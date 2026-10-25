@@ -203,7 +203,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
 
   const path = view?.path ?? shown?.path ?? "";
   const preview = view ? previewKind(view.path) : null;
-  const showPreview = preview !== null && rendered === path && Boolean(view?.text) && !view?.binary;
+  const showPreview = (preview === "markdown" || preview === "html") && rendered === path && Boolean(view?.text) && !view?.binary;
   const cut = path.lastIndexOf("/") + 1;
   const mention = () => {
     addToDraft(`@${path}${marked ? `:${marked}` : ""}`);
@@ -259,7 +259,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
               </span>
             ) : null}
             <span className="viewer-actions">
-              {preview !== null ? (
+              {preview === "markdown" || preview === "html" ? (
                 <span className="viewer-toggle" role="group" aria-label="View">
                   <button type="button" aria-pressed={!showPreview} onClick={() => setRendered(null)}>
                     Code
@@ -305,6 +305,10 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
                 <Markdown text={view.text ?? ""} />
               </div>
             )
+          ) : preview === "image" ? (
+            <div className="viewer-prose">
+              <img className="viewer-image" alt={path} src={`/api/workspaces/${encodeURIComponent(workspace.id)}/media?path=${encodeURIComponent(path)}`} />
+            </div>
           ) : view.binary ? (
             <p className="viewer-empty muted">A binary file ({bytes(view.size)}): nothing to show as text.</p>
           ) : (

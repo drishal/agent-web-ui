@@ -84,7 +84,7 @@ import { SavedPrompts } from "./saved-prompts.js";
 import { Limits } from "./limits.js";
 import { Notifier, pushEndpointProblem } from "./notify.js";
 import { ChatSearcher, type SearchTarget } from "./chat-search.js";
-import { viewFile } from "./file-view.js";
+import { readMedia, viewFile } from "./file-view.js";
 import { UsageReader, type UsageTarget } from "./usage-report.js";
 import { Checkpoints } from "./checkpoints.js";
 import { gitFileDiff, gitStatus } from "./git-status.js";
@@ -396,6 +396,18 @@ export function createApp(deps: AppDeps) {
   });
 
   // The file viewer: one of the project's own files, read-only and bounded (file-view.ts).
+  // An image's bytes for the viewer's preview: same confinement as the text view,
+  // typed by magic bytes, with nosniff so the browser takes the type we send.
+  app.get("/api/workspaces/:id/media", async (req, res) => {
+    const ws = await workspaces.get(req.params.id);
+    const { path: wanted } = fileViewSchema.parse(req.query);
+    const { bytes, mimeType } = await readMedia(ws.path, wanted);
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "private, max-age=60");
+    res.send(bytes);
+  });
   app.get("/api/workspaces/:id/file", async (req, res) => {
     const ws = await workspaces.get(req.params.id);
     const { path: wanted } = fileViewSchema.parse(req.query);
