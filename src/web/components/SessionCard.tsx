@@ -55,7 +55,11 @@ export function SessionCard({ s, anchor, harnessName, project, id }: { s: Projec
         <div className="session-card-loading muted">No preview for this session</div>
       ) : (
         <>
-          {data.prompt ? <p className="session-card-prompt">{data.prompt}</p> : null}
+          {data.prompt ? (
+            <div className="session-card-prompt">
+              <p className="session-card-clamp">{data.prompt}</p>
+            </div>
+          ) : null}
           {data.answer ? <p className="session-card-answer">{plainPreview(data.answer)}</p> : null}
           {data.files.length > 0 ? (
             <ul className="session-card-files" aria-label="Files changed">

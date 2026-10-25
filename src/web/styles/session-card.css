@@ -37,26 +37,37 @@
   font-size: 11px;
 }
 
+/* The bubble carries the background and padding; the clamp lives on a box without
+   either. A clamp clips at the content box while overflow clips at the padding box,
+   and with both on one element the next line's top shows in the bottom padding
+   (Gecko does this with the card's long prompts). */
 .session-card-prompt {
-  display: -webkit-box;
   margin: 0 0 6px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
   padding: 5px 8px;
   border-radius: var(--r-sm);
   background: var(--bubble);
   color: var(--text);
 }
 
+.session-card-clamp,
 .session-card-answer {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
-  color: var(--text-2);
   line-height: 1.5;
+}
+
+.session-card-clamp {
+  -webkit-line-clamp: 3;
+  /* The hard stop, in case a browser's clamp ends mid-line. */
+  max-height: calc(3 * 1.5em);
+}
+
+.session-card-answer {
+  -webkit-line-clamp: 6;
+  max-height: calc(6 * 1.5em);
+  color: var(--text-2);
   white-space: pre-line;
 }
 

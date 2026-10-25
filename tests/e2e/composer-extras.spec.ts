@@ -157,13 +157,24 @@ test("search in project finds a line and puts it into the message as @path:line"
 test("resting on a session row shows its hover card", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await sendAndWait(page, "hover card prompt");
+  // Long enough that the card's prompt excerpt clamps.
+  await sendAndWait(page, "hover card prompt " + "many more words to wrap ".repeat(12));
   await newChat(page);
   await showSidebar(page);
   await page.locator(".session", { hasText: "hover card prompt" }).first().hover();
   const card = page.getByRole("tooltip");
   await expect(card).toContainText("hover card prompt");
   await expect(card).toContainText("1 turn");
+  // The clamp sits on a box with no padding: a clamp clips at the content box, so with
+  // padding on the same element the next line's top shows in the bottom padding (Gecko
+  // painted that half line under the bubble until the two were split).
+  const clamp = await card.locator(".session-card-clamp").evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { padding: `${cs.paddingTop} ${cs.paddingBottom}`, height: el.getBoundingClientRect().height, line: Number.parseFloat(cs.lineHeight), max: cs.maxHeight };
+  });
+  expect(clamp.padding).toBe("0px 0px");
+  expect(clamp.height).toBeLessThanOrEqual(3 * clamp.line + 0.5);
+  expect(clamp.max).toBe("54px");
   await page.mouse.move(800, 400);
   await expect(card).toBeHidden();
 });
