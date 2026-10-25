@@ -92,6 +92,17 @@ test("a lone tilde is an approximation: only two strike the text between them", 
   await expect(answer.locator("del")).toHaveText("this part is gone");
 });
 
+test("raw HTML in an answer reads as the text it is, not as an element", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  // The fake echoes the prompt, so both the tag and the script arrive as answer text.
+  await sendAndWait(page, "Hemis wrote <the thought> and <script>alert(1)</script> into the answer");
+  const answer = answers(page).last();
+  await expect(answer).toContainText("<the thought>");
+  await expect(answer).toContainText("<script>alert(1)</script>");
+  await expect(answer.locator("script")).toHaveCount(0);
+});
+
 test("an edit row carries its +N −M badge", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

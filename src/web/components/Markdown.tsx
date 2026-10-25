@@ -1,7 +1,8 @@
 // Answers and prompts as Markdown (GitHub-flavoured), rendered safely: raw
-// HTML is skipped, links are http(s)/mailto only and open in a new tab, and
-// remote images never load (their alt text and URL show instead). Code blocks
-// get Copy, and Run on a one-line shell block in a finished answer.
+// HTML is shown as the text it is — nothing here parses it into elements —
+// links are http(s)/mailto only and open in a new tab, and remote images never
+// load (their alt text and URL show instead). Code blocks get Copy, and Run on
+// a one-line shell block in a finished answer.
 import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
@@ -79,7 +80,10 @@ function MarkdownImpl({ text, allowRun = false }: { text: string; allowRun?: boo
   const parts = useMemo(() => withCode(allowRun), [allowRun]);
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={REMARK} skipHtml urlTransform={safeUrl} components={parts}>
+      {/* No rehype-raw: without it react-markdown has no path from markdown to
+          elements, so an agent's `<details>` or `<script>` comes out escaped
+          rather than being dropped (an answer quoting a tag used to lose it). */}
+      <ReactMarkdown remarkPlugins={REMARK} skipHtml={false} urlTransform={safeUrl} components={parts}>
         {text}
       </ReactMarkdown>
     </div>
