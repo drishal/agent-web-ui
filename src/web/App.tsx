@@ -700,6 +700,12 @@ export function App() {
     s: ProjectSession,
     { newTab = false, workspace: known, ignoreHerdr = false }: { newTab?: boolean; workspace?: WorkspaceInfo; ignoreHerdr?: boolean } = {},
   ) => {
+    // Opening it here is reading it: no toast, the dot just goes.
+    if (s.unread) {
+      void api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, unread: false } })
+        .then((mark) => markSession(s.id, mark))
+        .catch(() => undefined);
+    }
     const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
     if (open >= 0) {
       activateTab(open);

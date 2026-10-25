@@ -6,7 +6,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow } from "../hooks.js";
-import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
+import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import { focusProject, groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
@@ -41,7 +41,7 @@ function relativeTime(iso: string | null): string {
 }
 
 
-export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boolean; snoozedUntil?: number | null };
+export type MarkChange = { pinned?: boolean; archived?: boolean; settled?: boolean; snoozedUntil?: number | null; unread?: boolean };
 
 /** A row's moves inside its date section: whether it can go up or down, and the move. */
 type Mover = { up: boolean; down: boolean; by: (delta: -1 | 1) => void };
@@ -187,6 +187,11 @@ function RowMenu({
             <li role="none">
               <button type="button" role="menuitem" onClick={() => pick({ settled: !s.settled })}>
                 <IconCheck size={14} /> {s.settled ? "Unsettle" : "Settle"}
+              </button>
+            </li>
+            <li role="none">
+              <button type="button" role="menuitem" onClick={() => pick({ unread: !s.unread })}>
+                <IconDot size={14} /> {s.unread ? "Mark read" : "Mark unread"}
               </button>
             </li>
             {s.snoozedUntil && s.snoozedUntil > Date.now() ? (
@@ -370,6 +375,7 @@ function SessionRow({
           <span className="harness-dot" style={harnessColor(s.harnessId)} role="img" aria-label={harnessName} title={harnessName} />
         )}
         <span className="session-title">{s.title}</span>
+        {s.unread ? <span className="session-unread" role="img" aria-label="Unread" title="Unread" /> : null}
         <span className="session-meta">
           {project ? <span className="session-project">{project}</span> : null}
           {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}

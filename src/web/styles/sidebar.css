@@ -755,3 +755,12 @@ body.is-resizing {
   cursor: col-resize;
   user-select: none;
 }
+
+/* Marked unread: a dot beside the title until it is opened here. */
+.session-unread {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}

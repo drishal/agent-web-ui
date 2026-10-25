@@ -306,3 +306,17 @@ test("a session can be snoozed until a time you pick", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Wake now" }).click();
   await expect(page.getByRole("button", { name: "1 snoozed" })).toHaveCount(0);
 });
+
+test("a session can be marked unread, and opening it marks it read", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "unread me");
+  await showSidebar(page);
+  const row = page.locator(".session-item", { hasText: "unread me" }).first();
+  await row.locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark unread" }).click();
+  await expect(row.locator(".session-unread")).toBeVisible();
+  // Opening it here is reading it: the dot goes without a word.
+  await row.locator(".session").click();
+  await expect(row.locator(".session-unread")).toHaveCount(0);
+});
