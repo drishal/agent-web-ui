@@ -6,7 +6,9 @@
   display: flex;
   align-items: stretch;
   min-height: 36px;
-  background: var(--surface);
+  /* The page colour behind the tabs: only the tab list takes the sidebar's
+     surface, so one tab does not leave a second, empty toolbar across the top. */
+  background: var(--bg);
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -15,6 +17,7 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
+  background: var(--surface);
   scrollbar-width: none;
 }
 

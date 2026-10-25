@@ -39,7 +39,7 @@ test("a session open in a herdr pane is marked, shown in herdr, or opened here o
     await signInAndOpen(page, "beta");
     await showSidebar(page);
     const row = page.locator(".session", { hasText: "herdr pane session" });
-    await expect(row.locator(".session-herdr")).toHaveText("herdr");
+    await expect(row.locator(".session-herdr")).toHaveAttribute("aria-label", /Open in herdr, pane w1:p2 \(working\)/);
     await expect(row.locator(".session-herdr")).toHaveClass(/is-working/);
 
     await row.click();

@@ -519,6 +519,14 @@
   color: var(--muted-text);
 }
 
+/* Times line up from row to row, so the titles stop at one left edge. */
+.session-time,
+.session-wake {
+  min-width: 3.2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Pin and archive: a ⋯ over the row's time on hover; on touch screens on the open session's
    row, and a long press on any row. */
 .session-item {

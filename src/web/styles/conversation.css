@@ -274,24 +274,19 @@
 }
 
 /* A session a herdr pane runs (not this server): its dot follows what herdr says the agent does. */
+/* The herdr marker is a diamond, not a word: the row's title keeps the width,
+   and the tooltip (and the label) name the pane. */
 .session-herdr {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--muted-text);
-  font-weight: 600;
-}
-
-.session-herdr::before {
-  content: "";
+  flex: none;
   width: 6px;
   height: 6px;
-  border-radius: 4px;
-  background: currentColor;
+  border-radius: 2px;
+  background: var(--muted-text);
+  transform: rotate(45deg);
 }
 
 .session-herdr.is-working {
-  color: var(--accent);
+  background: var(--accent);
 }
 
 .session-herdr.is-blocked {

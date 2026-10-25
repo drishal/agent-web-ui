@@ -418,9 +418,12 @@ function SessionRow({
           {project ? <span className="session-project">{project}</span> : null}
           {s.liveChatId && !working ? <span className="live-dot" title="Open in this server" aria-label="live" /> : null}
           {s.herdr ? (
-            <span className={`session-herdr is-${s.herdr.status}`} title={`Open in herdr, pane ${s.herdr.paneId} (${s.herdr.status})`}>
-              herdr
-            </span>
+            <span
+              className={`session-herdr is-${s.herdr.status}`}
+              role="img"
+              aria-label={`Open in herdr, pane ${s.herdr.paneId} (${s.herdr.status})`}
+              title={`Open in herdr, pane ${s.herdr.paneId} (${s.herdr.status})`}
+            />
           ) : null}
           {s.asking ? <span className="session-asking">needs you</span> : null}
           {(s.snoozedUntil ?? 0) > Date.now() ? (
