@@ -18,6 +18,14 @@ browser ──HTTP/SSE──▶ Node server (127.0.0.1:4783) ──▶ HarnessAd
 
 **The Awui harness** is a chat surface in the harness dropdown, web UI only (atui omits it). For reading, asking, and computing, never editing the project: it is a `pi` child with pi's four writing/executing tools denied (`--exclude-tools bash,edit,write,powershell`), so a chat there can read, search the web, and use read-only MCP servers, but cannot edit files or run shell commands. Two awui extensions give it the chat-surface extras: `render_html` publishes a page (a chart, table, or mockup) into the thread — it writes only to awui's own render store, never the workspace — and [`eval_python`](extensions/eval-python.ts) runs a short snippet in a throwaway tmp dir (stateless, timeout-capped, output-bounded), so it can compute without touching the project. It keeps its own agent directory and per-project sessions under awui's state folder — never the user's `~/.pi/agent` — and declares no fork/rewind capability. Its sidebar shows a flat, dated chat history (Pinned, Today, Yesterday, each day this week, Older), Claude.ai-style, instead of projects; the project tree belongs to the coding harnesses. `Settings → Awui harness` edits the providers it can call (name, base URL, API kind, key — stored only in its own `models.json`, the key never shown back); the `litellm` provider is seeded from `~/.pi/agent/models.json` the first time and never overwritten after that.
 
+## Screenshots
+
+![A turn in a real session: the prompt, the work it took folded open over its thoughts and commands, and the answer](docs/screenshots/turn.png)
+
+The start screen, a long session with its todo list and context ring, usage across chats, the
+palette, the file viewer, the light theme, and the phone layout are in
+[docs/screenshots/](docs/screenshots) — taken from real sessions with the Pi harness.
+
 ## Install and run
 
 ### The binary (easiest)
