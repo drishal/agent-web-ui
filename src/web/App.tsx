@@ -700,11 +700,12 @@ export function App() {
     s: ProjectSession,
     { newTab = false, workspace: known, ignoreHerdr = false }: { newTab?: boolean; workspace?: WorkspaceInfo; ignoreHerdr?: boolean } = {},
   ) => {
-    // Opening it here is reading it: no toast, the dot just goes.
+    // Opening it here is reading it: no toast, the dot just goes. Awaited, so the
+    // overview refresh that opening triggers cannot land first and put it back.
     if (s.unread) {
-      void api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, unread: false } })
-        .then((mark) => markSession(s.id, mark))
-        .catch(() => undefined);
+      const mark = await api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, unread: false } }).catch(() => null);
+      if (mark) markSession(s.id, mark);
+      void refreshSessions();
     }
     const open = findTab(tabsRef.current, { chatId: s.liveChatId ?? null, sessionId: s.id });
     if (open >= 0) {
