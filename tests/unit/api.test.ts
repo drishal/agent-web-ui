@@ -475,6 +475,23 @@ describe("sessions across projects", () => {
     await agent.post("/api/sessions/marks/bulk").send({ ids: Array.from({ length: 501 }, (_, i) => `fake:${i}`), settled: true }).expect(400);
   });
 
+  it("restarts a chat on the same session, under a new chat id", async () => {
+    const { agent, t, ws } = await setup();
+    t.fake.sessions.set("r1", { nativeId: "r1", cwd: t.project, title: "Restart me", messages: [{}], updatedAt: new Date() });
+    const before = (await agent.post("/api/chats/resume").send({ harnessId: "fake", workspaceId: ws.id, sessionId: "fake:r1" }).expect(200)).body as ChatSnapshot;
+
+    const after = (await agent.post(`/api/chats/${before.chatId}/restart`).expect(200)).body as ChatSnapshot;
+    expect(after.chatId).not.toBe(before.chatId);
+    expect(after.sessionId).toBe(before.sessionId);
+    expect(after.status).toBe("idle");
+    // The old chat is gone: the caller follows the new id.
+    await agent.get(`/api/chats/${before.chatId}`).expect(404);
+
+    // Restarting waits for the run: a live harness is not torn down under it.
+    await agent.post(`/api/chats/${after.chatId}/messages`).send({ text: "slow first run" });
+    expect((await agent.post(`/api/chats/${after.chatId}/restart`)).status).toBe(409);
+  });
+
   it("keeps a hand-made order per project and harness, bounded", async () => {
     const { agent, ws } = await setup();
     const saved = await agent.post("/api/sessions/order").send({ harnessId: "fake", workspaceId: ws.id, ids: ["fake:b", "fake:a", "fake:b"] }).expect(200);

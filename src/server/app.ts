@@ -702,6 +702,23 @@ export function createApp(deps: AppDeps) {
     res.json(chat.snapshot());
   });
 
+  /**
+   * Restart a chat's harness on the same session: the settings, tools, skills, and
+   * extensions it loads are read again while the conversation stays. The old chat is
+   * disposed and a new one resumes the session, so the answer carries the new chat id.
+   */
+  app.post("/api/chats/:id/restart", async (req, res) => {
+    const old = manager.get(req.params.id);
+    if (old.status !== "idle" && old.status !== "error") throw new ChatError(409, "busy", "Wait until the agent is idle");
+    const prefix = `${old.adapter.id}:`;
+    if (!old.sessionId?.startsWith(prefix)) throw new ChatError(409, "no_session", "This chat has no saved session to restart yet");
+    const nativeId = old.sessionId.slice(prefix.length);
+    const { workspace, adapter } = old;
+    await old.dispose("Restarted");
+    const chat = await manager.resume(adapter, workspace, nativeId);
+    res.json(chat.snapshot());
+  });
+
   // Show a herdr pane (a session open there). Only this machine: herdr's socket controls its terminals,
   // and a pane switched from another device would change a screen nobody there is looking at.
   app.post("/api/herdr/focus", async (req, res) => {
