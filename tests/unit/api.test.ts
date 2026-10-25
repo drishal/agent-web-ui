@@ -451,6 +451,24 @@ describe("sessions across projects", () => {
     await agent.post("/api/sessions/marks").send({ sessionId: "fake:a1" }).expect(400);
   });
 
+  it("applies one mark to a selection, and puts the whole selection back", async () => {
+    const { agent, t } = await setup();
+    for (const [id, title] of [["a1", "Fix the build"], ["a2", "Ship it"]] as Array<[string, string]>) {
+      t.fake.sessions.set(id, { nativeId: id, cwd: t.project, title, messages: [{}], updatedAt: new Date() });
+    }
+    const marks = async () => ((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.map((s) => [s.id, s.pinned, s.archived]).sort();
+    const bulk = (change: object) => agent.post("/api/sessions/marks/bulk").send({ ids: ["fake:a1", "fake:a2"], ...change });
+
+    expect((await bulk({ archived: true }).expect(200)).body.marks).toEqual({ "fake:a1": { archived: true }, "fake:a2": { archived: true } });
+    expect(await marks()).toEqual([["fake:a1", undefined, true], ["fake:a2", undefined, true]]);
+    // Putting a selection back is one call with replace, as one row's undo is.
+    await bulk({ replace: true }).expect(200);
+    expect(await marks()).toEqual([["fake:a1", undefined, undefined], ["fake:a2", undefined, undefined]]);
+    await bulk({}).expect(400);
+    await agent.post("/api/sessions/marks/bulk").send({ ids: [], settled: true }).expect(400);
+    await agent.post("/api/sessions/marks/bulk").send({ ids: Array.from({ length: 501 }, (_, i) => `fake:${i}`), settled: true }).expect(400);
+  });
+
   it("keeps a hand-made order per project and harness, bounded", async () => {
     const { agent, ws } = await setup();
     const saved = await agent.post("/api/sessions/order").send({ harnessId: "fake", workspaceId: ws.id, ids: ["fake:b", "fake:a", "fake:b"] }).expect(200);

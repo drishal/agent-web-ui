@@ -15,6 +15,17 @@ describe("session marks", () => {
     expect(m.get("s")).toBeUndefined();
   });
 
+  it("applies one change to a selection, and clears the selection in one go", async () => {
+    const m = SessionMarks.inMemory();
+    await m.set("a", { pinned: true });
+    await m.set("b", { snoozedUntil: 9e12 });
+    expect(await m.setMany(["a", "b", "c"], { settled: true })).toEqual({ a: { settled: true }, b: { settled: true }, c: { settled: true } });
+    expect(["a", "b", "c"].map((id) => m.get(id))).toEqual([{ settled: true }, { settled: true }, { settled: true }]);
+    // replace clears the whole selection, which is its undo.
+    await m.setMany(["a", "b", "c"], { replace: true });
+    expect(["a", "b", "c"].map((id) => m.get(id))).toEqual([undefined, undefined, undefined]);
+  });
+
   it("wakes a settled or snoozed session, and leaves pins alone", async () => {
     const m = SessionMarks.inMemory();
     await m.set("a", { settled: true });

@@ -54,33 +54,50 @@ export class SessionMarks {
     return this.marks.get(sessionId);
   }
 
+  /** What a change makes of one session's current mark: replace wins, else the new place clears the others. */
+  private merged(sessionId: string, change: MarkChange): SessionMark {
+    if (change.replace) return clean(change as Record<string, unknown>);
+    const next: SessionMark = { ...this.marks.get(sessionId) };
+    const only = (keep: keyof SessionMark) => {
+      for (const key of ["pinned", "archived", "settled", "snoozedUntil"] as const) if (key !== keep) delete next[key];
+    };
+    if (change.pinned === true) {
+      only("pinned");
+      next.pinned = true;
+    } else if (change.pinned === false) delete next.pinned;
+    if (change.archived === true) {
+      only("archived");
+      next.archived = true;
+    } else if (change.archived === false) delete next.archived;
+    if (change.settled === true) {
+      only("settled");
+      next.settled = true;
+    } else if (change.settled === false) delete next.settled;
+    if (typeof change.snoozedUntil === "number") {
+      only("snoozedUntil");
+      next.snoozedUntil = change.snoozedUntil;
+    } else if (change.snoozedUntil === null) delete next.snoozedUntil;
+    return next;
+  }
+
   set(sessionId: string, change: MarkChange): Promise<SessionMark> {
-    let next: SessionMark;
-    if (change.replace) {
-      next = clean(change as Record<string, unknown>);
-    } else {
-      next = { ...this.marks.get(sessionId) };
-      const only = (keep: keyof SessionMark) => {
-        for (const key of ["pinned", "archived", "settled", "snoozedUntil"] as const) if (key !== keep) delete next[key];
-      };
-      if (change.pinned === true) {
-        only("pinned");
-        next.pinned = true;
-      } else if (change.pinned === false) delete next.pinned;
-      if (change.archived === true) {
-        only("archived");
-        next.archived = true;
-      } else if (change.archived === false) delete next.archived;
-      if (change.settled === true) {
-        only("settled");
-        next.settled = true;
-      } else if (change.settled === false) delete next.settled;
-      if (typeof change.snoozedUntil === "number") {
-        only("snoozedUntil");
-        next.snoozedUntil = change.snoozedUntil;
-      } else if (change.snoozedUntil === null) delete next.snoozedUntil;
+    return this.store(sessionId, this.merged(sessionId, change));
+  }
+
+  /**
+   * One change applied to a whole selection, with one write: a loop of `set`
+   * would rewrite the file per row and race its own snapshots.
+   */
+  async setMany(sessionIds: string[], change: MarkChange): Promise<Record<string, SessionMark>> {
+    const out: Record<string, SessionMark> = {};
+    for (const id of sessionIds) {
+      const next = this.merged(id, change);
+      if (empty(next)) this.marks.delete(id);
+      else this.marks.set(id, next);
+      out[id] = next;
     }
-    return this.store(sessionId, next);
+    await writeJson(this.file, Object.fromEntries(this.marks));
+    return out;
   }
 
   /** Activity in the session (a run starts, it fails or asks): it is no longer settled or snoozed. */

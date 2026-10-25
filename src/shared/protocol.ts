@@ -958,19 +958,25 @@ export interface RunResult {
 }
 
 /** Pin or archive a session; pinning unarchives it and archiving unpins it. */
-export const sessionMarkSchema = z
-  .object({
-    sessionId: z.string().min(1).max(512),
-    pinned: z.boolean().optional(),
-    archived: z.boolean().optional(),
-    settled: z.boolean().optional(),
-    snoozedUntil: z.number().int().positive().max(8_640_000_000_000_000).nullable().optional(),
-    /** Set exactly these marks, clearing the rest (an undo). */
-    replace: z.boolean().optional(),
-  })
-  .refine((v) => v.replace || v.pinned !== undefined || v.archived !== undefined || v.settled !== undefined || v.snoozedUntil !== undefined, {
-    message: "empty mark",
-  });
+/** The fields of a mark change, shared by one session and by a whole selection. */
+const markChangeShape = {
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  settled: z.boolean().optional(),
+  snoozedUntil: z.number().int().positive().max(8_640_000_000_000_000).nullable().optional(),
+  /** Set exactly these marks, clearing the rest (an undo). */
+  replace: z.boolean().optional(),
+};
+
+/** False for a body that changes nothing: nothing to apply, nothing to undo. */
+const hasMark = (v: { pinned?: unknown; archived?: unknown; settled?: unknown; snoozedUntil?: unknown; replace?: unknown }): boolean =>
+  v.replace === true || v.pinned !== undefined || v.archived !== undefined || v.settled !== undefined || v.snoozedUntil !== undefined;
+
+/** Pin or archive a session; pinning unarchives it and archiving unpins it. */
+export const sessionMarkSchema = z.object({ sessionId: z.string().min(1).max(512), ...markChangeShape }).refine(hasMark, { message: "empty mark" });
+
+/** The same change for a selection, applied with one write. */
+export const sessionBulkMarkSchema = z.object({ ids: z.array(z.string().min(1).max(512)).min(1).max(500), ...markChangeShape }).refine(hasMark, { message: "empty mark" });
 
 /** The marks a session can carry, as the server keeps them. */
 /** A project's sessions in a hand-made order, for one harness: the whole list, first to last. */

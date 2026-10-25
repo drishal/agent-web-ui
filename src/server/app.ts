@@ -34,6 +34,7 @@ import {
   gitCommitSchema,
   savedPromptSchema,
   sessionMarkSchema,
+  sessionBulkMarkSchema,
   sessionOrderSchema,
   pushSubscriptionSchema,
   pushTestSchema,
@@ -650,6 +651,12 @@ export function createApp(deps: AppDeps) {
     const { sessionId, ...change } = body(sessionMarkSchema, req);
     if (change.snoozedUntil !== undefined && change.snoozedUntil !== null && change.snoozedUntil <= Date.now()) throw new ChatError(400, "bad_snooze", "Snooze until a time to come");
     res.json(await marks.set(sessionId, change));
+  });
+  /** The same change for several sessions at once: one write, and one undo for the selection. */
+  app.post("/api/sessions/marks/bulk", async (req, res) => {
+    const { ids, ...change } = body(sessionBulkMarkSchema, req);
+    if (change.snoozedUntil !== undefined && change.snoozedUntil !== null && change.snoozedUntil <= Date.now()) throw new ChatError(400, "bad_snooze", "Snooze until a time to come");
+    res.json({ marks: await marks.setMany(ids, change) });
   });
 
   app.post("/api/sessions/order", async (req, res) => {
