@@ -320,3 +320,26 @@ test("a session can be marked unread, and opening it marks it read", async ({ pa
   await row.locator(".session").click();
   await expect(row.locator(".session-unread")).toHaveCount(0);
 });
+
+test("a session can be snoozed until the limit resets", async ({ page }) => {
+  // The fake harness reports no limits: stand in for a limited account with a reset ahead.
+  const reset = Date.now() + 2 * 3_600_000;
+  await page.route("**/api/limits", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [{ id: "claude", source: "Claude Code", provider: "anthropic", limited: true, at: Date.now(), windows: [{ label: "5 hours", used: 1, resetsAt: reset }] }],
+        errors: [],
+      },
+    }),
+  );
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "limit snooze me");
+  await showSidebar(page);
+  const row = page.locator(".session-item", { hasText: "limit snooze me" }).first();
+  await row.locator(".session").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Until the limit resets" }).click();
+  await expect(page.getByTestId("toast")).toContainText("limit snooze me");
+  await expect(page.locator(".session-item", { hasText: "limit snooze me" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "1 snoozed" })).toBeVisible();
+});

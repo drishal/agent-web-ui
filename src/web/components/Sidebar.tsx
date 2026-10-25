@@ -8,6 +8,8 @@ import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverv
 import { useDismiss, useNow } from "../hooks.js";
 import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconFolder, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
+import type { UsageLimits } from "../../shared/protocol.js";
+import { limitResetAt } from "../../shared/limit-stop.js";
 import { focusProject, groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
@@ -72,7 +74,9 @@ const RowActions = createContext<{
   beside?: (s: ProjectSession) => void;
   resumable: (s: ProjectSession) => boolean;
   notice: (text: string) => void;
-}>({ warm: () => {}, resumable: () => false, notice: () => {} });
+  /** When every limited account window resets, for the menu entry below. */
+  snoozeReset: number | null;
+}>({ warm: () => {}, resumable: () => false, notice: () => {}, snoozeReset: null });
 const HOVER_WARM_MS = 90;
 /** How long the mouse rests on a row before its hover card shows. */
 const HOVER_CARD_MS = 500;
@@ -102,6 +106,7 @@ function RowMenu({
   /** Wake it again at a time the user picks (the dialog's own item). */
   onSnoozeAt: () => void;
 }) {
+  const { snoozeReset } = useContext(RowActions);
   const list = useRef<HTMLUListElement>(null);
   // Its height, measured before the first paint: the layout's, since it pops in scaled.
   const [height, setHeight] = useState(300);
@@ -201,13 +206,22 @@ function RowMenu({
                 </button>
               </li>
             ) : (
-              snoozeOptions().map((o) => (
+              <>
+                {snoozeReset ? (
+                  <li role="none">
+                    <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: snoozeReset + 20_000 })}>
+                      <IconClock size={14} /> Until the limit resets
+                    </button>
+                  </li>
+                ) : null}
+                {snoozeOptions().map((o) => (
                 <li role="none" key={o.label}>
                   <button type="button" role="menuitem" onClick={() => pick({ snoozedUntil: o.until })}>
                     <IconClock size={14} /> Snooze {o.label.toLowerCase()}
                   </button>
                 </li>
-              ))
+                ))}
+              </>
             )}
             <li role="none">
               <button type="button" role="menuitem" onClick={() => pick({ archived: !s.archived })}>
@@ -867,6 +881,8 @@ function FocusedProjectView({
 
 export function Sidebar(props: {
   open: boolean;
+  /** Every account limits, whose reset the row menu can snooze until. */
+  limits: UsageLimits | null;
   harnesses: HarnessStatus[];
   harnessId: string | null;
   onHarness: (id: string) => void;
@@ -991,7 +1007,7 @@ export function Sidebar(props: {
   );
 
   return (
-    <RowActions.Provider value={{ warm: props.onWarmSession, ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}), resumable, notice: props.onNotice }}>
+    <RowActions.Provider value={{ warm: props.onWarmSession, snoozeReset: limitResetAt(props.limits), ...(props.onOpenBeside ? { beside: props.onOpenBeside } : {}), resumable, notice: props.onNotice }}>
       <div className={`backdrop${props.open ? " is-open" : ""}`} onClick={props.onClose} aria-hidden="true" />
       <aside ref={asideRef} className={`sidebar${props.open ? " is-open" : ""}`} aria-label="Sessions" {...(props.open ? { role: "dialog", "aria-modal": true } : {})}>
         <div className="sidebar-head">

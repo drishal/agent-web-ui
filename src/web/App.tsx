@@ -1231,6 +1231,7 @@ export function App() {
       style={{ ["--sidebar-w" as string]: `${sidebarWidth}px` }}
     >
       <Sidebar
+        limits={limits}
         resizer={<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} onCommit={commitSidebarWidth} />}
         footer={
           <button
