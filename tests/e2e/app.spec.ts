@@ -844,6 +844,25 @@ test("the sidebar's list slides back when it returns to all projects", async ({ 
   await expect(page.getByTestId("focused-project")).toHaveCount(0);
 });
 
+test("a deploy while the page stays open offers a reload", async ({ page, request }) => {
+  await signInAndOpen(page);
+  const { build } = (await (await request.get("/api/health")).json()) as { build: string };
+  // The server now serves another build; the page still runs the one it loaded.
+  await page.route("**/api/health", (route) => route.fulfill({ json: { ok: true, build: `${build}-next` } }));
+  // What happens when the app comes back to the foreground (an installed PWA has no reload button).
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.getByText("A new build is available.")).toBeVisible();
+  // The palette carries the same escape hatch for a keyboard without a reload key.
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("reload the app");
+  await expect(page.getByRole("option", { name: /Reload the app/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.unroute("**/api/health");
+  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  // Reloaded onto the real build: the strip is gone.
+  await expect(page.getByText("A new build is available.")).toHaveCount(0);
+});
+
 test("a working session spins in the sidebar, also while another chat is open", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

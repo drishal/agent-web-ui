@@ -614,6 +614,8 @@ export type ChatWidth = z.infer<typeof chatWidthSchema>;
 
 export interface Bootstrap {
   version: string;
+  /** What this server serves as the web bundle (index.html's hash); pages compare it to notice a deploy. */
+  build: string;
   /** "local": this machine, no sign-in. "password": signed in from another device. */
   auth: { mode: "local" | "password"; username: string | null; remoteEnabled: boolean };
   harnesses: HarnessStatus[];

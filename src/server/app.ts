@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { ZodError, type ZodType } from "zod";
+import { buildIdOf } from "./build-id.js";
 import { embeddedWeb } from "./embedded.js";
 import {
   answerSchema,
@@ -211,6 +212,10 @@ export function createApp(deps: AppDeps) {
     if (chat.sessionId) marks.wake(chat.sessionId);
   };
   const log = deps.log ?? ((m: string) => console.error(m));
+  // What this process serves as the web bundle: a page compares it with the build
+  // it loaded to notice a deploy (the binary embeds the bundle; a source run has
+  // dist/web). "dev" when neither exists, which the client then ignores.
+  const build = buildIdOf(embeddedWeb()?.get("/index.html")?.text ?? (deps.webDir ? readIndexHtml(deps.webDir) : null));
   const app = express();
   app.disable("x-powered-by");
   app.set("etag", false);
@@ -244,7 +249,7 @@ export function createApp(deps: AppDeps) {
   app.use(security.trust);
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, build });
   });
 
   // Sign-in for other devices; reachable without a session.
@@ -298,6 +303,7 @@ export function createApp(deps: AppDeps) {
     const t = await theme.get();
     const payload: Bootstrap = {
       version: deps.version,
+      build,
       auth: {
         mode: res.locals.local === true ? "local" : "password",
         username: security.username,
@@ -1128,7 +1134,9 @@ export function createApp(deps: AppDeps) {
         res.status(404).end();
         return;
       }
-      res.setHeader("Cache-Control", urlPath.endsWith(".html") || urlPath === "/index.html" ? "no-store" : "public, max-age=3600");
+      // index.html and the worker are how a deploy reaches a page; the rest is content-hashed.
+      const fresh = urlPath.endsWith(".html") || urlPath === "/index.html" || urlPath === "/sw.js";
+      res.setHeader("Cache-Control", fresh ? "no-store" : "public, max-age=3600");
       res.setHeader("Content-Type", file.contentType);
       res.send(file.text);
     });
@@ -1161,6 +1169,15 @@ export function createApp(deps: AppDeps) {
   });
 
   return app;
+}
+
+/** The served index.html, whose asset names name the build; null when there is none. */
+function readIndexHtml(dir: string): string | null {
+  try {
+    return readFileSync(path.join(dir, "index.html"), "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function noStoreHtml(res: Response, filePath: string): void {

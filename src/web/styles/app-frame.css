@@ -80,3 +80,17 @@
   background: color-mix(in srgb, var(--warn) 10%, var(--bg));
   border-bottom: 1px solid var(--hairline);
 }
+
+/* A deploy landed while this page stayed open: one button, in place of the
+   browser reload an installed app does not have (see app-update.ts). */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--text);
+  font-size: 13px;
+}

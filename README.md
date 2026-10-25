@@ -182,6 +182,7 @@ The **Settings** dialog (gear left of the collapse button) edits the same file: 
   - a long prompt keeps four lines of its bubble before **Show more** (six on a wide screen), so a pasted wall of text does not fill the screen;
   - a swipe in from the left edge opens the sessions drawer, a swipe left closes it;
   - dialogs and pickers are bottom sheets: drag the handle down to close one;
+  - after a deploy an open page (or an installed app) shows **A new build is available** with **Reload** — the palette's *Reload the app* does the same — because an installed app has no browser reload button and iOS drops pull-to-refresh. The page compares the build it loaded (a hash of `index.html`) with the server's, so a server-only change does not raise it;
   - a long press on a prompt or a reply opens its actions (Retry, Edit, Copy; Copy, Quote in message, Fork, Undo file changes) as a sheet;
   - while a run goes, a bar above the composer shows how long it has run and a big **Stop**;
   - Search moves into the chat's ⋯ menu, and the composer stays above the keyboard; Enter adds a line, the send button sends;

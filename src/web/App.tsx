@@ -21,6 +21,7 @@ import type {
   WorkspaceInfo,
 } from "../shared/protocol.js";
 import { api, ApiError, errorText } from "./api.js";
+import { checkForNewBuild, rememberBuild, reloadApp, watchForNewBuild } from "./app-update.js";
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
 import type { ChatState } from "./chat-state.js";
@@ -29,6 +30,7 @@ import { appCommand } from "./commands.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { Composer } from "./components/Composer.js";
 import { Conversation } from "./components/Conversation.js";
+import { UpdateBanner } from "./components/UpdateBanner.js";
 import { LimitsSummary } from "./components/LimitsMeter.js";
 import { Loader } from "./components/Loader.js";
 import { LoginForm } from "./components/LoginForm.js";
@@ -221,6 +223,14 @@ export function App() {
   useEffect(() => {
     if (boot) applyHarnessAccents(boot.harnesses);
   }, [boot]);
+  // The build this page loaded from, and the three moments a deploy can surface:
+  // the stream reconnecting to a restarted server, the page becoming visible again,
+  // and a slow poll while it stays visible (see app-update.ts).
+  useEffect(() => rememberBuild(boot?.build), [boot]);
+  useEffect(() => watchForNewBuild(), []);
+  useEffect(() => {
+    if (conn === "connected") void checkForNewBuild();
+  }, [conn]);
   const chatId = chat?.chatId ?? null;
 
   // ---- session tabs ---------------------------------------------------------------------
@@ -1116,6 +1126,7 @@ export function App() {
     });
     items.push({ id: "usage", section: "Actions", label: "Usage across chats", hint: "tokens, cost", keywords: "spend dashboard stats", run: () => setUsageOpen(true) });
     items.push({ id: "routines", section: "Actions", label: "Routines…", hint: "scheduled prompts", keywords: "schedule cron jobs recurring", run: () => setRoutinesOpen(true) });
+    items.push({ id: "reload-app", section: "Actions", label: "Reload the app", hint: "after an update", keywords: "refresh update deploy new build", run: () => void reloadApp() });
     items.push({ id: "prompts", section: "Actions", label: "Saved prompts…", hint: "#", keywords: "templates snippets", run: () => setPromptsOpen({}) });
     items.push({ id: "open-file", section: "Actions", label: "Open a file…", hint: searchWorkspace?.name, keywords: "view read go to", disabled: searchWorkspace ? undefined : "Choose a project first", run: () => setViewer({ request: null }) });
     items.push({ id: "search-all", section: "Actions", label: "Search every chat", hint: shortcutHint("history-search"), keywords: "history find", run: () => setChatSearch("") });
@@ -1544,6 +1555,7 @@ export function App() {
             {CONN_BANNER[conn]}…
           </div>
         ) : null}
+        <UpdateBanner />
         {chat && chat.config.models.length === 0 && chat.capabilities.supportsModelSelection ? (
           <div className="banner banner-warning">
             {chatHarness?.setupCommand ? (

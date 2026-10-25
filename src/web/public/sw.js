@@ -22,6 +22,14 @@ const SHARE_CACHE = "awui-share";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// The page asks for this when it finds a newer worker waiting. An installed iOS
+// app does not reliably activate a worker that called skipWaiting() from
+// install — the old one keeps serving its shell (WebKit bug 199110) — so the
+// reload path posts this and waits for controllerchange.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+});
+
 self.addEventListener("push", (event) => event.waitUntil(showNotes()));
 
 async function showNotes() {

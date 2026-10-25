@@ -38,7 +38,9 @@ const sameKey = (a: ArrayBuffer | null | undefined, b: Uint8Array): boolean => {
 export async function worker(): Promise<ServiceWorkerRegistration | null> {
   if (!window.isSecureContext || !("serviceWorker" in navigator)) return null;
   try {
-    return await navigator.serviceWorker.register("./sw.js");
+    // Never let the HTTP cache answer "is there a new worker?": a deploy must reach
+    // an installed app on the next check, not an hour later.
+    return await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
   } catch {
     return null;
   }

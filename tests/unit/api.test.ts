@@ -28,6 +28,16 @@ describe("bootstrap and workspaces", () => {
     expect(JSON.stringify(res.body.harnesses)).not.toMatch(/nonexistent/);
   });
 
+  it("names the web build it serves, on the bootstrap and on health", async () => {
+    const { agent } = await setup();
+    const boot = await agent.get("/api/bootstrap");
+    const health = await agent.get("/api/health");
+    expect(typeof boot.body.build).toBe("string");
+    expect(boot.body.build).not.toBe("");
+    // A page compares the two after a deploy: they must be the same string.
+    expect(health.body.build).toBe(boot.body.build);
+  });
+
   it("opens workspaces only inside the roots, by realpath", async () => {
     const { agent, t } = await setup();
     const outside = tempDir("awui-outside-");
