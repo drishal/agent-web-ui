@@ -17,6 +17,8 @@ import { HarnessMenu } from "./HarnessMenu.js";
 import { WorkingRing } from "./WorkingRing.js";
 import { SessionCard } from "./SessionCard.js";
 import { ProjectBadge } from "./ProjectBadge.js";
+import { ProjectIconDialog } from "./ProjectIconDialog.js";
+import { setProjectIcon, useProjectIcons } from "../project-icons.js";
 import { SnoozeUntil } from "./SnoozeUntil.js";
 
 /** Sessions shown per project before "Show N more". */
@@ -606,7 +608,7 @@ function ProjectGroupView({
       <div className="project-head">
         <button type="button" className="project-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={workspace.path}>
           <IconChevronDown size={12} className="group-chevron" />
-          <ProjectBadge name={workspace.name} />
+          <ProjectBadge id={workspace.id} name={workspace.name} />
           <span className="project-name">{workspace.name}</span>
           {sharesRepo && checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
           {!open && sessions.some(isWorking) ? <WorkingRing colored={false} /> : null}
@@ -673,6 +675,8 @@ function FocusedHeader({
   scope: Array<{ workspace: WorkspaceInfo; count: number; current: boolean }>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [iconOpen, setIconOpen] = useState(false);
+  const icons = useProjectIcons();
   const headWrap = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLUListElement>(null);
   useDismiss(headWrap, menuOpen, () => setMenuOpen(false));
@@ -714,7 +718,7 @@ function FocusedHeader({
         title={workspace.path}
         onClick={() => setMenuOpen((v) => !v)}
       >
-        <ProjectBadge name={workspace.name} />
+        <ProjectBadge id={workspace.id} name={workspace.name} />
         <span className="project-name">{workspace.name}</span>
         {checkout?.branch ? <span className="project-branch">{checkout.branch}</span> : null}
         <span className="group-count">{total}</span>
@@ -732,6 +736,11 @@ function FocusedHeader({
                 <IconChevronLeft size={13} /> All projects
               </button>
             </li>
+            <li role="none">
+              <button type="button" role="menuitem" onClick={() => pick(() => setIconOpen(true))}>
+                Set an icon…
+              </button>
+            </li>
             {other.map((p) => (
               <li key={p.workspace.id} role="none">
                 <ProjectMenuItem name={p.workspace.name} path={p.workspace.path} count={p.count} onPick={() => pick(() => onFocus(p.workspace.id))} />
@@ -740,6 +749,7 @@ function FocusedHeader({
           </ul>
         </>
       ) : null}
+      {iconOpen ? <ProjectIconDialog name={workspace.name} icon={icons[workspace.id] ?? ""} onSave={(icon) => setProjectIcon(workspace.id, icon)} onClose={() => setIconOpen(false)} /> : null}
     </div>
   );
 }

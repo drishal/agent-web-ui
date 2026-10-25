@@ -352,3 +352,21 @@ test("a project's folder shows its own monogram", async ({ page }) => {
   await expect(badge).toHaveText("A");
   await expect(badge).toHaveCSS("filter", /hue-rotate/);
 });
+
+test("a project's icon can be set on this device", async ({ page }) => {
+  await signInAndOpen(page);
+  await showSidebar(page);
+  const head = page.getByTestId("focused-project");
+  // The folder switcher, not the "New chat in alpha" button beside it.
+  await head.locator(".focus-switch").click();
+  await page.getByRole("menuitem", { name: "Set an icon…" }).click();
+  const dialog = page.getByRole("dialog", { name: /^Icon for / });
+  await dialog.getByLabel(/A letter or an emoji/).fill("★");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".project-badge").first()).toHaveText("★");
+  // It lives in this browser: a reload keeps it.
+  await page.reload();
+  await showSidebar(page);
+  await expect(page.locator(".project-badge").first()).toHaveText("★");
+});

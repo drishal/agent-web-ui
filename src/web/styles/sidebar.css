@@ -779,3 +779,14 @@ body.is-resizing {
   line-height: 1;
   filter: hue-rotate(var(--badge-hue, 0deg));
 }
+
+/* A picked icon sits in the same badge, a touch larger than a letter. */
+.project-badge {
+  font-size: 12px;
+}
+
+.icon-input {
+  width: 6ch;
+  text-align: center;
+  font-size: 18px;
+}
