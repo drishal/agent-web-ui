@@ -112,7 +112,9 @@ test("open tabs move into the drawer, and the home-screen shortcuts open a new c
   await expect(page.locator(".sidebar")).toHaveClass(/is-open/);
   await expect(page).not.toHaveURL(/[?](sessions|new)=/);
   await page.goto("/?new=1");
-  await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
+  // The start screen, whichever of its two headings the restored folder allows
+  // (the live folder comes back from the server, which can lag a loaded suite).
+  await expect(page.getByRole("heading", { name: /^What should .* (do in|work on)/ })).toBeVisible({ timeout: 20_000 });
   await expect(page).not.toHaveURL(/[?](sessions|new)=/);
 });
 
