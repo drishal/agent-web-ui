@@ -91,6 +91,8 @@ export interface SessionSummary {
   settled?: true;
   /** Epoch ms: out of the projects until then (or until it needs you). */
   snoozedUntil?: number;
+  /** Not seen yet: a dot on the row until it is opened here (a mark this server keeps). */
+  unread?: true;
   /** A live chat waiting on an answer or an approval. */
   asking?: true;
   /** Open in a herdr pane (its harness run there, not by this server), and what herdr says it does. */
@@ -966,11 +968,12 @@ const markChangeShape = {
   snoozedUntil: z.number().int().positive().max(8_640_000_000_000_000).nullable().optional(),
   /** Set exactly these marks, clearing the rest (an undo). */
   replace: z.boolean().optional(),
+  unread: z.boolean().optional(),
 };
 
 /** False for a body that changes nothing: nothing to apply, nothing to undo. */
-const hasMark = (v: { pinned?: unknown; archived?: unknown; settled?: unknown; snoozedUntil?: unknown; replace?: unknown }): boolean =>
-  v.replace === true || v.pinned !== undefined || v.archived !== undefined || v.settled !== undefined || v.snoozedUntil !== undefined;
+const hasMark = (v: { pinned?: unknown; archived?: unknown; settled?: unknown; snoozedUntil?: unknown; unread?: unknown; replace?: unknown }): boolean =>
+  v.replace === true || v.pinned !== undefined || v.archived !== undefined || v.settled !== undefined || v.snoozedUntil !== undefined || v.unread !== undefined;
 
 /** Pin or archive a session; pinning unarchives it and archiving unpins it. */
 export const sessionMarkSchema = z.object({ sessionId: z.string().min(1).max(512), ...markChangeShape }).refine(hasMark, { message: "empty mark" });
@@ -991,6 +994,7 @@ export interface SessionMarkState {
   archived?: true;
   settled?: true;
   snoozedUntil?: number;
+  unread?: true;
 }
 export const compactSchema = z.object({ instructions: z.string().max(10_000).optional() });
 export const answerSchema = z.object({ answer: interactionAnswerSchema });

@@ -15,6 +15,24 @@ describe("session marks", () => {
     expect(m.get("s")).toBeUndefined();
   });
 
+  it("keeps unread beside a place, and clears it without moving the session", async () => {
+    const m = SessionMarks.inMemory();
+    await m.set("a", { pinned: true });
+    expect(await m.set("a", { unread: true })).toEqual({ pinned: true, unread: true });
+    expect(m.get("a")).toEqual({ pinned: true, unread: true });
+    // Reading it leaves the pin where it was.
+    expect(await m.set("a", { unread: false })).toEqual({ pinned: true });
+    // Activity clears settled/snoozed but not unread.
+    await m.set("b", { snoozedUntil: 9e12, unread: true });
+    m.wake("b");
+    await new Promise((r) => setTimeout(r, 5));
+    expect(m.get("b")).toEqual({ unread: true });
+    // A selection clears in one call.
+    await m.setMany(["c", "d"], { unread: true });
+    await m.setMany(["c", "d"], { unread: false });
+    expect([m.get("c"), m.get("d")]).toEqual([undefined, undefined]);
+  });
+
   it("applies one change to a selection, and clears the selection in one go", async () => {
     const m = SessionMarks.inMemory();
     await m.set("a", { pinned: true });

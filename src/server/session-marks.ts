@@ -13,6 +13,8 @@ export interface MarkChange {
   archived?: boolean;
   settled?: boolean;
   snoozedUntil?: number | null;
+  /** Seen? Kept beside a place, never in place of one. */
+  unread?: boolean;
   /** Set exactly the given marks and clear the rest. */
   replace?: boolean;
 }
@@ -23,10 +25,11 @@ function clean(raw: Record<string, unknown>): SessionMark {
     ...(raw.archived === true ? { archived: true } : {}),
     ...(raw.settled === true ? { settled: true } : {}),
     ...(typeof raw.snoozedUntil === "number" && raw.snoozedUntil > 0 ? { snoozedUntil: raw.snoozedUntil } : {}),
+    ...(raw.unread === true ? { unread: true } : {}),
   };
 }
 
-const empty = (m: SessionMark) => !m.pinned && !m.archived && !m.settled && !m.snoozedUntil;
+const empty = (m: SessionMark) => !m.pinned && !m.archived && !m.settled && !m.snoozedUntil && !m.unread;
 
 export class SessionMarks {
   private readonly marks = new Map<string, SessionMark>();
@@ -77,6 +80,9 @@ export class SessionMarks {
       only("snoozedUntil");
       next.snoozedUntil = change.snoozedUntil;
     } else if (change.snoozedUntil === null) delete next.snoozedUntil;
+    // Unread sits beside a place (pin, settle, snooze) instead of replacing it.
+    if (change.unread === true) next.unread = true;
+    else if (change.unread === false) delete next.unread;
     return next;
   }
 

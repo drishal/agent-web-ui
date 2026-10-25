@@ -464,6 +464,12 @@ describe("sessions across projects", () => {
     // Putting a selection back is one call with replace, as one row's undo is.
     await bulk({ replace: true }).expect(200);
     expect(await marks()).toEqual([["fake:a1", undefined, undefined], ["fake:a2", undefined, undefined]]);
+    // Unread sits beside a place: marking it read leaves the archive alone.
+    await bulk({ archived: true, unread: true }).expect(200);
+    expect(((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.every((s) => s.unread === true && s.archived === true)).toBe(true);
+    await bulk({ unread: false }).expect(200);
+    expect(((await agent.get("/api/sessions").expect(200)).body as SessionsOverview).sessions.every((s) => s.unread === undefined && s.archived === true)).toBe(true);
+    await bulk({ replace: true }).expect(200);
     await bulk({}).expect(400);
     await agent.post("/api/sessions/marks/bulk").send({ ids: [], settled: true }).expect(400);
     await agent.post("/api/sessions/marks/bulk").send({ ids: Array.from({ length: 501 }, (_, i) => `fake:${i}`), settled: true }).expect(400);
