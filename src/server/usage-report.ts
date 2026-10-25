@@ -57,7 +57,7 @@ export function buildReport(
   const days = new Map<string, { totals: UsageTotals; tokensByHarness: Record<string, number> }>();
   for (let i = 0; i < opts.days; i++) days.set(dayOf(since + i * DAY_MS + 12 * 3_600_000, opts.tz), { totals: zero(), tokensByHarness: {} });
   const harnesses = new Map<string, { totals: UsageTotals; sessions: number }>();
-  const models = new Map<string, { model: string; harnessId: string; totals: UsageTotals }>();
+  const models = new Map<string, { model: string; harnesses: Map<string, number>; totals: UsageTotals }>();
   const sessions: Array<{ session: ProjectSession; totals: UsageTotals }> = [];
   for (const { session, entries } of calls) {
     const mine = zero();
@@ -70,9 +70,13 @@ export function buildReport(
         add(day.totals, e);
         day.tokensByHarness[session.harnessId] = (day.tokensByHarness[session.harnessId] ?? 0) + tokensOf(e);
       }
-      const key = `${session.harnessId}\u0000${e.model ?? "unknown"}`;
-      const model = models.get(key) ?? { model: e.model ?? "unknown", harnessId: session.harnessId, totals: zero() };
+      // One row per model name, not per harness: the panel shows the name alone, so a
+      // key that included the harness would list "deepseek-v4.1-flash" three times.
+      // The name is the part the panel shows (a provider prefix is dropped).
+      const key = (e.model ?? "unknown").split("/").pop() || "unknown";
+      const model = models.get(key) ?? { model: key, harnesses: new Map(), totals: zero() };
       add(model.totals, e);
+      model.harnesses.set(session.harnessId, (model.harnesses.get(session.harnessId) ?? 0) + tokensOf(e));
       models.set(key, model);
     }
     if (mine.calls === 0) continue;
@@ -91,7 +95,15 @@ export function buildReport(
     totals,
     byDay: [...days.entries()].map(([day, d]) => ({ day, ...d })),
     byHarness: [...harnesses.entries()].map(([harnessId, h]) => ({ harnessId, ...h })).sort((a, b) => tokensOf(b.totals) - tokensOf(a.totals)),
-    byModel: [...models.values()].sort((a, b) => tokensOf(b.totals) - tokensOf(a.totals)).slice(0, TOP_MODELS),
+    byModel: [...models.values()]
+      .map((m) => ({
+        model: m.model,
+        // Who ran it, most tokens first: the row is tinted with the first.
+        harnesses: [...m.harnesses.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id),
+        totals: m.totals,
+      }))
+      .sort((a, b) => tokensOf(b.totals) - tokensOf(a.totals))
+      .slice(0, TOP_MODELS),
     top,
     workspaces: opts.workspaces.filter((w) => used.has(w.id)),
     unreadable: opts.unreadable,

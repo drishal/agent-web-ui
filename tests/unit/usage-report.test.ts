@@ -76,7 +76,11 @@ describe("usage, added up", () => {
       ["claude", 1],
       ["pi", 1],
     ]);
-    expect(report.byModel.map((m) => `${m.harnessId}/${m.model}`)).toEqual(["claude/m1", "pi/m2", "pi/m1"]);
+    // One row per model name, the harnesses that ran it listed most tokens first.
+    expect(report.byModel.map((m) => [m.model, m.harnesses])).toEqual([
+      ["m1", ["claude", "pi"]],
+      ["m2", ["pi"]],
+    ]);
     expect(report.top.map((s) => [s.session.id, tokensOf(s.totals)])).toEqual([
       ["claude:b", 5110],
       ["pi:a", 1210],

@@ -164,11 +164,11 @@ export function UsageDialog({
                 {report.byModel.length === 0 ? <p className="muted usage-none">No calls in this range</p> : null}
                 {report.byModel.map((m) => (
                   <BarRow
-                    key={`${m.harnessId}:${m.model}`}
-                    style={harnessColor(m.harnessId)}
+                    key={m.model}
+                    style={harnessColor(m.harnesses[0])}
                     label={
-                      <span className="usage-model" title={`${m.model} (${name(m.harnessId)})`}>
-                        {m.model.split("/").pop()}
+                      <span className="usage-model" title={`${m.model} (${m.harnesses.map(name).join(", ")})`}>
+                        {m.model}
                       </span>
                     }
                     share={tokensOf(m.totals) / most(report.byModel)}

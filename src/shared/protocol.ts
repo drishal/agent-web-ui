@@ -697,7 +697,8 @@ export interface UsageReport {
   byDay: Array<{ day: string; totals: UsageTotals; tokensByHarness: Record<string, number> }>;
   byHarness: Array<{ harnessId: string; totals: UsageTotals; sessions: number }>;
   /** The most-used models, most tokens first. */
-  byModel: Array<{ model: string; harnessId: string; totals: UsageTotals }>;
+  /** One row per model name across harnesses (the panel names no harness per row), with who ran it, most tokens first. */
+  byModel: Array<{ model: string; harnesses: string[]; totals: UsageTotals }>;
   /** The sessions that used the most, most first. */
   top: Array<{ session: ProjectSession; totals: UsageTotals }>;
   workspaces: WorkspaceInfo[];
