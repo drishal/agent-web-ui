@@ -209,7 +209,11 @@ test("the prompt box can be dragged taller, and a reload keeps it", async ({ pag
   await expect.poll(height).toBeGreaterThan(before + 50);
   const tall = await height();
   await page.reload();
-  await expect.poll(async () => ((await page.getByRole("textbox", { name: "Message" }).boundingBox()) as { height: number }).height).toBeGreaterThan(tall - 6);
+  // The box comes back with the restored chat, which can take a moment under load.
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible({ timeout: 20_000 });
+  await expect
+    .poll(async () => ((await page.getByRole("textbox", { name: "Message" }).boundingBox()) as { height: number }).height, { timeout: 20_000 })
+    .toBeGreaterThan(tall - 6);
 });
 
 test("a chat's harness can be restarted without losing the conversation", async ({ page }) => {
