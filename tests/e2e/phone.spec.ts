@@ -1,10 +1,10 @@
 // awui on a phone: a 390×844 touch screen. Gestures are real touch events
 // (DevTools' Input.dispatchTouchEvent): a long press on a message opens its
 // actions, a swipe from the left edge opens the drawer, a drag down on a
-// sheet's handle closes it. Also the thumb bar's Stop, Search in the chat
-// menu, tabs in the drawer, the home-screen shortcuts, a share from another
-// app arriving in a new chat's composer, the composer's settings folded into
-// one chip, and the permission list kept on screen from its row in that sheet.
+// sheet's handle closes it. Also stopping a run from the composer, Search in
+// the chat menu, tabs in the drawer, the home-screen shortcuts, a share from
+// another app arriving in a new chat's composer, the composer's settings folded
+// into one chip, and the permission list kept on screen from its row in that sheet.
 import { expect, test, type Page } from "@playwright/test";
 import { newChat, openChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
@@ -72,17 +72,15 @@ test("a swipe from the left edge opens the drawer and a swipe left closes it", a
   await expect(sidebar).not.toHaveClass(/is-open/);
 });
 
-test("a running chat shows a thumb bar whose Stop stops it; Search lives in the chat menu", async ({ page }) => {
+test("a running chat stops from the composer's Stop; Search lives in the chat menu", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
   await newChat(page);
   await page.keyboard.press("Escape");
   await send(page, "slow stream please");
-  const bar = page.locator(".thumb-bar");
-  await expect(bar).toContainText("Working");
-  await page.getByRole("button", { name: "Stop now" }).click();
+  await expect(page.getByTestId("chat-status")).toHaveText("Working");
+  await page.getByRole("button", { name: "Stop the agent" }).click();
   await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 15_000 });
-  await expect(bar).toBeHidden();
   // The header's Search button is folded into the chat menu here.
   await expect(page.getByRole("button", { name: "Commands" })).toBeHidden();
   await page.getByRole("button", { name: "Chat actions" }).click();

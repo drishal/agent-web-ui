@@ -2,9 +2,8 @@
    On a touch screen (pointer: coarse) the targets a thumb hits grow to the
    44px touch guidelines ask for; a mouse keeps the dense layout. Under 641px
    dialogs are bottom sheets with a handle (a drag down closes them, see
-   gestures.ts), the tab strip moves into the drawer, Search moves into the
-   chat menu, and a running chat shows a thumb-height bar with Stop. The page
-   never pulls to refresh, so scrolling to the top cannot reload a run. */
+   gestures.ts), the tab strip moves into the drawer, and Search moves into the
+   chat menu. The page never pulls to refresh, so scrolling to the top cannot reload a run. */
 html,
 body {
   overscroll-behavior-y: none;
@@ -12,7 +11,6 @@ body {
 
 .sheet-handle,
 .drawer-tabs,
-.thumb-bar,
 .menu-phone-only {
   display: none;
 }
@@ -189,31 +187,6 @@ body {
     color: var(--muted-text);
   }
 
-  /* While a run goes: how long, and Stop where a thumb rests. */
-  .thumb-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 6px;
-    padding: 4px 4px 4px 12px;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-size: 13px;
-  }
-
-  .thumb-bar-label {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .thumb-stop {
-    min-height: 40px;
-    padding: 0 16px;
-    border-radius: 999px;
-    background: var(--danger);
-    color: var(--bg);
-  }
 
   /* A message's actions as a sheet (a long press). */
   .action-sheet-list {

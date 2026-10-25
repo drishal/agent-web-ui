@@ -353,13 +353,9 @@
 }
 
 .turn-prompt {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   display: flex;
   justify-content: flex-end;
   padding: 12px 0 10px;
-  background: linear-gradient(var(--bg) 78%, color-mix(in srgb, var(--bg) 0%, transparent));
 }
 
 .bubble-stack {

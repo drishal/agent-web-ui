@@ -26,12 +26,10 @@ import { continueList, indentList } from "../list-continue.js";
 import { loadStash, saveStash, stashDraft, takeFromStash, type StashEntry } from "../stash.js";
 import { CONTINUE_TEXT, limitStop } from "../../shared/limit-stop.js";
 import { LimitRecovery } from "./LimitRecovery.js";
-import { useDismiss, useNow } from "../hooks.js";
-import { formatDuration } from "../turns.js";
+import { useDismiss } from "../hooks.js";
 import { GitPanel, GitRow } from "./GitStatusView.js";
 import { useGitStatus } from "../git.js";
 import { Dot, dotted } from "./Dot.js";
-import { Rolling } from "./Rolling.js";
 
 /** The prompt box's drag limits: a line, or most of a screen. */
 const MIN_PROMPT_H = 26;
@@ -116,9 +114,6 @@ export function Composer({
   const running = chat.status === "running";
   const stopping = chat.status === "stopping";
   const busy = running || stopping || chat.status === "compacting";
-  // The phone's thumb bar: how long this run has gone, from its prompt.
-  const now = useNow(running);
-  const runStart = running ? [...chat.items].reverse().find((i) => i.kind === "user")?.at : undefined;
   const closed = chat.status === "disposed";
   // Capturing a window is a desktop gesture; on a phone the picker would offer the phone itself.
   const canCapture = useMemo(() => canCaptureScreen() && !coarsePointer(), []);
@@ -574,25 +569,6 @@ export function Composer({
             resizeTo(promptHeightNow() + (e.key === "ArrowUp" ? 24 : -24));
           }}
         />
-      ) : null}
-      {busy ? (
-        <div className="thumb-bar" role="status">
-          <Spinner size={13} />
-          <span className="thumb-bar-label">
-            {stopping ? "Stopping" : chat.status === "compacting" ? "Compacting" : "Working"}
-            {runStart ? (
-              <>
-                <Dot />
-                <Rolling text={formatDuration(Math.max(0, now - runStart))} />
-              </>
-            ) : null}
-          </span>
-          {running ? (
-            <button type="button" className="btn btn-small thumb-stop" onClick={onStop} aria-label="Stop now">
-              <IconStop size={13} /> Stop
-            </button>
-          ) : null}
-        </div>
       ) : null}
       <StatusStack
         chatId={chat.chatId}
