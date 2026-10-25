@@ -35,11 +35,15 @@ export function resetFromText(text: string, now: number): number | null {
   return at.getTime();
 }
 
-/** The latest reset among this harness's full windows, when its account says it is limited. */
-function resetFromLimits(limits: UsageLimits | null, source: string, now: number): number | null {
+/**
+ * The latest reset among the windows that are full, inside a source when one is
+ * named (a harness's own reading) or across every account (the sidebar's "Until
+ * the limit resets").
+ */
+export function limitResetAt(limits: UsageLimits | null, now = Date.now(), source?: string): number | null {
   let best: number | null = null;
   for (const account of limits?.accounts ?? []) {
-    if (account.source !== source) continue;
+    if (source !== undefined && account.source !== source) continue;
     for (const w of account.windows) {
       const full = account.limited ? (w.used ?? 1) >= 0.99 : (w.used ?? 0) >= 0.99;
       if (full && w.resetsAt !== null && w.resetsAt > now && (best === null || w.resetsAt > best)) best = w.resetsAt;
@@ -59,7 +63,7 @@ export function limitStop(items: readonly ChatItem[], status: ChatStatus, limits
     if (item?.kind === "assistant") text = item.error ?? (item.text.length < 400 ? item.text : "");
     else if (item?.kind === "notice" && item.level !== "info") text = item.text;
     if (!item || !text || !LIMIT_TEXT.test(text)) continue;
-    return { id: item.id, resetsAt: resetFromText(text, now) ?? resetFromLimits(limits, source, now) };
+    return { id: item.id, resetsAt: resetFromText(text, now) ?? limitResetAt(limits, now, source) };
   }
   return null;
 }
