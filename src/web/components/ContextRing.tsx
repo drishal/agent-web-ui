@@ -1,10 +1,13 @@
 // Context occupancy ring (DeepSeek Harness / OpenCode). Its popover holds the
 // whole picture, in DeepSeek Harness's sections: what fills the context
-// window, the session's tokens, and model timing. Hidden until the harness
-// reports a percentage.
+// window, the session's tokens, and model timing. On a phone the popover is
+// the same body drawn as a bottom sheet (Dialog); the desktop keeps the
+// anchored popover. Hidden until the harness reports a percentage.
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
+import { coarse } from "../gestures.js";
 import { useDismiss } from "../hooks.js";
+import { Dialog } from "./Dialog.js";
 import { Dot } from "./Dot.js";
 
 function compact(n: number): string {
@@ -47,6 +50,73 @@ function Row({ label, value, color, title }: { label: string; value: string; col
   );
 }
 
+/** The popover's sections. Drawn inside the desktop's anchored panel and inside the phone's bottom sheet alike. */
+function UsageBody({ context, usage }: { context: ContextUsage; usage: SessionUsage | null }) {
+  const pct = Math.max(0, Math.min(100, context.percent ?? 0));
+  const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
+
+  const uncached = usage ? usage.input + usage.cacheWrite : 0;
+  const inputTotal = usage ? uncached + usage.cachedInput : 0;
+  const cacheHit = inputTotal > 0 && usage ? `${Math.round((usage.cachedInput / inputTotal) * 100)}%` : "—";
+  const timed = usage !== null && (usage.llmMs !== null || usage.tokensPerSecond !== null);
+  // A fresh session has nothing to report but zeros; show those sections after its first model call.
+  const used = usage !== null && usage.steps > 0 ? usage : null;
+
+  return (
+    <>
+      <section className="usage-section" aria-label="Context">
+        <div className="usage-head">
+          <span>
+            <strong>{pct < 1 ? "<1" : Math.round(pct)}%</strong> of context used
+          </span>
+          <span className="usage-value">{context.tokens !== null ? `${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}</span>
+        </div>
+        <div className="usage-bar" aria-hidden="true">
+          {categories.length > 0 ? (
+            categories.map((x, i) => <span key={x.id} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />)
+          ) : (
+            <span style={{ width: `${pct}%`, background: "currentColor" }} />
+          )}
+        </div>
+        {categories.map((x, i) => (
+          <Row key={x.id} label={x.label} value={compact(x.tokens)} color={swatch(x, i)} title={`${full(x.tokens)} tokens (estimated)`} />
+        ))}
+      </section>
+
+      {used ? (
+        <section className="usage-section" aria-label="Tokens">
+          <div className="usage-head">
+            <span>Tokens this session</span>
+            <span className="usage-value">{full(inputTotal + used.output)}</span>
+          </div>
+          <Row label="Cache hit" value={cacheHit} />
+          <Row label="Uncached input" value={full(uncached)} />
+          <Row label="Cached input" value={full(used.cachedInput)} />
+          <Row label="Output" value={full(used.output)} />
+          {used.cost !== null ? <Row label="Cost" value={`$${used.cost.toFixed(used.cost < 1 ? 4 : 2)}`} /> : null}
+        </section>
+      ) : null}
+
+      {used ? (
+        <section className="usage-section" aria-label="Session">
+          <div className="usage-head">
+            <span>Session</span>
+            <span className="usage-value">
+              {used.turns} {used.turns === 1 ? "turn" : "turns"}
+              <Dot />
+              {used.steps} {used.steps === 1 ? "step" : "steps"}
+            </span>
+          </div>
+          <Row label="LLM time" value={used.llmMs !== null ? duration(used.llmMs) : "—"} />
+          <Row label="Avg time to first token" value={used.ttftMs !== null ? duration(used.ttftMs) : "—"} />
+          <Row label="Tokens per second" value={used.tokensPerSecond !== null ? `${used.tokensPerSecond} tok/s` : "—"} />
+          {!timed ? <p className="usage-note">Timing is measured from runs this server watches.</p> : null}
+        </section>
+      ) : null}
+    </>
+  );
+}
+
 export function ContextRing({ context, usage }: { context: ContextUsage | null; usage: SessionUsage | null }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -57,7 +127,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
   // The ring sits anywhere in the composer's wrapped control row, so the panel
   // pulls itself back inside the viewport and inside the room above the ring.
   // Measured from the layout box, since the opening animation scales the
-  // painted one.
+  // painted one. (Desktop only; a phone draws the panel as a sheet.)
   useLayoutEffect(() => {
     const el = pop.current;
     const anchor = wrap.current?.getBoundingClientRect();
@@ -79,14 +149,6 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
   const c = 2 * Math.PI * r;
   const tone = pct >= 90 ? "danger" : pct >= 70 ? "warn" : "ok";
   const detail = `${Math.round(pct)}% of context used${context.tokens !== null ? ` · ${compact(context.tokens)} / ${compact(context.window)} tokens` : ""}`;
-  const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
-
-  const uncached = usage ? usage.input + usage.cacheWrite : 0;
-  const inputTotal = usage ? uncached + usage.cachedInput : 0;
-  const cacheHit = inputTotal > 0 && usage ? `${Math.round((usage.cachedInput / inputTotal) * 100)}%` : "—";
-  const timed = usage !== null && (usage.llmMs !== null || usage.tokensPerSecond !== null);
-  // A fresh session has nothing to report but zeros; show those sections after its first model call.
-  const used = usage !== null && usage.steps > 0 ? usage : null;
 
   return (
     <div className="context-ring-wrap" ref={wrap}>
@@ -101,76 +163,20 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
       >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="2" />
-          <circle
-            cx="8"
-            cy="8"
-            r={r}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeDasharray={`${(pct / 100) * c} ${c}`}
-            transform="rotate(-90 8 8)"
-          />
+          <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray={`${(pct / 100) * c} ${c}`} strokeLinecap="round" transform="rotate(-90 8 8)" />
         </svg>
         <span className="context-pct">{Math.round(pct)}%</span>
       </button>
       {open ? (
-        <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
-          <section className="usage-section" aria-label="Context">
-            <div className="usage-head">
-              <span>
-                <strong>{pct < 1 ? "<1" : Math.round(pct)}%</strong> of context used
-              </span>
-              <span className="usage-value">
-                {context.tokens !== null ? `${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}
-              </span>
-            </div>
-            <div className="usage-bar" aria-hidden="true">
-              {categories.length > 0 ? (
-                categories.map((x, i) => (
-                  <span key={x.id} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />
-                ))
-              ) : (
-                <span style={{ width: `${pct}%`, background: "currentColor" }} />
-              )}
-            </div>
-            {categories.map((x, i) => (
-              <Row key={x.id} label={x.label} value={compact(x.tokens)} color={swatch(x, i)} title={`${full(x.tokens)} tokens (estimated)`} />
-            ))}
-          </section>
-
-          {used ? (
-            <section className="usage-section" aria-label="Tokens">
-              <div className="usage-head">
-                <span>Tokens this session</span>
-                <span className="usage-value">{full(inputTotal + used.output)}</span>
-              </div>
-              <Row label="Cache hit" value={cacheHit} />
-              <Row label="Uncached input" value={full(uncached)} />
-              <Row label="Cached input" value={full(used.cachedInput)} />
-              <Row label="Output" value={full(used.output)} />
-              {used.cost !== null ? <Row label="Cost" value={`$${used.cost.toFixed(used.cost < 1 ? 4 : 2)}`} /> : null}
-            </section>
-          ) : null}
-
-          {used ? (
-            <section className="usage-section" aria-label="Session">
-              <div className="usage-head">
-                <span>Session</span>
-                <span className="usage-value">
-                  {used.turns} {used.turns === 1 ? "turn" : "turns"}
-                  <Dot />
-                  {used.steps} {used.steps === 1 ? "step" : "steps"}
-                </span>
-              </div>
-              <Row label="LLM time" value={used.llmMs !== null ? duration(used.llmMs) : "—"} />
-              <Row label="Avg time to first token" value={used.ttftMs !== null ? duration(used.ttftMs) : "—"} />
-              <Row label="Tokens per second" value={used.tokensPerSecond !== null ? `${used.tokensPerSecond} tok/s` : "—"} />
-              {!timed ? <p className="usage-note">Timing is measured from runs this server watches.</p> : null}
-            </section>
-          ) : null}
-        </div>
+        coarse() ? (
+          <Dialog title="Context and usage" onClose={() => setOpen(false)} className="usage-sheet">
+            <UsageBody context={context} usage={usage} />
+          </Dialog>
+        ) : (
+          <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
+            <UsageBody context={context} usage={usage} />
+          </div>
+        )
       ) : null}
     </div>
   );

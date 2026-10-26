@@ -703,6 +703,13 @@
   translate: var(--usage-shift, 0) 0;
 }
 
+/* The phone's form: the same body inside the bottom sheet (Dialog). */
+.usage-sheet .dialog-body {
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 .usage-section {
   padding: 10px 0;
 }
