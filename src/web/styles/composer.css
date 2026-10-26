@@ -298,6 +298,12 @@
   border-radius: 50%;
 }
 
+/* The attach button's glyph: an image on desktop, a + on a phone (the
+   phone's one row reads as add-first). */
+.composer-attach .attach-plus {
+  display: none;
+}
+
 .composer-bar .composer-capture {
   width: 32px;
   height: 32px;
@@ -363,10 +369,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* A phone: an empty prompt box is one line, not two (52 px was a desktop's two
-   lines); the attach/send row and the config chip lose the extra tap-target
-   height a wide screen can afford (44 px is still met in the touch rules for
-   the icons themselves). */
+/* A phone: one row under the input — a + for the images, the chat's pill
+   (which opens the chat-settings sheet), and on the right the context ring
+   and a round Send/Stop. The capture button is a desktop affordance (there
+   is no window to grab); the pickers (the desktop's chips) stay hidden
+   behind the one pill. Touch targets are 44 px at the icon and send buttons;
+   the pill is content-height so the row stays slim. */
 @media (max-width: 600px) {
   .composer-card {
     padding-top: 8px;
@@ -383,29 +391,79 @@
   }
 
   .composer-bar {
-    row-gap: 6px;
+    flex-wrap: nowrap;
+    gap: 6px;
     margin-top: 4px;
   }
 
-  .composer-bar .composer-actions {
-    order: 1;
+  .composer-bar .composer-attach .attach-image {
+    display: none;
+  }
+
+  .composer-bar .composer-attach .attach-plus {
+    display: block;
+  }
+
+  .composer-bar .composer-capture {
+    display: none;
+  }
+
+  /* The stash is a desktop tool (its key, Alt+S, has no phone); on a phone it
+     shows only when it already holds drafts, so nothing you parked is lost. */
+  .composer-bar .stash:not(:has(.stash-count)) {
+    display: none;
   }
 
   .composer-bar .composer-controls {
-    order: 2;
-    flex-basis: 100%;
+    order: 0;
+    flex: 1;
+    min-width: 0;
   }
+
   .composer-pickers {
     display: none;
   }
 
-  /* One chip in their place: the values on one line, the settings sheet behind it.
-     Outranks the coarse-pointer 40-px pill rule in phones.css (it names .pill-trigger). */
+  .composer-bar .composer-actions {
+    margin-left: auto;
+  }
+
+  /* The compact chip is a picker too wide for one row; the context ring next
+     to Send reads as enough. */
+  .composer-actions .compact-chip {
+    display: none;
+  }
+
+  /* Busy: Steer/Follow-up/Then are the transient affordances; they take their
+     own line under the row so the one-handed row stays put. */
+  .composer-bar:has(.composer-actions .pill-btn) {
+    flex-wrap: wrap;
+  }
+
+  .composer-bar:has(.composer-actions .pill-btn) .composer-controls {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .composer-bar:has(.composer-actions .pill-btn) .composer-actions {
+    order: 1;
+    width: 100%;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+  }
+
+  /* The sheet opener as the row's model pill: centred, single line; a tap
+     still opens the chat-settings sheet. Outranks phones.css's coarse-pointer
+     min-height on .pill-trigger. */
   .composer .composer-controls .pill-trigger.composer-config-chip {
     display: inline-flex;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+    width: auto;
     height: 36px;
     min-height: 36px;
+    justify-content: center;
+    border-radius: 999px;
   }
 }
 

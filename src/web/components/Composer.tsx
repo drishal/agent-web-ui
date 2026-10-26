@@ -11,7 +11,7 @@ import type { ChatState } from "../chat-state.js";
 import { APP_COMMANDS, isSkill, mergeCommands, skillMenu, skillName, slashMenu } from "../commands.js";
 import { blanks, matchPrompts, nextBlank, promptGist } from "../prompt-blanks.js";
 import { managePrompts, useSavedPrompts } from "../saved-prompts.js";
-import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconSpark, IconScreen, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
+import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconPlus, IconSpark, IconScreen, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
 import { canCaptureScreen, captureScreen } from "../screen-capture.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
@@ -821,7 +821,8 @@ export function Composer({
               disabled={closed || images.length >= MAX_IMAGES}
               onClick={() => filePicker.current?.click()}
             >
-              <IconImage size={16} />
+              <IconImage size={16} className="attach-image" />
+              <IconPlus size={16} className="attach-plus" />
             </button>
             <input
               ref={filePicker}
