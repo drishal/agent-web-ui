@@ -363,9 +363,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A phone: an empty prompt box is one line, not two (52 px was a desktop's two
+   lines); the attach/send row and the config chip lose the extra tap-target
+   height a wide screen can afford (44 px is still met in the touch rules for
+   the icons themselves). */
 @media (max-width: 600px) {
+  .composer-card {
+    padding-top: 8px;
+    padding-bottom: 6px;
+  }
+
+  .composer-input {
+    min-height: 24px;
+    max-height: 180px;
+  }
+
+  .composer.is-hero .composer-input {
+    min-height: 30px;
+  }
+
   .composer-bar {
     row-gap: 6px;
+    margin-top: 4px;
   }
 
   .composer-bar .composer-actions {
@@ -380,11 +399,13 @@
     display: none;
   }
 
-  /* One chip in their place: the values on one line, the settings sheet behind it. */
-  .composer-controls .composer-config-chip {
+  /* One chip in their place: the values on one line, the settings sheet behind it.
+     Outranks the coarse-pointer 40-px pill rule in phones.css (it names .pill-trigger). */
+  .composer .composer-controls .pill-trigger.composer-config-chip {
     display: inline-flex;
     width: 100%;
-    height: 40px;
+    height: 36px;
+    min-height: 36px;
   }
 }
 
