@@ -41,7 +41,7 @@ banners-dialogs.css), so search rather than guess.
 | Page frame, header, status bar | `App.tsx`, `StatusBar.tsx` | `app-frame.css`, `header.css` | `app.spec.ts` |
 | Sidebar: harness, projects, sessions | `Sidebar.tsx`, `HarnessMenu.tsx`, `SessionCard.tsx`, `SidebarResizer.tsx`, `WorkingRing.tsx` | `sidebar.css`, `session-card.css` | `app.spec.ts`, `tabs.spec.ts` |
 | Session tabs | `TabStrip.tsx` | `session-tabs.css` | `tabs.spec.ts` |
-| Conversation: turns, answers, thoughts | `Conversation.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `QuoteButton.tsx`, `TurnRail.tsx` | `conversation.css` | `app.spec.ts` |
+| Conversation: turns, answers, thoughts | `Conversation.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `QuoteButton.tsx`, `TurnRail.tsx`, `StickyPrompt.tsx` (`sticky-prompt.ts`) | `conversation.css` | `app.spec.ts` |
 | Tool rows and their bodies (diffs, terminals) | `ToolBody.tsx` (inside `Conversation.tsx`) | `conversation.css` | `app.spec.ts` (tool cards) |
 | Subagents, agent-rendered pages, plans | `Subagents.tsx`, `HtmlRenderFrame.tsx`, `PlanCard.tsx` | `subagents.css`, `plan-card.css` | `app.spec.ts`, `composer-extras.spec.ts` |
 | Empty chat, opening a chat | `App.tsx` (hero), `SwitchSplash.tsx`, `Loader.tsx` | `hero.css`, `opening-chat.css`, `loader.css` | `app.spec.ts`, `tabs.spec.ts` |

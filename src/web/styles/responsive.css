@@ -104,6 +104,10 @@
     padding: 4px 12px 20px;
   }
 
+  .sticky-prompt {
+    padding-inline: 12px;
+  }
+
   .bubble-stack {
     max-width: 88%;
   }

@@ -25,6 +25,7 @@ import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
+import { StickyPrompt } from "./StickyPrompt.js";
 import { IMPLEMENT_TEXT, PlanCard } from "./PlanCard.js";
 
 const PIN_DISTANCE_PX = 96;
@@ -1377,6 +1378,16 @@ export function Conversation({
       </div>
       <QuoteButton scope={scroller} />
       <TurnRail turns={turns} scroller={scroller} onReveal={reveal} />
+      {/* The find bar owns the top corner while it is open; going back leaves the end of the chat, so the end stops pulling the view down. */}
+      <StickyPrompt
+        turns={turns}
+        scroller={scroller}
+        hidden={find !== null}
+        onBeforeGo={() => {
+          pinned.current = false;
+          jumpingRef.current = false;
+        }}
+      />
       {showJump ? (
         <button type="button" className="jump" onClick={jump}>
           Jump to latest <IconChevronDown size={14} />

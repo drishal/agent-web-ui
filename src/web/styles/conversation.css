@@ -1500,6 +1500,50 @@
   box-shadow: var(--shadow-soft);
 }
 
+/* The prompt of the turn being read, once it has scrolled off the top (StickyPrompt). It overlays the
+   scroll area, so nothing moves; it stops short of the scrollbar and sits below the find bar's layer.
+   Its height is STICKY_BAR_PX in sticky-prompt.ts. The side padding lines its text up with the thread's. */
+.sticky-prompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 calc(max(0px, (100% - 8px - var(--chat-col)) / 2) + 20px);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--text-2);
+  font-size: calc(var(--chat-small) - 0.5px);
+  text-align: left;
+  animation: fade-in 0.14s var(--ease-out);
+}
+
+.sticky-prompt:hover {
+  color: var(--text);
+}
+
+.sticky-number {
+  flex: none;
+  color: var(--muted-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sticky-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Turn rail (DeepSeek Harness), desktop only. */
 .turn-rail {
   position: absolute;

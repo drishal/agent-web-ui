@@ -1347,3 +1347,52 @@ test("a tool's full output opens in its own sheet, with Copy", async ({ page }) 
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
 });
+
+test("a sticky bar names the prompt once it has scrolled off, and goes back to it", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await signInAndOpen(page);
+  await newChat(page);
+  // "slow" makes a long answer, so the chat ends with the prompt far above the view.
+  await sendAndWait(page, "slow sticky walrus");
+  const bar = page.getByRole("button", { name: /^Back to prompt #1: slow sticky walrus/ });
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText("#1");
+  await expect(bar).toContainText("slow sticky walrus");
+  await expect(prompts(page).first()).not.toBeInViewport();
+  // It overlays the top of the conversation: it takes no room from the thread.
+  const conversation = page.locator(".conversation");
+  const [barBox, viewBox] = [await bar.boundingBox(), await conversation.boundingBox()];
+  expect(barBox!.y).toBeCloseTo(viewBox!.y, 0);
+  expect(barBox!.height).toBeLessThanOrEqual(32);
+  // Find owns the top corner while it is open.
+  await page.locator(".chat-header h1").click();
+  await page.keyboard.press("Control+KeyF");
+  await expect(page.getByRole("searchbox", { name: "Find in chat" })).toBeFocused();
+  await expect(bar).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("searchbox", { name: "Find in chat" })).toBeHidden();
+  await expect(bar).toBeVisible();
+  // Click: back at the prompt, and the bar is gone.
+  await bar.click();
+  await expect(prompts(page).first()).toBeInViewport();
+  await expect(bar).toBeHidden();
+  // Down into the answer again: it returns. A second turn is named #2 once its own prompt scrolls off.
+  await page.locator(".conversation").evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await expect(bar).toBeVisible();
+  await sendAndWait(page, "slow sticky wombat");
+  await expect(page.getByRole("button", { name: /^Back to prompt #2: slow sticky wombat/ })).toBeVisible();
+});
+
+test("the sticky bar goes back at once under reduced motion, and from the keyboard", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "slow sticky reading");
+  const bar = page.getByRole("button", { name: /^Back to prompt #1:/ });
+  await expect(bar).toBeVisible();
+  await bar.focus();
+  await page.keyboard.press("Enter");
+  await expect(prompts(page).first()).toBeInViewport();
+  await expect(bar).toBeHidden();
+});
