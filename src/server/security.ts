@@ -165,7 +165,12 @@ export class Security {
     const auth = this.options.password;
     if (!auth) return send(res, 404, "not_found", "Password sign-in is not configured");
     const address = req.socket.remoteAddress ?? "unknown";
-    const wait = this.limiter.retryAfter(address);
+    // Tailscale Serve proxies every device over loopback, so its peer address is
+    // always 127.0.0.1: count those failures by the tailnet login instead, or one
+    // device guessing could lock every other one out.
+    const login = res.locals.hostKind === "remote" ? String(req.headers["tailscale-user-login"] ?? "").toLowerCase() : "";
+    const who = login ? `tailscale:${login}` : address;
+    const wait = this.limiter.retryAfter(who);
     if (wait > 0) {
       res.setHeader("Retry-After", String(wait));
       return send(res, 429, "locked", `Too many failed sign-ins. Try again in ${Math.ceil(wait / 60)} min.`, { retryAfter: wait });
@@ -175,12 +180,12 @@ export class Security {
     const password = typeof body.password === "string" ? body.password.slice(0, 1024) : "";
     const ok = await auth.verify(username, password);
     if (!ok) {
-      this.limiter.fail(address);
-      this.options.log?.(`sign-in failed from ${address}`);
+      this.limiter.fail(who);
+      this.options.log?.(`sign-in failed from ${login ? `${login} via Tailscale` : address}`);
       await new Promise((r) => setTimeout(r, FAIL_DELAY_MS));
       return send(res, 401, "bad_credentials", "Wrong username or password");
     }
-    this.limiter.succeed(address);
+    this.limiter.succeed(who);
     res.setHeader("Set-Cookie", this.issueCookie(res.locals.authority as string, res.locals.hostKind === "remote"));
     res.json({ ok: true, username: auth.username });
   };

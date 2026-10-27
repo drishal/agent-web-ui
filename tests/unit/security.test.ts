@@ -122,6 +122,16 @@ describe("other devices", () => {
     expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
   });
 
+  it("over Tailscale Serve are locked out per tailnet login, not per proxy address", async () => {
+    t = await makeTestApp({ withPassword: true, allowedHosts: ["box.tail.ts.net"] });
+    const login = (who: string, password: string) =>
+      request(t!.server).post("/api/login").set("Host", "box.tail.ts.net").set("Tailscale-User-Login", who).send({ username: USER, password });
+    for (let i = 0; i < 5; i++) expect((await login("guesser@example.com", "x")).status).toBe(401);
+    expect((await login("guesser@example.com", PASS)).status).toBe(429);
+    // Every Serve request arrives from 127.0.0.1; another login is not locked with it.
+    expect((await login("me@example.com", PASS)).status).toBe(200);
+  });
+
   it("over Tailscale Serve use the password, plus the user allowlist when set", async () => {
     t = await makeTestApp({ withPassword: true, allowedHosts: ["box.tail.ts.net"], allowedTailscaleUsers: ["me@example.com"] });
     const denied = await request(t.server).get("/api/health").set("Host", "box.tail.ts.net").set("Tailscale-User-Login", "other@example.com");

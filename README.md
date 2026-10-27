@@ -433,7 +433,7 @@ omp is a Pi fork and reads the **same variable names** (`PI_CODING_AGENT_DIR`, `
 - **Other devices sign in** with `auth.username`/`auth.password` from `config.yml`, or the login from `npm run set-password`:
   - `set-password` stores only a salted scrypt hash, mode 0600. `auth.password` is plaintext in `config.yml` (forced to mode 0600) and is hashed in memory with a salt derived from the cookie secret, so restarts keep devices signed in.
   - Sign-in issues an HMAC-signed cookie bound to that `host:port` and to the credential fingerprint: `HttpOnly`, `SameSite=Strict`, ~30 days, and `Secure` on Serve hosts. Changing the password signs every device out.
-  - Five wrong tries lock that address for 15 minutes, and every failure costs 400 ms.
+  - Five wrong tries lock that address for 15 minutes, and every failure costs 400 ms. Over Tailscale Serve, where every device arrives from loopback, the lock is per tailnet login instead.
   - Without a configured login, every non-local request is refused, and `HOST=0.0.0.0` or `ALLOWED_HOSTS` will not start.
 - **LAN access is plain HTTP.** On your home network the password and chats are not encrypted; use Tailscale (HTTPS through Serve, or the encrypted tailnet) when you are away. NixOS's firewall also has to allow the port on the LAN interface (see below).
 - If `ALLOWED_TAILSCALE_USERS` is set, Serve requests must also carry an allowed `Tailscale-User-Login` (trustworthy only because the backend is behind Serve).
