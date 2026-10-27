@@ -6,8 +6,12 @@
 // read back into the string on every edit. The handle answers like a textarea
 // (value, selectionStart/End, setSelectionRange, focus), so the composer's keys,
 // menus, recall, lists, blanks, and stash work on it unchanged. Enter, a paste,
-// and a text drop insert plain text here, so the browser never adds markup.
+// and a text drop insert plain text here, so the browser never adds markup. The
+// redraw wipes the browser's undo stack, so the box keeps its own
+// (draft-history.ts) and answers Ctrl/Cmd+Z, Shift+Z, Ctrl+Y, and the browser's
+// historyUndo/historyRedo itself.
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { DraftHistory, type DraftSnap } from "../draft-history.js";
 import { chipLabel, draftPieces, withoutPiece, type DraftPiece } from "../draft-chips.js";
 
 /** What the composer reads and moves, as it did on its textarea. */
@@ -136,6 +140,9 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
   /** Where the caret goes once a value set here has been drawn. */
   const pending = useRef<[number, number] | null>(null);
   const composing = useRef(false);
+  const history = useRef(new DraftHistory());
+  /** The draft as this editor last knew it: a different value arriving is the composer's own change. */
+  const known = useRef(value);
 
   /** The text offset of a DOM point in the box. */
   const offsetOf = (node: Node, offset: number): number => {
@@ -226,6 +233,12 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     if (!root || composing.current) return;
     const focused = document.activeElement === root;
     const [start, end] = focused ? selection() : [value.length, value.length];
+    if (value !== known.current) {
+      // The composer set the draft (recall, completion, stash, a list's Enter): undoable, except a cleared box after a send starts afresh.
+      if (value === "") history.current.reset();
+      else history.current.record({ value: known.current, selection: [Math.min(start, known.current.length), Math.min(end, known.current.length)] }, value, Date.now(), "edit");
+      known.current = value;
+    }
     const pieces = draftPieces(value, typed.current === value && start === end ? start : undefined);
     const shown = readText(root);
     if (shown.text === value && shown.flat && drawnChips(root) === chipsOf(pieces)) {
@@ -263,21 +276,59 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     if (root) Object.defineProperty(root, "value", { configurable: true, get: () => current.current });
   }, []);
 
+  /** Say the draft is now `next`, keeping what it was (with its caret `before`) for undo. */
+  const change = (next: string, before: [number, number], kind?: "edit") => {
+    history.current.record({ value: current.current, selection: before }, next, Date.now(), kind);
+    known.current = next;
+    onChange(next);
+  };
+
   /** Put `text` where the selection is, as typing would, and say so. */
   const insert = (text: string) => {
     const [start, end] = selection();
     const next = current.current.slice(0, start) + text + current.current.slice(end);
     pending.current = [start + text.length, start + text.length];
     typed.current = next;
-    onChange(next);
+    change(next, [start, end], "edit");
   };
+
+  /** Go back (or forward) one step of the box's own history. */
+  const travel = (back: boolean) => {
+    const now: DraftSnap = { value: current.current, selection: selection() };
+    const snap = back ? history.current.undo(now) : history.current.redo(now);
+    if (!snap) return;
+    pending.current = snap.selection;
+    typed.current = null;
+    known.current = snap.value;
+    onChange(snap.value);
+  };
+  const travelRef = useRef(travel);
+  travelRef.current = travel;
+  // The browser's own undo (its menu, the OS's shortcut) would act on a box it no longer remembers: take it here.
+  useLayoutEffect(() => {
+    const root = box.current;
+    if (!root) return;
+    const on = (e: Event) => {
+      const type = (e as InputEvent).inputType;
+      if (type !== "historyUndo" && type !== "historyRedo") return;
+      e.preventDefault();
+      travelRef.current(type === "historyUndo");
+    };
+    root.addEventListener("beforeinput", on);
+    return () => root.removeEventListener("beforeinput", on);
+  }, []);
 
   const onInput = () => {
     const root = box.current;
     if (!root) return;
     const { text } = readText(root);
     typed.current = text;
-    if (text !== current.current) onChange(text);
+    if (text !== current.current) {
+      // The caret before the change is where the old and new text first differ.
+      let p = 0;
+      while (p < text.length && p < current.current.length && text[p] === current.current[p]) p++;
+      change(text, [p, p]);
+    }
   };
 
   const removeChip = (chip: HTMLElement) => {
@@ -291,7 +342,7 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     pending.current = [start, start];
     typed.current = null;
     box.current?.focus();
-    onChange(next);
+    change(next, [start + raw.length, start + raw.length], "edit");
   };
 
   return (
@@ -322,6 +373,11 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
       onKeyDown={(e) => {
         onKeyDown?.(e);
         if (e.defaultPrevented || e.nativeEvent.isComposing) return;
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key.toLowerCase() === "z" || (e.key.toLowerCase() === "y" && e.ctrlKey && !e.shiftKey))) {
+          e.preventDefault();
+          travel(e.key.toLowerCase() === "z" && !e.shiftKey);
+          return;
+        }
         if (e.key === "Enter") {
           // A line break as text, never the browser's <div>; a chord the composer left alone does nothing.
           e.preventDefault();
@@ -337,7 +393,7 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
           e.preventDefault();
           pending.current = [piece.start, piece.start];
           typed.current = null;
-          onChange(withoutPiece(current.current, piece));
+          change(withoutPiece(current.current, piece), [start, start], "edit");
         }
       }}
       onPaste={(e) => {

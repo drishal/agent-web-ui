@@ -273,3 +273,53 @@ test("a chat's harness can be restarted without losing the conversation", async 
   await expect(page.getByTestId("user-prompt").last()).toHaveText("restart me");
   await sendAndWait(page, "after the restart");
 });
+
+test("Ctrl+Z and Ctrl+Shift+Z undo and redo the draft, across Enter, a paste, and a chip's removal", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  await box(page).focus();
+  await page.keyboard.type("one two");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("three");
+  await expectDraft(box(page)).toBe("one two\nthree");
+  await page.keyboard.press("Control+z");
+  await expectDraft(box(page)).toBe("one two\n");
+  await page.keyboard.press("Control+z");
+  await expectDraft(box(page)).toBe("one two");
+  await page.keyboard.press("Control+Shift+Z");
+  await expectDraft(box(page)).toBe("one two\n");
+  await page.keyboard.press("Control+y");
+  await expectDraft(box(page)).toBe("one two\nthree");
+
+  // A paste is one step.
+  await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.setData("text/plain", " pasted text");
+    document.querySelector('[role="textbox"]')?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expectDraft(box(page)).toBe("one two\nthree pasted text");
+  await page.keyboard.press("Control+z");
+  await expectDraft(box(page)).toBe("one two\nthree");
+});
+
+test("Ctrl+Z brings back a chip taken out with Backspace", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  const draft = "see @src/web/find.ts here";
+  await box(page).fill(draft);
+  const chips = box(page).locator(".draft-chip");
+  await expect(chips).toHaveCount(1);
+  await box(page).focus();
+  await page.keyboard.press("Control+End");
+  // " here" is five steps back; the caret then sits just after the chip.
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Backspace");
+  await expect(chips).toHaveCount(0);
+  await expectDraft(box(page)).toBe("see here");
+  await page.keyboard.press("Control+z");
+  await expect(chips).toHaveCount(1);
+  await expectDraft(box(page)).toBe(draft);
+  await page.keyboard.press("Control+Shift+Z");
+  await expect(chips).toHaveCount(0);
+  await expectDraft(box(page)).toBe("see here");
+});
