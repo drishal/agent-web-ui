@@ -128,7 +128,9 @@ async function main(): Promise<void> {
     ...(password ? { password } : {}),
     ...(config.host === "0.0.0.0" ? { lanHosts: cachedLanHosts() } : {}),
     log: (m) => console.error(`awui: ${m}`),
+    revokedFile: path.join(config.stateDir, "signed-out.json"),
   });
+  await security.ready;
   const { workspaces, warnings } = await Workspaces.create(config.workspaceRoots, config.home);
   for (const w of warnings) console.error(`awui: ${w}`);
   if (workspaces.rootList.length === 0) {

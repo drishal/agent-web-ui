@@ -3,9 +3,9 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashPassword, loadCredentials, LoginLimiter, PasswordAuth } from "../../src/server/auth.js";
 import { loadOrCreateSecret, Security } from "../../src/server/security.js";
 import { makeTestApp, PASS, type TestApp, USER } from "../helpers/app.js";
@@ -109,6 +109,29 @@ describe("other devices", () => {
     expect(s1.hasSession(req, "h:1")).toBe(true);
     expect(s2.hasSession(req, "h:1")).toBe(false);
     expect(s1.hasSession(req, "h:2")).toBe(false);
+  });
+
+  it("are void once their device signs out, even for a copy of the cookie, across a restart", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "awui-revoked-"));
+    const revokedFile = path.join(dir, "signed-out.json");
+    const password = new PasswordAuth(await hashPassword(USER, PASS));
+    const secret = randomBytes(32);
+    const options = { port: 4783, allowedHosts: [], allowedTailscaleUsers: [], secret, password, revokedFile };
+    const s1 = new Security(options);
+    await s1.ready;
+    const signedOut = s1.issueCookie("h:1", false).split(";")[0] as string;
+    const kept = s1.issueCookie("h:1", false).split(";")[0] as string;
+    const req = (cookie: string) => ({ headers: { cookie } }) as unknown as Request;
+    const res = { locals: { authority: "h:1" }, setHeader: () => undefined, json: () => undefined } as unknown as Response;
+    s1.logout(req(signedOut), res);
+    expect(s1.hasSession(req(signedOut), "h:1")).toBe(false);
+    expect(s1.hasSession(req(kept), "h:1")).toBe(true);
+    // The list is on disk (mode 0600), so a restarted server still refuses the copy.
+    await vi.waitFor(() => expect(statSync(revokedFile).mode & 0o777).toBe(0o600));
+    const s2 = new Security(options);
+    await s2.ready;
+    expect(s2.hasSession(req(signedOut), "h:1")).toBe(false);
+    expect(s2.hasSession(req(kept), "h:1")).toBe(true);
   });
 
   it("are locked out after repeated failures", async () => {

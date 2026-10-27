@@ -19,11 +19,14 @@ import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
 import { LoginLimiter, type PasswordAuth } from "./auth.js";
 import { parseAuthority } from "./config.js";
+import { isObj, readJson, writeJson } from "./state-file.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "x-forwarded-host", "x-real-ip", "forwarded"];
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const FAIL_DELAY_MS = 400;
+/** Signed-out sessions remembered at once; each is a few dozen bytes. */
+const MAX_REVOKED = 10_000;
 
 export interface SecurityOptions {
   port: number;
@@ -34,6 +37,8 @@ export interface SecurityOptions {
   password?: PasswordAuth;
   /** HOST=0.0.0.0: hostnames of this machine reachable on the LAN. */
   lanHosts?: () => Set<string>;
+  /** Where signed-out sessions are remembered until their cookies expire; absent keeps them in memory only. */
+  revokedFile?: string;
   log?: (message: string) => void;
 }
 
@@ -49,9 +54,36 @@ function send(res: Response, status: number, code: string, error: string, extra:
 export class Security {
   readonly cookieName: string;
   private readonly limiter = new LoginLimiter();
+  /** Signed-out sessions by id, with when their cookie would have expired; a copied cookie is void once its device signs out. */
+  private revoked = new Map<string, number>();
+  /** The revoked list as read from the state folder, once, before the first check. */
+  readonly ready: Promise<void>;
 
   constructor(private readonly options: SecurityOptions) {
     this.cookieName = `awui_${options.port}`;
+    this.ready = this.loadRevoked();
+  }
+
+  private async loadRevoked(): Promise<void> {
+    const data = await readJson(this.options.revokedFile ?? null);
+    if (!isObj(data)) return;
+    const now = Date.now();
+    for (const [id, exp] of Object.entries(data)) {
+      if (typeof exp === "number" && exp > now && this.revoked.size < MAX_REVOKED) this.revoked.set(id, exp);
+    }
+  }
+
+  /** Remember one session as signed out, until its cookie would expire anyway. */
+  private revoke(id: string, exp: number, now = Date.now()): void {
+    for (const [k, e] of this.revoked) if (e <= now) this.revoked.delete(k);
+    // Past the cap the oldest go first: a cookie that old is near its own expiry.
+    while (this.revoked.size >= MAX_REVOKED) {
+      const oldest = this.revoked.keys().next().value;
+      if (oldest === undefined) break;
+      this.revoked.delete(oldest);
+    }
+    this.revoked.set(id, exp);
+    void writeJson(this.options.revokedFile ?? null, Object.fromEntries(this.revoked));
   }
 
   get username(): string | null {
@@ -120,7 +152,7 @@ export class Security {
   }
 
   issueCookie(authority: string, secure: boolean, now = Date.now()): string {
-    const body = { v: 2, h: authority, iat: now, exp: now + COOKIE_MAX_AGE_MS, f: this.options.password?.fingerprint ?? "" };
+    const body = { v: 2, h: authority, iat: now, exp: now + COOKIE_MAX_AGE_MS, f: this.options.password?.fingerprint ?? "", n: randomBytes(12).toString("base64url") };
     const payload = Buffer.from(JSON.stringify(body)).toString("base64url");
     const value = `${payload}.${this.sign(payload)}`;
     const attrs = [`${this.cookieName}=${value}`, "Path=/", "HttpOnly", "SameSite=Strict", `Max-Age=${COOKIE_MAX_AGE_MS / 1000}`];
@@ -139,24 +171,32 @@ export class Security {
     return null;
   }
 
-  hasSession(req: Request, authority: string, now = Date.now()): boolean {
+  /** The request's cookie, when it is a valid session for this authority: its id (absent on cookies from before ids) and expiry. */
+  private session(req: Request, authority: string, now = Date.now()): { n?: string; exp: number } | null {
     const password = this.options.password;
-    if (!password) return false;
+    if (!password) return null;
     const value = this.readCookie(req);
-    if (!value) return false;
+    if (!value) return null;
     const dot = value.indexOf(".");
-    if (dot <= 0) return false;
+    if (dot <= 0) return null;
     const payload = value.slice(0, dot);
     const given = Buffer.from(value.slice(dot + 1));
     const expected = Buffer.from(this.sign(payload));
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return false;
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
     try {
-      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { h?: string; exp?: number; f?: string };
-      // A cookie from before the password changed is void.
-      return data.h === authority && typeof data.exp === "number" && data.exp > now && data.f === password.fingerprint;
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { h?: string; exp?: number; f?: string; n?: unknown };
+      // A cookie from before the password changed is void, and so is one whose device signed out.
+      if (data.h !== authority || typeof data.exp !== "number" || data.exp <= now || data.f !== password.fingerprint) return null;
+      const n = typeof data.n === "string" ? data.n : undefined;
+      if (n !== undefined && this.revoked.has(n)) return null;
+      return n !== undefined ? { n, exp: data.exp } : { exp: data.exp };
     } catch {
-      return false;
+      return null;
     }
+  }
+
+  hasSession(req: Request, authority: string, now = Date.now()): boolean {
+    return this.session(req, authority, now) !== null;
   }
 
   /** POST /api/login { username, password }. */
@@ -190,7 +230,9 @@ export class Security {
     res.json({ ok: true, username: auth.username });
   };
 
-  logout = (_req: Request, res: Response): void => {
+  logout = (req: Request, res: Response): void => {
+    const session = typeof res.locals.authority === "string" ? this.session(req, res.locals.authority) : null;
+    if (session?.n !== undefined) this.revoke(session.n, session.exp);
     res.setHeader("Set-Cookie", `${this.cookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
     res.setHeader("Cache-Control", "no-store");
     res.json({ ok: true });
