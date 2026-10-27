@@ -1,9 +1,11 @@
 // A project file, read for the file viewer. Confined to what the project
 // lists (project-files.ts: what git tracks plus untracked files it does not
 // ignore, else its walk), so a gitignored .env or a build folder stays out;
-// resolved by realpath, so a link out of the project is refused; read-only;
+// resolved by realpath, so a link out of the project is refused, and opened as
+// the very file that was checked (no link followed, same inode); read-only;
 // and bounded: the first 512 KB, cut at a line, and no text for a binary file.
-import { promises as fs, type Stats } from "node:fs";
+import { constants, promises as fs, type Stats } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import type { FileView } from "../shared/protocol.js";
 import { ChatError } from "./chats/chat.js";
@@ -37,6 +39,26 @@ async function listed(root: string, input: string): Promise<{ real: string; stat
   return { real, stat, shown };
 }
 
+/**
+ * Open the file `listed` checked, and only that file: a link put in its place
+ * after the check is not followed, and a different file (swapped in by rename,
+ * or through a parent folder) is refused by its device and inode.
+ */
+async function openChecked(real: string, stat: Stats): Promise<FileHandle> {
+  let handle: FileHandle;
+  try {
+    handle = await fs.open(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    throw new ChatError(409, "file_changed", "That file changed while it was opened; try again");
+  }
+  const now = await handle.stat();
+  if (now.dev !== stat.dev || now.ino !== stat.ino) {
+    await handle.close();
+    throw new ChatError(409, "file_changed", "That file changed while it was opened; try again");
+  }
+  return handle;
+}
+
 /** Images the browser may show from this origin; SVG is absent on purpose (it can run script). */
 const MEDIA: Array<{ mimeType: string; test: (head: Buffer) => boolean }> = [
   { mimeType: "image/png", test: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
@@ -54,24 +76,26 @@ export const MEDIA_BYTES = 20 * 1024 * 1024;
 export async function readMedia(root: string, input: string): Promise<{ bytes: Buffer; mimeType: string }> {
   const { real, stat } = await listed(root, input);
   if (stat.size > MEDIA_BYTES) throw new ChatError(413, "too_large", "That image is larger than 20 MB");
-  const handle = await fs.open(real, "r");
-  let head: Buffer;
+  const handle = await openChecked(real, stat);
   try {
     const buffer = Buffer.alloc(16);
     const { bytesRead } = await handle.read(buffer, 0, 16, 0);
-    head = buffer.subarray(0, bytesRead);
+    const head = buffer.subarray(0, bytesRead);
+    const kind = MEDIA.find((m) => m.test(head));
+    if (!kind) throw new ChatError(415, "not_an_image", "Only PNG, JPEG, GIF, and WebP images preview here");
+    // From the same handle, so the bytes are the file whose head was typed.
+    const bytes = Buffer.alloc(Math.min(stat.size, MEDIA_BYTES));
+    const { bytesRead: read } = await handle.read(bytes, 0, bytes.length, 0);
+    return { bytes: bytes.subarray(0, read), mimeType: kind.mimeType };
   } finally {
     await handle.close();
   }
-  const kind = MEDIA.find((m) => m.test(head));
-  if (!kind) throw new ChatError(415, "not_an_image", "Only PNG, JPEG, GIF, and WebP images preview here");
-  return { bytes: await fs.readFile(real), mimeType: kind.mimeType };
 }
 
 /** `input` in the project at `root` (a real path): relative to it, or absolute inside it. */
 export async function viewFile(root: string, input: string): Promise<FileView> {
   const { real, stat, shown } = await listed(root, input);
-  const handle = await fs.open(real, "r");
+  const handle = await openChecked(real, stat);
   let bytes: Buffer;
   try {
     const buffer = Buffer.alloc(Math.min(stat.size, VIEW_BYTES));
