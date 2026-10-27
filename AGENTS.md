@@ -113,6 +113,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               app's shortcuts, shares, and prompt links (?new, ?sessions, ?share, ?prompt).
                               public/sw.js: push, Approve/Deny from a notification, the share target, the
                               offline page (it never caches the app).
+  turn-time.ts                A turn's time and speed as hover text: the prompt's clock time, the answer row's "24s · first token 1.2s" (pure; nothing unknown is shown).
   sticky-prompt.ts            The sticky prompt bar: which turn's prompt has scrolled out above the view (pure; StickyPrompt.tsx measures and draws).
   sidebar-filter.ts           The sidebar's quick filter chips (Running, Needs you, Today): matching, counts, and the narrowed overview.
   find.ts                     Find in chat: matches and the folds to open (Conversation walks and paints the DOM).

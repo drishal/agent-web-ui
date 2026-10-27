@@ -313,6 +313,33 @@ test("a prompt's actions show on hover: edit replaces it in place, retry branche
   await expect(page.getByTestId("answer").last()).toContainText("Echo: only question", { timeout: 15_000 });
 });
 
+test("hovering a turn shows when it was sent and how fast it went", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "when was this");
+  const turn = page.getByTestId("turn").last();
+  // The prompt's time sits among its actions, with the full date on its title.
+  const when = turn.locator(".prompt-time");
+  await turn.getByTestId("user-prompt").hover();
+  await expect(turn.getByTestId("prompt-actions")).toHaveCSS("opacity", "1");
+  await expect(when).toHaveText(/\d{1,2}:\d{2}/);
+  await expect(when).toHaveAttribute("title", /\d/);
+  // The answer's row says how long the turn took, and only once the answer is hovered or focused.
+  const timing = turn.getByTestId("answer-timing");
+  await expect(timing).toHaveText(/\d+(\.\d+)?s/);
+  await expect(timing).toHaveCSS("opacity", "0");
+  const row = timing.locator("..");
+  const before = await row.boundingBox();
+  await turn.getByTestId("answer").hover();
+  await expect(timing).toHaveCSS("opacity", "1");
+  expect(await row.boundingBox()).toEqual(before);
+  // Keyboard focus anywhere in the answer shows it too.
+  await page.mouse.move(0, 0);
+  await expect(timing).toHaveCSS("opacity", "0");
+  await turn.getByRole("button", { name: "Copy reply" }).focus();
+  await expect(timing).toHaveCSS("opacity", "1");
+});
+
 test("a divider marks the turn where the model changed", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

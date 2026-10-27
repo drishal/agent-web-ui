@@ -1383,6 +1383,33 @@
   margin: 6px 0 0 -6px;
 }
 
+/* How the turn went, beside Copy and Fork. It only fades in (the row never reflows) on hover or keyboard focus
+   anywhere in the answer; with no hover (touch) it simply stays, as the prompt's actions do. */
+.answer-timing {
+  align-self: center;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease-out);
+}
+
+.answer:hover .answer-timing,
+.answer:focus-within .answer-timing {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .answer-timing {
+    opacity: 1;
+  }
+}
+
 .answer-error {
   margin: 6px 0 0;
   color: var(--danger);

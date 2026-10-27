@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { ago, buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
+import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -18,6 +18,7 @@ import { QuoteButton } from "./QuoteButton.js";
 import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
 import { useLongPress } from "../gestures.js";
 import { ActionSheet, type SheetAction } from "./ActionSheet.js";
+import { formatFullWhen, formatWhen, timingLabel, turnTiming } from "../turn-time.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
@@ -444,7 +445,7 @@ function UserPrompt({
   ];
   return (
     <div className={`turn-prompt${arrival}${editing ? " is-editing" : ""}`}>
-      {sheet ? <ActionSheet title="Message" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
+      {sheet ? <ActionSheet title={item.at ? `Message · ${formatWhen(item.at)}` : "Message"} actions={sheetActions} onClose={() => setSheet(false)} /> : null}
       <div className="bubble-stack">
         {item.images?.length ? <SentImages images={item.images} /> : null}
         {editing ? (
@@ -487,8 +488,8 @@ function UserPrompt({
         {!editing ? (
           <div className="prompt-actions" data-testid="prompt-actions">
             {item.at ? (
-              <span className="prompt-time" title={new Date(item.at).toLocaleString()}>
-                {ago(item.at)}
+              <span className="prompt-time" title={formatFullWhen(item.at)}>
+                {formatWhen(item.at)}
               </span>
             ) : null}
             {canBranch ? (
@@ -550,6 +551,7 @@ function Answer({
   onFork,
   canRestore,
   onRestore,
+  timing = null,
 }: {
   item: AssistantItem;
   through: number;
@@ -558,6 +560,8 @@ function Answer({
   /** The files as they were before this turn's prompt can be put back. */
   canRestore: boolean;
   onRestore: (through: number) => void;
+  /** How fast the turn went ("24s · first token 1.2s"), shown quietly on hover; null when nothing is known. */
+  timing?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -576,7 +580,7 @@ function Answer({
   ];
   return (
     <div className={`answer${arrival}${item.streaming ? " is-streaming" : ""}`} data-testid="answer" {...press}>
-      {sheet ? <ActionSheet title="Reply" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
+      {sheet ? <ActionSheet title={timing ? `Reply · ${timing}` : "Reply"} actions={sheetActions} onClose={() => setSheet(false)} /> : null}
       {item.text ? <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}
@@ -625,6 +629,11 @@ function Answer({
             >
               <IconUndo size={14} />
             </button>
+          ) : null}
+          {timing ? (
+            <span className="answer-timing" data-testid="answer-timing">
+              {timing}
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -918,7 +927,7 @@ const TurnView = memo(function TurnView({
         <PlanCard key={p.id} plan={p.plan} onImplement={onImplement} />
       ))}
       {turn.answer ? (
-        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} />
+        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} timing={turn.live ? null : timingLabel(turnTiming(turn))} />
       ) : null}
       {afterWork ? (
         <div className="turn-work-after" data-testid="work-after">
