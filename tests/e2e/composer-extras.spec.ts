@@ -3,7 +3,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen, expectDraft } from "./helpers.js";
+import { commandChat, newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen, expectDraft } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
@@ -20,6 +20,27 @@ test("↑ and ↓ walk this chat's prompts", async ({ page }) => {
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await expectDraft(box(page)).toBe("");
+});
+
+test("a long draft shows its estimated size beside the context ring, and the panel says what sending does to the context", async ({ page }) => {
+  await signInAndOpen(page);
+  await commandChat(page);
+  const figure = page.getByTestId("draft-size");
+  // Nothing for an empty or a short draft.
+  await expect(figure).toHaveCount(0);
+  await box(page).fill("a short note");
+  await expect(figure).toHaveCount(0);
+  // 2,000 characters of prose is about 500 tokens.
+  await box(page).fill("word ".repeat(400));
+  await expect(figure).toHaveText(/^~\d+(\.\d+)?[kM]? tokens$/);
+  await expect(figure).toHaveText(/^~(4[5-9]\d|5\d\d) tokens$/);
+  await page.getByTestId("context-ring").click();
+  const panel = page.getByRole("dialog", { name: "Context and usage" });
+  await expect(panel.getByTestId("draft-row")).toHaveText(/^This message ≈ \d+ tokens → context \d+% → \d+%$/);
+  await page.keyboard.press("Escape");
+  // Clearing the box takes it away again.
+  await box(page).fill("");
+  await expect(figure).toHaveCount(0);
 });
 
 test("references and quotes show as chips in the sentence, and go as the same text", async ({ page }) => {

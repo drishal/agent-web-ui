@@ -2,11 +2,14 @@
 // whole picture, in DeepSeek Harness's sections: what fills the context
 // window, the session's tokens, and model timing. On a phone the popover is
 // the same body drawn as a bottom sheet (Dialog); the desktop keeps the
-// anchored popover. Hidden until the harness reports a percentage.
-import { useLayoutEffect, useRef, useState } from "react";
+// anchored popover. Hidden until the harness reports a percentage. Beside it, the
+// draft's estimated size once it is worth a mention (token-estimate.ts), which stays
+// even where the ring is hidden; the panel adds what sending it does to the context.
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 import { coarse } from "../gestures.js";
 import { useDismiss } from "../hooks.js";
+import { type DraftSize, draftRow, draftSize, draftWarning } from "../token-estimate.js";
 import { Dialog } from "./Dialog.js";
 import { Dot } from "./Dot.js";
 
@@ -51,9 +54,10 @@ function Row({ label, value, color, title }: { label: string; value: string; col
 }
 
 /** The popover's sections. Drawn inside the desktop's anchored panel and inside the phone's bottom sheet alike. */
-function UsageBody({ context, usage }: { context: ContextUsage; usage: SessionUsage | null }) {
+function UsageBody({ context, usage, draft, canCompact }: { context: ContextUsage; usage: SessionUsage | null; draft: DraftSize | null; canCompact: boolean }) {
   const pct = Math.max(0, Math.min(100, context.percent ?? 0));
   const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
+  const warning = draft ? draftWarning(draft, canCompact) : null;
 
   const uncached = usage ? usage.input + usage.cacheWrite : 0;
   const inputTotal = usage ? uncached + usage.cachedInput : 0;
@@ -81,6 +85,12 @@ function UsageBody({ context, usage }: { context: ContextUsage; usage: SessionUs
         {categories.map((x, i) => (
           <Row key={x.id} label={x.label} value={compact(x.tokens)} color={swatch(x, i)} title={`${full(x.tokens)} tokens (estimated)`} />
         ))}
+        {draft ? (
+          <p className={`usage-note usage-draft${draft.near ? " is-near" : ""}`} data-testid="draft-row">
+            {draftRow(draft)}
+            {warning ? <strong>{warning}</strong> : null}
+          </p>
+        ) : null}
       </section>
 
       {used ? (
@@ -117,7 +127,8 @@ function UsageBody({ context, usage }: { context: ContextUsage; usage: SessionUs
   );
 }
 
-export function ContextRing({ context, usage }: { context: ContextUsage | null; usage: SessionUsage | null }) {
+/** `draft` is the composer's text and image count, for the figure of what sending adds; `canCompact` whether the harness can answer a full window with Compact. */
+export function ContextRing({ context, usage, draft, canCompact }: { context: ContextUsage | null; usage: SessionUsage | null; draft: { text: string; images: number }; canCompact: boolean }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
@@ -142,8 +153,17 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
     if (shift > 0) el.style.setProperty("--usage-shift", `${shift}px`);
   }, [open]);
 
+  // The estimate lags a keystroke rather than holding one up: a draft can be a huge paste.
+  const text = useDeferredValue(draft.text);
+  const size = useMemo(() => draftSize(text, draft.images, context), [text, draft.images, context]);
+  const figure = size ? (
+    <span className={`draft-size${size.near ? " is-near" : ""}`} title={draftRow(size)} data-testid="draft-size">
+      {size.label}
+    </span>
+  ) : null;
+
   // Hidden until there is real usage: an empty ring reads like a spinner.
-  if (!context || context.percent === null || context.percent < 0.5) return null;
+  if (!context || context.percent === null || context.percent < 0.5) return figure ? <div className="context-ring-wrap">{figure}</div> : null;
   const pct = Math.max(0, Math.min(100, context.percent));
   const r = 6;
   const c = 2 * Math.PI * r;
@@ -152,6 +172,7 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
 
   return (
     <div className="context-ring-wrap" ref={wrap}>
+      {figure}
       <button
         type="button"
         className={`context-ring tone-${tone}`}
@@ -170,11 +191,11 @@ export function ContextRing({ context, usage }: { context: ContextUsage | null; 
       {open ? (
         coarse() ? (
           <Dialog title="Context and usage" onClose={() => setOpen(false)} className="usage-sheet">
-            <UsageBody context={context} usage={usage} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} />
           </Dialog>
         ) : (
           <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
-            <UsageBody context={context} usage={usage} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} />
           </div>
         )
       ) : null}

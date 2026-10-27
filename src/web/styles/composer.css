@@ -757,6 +757,27 @@
 
 .context-ring-wrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The draft's estimated size, beside the ring: quiet until sending would nearly fill the window. */
+.draft-size {
+  color: var(--muted-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.draft-size.is-near,
+.usage-draft.is-near {
+  color: var(--warn);
+}
+
+.usage-draft strong {
+  display: block;
+  font-weight: 600;
 }
 
 .context-ring {

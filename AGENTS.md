@@ -120,6 +120,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   list-continue.ts            Markdown lists in the composer: Shift+Enter continues one, Tab indents it.
   prompt-link.ts              Prompt links (?prompt=): hidden characters taken out, a link made.
   stash.ts                    The prompt stash: drafts parked in browser storage, images within a budget.
+  token-estimate.ts           The draft's size in tokens while typed (a rough estimate) and its share of the context; the ring draws it.
   limit-stop.ts               A run stopped on a usage limit, and when the limit resets.
   attention.ts                What needs you: the title and favicon count, and the chime.
   saved-prompts.ts, prompt-blanks.ts   The # menu's list (the server's, kept in step) and its {{blanks}} (pure; atui uses them).

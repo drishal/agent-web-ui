@@ -45,7 +45,7 @@ banners-dialogs.css), so search rather than guess.
 | Tool rows and their bodies (diffs, terminals) | `ToolBody.tsx` (inside `Conversation.tsx`) | `conversation.css` | `app.spec.ts` (tool cards) |
 | Subagents, agent-rendered pages, plans | `Subagents.tsx`, `HtmlRenderFrame.tsx`, `PlanCard.tsx` | `subagents.css`, `plan-card.css` | `app.spec.ts`, `composer-extras.spec.ts` |
 | Empty chat, opening a chat | `App.tsx` (hero), `SwitchSplash.tsx`, `Loader.tsx` | `hero.css`, `opening-chat.css`, `loader.css` | `app.spec.ts`, `tabs.spec.ts` |
-| Composer card and its row of controls | `Composer.tsx`, `ChipEditor.tsx` (the box, its chips: `draft-chips.ts`, long pastes: `paste-ranges.ts`), `ComposerControls.tsx`, `ModelPicker.tsx`, `ThinkingPicker.tsx`, `PermissionPicker.tsx`, `HarnessMenu.tsx` (chip), `ContextRing.tsx` | `composer.css`, `model-picker.css` | `app.spec.ts` |
+| Composer card and its row of controls | `Composer.tsx`, `ChipEditor.tsx` (the box, its chips: `draft-chips.ts`, long pastes: `paste-ranges.ts`), `ComposerControls.tsx`, `ModelPicker.tsx`, `ThinkingPicker.tsx`, `PermissionPicker.tsx`, `HarnessMenu.tsx` (chip), `ContextRing.tsx` (the draft size beside it: `token-estimate.ts`) | `composer.css`, `model-picker.css` | `app.spec.ts`, `composer-extras.spec.ts` |
 | Composer extras: stash, link note, usage-limit banner | `Composer.tsx`, `LimitRecovery.tsx` | `composer-extras.css` | `composer-extras.spec.ts` |
 | Status stack (todos, queue, chain) and the git row | `StatusStack.tsx`, `GitStatusView.tsx` | `status-stack.css`, `queue-edit.css`, `chain.css` | `app.spec.ts`, `unified.spec.ts` |
 | Approvals and questions | `ApprovalStack.tsx` | `approvals.css` | `app.spec.ts` |
