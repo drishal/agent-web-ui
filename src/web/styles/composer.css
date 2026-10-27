@@ -343,7 +343,7 @@
   opacity: 0.6;
 }
 
-/* A chip in the sentence: a file, a line range, a quoted passage. Atomic: a click on
+/* A chip in the sentence: a file, a line range, a quoted passage, a long paste. Atomic: a click on
    its × or Backspace after it takes it out whole. */
 .draft-chip {
   display: inline-flex;
@@ -397,6 +397,27 @@
 
 .draft-chip.is-quote .draft-chip-icon {
   color: inherit;
+}
+
+/* A long paste: one chip for the block, which a click (or Enter on its label) turns back into text. */
+.draft-chip.is-paste {
+  cursor: pointer;
+  transition: background 120ms ease-out;
+}
+
+.draft-chip.is-paste:hover {
+  background: var(--hover);
+}
+
+.draft-chip.is-paste .draft-chip-label {
+  font-weight: 600;
+  color: var(--text);
+  border-radius: var(--r-xs);
+}
+
+.draft-chip.is-paste .draft-chip-label:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .draft-chip-x {

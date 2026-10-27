@@ -323,3 +323,78 @@ test("Ctrl+Z brings back a chip taken out with Backspace", async ({ page }) => {
   await expect(chips).toHaveCount(0);
   await expectDraft(box(page)).toBe("see here");
 });
+
+/** Paste `text` into the composer's box the way the browser does: one plain-text clipboard event. */
+async function pasteText(page: Page, text: string) {
+  await page.evaluate((t) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", t);
+    document.querySelector('[role="textbox"]')?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, text);
+}
+
+test("a long paste is one chip, goes as the full text, and Backspace and Ctrl+Z take it out and back", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  const rows = Array.from({ length: 30 }, (_, i) => `row ${i + 1}`).join("\n");
+  await box(page).focus();
+  await pasteText(page, rows);
+  const chip = box(page).locator(".draft-chip", { hasText: "Pasted 30 lines" });
+  await expect(chip).toHaveCount(1);
+  // The text is all still in the draft; the chip is only how it is drawn.
+  await expectDraft(box(page)).toBe(rows);
+  await expect(box(page)).not.toContainText("row 15");
+
+  // Backspace beside it removes the whole paste, and Ctrl+Z puts it back as a chip.
+  await page.keyboard.press("Backspace");
+  await expect(chip).toHaveCount(0);
+  await expectDraft(box(page)).toBe("");
+  await page.keyboard.press("Control+z");
+  await expect(chip).toHaveCount(1);
+  await expectDraft(box(page)).toBe(rows);
+  await page.keyboard.press("Control+Shift+Z");
+  await expect(chip).toHaveCount(0);
+  await expectDraft(box(page)).toBe("");
+  await page.keyboard.press("Control+z");
+  await expect(chip).toHaveCount(1);
+
+  // Sent, it reaches the agent whole: the fake harness echoes what it received.
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByTestId("answer").last()).toContainText("row 30", { timeout: 20_000 });
+  await expect(page.getByTestId("answer").last()).toContainText("row 15");
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  await expect(chip).toHaveCount(0);
+  await expectDraft(box(page)).toBe("");
+});
+
+test("clicking a paste chip, or Enter on its label, turns it back into plain text; a short paste stays text", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  const rows = Array.from({ length: 12 }, (_, i) => `row ${i + 1}`).join("\n");
+  await box(page).focus();
+  await pasteText(page, "a few\nshort\nlines");
+  await expect(box(page).locator(".draft-chip")).toHaveCount(0);
+  await expectDraft(box(page)).toBe("a few\nshort\nlines");
+  await box(page).fill("");
+  await page.keyboard.type("see ");
+  await pasteText(page, rows);
+  const chip = box(page).locator(".draft-chip", { hasText: "Pasted 12 lines" });
+  await expect(chip).toHaveCount(1);
+  // Typing after it leaves it one chip.
+  await page.keyboard.type("more ");
+  await expect(chip).toHaveCount(1);
+  await expectDraft(box(page)).toBe(`see ${rows}more `);
+  await chip.click();
+  await expect(box(page).locator(".draft-chip")).toHaveCount(0);
+  await expectDraft(box(page)).toBe(`see ${rows}more `);
+  await expect(box(page)).toContainText("row 7");
+
+  // The same from the keyboard: the chip's label takes focus, Enter.
+  await box(page).fill("");
+  await pasteText(page, rows);
+  await expect(chip).toHaveCount(1);
+  await chip.getByRole("button", { name: "Pasted 12 lines: show the text" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(box(page).locator(".draft-chip")).toHaveCount(0);
+  await expectDraft(box(page)).toBe(rows);
+});

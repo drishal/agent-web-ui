@@ -4,12 +4,17 @@
 // keeps its raw text, and joining the pieces gives the draft back exactly, so
 // the wire text is what draft-segments.ts writes and nothing changes there.
 // A quote's chip takes the blank lines around its block with it, so it sits in
-// the sentence where it was put; removing the chip removes them too.
+// the sentence where it was put; removing the chip removes them too. A long
+// paste is a chip too, but the text alone cannot say where one was: the editor
+// passes the ranges it remembers (paste-ranges.ts), the text inside one is never
+// read for quotes or references, and the rest is split as usual around it.
+import { pasteLabel, usableRanges, type PasteRange } from "./paste-ranges.js";
 
 export type DraftPiece =
   | { kind: "text"; start: number; raw: string }
   | { kind: "file"; start: number; raw: string; path: string; line?: number; end?: number }
-  | { kind: "quote"; start: number; raw: string; text: string };
+  | { kind: "quote"; start: number; raw: string; text: string }
+  | { kind: "paste"; start: number; raw: string; id: number };
 
 /** One quoted line: `>` at the start of the line, its text after an optional space. */
 const QUOTE_LINE = /^>[ \t]?(.*)$/;
@@ -40,9 +45,28 @@ function filePieces(text: string, at: number, out: DraftPiece[]) {
 /**
  * The draft's pieces, in order. `typing` is where the caret is while the user
  * types: a reference ending there is still being written, so it stays text
- * until something follows it.
+ * until something follows it. `pastes` are the long pastes the editor knows of.
  */
-export function draftPieces(text: string, typing?: number): DraftPiece[] {
+export function draftPieces(text: string, typing?: number, pastes?: readonly PasteRange[]): DraftPiece[] {
+  const ranges = pastes && pastes.length > 0 ? usableRanges(text, pastes) : [];
+  if (ranges.length === 0) return textPieces(text, typing);
+  const out: DraftPiece[] = [];
+  const gap = (from: number, to: number) => {
+    if (to <= from) return;
+    for (const p of textPieces(text.slice(from, to), typing !== undefined && typing >= from && typing <= to ? typing - from : undefined)) out.push({ ...p, start: p.start + from });
+  };
+  let at = 0;
+  for (const r of ranges) {
+    gap(at, r.start);
+    out.push({ kind: "paste", start: r.start, raw: text.slice(r.start, r.start + r.length), id: r.id });
+    at = r.start + r.length;
+  }
+  gap(at, text.length);
+  return out;
+}
+
+/** The pieces of a run of text with no pastes in it. */
+function textPieces(text: string, typing?: number): DraftPiece[] {
   const out: DraftPiece[] = [];
   const lines = text.split("\n");
   let offset = 0;
@@ -105,6 +129,7 @@ export function chipLabel(piece: DraftPiece, before: readonly DraftPiece[]): { l
     return { label: flat.length > 72 ? `${flat.slice(0, 70)}…` : flat, lines: "", title: piece.text, linesOnly: false };
   }
   if (piece.kind === "text") return { label: piece.raw, lines: "", title: "", linesOnly: false };
+  if (piece.kind === "paste") return { label: pasteLabel(piece.raw), lines: "", title: piece.raw.length > 300 ? `${piece.raw.slice(0, 300)}…` : piece.raw, linesOnly: false };
   const lines = linesLabel(piece);
   const named = before.some((p) => p.kind === "file" && p.path === piece.path && p.line === undefined);
   return { label: piece.path, lines, title: piece.raw, linesOnly: lines !== "" && named };

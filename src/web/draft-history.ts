@@ -2,14 +2,22 @@
 // itself from the plain-text draft, which wipes the browser's own undo stack, so
 // the editor keeps this one: bounded snapshots of the draft and its selection,
 // pure and clock-free (the caller passes the time) so it can be unit-tested.
+// A snapshot carries the draft's paste ranges too (paste-ranges.ts), so undo and
+// redo bring a long paste back as the one chip it was.
 // Plain typing (or erasing) one character at a time folds into one entry until a
 // pause, a space or line break, or a caret jump; anything else is its own entry.
 
-/** The draft and the selection it had. */
+import type { PasteRange } from "./paste-ranges.js";
+
+/** The draft, the selection it had, and where its long pastes were. */
 export interface DraftSnap {
   value: string;
   selection: [number, number];
+  pastes?: PasteRange[];
 }
+
+/** A snapshot of its own, so what the caller keeps changing never reaches the history. */
+const copy = (s: DraftSnap): DraftSnap => ({ value: s.value, selection: [...s.selection], ...(s.pastes ? { pastes: s.pastes.map((r) => ({ ...r })) } : {}) });
 
 type Kind = "type" | "erase" | "edit";
 
@@ -47,7 +55,7 @@ export class DraftHistory {
       now - last.time < BURST_MS &&
       (k === "type" ? c.at === last.at + 1 : c.at === last.at || c.at === last.at - 1);
     if (!joins) {
-      this.undos.push({ value: before.value, selection: [...before.selection] });
+      this.undos.push(copy(before));
       if (this.undos.length > HISTORY_LIMIT) this.undos.shift();
     }
     this.redos = [];
@@ -74,7 +82,7 @@ export class DraftHistory {
     this.last = null;
     for (let snap = from.pop(); snap; snap = from.pop()) {
       if (snap.value === now.value) continue;
-      to.push({ value: now.value, selection: [...now.selection] });
+      to.push(copy(now));
       if (to.length > HISTORY_LIMIT) to.shift();
       return snap;
     }

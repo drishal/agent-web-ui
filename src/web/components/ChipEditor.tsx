@@ -1,6 +1,6 @@
 // The composer's text box with chips in the sentence: file references, line
-// ranges, and quoted passages drawn as small atomic pills (draft-chips.ts),
-// everything else as typed. The draft stays a plain string, the composer's own
+// ranges, quoted passages, and long pastes drawn as small atomic pills
+// (draft-chips.ts), everything else as typed. The draft stays a plain string, the composer's own
 // state, and this is a view of it: the box is contenteditable, but its content
 // is drawn here from the string (not by React, which would fight the caret), and
 // read back into the string on every edit. The handle answers like a textarea
@@ -10,9 +10,14 @@
 // redraw wipes the browser's undo stack, so the box keeps its own
 // (draft-history.ts) and answers Ctrl/Cmd+Z, Shift+Z, Ctrl+Y, and the browser's
 // historyUndo/historyRedo itself.
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
+// A long paste (paste-ranges.ts) is one chip, yet its full text stays in the
+// draft and goes out as typed: the box remembers where each paste sits and
+// moves those ranges along with every edit (and through undo). A click on the
+// chip (or Enter or Space on its label) turns it back into plain text, for good.
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { DraftHistory, type DraftSnap } from "../draft-history.js";
 import { chipLabel, draftPieces, withoutPiece, type DraftPiece } from "../draft-chips.js";
+import { addRange, isLongPaste, shiftRanges, shiftRangesDiff, usableRanges, type PasteRange } from "../paste-ranges.js";
 
 /** What the composer reads and moves, as it did on its textarea. */
 export interface ChipEditorHandle {
@@ -43,6 +48,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const ICONS = {
   file: ["M4 1.75h5l3 3v9.5H4z", "M9 1.75v3h3M6 8h4M6 10.5h4"],
   lines: ["M3 4h10M3 8h10M3 12h6"],
+  paste: ["M5.5 2.75h5v1.5h-5z", "M4 3.5H3.5v10.75h9V3.5H12", "M6 7.5h4M6 10h4"],
   quote: ["M3.5 11.5c1.6-.6 2.5-1.9 2.5-3.8V4.5H3v3.2h2.6", "M9.5 11.5c1.6-.6 2.5-1.9 2.5-3.8V4.5H9v3.2h2.6"],
   x: ["M4.5 4.5l7 7M11.5 4.5l-7 7"],
 } as const;
@@ -67,10 +73,17 @@ function chipNode(piece: Exclude<DraftPiece, { kind: "text" }>, before: readonly
   chip.contentEditable = "false";
   chip.dataset.raw = piece.raw;
   chip.title = title;
-  chip.appendChild(icon(piece.kind === "quote" ? ICONS.quote : linesOnly ? ICONS.lines : ICONS.file, "draft-chip-icon"));
+  chip.appendChild(icon(piece.kind === "quote" ? ICONS.quote : piece.kind === "paste" ? ICONS.paste : linesOnly ? ICONS.lines : ICONS.file, "draft-chip-icon"));
   const name = document.createElement("span");
   name.className = "draft-chip-label";
   name.textContent = piece.kind === "quote" ? `“${label}”` : linesOnly ? lines : label;
+  if (piece.kind === "paste") {
+    // The chip is not a tab stop of the text, but its label is a button: Enter or Space puts the text back.
+    chip.dataset.paste = String(piece.id);
+    name.setAttribute("role", "button");
+    name.tabIndex = 0;
+    name.setAttribute("aria-label", `${label}: show the text`);
+  }
   chip.appendChild(name);
   if (lines && !linesOnly) {
     const at = document.createElement("span");
@@ -82,7 +95,7 @@ function chipNode(piece: Exclude<DraftPiece, { kind: "text" }>, before: readonly
   x.type = "button";
   x.className = "draft-chip-x";
   x.tabIndex = -1;
-  x.setAttribute("aria-label", `Remove ${piece.kind === "quote" ? "the quote" : piece.raw.slice(1)}`);
+  x.setAttribute("aria-label", `Remove ${piece.kind === "quote" ? "the quote" : piece.kind === "paste" ? "the pasted text" : piece.raw.slice(1)}`);
   x.appendChild(icon(ICONS.x, ""));
   chip.appendChild(x);
   return chip;
@@ -141,6 +154,11 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
   const pending = useRef<[number, number] | null>(null);
   const composing = useRef(false);
   const history = useRef(new DraftHistory());
+  /** Where the draft's long pastes are, kept true as it changes; a chip shows each. */
+  const pasteRanges = useRef<PasteRange[]>([]);
+  const nextPasteId = useRef(1);
+  /** Bumped when only the ranges changed (a chip turned back to text), so the box draws again. */
+  const [shape, setShape] = useState(0);
   /** The draft as this editor last knew it: a different value arriving is the composer's own change. */
   const known = useRef(value);
 
@@ -235,11 +253,13 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     const [start, end] = focused ? selection() : [value.length, value.length];
     if (value !== known.current) {
       // The composer set the draft (recall, completion, stash, a list's Enter): undoable, except a cleared box after a send starts afresh.
+      const kept = value === "" ? [] : shiftRangesDiff(pasteRanges.current, known.current, value);
       if (value === "") history.current.reset();
-      else history.current.record({ value: known.current, selection: [Math.min(start, known.current.length), Math.min(end, known.current.length)] }, value, Date.now(), "edit");
+      else history.current.record({ value: known.current, selection: [Math.min(start, known.current.length), Math.min(end, known.current.length)], pastes: pasteRanges.current }, value, Date.now(), "edit");
+      pasteRanges.current = kept;
       known.current = value;
     }
-    const pieces = draftPieces(value, typed.current === value && start === end ? start : undefined);
+    const pieces = draftPieces(value, typed.current === value && start === end ? start : undefined, pasteRanges.current);
     const shown = readText(root);
     if (shown.text === value && shown.flat && drawnChips(root) === chipsOf(pieces)) {
       if (pending.current) {
@@ -252,7 +272,7 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     const at = pending.current ?? [Math.min(start, value.length), Math.min(end, value.length)];
     pending.current = null;
     if (focused) select(at[0], at[1]);
-  }, [value]);
+  }, [value, shape]);
 
   // The textarea's handle; tests read the same `value` off the element.
   useImperativeHandle(ref, () => ({
@@ -276,29 +296,44 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     if (root) Object.defineProperty(root, "value", { configurable: true, get: () => current.current });
   }, []);
 
-  /** Say the draft is now `next`, keeping what it was (with its caret `before`) for undo. */
-  const change = (next: string, before: [number, number], kind?: "edit") => {
-    history.current.record({ value: current.current, selection: before }, next, Date.now(), kind);
+  /** Say the draft is now `next` with its pastes at `pastes`, keeping what it was (with its caret `before`) for undo. */
+  const change = (next: string, before: [number, number], pastes: PasteRange[], kind?: "edit") => {
+    history.current.record({ value: current.current, selection: before, pastes: pasteRanges.current }, next, Date.now(), kind);
+    pasteRanges.current = pastes;
     known.current = next;
     onChange(next);
   };
 
-  /** Put `text` where the selection is, as typing would, and say so. */
-  const insert = (text: string) => {
+  /** Put `text` where the selection is, as typing would, and say so; a long paste becomes a chip. */
+  const insert = (text: string, pasted = false) => {
     const [start, end] = selection();
     const next = current.current.slice(0, start) + text + current.current.slice(end);
     pending.current = [start + text.length, start + text.length];
     typed.current = next;
-    change(next, [start, end], "edit");
+    let pastes = shiftRanges(pasteRanges.current, start, end, text.length);
+    if (pasted && isLongPaste(text)) pastes = addRange(pastes, { id: nextPasteId.current++, start, length: text.length });
+    change(next, [start, end], pastes, "edit");
+  };
+
+  /** A paste chip back to plain text, the caret after it. It does not come back as a chip. */
+  const expand = (id: number) => {
+    const range = pasteRanges.current.find((r) => r.id === id);
+    if (!range) return;
+    pasteRanges.current = pasteRanges.current.filter((r) => r.id !== id);
+    pending.current = [range.start + range.length, range.start + range.length];
+    typed.current = null;
+    box.current?.focus();
+    setShape((n) => n + 1);
   };
 
   /** Go back (or forward) one step of the box's own history. */
   const travel = (back: boolean) => {
-    const now: DraftSnap = { value: current.current, selection: selection() };
+    const now: DraftSnap = { value: current.current, selection: selection(), pastes: pasteRanges.current };
     const snap = back ? history.current.undo(now) : history.current.redo(now);
     if (!snap) return;
     pending.current = snap.selection;
     typed.current = null;
+    pasteRanges.current = usableRanges(snap.value, snap.pastes ?? []);
     known.current = snap.value;
     onChange(snap.value);
   };
@@ -327,8 +362,14 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
       // The caret before the change is where the old and new text first differ.
       let p = 0;
       while (p < text.length && p < current.current.length && text[p] === current.current[p]) p++;
-      change(text, [p, p]);
+      change(text, [p, p], shiftRangesDiff(pasteRanges.current, current.current, text));
     }
+  };
+
+  /** The draft without a chip's text: a paste's range goes with it, the other ranges move. */
+  const withoutChip = (piece: DraftPiece): { next: string; pastes: PasteRange[] } => {
+    const next = withoutPiece(current.current, piece);
+    return { next, pastes: piece.kind === "paste" ? shiftRanges(pasteRanges.current, piece.start, piece.start + piece.raw.length, 0) : shiftRangesDiff(pasteRanges.current, current.current, next) };
   };
 
   const removeChip = (chip: HTMLElement) => {
@@ -336,13 +377,13 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
     if (!root) return;
     const raw = chip.dataset.raw ?? "";
     const start = offsetOf(root, Array.from(root.childNodes).indexOf(chip));
-    const piece = draftPieces(current.current).find((p) => p.start === start && p.raw === raw);
+    const piece = draftPieces(current.current, undefined, pasteRanges.current).find((p) => p.start === start && p.raw === raw);
     if (!piece) return;
-    const next = withoutPiece(current.current, piece);
+    const { next, pastes } = withoutChip(piece);
     pending.current = [start, start];
     typed.current = null;
     box.current?.focus();
-    change(next, [start + raw.length, start + raw.length], "edit");
+    change(next, [start + raw.length, start + raw.length], pastes, "edit");
   };
 
   return (
@@ -371,6 +412,15 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
         onInput();
       }}
       onKeyDown={(e) => {
+        // A key on a chip's own label (a tab stop inside the box) is not the composer's: it only puts a paste back as text.
+        if (e.target !== e.currentTarget) {
+          const chip = (e.target as HTMLElement).closest<HTMLElement>(".draft-chip.is-paste");
+          if (chip && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            expand(Number(chip.dataset.paste));
+          }
+          return;
+        }
         onKeyDown?.(e);
         if (e.defaultPrevented || e.nativeEvent.isComposing) return;
         if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key.toLowerCase() === "z" || (e.key.toLowerCase() === "y" && e.ctrlKey && !e.shiftKey))) {
@@ -388,19 +438,20 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
           // A chip goes whole, as one character would.
           const [start, end] = selection();
           if (start !== end) return;
-          const piece = draftPieces(current.current).find((p) => p.kind !== "text" && (e.key === "Backspace" ? p.start + p.raw.length === start : p.start === start));
+          const piece = draftPieces(current.current, undefined, pasteRanges.current).find((p) => p.kind !== "text" && (e.key === "Backspace" ? p.start + p.raw.length === start : p.start === start));
           if (!piece) return;
           e.preventDefault();
           pending.current = [piece.start, piece.start];
           typed.current = null;
-          change(withoutPiece(current.current, piece), [start, start], "edit");
+          const { next, pastes } = withoutChip(piece);
+          change(next, [start, start], pastes, "edit");
         }
       }}
       onPaste={(e) => {
         onPaste?.(e);
         if (e.defaultPrevented) return;
         e.preventDefault();
-        insert(e.clipboardData.getData("text/plain"));
+        insert(e.clipboardData.getData("text/plain"), true);
       }}
       onDrop={(e) => {
         // Files go to the composer's own drop; dragged text arrives as plain text.
@@ -409,13 +460,18 @@ export const ChipEditor = forwardRef<ChipEditorHandle, Props>(function ChipEdito
         insert(e.dataTransfer.getData("text/plain"));
       }}
       onMouseDown={(e) => {
-        // The × keeps the caret in the box.
-        if ((e.target as HTMLElement).closest(".draft-chip-x")) e.preventDefault();
+        // The × and a paste chip keep the caret in the box.
+        if ((e.target as HTMLElement).closest(".draft-chip-x, .draft-chip.is-paste")) e.preventDefault();
       }}
       onClick={(e) => {
         const x = (e.target as HTMLElement).closest(".draft-chip-x");
         const chip = x?.closest<HTMLElement>(".draft-chip");
-        if (chip) removeChip(chip);
+        if (chip) {
+          removeChip(chip);
+          return;
+        }
+        const paste = (e.target as HTMLElement).closest<HTMLElement>(".draft-chip.is-paste");
+        if (paste) expand(Number(paste.dataset.paste));
       }}
     />
   );
