@@ -156,7 +156,7 @@ class Timing {
  * The replayable, monotonic ChatEvent stream: event ids, fan-out to
  * subscribers, and the replay window that lets a reconnecting stream catch up.
  */
-class EventLog {
+export class EventLog {
   private entries: Array<{ id: number; event: ChatEvent }> = [];
   private nextEventId = 1;
   private subscribers = new Set<ChatSubscriber>();
@@ -171,6 +171,10 @@ class EventLog {
 
   record(event: ChatEvent): void {
     const id = this.nextEventId++;
+    // A snapshot stands for everything before it, and each one copies every item:
+    // keep only the newest, so the log holds at most one copy of the chat.
+    // A stream further behind than it is sent a fresh snapshot, which is the same thing.
+    if (event.type === "snapshot") this.entries = [];
     this.entries.push({ id, event });
     if (this.entries.length > MAX_LOG_EVENTS) this.entries.splice(0, this.entries.length - MAX_LOG_EVENTS);
     for (const s of this.subscribers) s.send(id, event);
