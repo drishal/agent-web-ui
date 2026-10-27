@@ -4,6 +4,7 @@
 // server holds it and resume the session from the harness once it does not.
 import type { ChatSnapshot, ChatStatus } from "../shared/protocol.js";
 import { load, save } from "./storage.js";
+import { keepGroups, pinnedCount } from "./tab-order.js";
 
 export interface Tab {
   /** Stable identity for React and storage (a chat's id can change on resume). */
@@ -17,6 +18,8 @@ export interface Tab {
   title: string;
   /** A run finished while another tab was shown. */
   unread?: boolean;
+  /** Kept at the left of the strip, narrow, and not closed by a stray key or middle-click. */
+  pinned?: boolean;
 }
 
 export interface TabState {
@@ -73,16 +76,19 @@ export function placeTab(state: TabState, tab: Omit<Tab, "key">, { newTab = fals
   const existing = findTab(state, tab);
   if (existing >= 0) {
     const tabs = state.tabs.slice();
-    tabs[existing] = { ...tab, key: (tabs[existing] as Tab).key };
+    const was = tabs[existing] as Tab;
+    tabs[existing] = { ...tab, key: was.key, pinned: was.pinned };
     return { tabs, active: existing };
   }
   if (newTab || state.active < 0) {
-    const at = state.active + 1;
+    // After the shown tab, but never among the pinned ones: they stay a group at the left.
+    const at = Math.max(state.active + 1, pinnedCount(state.tabs));
     const tabs = [...state.tabs.slice(0, at), { ...tab, key: newKey() }, ...state.tabs.slice(at)];
     return { tabs, active: at };
   }
   const tabs = state.tabs.slice();
-  tabs[state.active] = { ...tab, key: (tabs[state.active] as Tab).key };
+  const was = tabs[state.active] as Tab;
+  tabs[state.active] = { ...tab, key: was.key, pinned: was.pinned };
   return { tabs, active: state.active };
 }
 
@@ -102,7 +108,7 @@ export function syncActive(state: TabState, chat: ChatSnapshot | null): TabState
   const tab = state.tabs[state.active];
   if (!tab || !chat) return state;
   if (tab.chatId !== chat.chatId && !(chat.sessionId !== null && tab.sessionId === chat.sessionId)) return state;
-  const next = { ...fromSnapshot(chat, tab.key) };
+  const next = { ...fromSnapshot(chat, tab.key), pinned: tab.pinned };
   if (next.chatId === tab.chatId && next.sessionId === tab.sessionId && next.title === tab.title && !tab.unread) return state;
   const tabs = state.tabs.slice();
   tabs[state.active] = next;
@@ -132,13 +138,17 @@ export function runningChats(sessions: ReadonlyArray<{ liveChatId?: string; stat
 
 const STORAGE_KEY = "tabs.v1";
 
-/** This device's tabs, as last left. Unread marks are not kept. */
+/** This device's tabs, as last left: their order and pins too. Unread marks are not kept. */
 export function loadTabs(): TabState {
   const raw = load<TabState | null>(STORAGE_KEY, null);
   if (!raw || !Array.isArray(raw.tabs)) return NO_TABS;
   const tabs = raw.tabs.filter((t): t is Tab => typeof t?.key === "string" && typeof t.harnessId === "string" && typeof t.workspacePath === "string");
   const active = Number.isInteger(raw.active) && raw.active >= 0 && raw.active < tabs.length ? raw.active : tabs.length > 0 ? 0 : -1;
-  return { tabs: tabs.map(({ unread: _unread, ...t }) => ({ ...t, title: typeof t.title === "string" ? t.title : "Chat" })), active };
+  const loaded = tabs.map(({ unread: _unread, pinned, ...t }) => ({ ...t, ...(pinned === true ? { pinned } : {}), title: typeof t.title === "string" ? t.title : "Chat" }));
+  // Pinned first, whatever order was stored; the shown tab is followed by identity.
+  const grouped = keepGroups(loaded);
+  const shown = loaded[active];
+  return { tabs: grouped, active: shown ? grouped.indexOf(shown) : active };
 }
 
 /** A tab without a session (a new chat nobody wrote in) cannot come back once its chat is gone. */

@@ -122,6 +122,114 @@ test("tabs come back after a reload, and the keyboard moves between them", async
   await expect(prompts(page)).toHaveText(["kept two"]);
 });
 
+/** Drag a tab with the mouse until its middle sits over `x` (a point on the page), in steps so the strip sees a drag. */
+async function dragTab(page: Page, title: string, x: number): Promise<void> {
+  const box = (await tab(page, title).boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + (x < box.x + box.width / 2 ? -8 : 8), y, { steps: 3 });
+  await page.mouse.move(x, y, { steps: 12 });
+  await page.mouse.up();
+}
+
+test("tabs reorder by dragging, pin from a menu, and move by keyboard; order and pins survive a reload", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "order alpha");
+  await newTab(page);
+  await sendAndWait(page, "order beta");
+  await newTab(page);
+  await sendAndWait(page, "order gamma");
+  await expect(tabs(page)).toHaveText([/order alpha/, /order beta/, /order gamma/]);
+
+  // The third tab dragged before the first. It was the shown tab and still is; the drag is not a click on another.
+  const first = (await tab(page, "order alpha").boundingBox())!;
+  await dragTab(page, "order gamma", first.x + 10);
+  await expect(tabs(page)).toHaveText([/order gamma/, /order alpha/, /order beta/]);
+  await expect(tab(page, "order gamma")).toHaveAttribute("aria-selected", "true");
+  await expect(prompts(page)).toHaveText(["order gamma"]);
+
+  // A drag that goes nowhere changes nothing, and a plain click still opens a tab.
+  const beta = (await tab(page, "order beta").boundingBox())!;
+  await page.mouse.move(beta.x + 40, beta.y + beta.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(beta.x + 42, beta.y + beta.height / 2);
+  await page.mouse.up();
+  await expect(tabs(page)).toHaveText([/order gamma/, /order alpha/, /order beta/]);
+  await expect(tab(page, "order beta")).toHaveAttribute("aria-selected", "true");
+
+  // Pin from the tab's right-click menu: it moves to the left, narrow, with no close button.
+  const wide = (await tab(page, "order beta").boundingBox())!.width;
+  await tab(page, "order beta").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Pin tab" }).click();
+  await expect(tabs(page)).toHaveText([/order beta/, /order gamma/, /order alpha/]);
+  await expect(tab(page, "order beta").getByRole("button", { name: /^Close / })).toHaveCount(0);
+  expect((await tab(page, "order beta").boundingBox())!.width).toBeLessThan(wide);
+  // An unread tab shows its ✕ only on hover.
+  await tab(page, "order gamma").hover();
+  await expect(tab(page, "order gamma").getByRole("button", { name: /^Close / })).toHaveCount(1);
+
+  // Neither Delete nor middle-click closes a pinned tab.
+  await tab(page, "order beta").focus();
+  await page.keyboard.press("Delete");
+  await tab(page, "order beta").click({ button: "middle" });
+  await expect(tabs(page)).toHaveCount(3);
+
+  // A drag stays inside its group: an unpinned tab dragged over the pinned one does not pass it.
+  const pinned = (await tab(page, "order beta").boundingBox())!;
+  await dragTab(page, "order alpha", pinned.x + 5);
+  await expect(tabs(page)).toHaveText([/order beta/, /order alpha/, /order gamma/]);
+
+  // Alt+Shift+→ and ← move the focused tab inside its group, and the focus stays on it.
+  await tab(page, "order alpha").focus();
+  await page.keyboard.press("Alt+Shift+ArrowRight");
+  await expect(tabs(page)).toHaveText([/order beta/, /order gamma/, /order alpha/]);
+  await expect(tab(page, "order alpha")).toBeFocused();
+  await page.keyboard.press("Alt+Shift+ArrowRight");
+  await expect(tabs(page)).toHaveText([/order beta/, /order gamma/, /order alpha/]);
+  await page.keyboard.press("Alt+Shift+ArrowLeft");
+  await page.keyboard.press("Alt+Shift+ArrowLeft");
+  await expect(tabs(page)).toHaveText([/order beta/, /order alpha/, /order gamma/]);
+  await expect(tab(page, "order alpha")).toBeFocused();
+
+  // Kept on this device.
+  await page.reload();
+  await expect(tabs(page)).toHaveText([/order beta/, /order alpha/, /order gamma/]);
+  await expect(tab(page, "order beta").getByRole("button", { name: /^Close / })).toHaveCount(0);
+  // An unread tab shows its ✕ only on hover.
+  await tab(page, "order alpha").hover();
+  await expect(tab(page, "order alpha").getByRole("button", { name: /^Close / })).toHaveCount(1);
+
+  // Unpin from the menu: it goes to the front of the others and the close button is back.
+  await tab(page, "order beta").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Unpin tab" }).click();
+  await expect(tabs(page)).toHaveText([/order beta/, /order alpha/, /order gamma/]);
+  // An unread tab shows its ✕ only on hover.
+  await tab(page, "order beta").hover();
+  await expect(tab(page, "order beta").getByRole("button", { name: /^Close / })).toHaveCount(1);
+});
+
+test("the palette pins and unpins the shown tab", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "palette first");
+  await newTab(page);
+  await sendAndWait(page, "palette second");
+  await expect(tabs(page)).toHaveText([/palette first/, /palette second/]);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("pin tab");
+  await page.getByRole("option", { name: /^Pin tab/ }).click();
+  await expect(tabs(page)).toHaveText([/palette second/, /palette first/]);
+  await expect(tab(page, "palette second").getByRole("button", { name: /^Close / })).toHaveCount(0);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search commands and sessions" }).fill("unpin tab");
+  await page.getByRole("option", { name: /^Unpin tab/ }).click();
+  // An unread tab shows its ✕ only on hover.
+  await tab(page, "palette second").hover();
+  await expect(tab(page, "palette second").getByRole("button", { name: /^Close / })).toHaveCount(1);
+});
+
 test("Ctrl+[ and Ctrl+] step through the chats shown, Alt+Shift+T reopens a closed tab, Ctrl+Alt+Enter sends and starts a new chat", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

@@ -66,6 +66,7 @@ import { RoutinesDialog } from "./components/RoutinesDialog.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { IconEdit, IconGauge, IconMenu, IconMore, IconSearch, IconSidebar, IconSplit } from "./icons.js";
 import { applyHarnessAccents, harnessColor } from "./harness-colors.js";
+import { moveTab, pinnedCount, setPinned } from "./tab-order.js";
 import { closeTab, draftTab, findTab, loadTabs, markUnread, placeChat, placeTab, runningChats, saveTabs, syncActive, type Tab, type TabState } from "./tabs.js";
 import { useLimits } from "./limits.js";
 import { useNotifications } from "./notify.js";
@@ -664,19 +665,33 @@ export function App() {
   /** Closed tabs, newest last, for Alt+Shift+T (the browser keeps Ctrl+Shift+T). */
   const closedTabs = useRef<Tab[]>([]);
   const reopenClosedTab = () => {
-    const tab = closedTabs.current.pop();
-    if (!tab) return;
+    const popped = closedTabs.current.pop();
+    if (!popped) return;
+    // Back unpinned, whatever it was: it is not among the pinned ones at the left any more.
+    const tab = { ...popped, pinned: undefined };
     const open = findTab(tabsRef.current, tab);
     if (open >= 0) {
       activateTab(open);
       return;
     }
     rememberShown();
-    const at = tabsRef.current.active + 1;
+    const at = Math.max(tabsRef.current.active + 1, pinnedCount(tabsRef.current.tabs));
     const next = { tabs: [...tabsRef.current.tabs.slice(0, at), tab, ...tabsRef.current.tabs.slice(at)], active: at };
     tabsRef.current = next;
     setTabState(next);
     void loadTab(tab);
+  };
+
+  /** Reorder the strip (a drag, or Alt+Shift+←/→); the shown tab stays the shown tab. */
+  const moveTabTo = (from: number, to: number) => {
+    const next = moveTab(tabsRef.current, from, to);
+    tabsRef.current = next;
+    setTabState(next);
+  };
+  const pinTabAt = (index: number, pinned: boolean) => {
+    const next = setPinned(tabsRef.current, index, pinned);
+    tabsRef.current = next;
+    setTabState(next);
   };
 
   const closeTabAt = (index: number) => {
@@ -1201,6 +1216,18 @@ export function App() {
     });
     items.push({ id: "folder", section: "Actions", label: "Choose project folder…", run: () => setPickerOpen(true) });
     items.push({ id: "reopen", section: "Actions", label: "Reopen closed tab", hint: shortcutHint("reopen"), disabled: closedTabs.current.length ? undefined : "No tab closed yet", searchOnly: true, run: reopenClosedTab });
+    const shownTab = tabState.tabs[tabState.active];
+    if (shownTab) {
+      items.push({
+        id: "pin-tab",
+        section: "Actions",
+        label: shownTab.pinned ? "Unpin tab" : "Pin tab",
+        hint: "this tab",
+        keywords: "tabs keep left strip",
+        searchOnly: true,
+        run: () => pinTabAt(tabState.active, !shownTab.pinned),
+      });
+    }
     items.push({ id: "back", section: "Actions", label: "Back to the previous chat", hint: shortcutHint("back"), searchOnly: true, disabled: visits.current.at > 0 ? undefined : "Nothing before this", run: () => stepVisits(-1) });
     items.push({ id: "forward", section: "Actions", label: "Forward to the next chat", hint: shortcutHint("forward"), searchOnly: true, disabled: visits.current.at < visits.current.list.length - 1 ? undefined : "Nothing after this", run: () => stepVisits(1) });
     items.push({ id: "sidebar", section: "Actions", label: collapsed ? "Show sidebar" : "Hide sidebar", searchOnly: true, run: () => collapseSidebar(!collapsed) });
@@ -1383,9 +1410,11 @@ export function App() {
                       <span className="drawer-tab-title">{tab.title || "New chat"}</span>
                       <span className="drawer-tab-harness">{boot.harnesses.find((h) => h.id === tab.harnessId)?.displayName ?? tab.harnessId}</span>
                     </button>
-                    <button type="button" className="icon-btn drawer-tab-close" aria-label={`Close tab ${tab.title || "New chat"}`} onClick={() => closeTabAt(i)}>
-                      ×
-                    </button>
+                    {tab.pinned ? null : (
+                      <button type="button" className="icon-btn drawer-tab-close" aria-label={`Close tab ${tab.title || "New chat"}`} onClick={() => closeTabAt(i)}>
+                        ×
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1465,6 +1494,8 @@ export function App() {
             harnessName={(id) => boot.harnesses.find((h) => h.id === id)?.displayName ?? id}
             onActivate={activateTab}
             onClose={closeTabAt}
+            onMove={moveTabTo}
+            onPin={pinTabAt}
             onNew={newTab}
             newDisabled={newChatDisabled !== null}
           />

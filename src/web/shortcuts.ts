@@ -62,7 +62,8 @@ export const SHORTCUTS: ShortcutGroup[] = [
     title: "Tabs and lists",
     items: [
       { id: "tab-move", keys: ["←", "→", "Home", "End"], label: "Move between tabs" },
-      { id: "tab-close", keys: ["Delete"], label: "Close the focused tab" },
+      { id: "tab-reorder", keys: ["Alt+Shift+←", "Alt+Shift+→"], label: "Move the focused tab left or right (inside its group, pinned or not)" },
+      { id: "tab-close", keys: ["Delete"], label: "Close the focused tab (a pinned one stays)" },
       { id: "list-move", keys: ["↑", "↓"], label: "Move in a picker or search's results" },
       { id: "list-pick", keys: ["Enter"], label: "Pick the highlighted result" },
       { id: "search-open", keys: ["Alt+Enter"], label: "Open a project search result in the file viewer" },

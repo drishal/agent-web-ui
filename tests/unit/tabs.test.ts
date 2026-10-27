@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatSnapshot } from "../../src/shared/protocol.js";
+import { setPinned } from "../../src/web/tab-order.js";
 import { closeTab, findTab, markUnread, NO_TABS, placeChat, placeTab, runningChats, syncActive, type TabState } from "../../src/web/tabs.js";
 
 const snap = (chatId: string, sessionId: string | null = `fake:${chatId}`, title = chatId) =>
@@ -60,6 +61,19 @@ describe("session tabs", () => {
     expect(syncActive(named, snap("a", "fake:a1", "Fix the build"))).toBe(named);
     // Another chat (being swapped in) does not overwrite the tab.
     expect(syncActive(named, snap("zzz"))).toBe(named);
+  });
+
+  it("keeps a tab pinned through its chat's updates, and opens new tabs after the pinned ones", () => {
+    let s = placeChat(placeChat(NO_TABS, snap("a")), snap("b"), { newTab: true });
+    s = setPinned({ ...s, active: 0 }, 0, true);
+    s = placeChat(s, snap("a", "fake:a1", "Named"));
+    expect(s.tabs[0]).toMatchObject({ chatId: "a", pinned: true, title: "Named" });
+    expect(syncActive(s, snap("a", "fake:a1", "Renamed")).tabs[0]?.pinned).toBe(true);
+    // The pinned tab is shown, yet a new tab goes after the pinned group, not inside it.
+    s = placeChat(s, snap("c"), { newTab: true });
+    expect([ids(s), s.active]).toEqual([["a", "c", "b"], 1]);
+    s = placeChat(setPinned({ ...s, active: 1 }, 1, true), snap("d"), { newTab: true });
+    expect(ids(s)).toEqual(["a", "c", "d", "b"]);
   });
 
   it("marks a background tab whose run finished, never the shown one", () => {

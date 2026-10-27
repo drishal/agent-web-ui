@@ -109,6 +109,37 @@
   display: none;
 }
 
+/* Pinned tabs: the harness dot and a short title, left of the rest, no ✕. */
+.session-tab.is-pinned {
+  width: 104px;
+  padding-right: 10px;
+}
+
+/* A tab drags sideways (pointer events); vertical touch moves stay the browser's. */
+.session-tab {
+  touch-action: pan-y;
+}
+
+/* While one is dragged, the lifted tab follows the pointer at once and the others
+   slide aside, eased. The class goes with the drop, in the same frame as the new
+   order, so nothing animates back. (prefers-reduced-motion turns the slide off.) */
+.tab-list.is-dragging {
+  cursor: grabbing;
+}
+
+.tab-list.is-dragging .session-tab:not(.is-lifted) {
+  transition: transform 0.16s var(--ease-out);
+}
+
+.session-tab.is-lifted {
+  z-index: 2;
+  scale: 1.02;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-float);
+  cursor: grabbing;
+}
+
 .tab-new {
   flex: none;
   align-self: center;
