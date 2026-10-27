@@ -3,7 +3,7 @@
 //    fold, 24px disclosure rows, the I/O card, the turn rail;
 //  - OpenCode: tool counts on the fold line, changed files per turn;
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
-import { Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
@@ -706,9 +706,15 @@ function ChangedFiles({ files, workspace, stat }: { files: string[]; workspace: 
  * stretch carries how long the turn took; the last, while the turn runs, the
  * spinner and the live thought; the others name what they ran.
  */
+/**
+ * Folds a user opened or closed, by fold: a turn whose agent wrote replies between its calls has
+ * one fold per stretch of work, and each opens on its own. A fold nobody touched follows its turn.
+ */
+const FoldContext = createContext<Record<string, boolean>>({});
+
 function ProcessFold({
   turn,
-  open,
+  open: turnOpen,
   onToggle,
   workspace,
   segment,
@@ -716,11 +722,15 @@ function ProcessFold({
 }: {
   turn: Turn;
   open: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, open: boolean) => void;
   workspace: string;
   segment?: WorkSegment;
   place?: "first" | "middle" | "last";
 }) {
+  const folds = useContext(FoldContext);
+  // Keyed by the stretch of work it holds; a turn's only fold is the turn (Find opens it by that id).
+  const foldId = segment?.key ?? turn.id;
+  const open = foldId === turn.id ? turnOpen : (folds[foldId] ?? turnOpen);
   const live = turn.live && (place === undefined || place === "last");
   const now = useNow(live);
   const items = segment?.items ?? turn.process;
@@ -734,7 +744,7 @@ function ProcessFold({
   const thought = live && !open ? latestThought(turn) : null;
   return (
     <div className={`process${open ? " is-open" : ""}${live ? " is-live" : ""}`}>
-      <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(turn.id)} data-testid="process-toggle">
+      <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
         <IconChevronDown size={14} className="process-chevron" />
         {live ? <Spinner size={13} /> : null}
         <span className="process-label">
@@ -813,7 +823,7 @@ function InterimReply({ item }: { item: AssistantItem }) {
  * folded (or, when it is only thinking, its thought rows as they are), then the
  * reply after it. All the stretches open and close together.
  */
-function SegmentedWork({ turn, segments, open, onToggle, workspace }: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: (id: string) => void; workspace: string }) {
+function SegmentedWork({ turn, segments, open, onToggle, workspace }: { turn: Turn; segments: WorkSegment[]; open: boolean; onToggle: (id: string, open: boolean) => void; workspace: string }) {
   // While the turn runs on after a reply, a live fold follows it for what comes next — unless the work
   // after the answer already owns the spinner below the reply.
   const ended = segments[segments.length - 1]?.reply !== null;
@@ -896,7 +906,7 @@ const TurnView = memo(function TurnView({
 }: {
   turn: Turn;
   open: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, open: boolean) => void;
   workspace: string;
   canFork: boolean;
   onFork: (through: number) => void;
@@ -1069,12 +1079,9 @@ export function Conversation({
     document.getElementById(`turn-${id}`)?.scrollIntoView({ block: "start" });
   }, [from]);
 
-  const onToggle = useCallback((id: string) => {
-    setOverrides((prev) => {
-      const turn = turnsRef.current.find((t) => t.id === id);
-      const current = prev[id] ?? Boolean(turn?.live);
-      return { ...prev, [id]: !current };
-    });
+  // `open` is what the fold shows now, so a fold that was following its turn flips from what it showed.
+  const onToggle = useCallback((id: string, open: boolean) => {
+    setOverrides((prev) => ({ ...prev, [id]: !open }));
   }, []);
 
   // App re-creates forkChat per render; keep a stable identity for memoized TurnViews.
@@ -1379,6 +1386,7 @@ export function Conversation({
       <div className="conversation" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
         <ChatIdContext.Provider value={chatId}>
           <ArrivalsContext.Provider value={arrivals}>
+            <FoldContext.Provider value={overrides}>
             <div className="thread" ref={watchThread}>
               {(from > 0 ? turns.slice(from) : turns).map((turn) => (
                 <Fragment key={turn.id}>
@@ -1404,6 +1412,7 @@ export function Conversation({
                 </Fragment>
               ))}
             </div>
+            </FoldContext.Provider>
           </ArrivalsContext.Provider>
         </ChatIdContext.Provider>
       </div>

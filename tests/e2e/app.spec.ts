@@ -1473,3 +1473,21 @@ test("Copy turn as Markdown puts the prompt, a line per tool call, and the answe
   // Only the one-line summaries: the edit's diff and output are not in it.
   expect(text).not.toContain("Edited src/app.ts");
 });
+
+test("each stretch of a turn's work opens on its own", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  // Work, a reply, then more work: two folds in one turn.
+  await sendAndWait(page, "afterreply showcase");
+  const folds = page.getByTestId("process-toggle");
+  await expect(folds).toHaveCount(2);
+  await expect(folds.nth(0)).toHaveAttribute("aria-expanded", "false");
+  await expect(folds.nth(1)).toHaveAttribute("aria-expanded", "false");
+  await folds.nth(0).click();
+  await expect(folds.nth(0)).toHaveAttribute("aria-expanded", "true");
+  await expect(folds.nth(1)).toHaveAttribute("aria-expanded", "false");
+  await folds.nth(1).click();
+  await folds.nth(0).click();
+  await expect(folds.nth(0)).toHaveAttribute("aria-expanded", "false");
+  await expect(folds.nth(1)).toHaveAttribute("aria-expanded", "true");
+});
