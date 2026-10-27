@@ -178,6 +178,17 @@ test("a share's text and image wait in the start screen's box and go with the fi
   await expect(page.getByTestId("user-prompt")).toHaveText(["describe it"]);
 });
 
+test("at full chat width the start screen's box keeps a gutter from the sidebar and the pane's edge", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  // What Settings → Chat width → Full sets.
+  await page.evaluate(() => document.documentElement.style.setProperty("--chat-col", "100%"));
+  const pane = (await page.locator(".start-screen").boundingBox())!;
+  const card = (await page.locator(".start-screen .composer-card").boundingBox())!;
+  expect(card.x - pane.x).toBeGreaterThanOrEqual(12);
+  expect(pane.x + pane.width - (card.x + card.width)).toBeGreaterThanOrEqual(12);
+});
+
 test("the start screen fits a phone: chips wrap, and sending works at 360 px", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await signInAndOpen(page);

@@ -11,7 +11,8 @@
 
 .hero-inner {
   width: 100%;
-  max-width: calc(var(--chat-col) + 8px);
+  /* "Full" chat width makes --chat-col 100%: the extra 8 px must not push past the pane. */
+  max-width: min(calc(var(--chat-col) + 8px), 100%);
 }
 
 .hero-mark {
@@ -76,10 +77,9 @@
 
 /* ---- start screen (no chat shown) -------------------------------------------------- */
 
+/* The chat's own composer gutter (16 px each side), so a full-width column never meets the sidebar or the pane's edge. */
 .start-screen .composer {
   max-width: none;
-  padding-left: 0;
-  padding-right: 0;
 }
 
 .start-screen .composer-input {
