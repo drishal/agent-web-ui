@@ -39,7 +39,7 @@ banners-dialogs.css), so search rather than guess.
 | Region | Components | Main styles | Covered by |
 |---|---|---|---|
 | Page frame, header, status bar | `App.tsx`, `StatusBar.tsx` | `app-frame.css`, `header.css` | `app.spec.ts` |
-| Sidebar: harness, projects, sessions | `Sidebar.tsx`, `HarnessMenu.tsx`, `SessionCard.tsx`, `SidebarResizer.tsx`, `WorkingRing.tsx` | `sidebar.css`, `session-card.css` | `app.spec.ts`, `tabs.spec.ts` |
+| Sidebar: harness, projects, sessions, quick filter chips (`sidebar-filter.ts`) | `Sidebar.tsx`, `HarnessMenu.tsx`, `SessionCard.tsx`, `SidebarResizer.tsx`, `WorkingRing.tsx` | `sidebar.css`, `session-card.css` | `app.spec.ts`, `tabs.spec.ts`, `sidebar-filter.spec.ts` |
 | Session tabs (drag to reorder, pin) | `TabStrip.tsx` (order logic: `tab-order.ts`) | `session-tabs.css` | `tabs.spec.ts` |
 | Conversation: turns, answers, thoughts | `Conversation.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `QuoteButton.tsx`, `TurnRail.tsx`, `StickyPrompt.tsx` (`sticky-prompt.ts`) | `conversation.css` | `app.spec.ts` |
 | Tool rows and their bodies (diffs, terminals) | `ToolBody.tsx` (inside `Conversation.tsx`) | `conversation.css` | `app.spec.ts` (tool cards) |

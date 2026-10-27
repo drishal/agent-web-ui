@@ -114,6 +114,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               public/sw.js: push, Approve/Deny from a notification, the share target, the
                               offline page (it never caches the app).
   sticky-prompt.ts            The sticky prompt bar: which turn's prompt has scrolled out above the view (pure; StickyPrompt.tsx measures and draws).
+  sidebar-filter.ts           The sidebar's quick filter chips (Running, Needs you, Today): matching, counts, and the narrowed overview.
   find.ts                     Find in chat: matches and the folds to open (Conversation walks and paints the DOM).
   prompt-history.ts           ↑/↓ recall of a chat's sent prompts in the composer.
   list-continue.ts            Markdown lists in the composer: Shift+Enter continues one, Tab indents it.

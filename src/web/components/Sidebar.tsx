@@ -1,4 +1,5 @@
-// The sessions sidebar: the harness and project pickers, search, and every
+// The sessions sidebar: the harness and project pickers, search with its quick
+// filter chips (Running, Needs you, Today), and every
 // project's sessions in date sections ("Show N more" past a few), from the
 // server's sessions overview. Rows warm their chat on hover, show a hover card,
 // carry a menu (new tab, resume command, pin, snooze, archive, move), and drag
@@ -11,6 +12,7 @@ import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import type { UsageLimits } from "../../shared/protocol.js";
 import { limitResetAt } from "../../shared/limit-stop.js";
 import { focusProject, groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
+import { applyQuick, asQuickFilter, chipsShown, escapeClears, quickCounts, QUICK_LABELS, type QuickFilter } from "../sidebar-filter.js";
 import { load, save } from "../storage.js";
 import { harnessColor } from "../harness-colors.js";
 import { HarnessMenu } from "./HarnessMenu.js";
@@ -975,6 +977,18 @@ export function Sidebar(props: {
   const now = useNow(true, 60_000);
   const isActiveSession = (s: ProjectSession) =>
     (props.activeSessionId !== null && s.id === props.activeSessionId) || (s.liveChatId !== undefined && s.liveChatId === props.activeChatId);
+  // What each session is doing now: the open chat's live status beats the listing's.
+  const isWorking = (s: ProjectSession) => (isActiveSession(s) ? isBusy(props.activeStatus) : isBusy(s.status));
+  // The quick filter (Running, Needs you, Today), kept per device; it narrows the overview before anything groups it.
+  const [quick, setQuick] = useState<QuickFilter | null>(() => asQuickFilter(load<unknown>("sidebarFilter", null)));
+  const pickQuick = (next: QuickFilter | null) => {
+    setQuick(next);
+    save("sidebarFilter", next);
+  };
+  const overview = useMemo(
+    () => applyQuick(props.overview, quick, now, isWorking),
+    [props.overview, quick, now, props.activeStatus, props.activeSessionId, props.activeChatId],
+  );
   const groupOptions = {
     currentId: props.workspace?.id ?? null,
     query: props.query,
@@ -986,15 +1000,19 @@ export function Sidebar(props: {
     now,
   };
   const groups = useMemo(
-    () => groupByProject(props.overview, groupOptions),
-    [props.overview, props.workspace, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now],
+    () => groupByProject(overview, groupOptions),
+    [overview, props.workspace, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now],
   );
   const sections = useMemo(
-    () => sidebarSections(props.overview, groupOptions),
-    [props.overview, props.query, props.harnessId, props.activeSessionId, props.activeChatId, now],
+    () => sidebarSections(overview, groupOptions),
+    [overview, props.query, props.harnessId, props.activeSessionId, props.activeChatId, now],
   );
   const { pinned, needs, working } = sections;
-  const projectName = (s: ProjectSession) => props.overview.workspaces.find((w) => w.id === s.workspaceId)?.name ?? "";
+  const quickCount = useMemo(
+    () => quickCounts(props.overview, groupOptions, isWorking),
+    [props.overview, props.harnessId, props.activeStatus, props.activeSessionId, props.activeChatId, now],
+  );
+  const projectName = (s: ProjectSession) => overview.workspaces.find((w) => w.id === s.workspaceId)?.name ?? "";
 
   // The focused project (Hermes Desktop's one-folder view). "auto" follows the current folder;
   // "all" is the back row's choice, kept until a folder is picked elsewhere or the header names one.
@@ -1011,9 +1029,9 @@ export function Sidebar(props: {
   useViewSlide(sessionList, focusId ?? "all");
   const focused = useMemo(() => {
     if (!focusId) return null;
-    const order = props.harnessId ? props.overview.orders?.[`${props.harnessId}:${focusId}`] : undefined;
-    return focusProject(props.overview, focusId, { ...groupOptions, ...(order ? { order } : {}) });
-  }, [props.overview, focusId, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now]);
+    const order = props.harnessId ? overview.orders?.[`${props.harnessId}:${focusId}`] : undefined;
+    return focusProject(overview, focusId, { ...groupOptions, ...(order ? { order } : {}) });
+  }, [overview, focusId, props.query, props.harnessId, showArchived, showSettled, showSnoozed, props.activeSessionId, props.activeChatId, now]);
   const selection = useSelectionMode();
   // The ids in the order the sections show them, for a Shift-click run.
   const selectionOrder = useMemo(
@@ -1034,8 +1052,14 @@ export function Sidebar(props: {
   }, [open]);
 
   const isActive = isActiveSession;
-  const isWorking = (s: ProjectSession) => (isActive(s) ? isBusy(props.activeStatus) : isBusy(s.status));
   const searching = props.query.trim() !== "";
+  // A filter that leaves nothing to list (the current project's empty heading does not count).
+  const quickEmpty =
+    quick !== null &&
+    pinned.length === 0 &&
+    needs.length === 0 &&
+    working.length === 0 &&
+    (props.harnessId === "awui" ? historySections(overview, groupOptions).length === 0 : groups.every((g) => g.sessions.length === 0));
   const sectionRow = (s: ProjectSession) => (
     <SessionRow
       key={s.id}
@@ -1142,7 +1166,22 @@ export function Sidebar(props: {
               <>
                 <label className="search-field">
                   <IconSearch size={14} />
-                  <input type="search" placeholder="Search sessions" value={props.query} onChange={(e) => props.onQuery(e.target.value)} aria-label="Search sessions" />
+                  <input
+                    type="search"
+                    placeholder="Search sessions"
+                    value={props.query}
+                    onChange={(e) => props.onQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      const clears = escapeClears(props.query, quick);
+                      if (e.key !== "Escape" || !clears) return;
+                      // Not the drawer's Escape, and not the browser's own clearing of a search box.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (clears === "query") props.onQuery("");
+                      else pickQuick(null);
+                    }}
+                    aria-label="Search sessions"
+                  />
                 </label>
                 <button type="button" className="icon-btn" aria-label="Refresh sessions" onClick={props.onRefresh}>
                   ↻
@@ -1150,6 +1189,15 @@ export function Sidebar(props: {
               </>
             )}
           </div>
+          {!selection.on ? (
+            <div className="quick-filters" role="group" aria-label="Filter sessions">
+              {chipsShown(quickCount, quick).map((f) => (
+                <button key={f} type="button" className="quick-chip" aria-pressed={quick === f} onClick={() => pickQuick(quick === f ? null : f)}>
+                  {QUICK_LABELS[f]} <span className="quick-count">{quickCount[f]}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           {props.onSearchAll && props.query.trim().length >= 2 ? (
             <button type="button" className="search-all" onClick={() => props.onSearchAll?.(props.query.trim())}>
               <IconSearch size={13} />
@@ -1195,9 +1243,9 @@ export function Sidebar(props: {
             {pinned.length > 0 ? (
               <SectionList className="pinned-group" testId="pinned-group" icon={<IconPin size={14} />} title="Pinned" sessions={pinned} row={(s) => sectionRow(s)} />
             ) : null}
-            {props.harnessId === "awui" ? (
+            {quickEmpty ? null : props.harnessId === "awui" ? (
               // The chat surface has no projects: a Claude.ai-style history, newest first by day.
-              historySections(props.overview, groupOptions)
+              historySections(overview, groupOptions)
                 .filter((sec) => sec.label !== "Pinned")
                 .map((sec) => (
                   <li className="project-group is-open history-group" key={sec.label} data-testid="history-group">
@@ -1214,7 +1262,7 @@ export function Sidebar(props: {
             ) : focused && !searching ? (
               <FocusedProjectView
                 focused={focused}
-                order={props.overview.orders?.[`${props.harnessId}:${focused.workspace.id}`]}
+                order={overview.orders?.[`${props.harnessId}:${focused.workspace.id}`]}
                 now={now}
                 isActive={isActive}
                 isWorking={isWorking}
@@ -1234,7 +1282,7 @@ export function Sidebar(props: {
                   key={g.workspace.id}
                   group={g}
                   searching={searching}
-                  order={props.overview.orders?.[`${props.harnessId}:${g.workspace.id}`]}
+                  order={overview.orders?.[`${props.harnessId}:${g.workspace.id}`]}
                   now={now}
                   isActive={isActive}
                   isWorking={isWorking}
@@ -1266,7 +1314,15 @@ export function Sidebar(props: {
                 ) : null}
               </li>
             ) : null}
-            {!props.sessionsLoading && groups.length === 0 && pinned.length === 0 && needs.length === 0 && working.length === 0 && !props.sessionsError ? (
+            {quickEmpty && !props.sessionsLoading && !props.sessionsError ? (
+              <li className="sidebar-note quick-empty">
+                No sessions match
+                <button type="button" className="btn btn-small btn-ghost" onClick={() => pickQuick(null)}>
+                  Clear filter
+                </button>
+              </li>
+            ) : null}
+            {!quick && !props.sessionsLoading && groups.length === 0 && pinned.length === 0 && needs.length === 0 && working.length === 0 && !props.sessionsError ? (
               <li className="sidebar-note">{searching ? "No matching sessions" : "No chats yet. Start one on the right."}</li>
             ) : null}
           </ul>
