@@ -34,48 +34,52 @@ describe("atui", () => {
     await ui.until("Echo: showcase tool edit please");
     await idle(ui);
     const f = await ui.until("Changed 3 files");
-    expect(f).toContain("│ showcase tool edit please");
-    expect(f).toMatch(/▸ Worked for \d+s · 2 reads, 1 search, 2 edits/);
+    // neat-render's turn: the prompt behind a ❯, the calls fired together on one tree, each
+    // outcome at the end of its line, the answer marked, and a Σ line of what the turn did.
+    expect(f).toContain("❯ showcase tool edit please");
+    expect(f).toContain("┌─ ● Read README.md");
+    expect(f).toMatch(/├─ ● Edit src\/app\.ts +Added 1 line, removed 1 line/);
+    expect(f).toMatch(/└─ ● /);
+    expect(f).toContain("● Echo: showcase tool edit please");
+    expect(f).toMatch(/Σ \d+ calls · /);
+    expect(f).not.toContain("Worked for");
     expect(f).toContain("Fake Echo ▾  low ▾");
-    await ui.click("▸ Worked");
-    // neat-render's rows: the edit as Update(path), its outcome on a └ line, its lines under it.
-    const rows = await ui.until("Update(src/app.ts)");
-    expect(rows).toContain("└ Added 1 line, removed 1 line");
-    expect(rows).toMatch(/- a\s*\n.*\+ b/s);
-    expect(rows).toContain("● Read README.md");
-    // Clicked, it is framed, its outcome in the bottom edge.
-    await ui.click("Update(src/app.ts)");
+    // Clicked, a call is framed on the tree's trunk, its outcome in the bottom edge.
+    await ui.click("Edit src/app.ts");
     const framed = await ui.until("╰─ Added 1 line, removed 1 line");
     expect(framed).toContain("╭");
+    // C-x e folds every turn to its line, and brings the work back.
+    ui.keys.pressKey("x", { ctrl: true });
+    ui.keys.pressKey("e");
+    const folded = await ui.until("▸ Worked for");
+    expect(folded).toMatch(/▸ Worked for \d+s · 2 reads, 1 search, 2 edits/);
+    expect(folded).not.toContain("┌─ ● Read");
   }, 30_000);
 
-  it("shows a reply written between tool calls as a reply, before the fold holding the command", async () => {
+  it("shows a reply written between tool calls as a reply, before the command that followed it", async () => {
     ui = await mount(path.join(server.root, "beta"), { height: 40 });
     await ui.type("interleaved please");
     ui.keys.pressEnter();
     await idle(ui);
     const f = await ui.until("Echo: interleaved please");
     const reply = f.indexOf("this is reply block 1");
-    const fold = f.search(/▸ Worked for \d+s · 1 command/);
+    const command = f.indexOf("● Bash");
     expect(reply).toBeGreaterThan(0);
-    expect(fold).toBeGreaterThan(reply);
-    expect(f.indexOf("Echo: interleaved please")).toBeGreaterThan(fold);
-    // Opened, the fold holds the command, not the reply again.
-    await ui.click("▸ Worked");
-    const open = await ui.until("● Bash");
-    // (The fake's thought quotes the reply, after "Considering:".)
-    expect(open.match(/(?<!Considering: )this is reply block 1/g)).toHaveLength(1);
+    expect(command).toBeGreaterThan(reply);
+    expect(f.indexOf("Echo: interleaved please")).toBeGreaterThan(command);
+    // The reply is drawn once, not again among the work. (The fake's thought would quote it, after "Considering:".)
+    expect(f.match(/(?<!Considering: )this is reply block 1/g)).toHaveLength(1);
   }, 30_000);
 
-  it("flashes the prompt's edge once when a run ends", async () => {
+  it("flashes the prompt's ❯ once when a run ends", async () => {
     ui = await mount(path.join(server.root, "alpha"));
     await ui.type("tool please");
     ui.keys.pressEnter();
     await idle(ui);
-    const ok = RGBA.fromHex(ui.app.theme().ok).toInts().join();
+    const ok = RGBA.fromHex(ui.app.theme().muted).toInts().join();
     const edge = async () => {
-      const row = (await ui?.spans())?.find((l) => l.map((s) => s.text).join("").includes("╭─F"));
-      return row?.find((s) => s.text.includes("╭"))?.fg.toInts().join();
+      const row = (await ui?.spans())?.find((l) => l.map((s) => s.text).join("").includes("❯ tool please"));
+      return row?.find((s) => s.text.includes("❯"))?.fg.toInts().join();
     };
     // A tenth of a second in, the flash is near its height.
     await wait(100);
@@ -113,7 +117,8 @@ describe("atui", () => {
     // Three lines at a time, the newest last.
     expect(live).toContain("│  ✓ tests/unit/step-2.test.ts");
     expect(live).not.toContain("step-1.test.ts");
-    expect(live).toContain("● Bash · running…");
+    // The bullet blinks between filled and hollow while the call runs.
+    expect(live).toMatch(/[●○] Bash · running…/);
     await idle(ui);
     expect(await ui.frame()).not.toContain("step-6.test.ts");
   }, 30_000);
@@ -397,7 +402,7 @@ describe("atui", () => {
     expect(ghost).toContain("━━━━");
     expect(ghost).toContain("Fake");
     await opened;
-    const thread = await ui.until("│ ghost session here");
+    const thread = await ui.until("❯ ghost session here");
     expect(thread).not.toContain("Opening");
   }, 30_000);
 
@@ -433,7 +438,7 @@ describe("atui", () => {
     await ui.type("first try");
     ui.keys.pressEnter();
     await idle(ui);
-    await ui.click("│ first try");
+    await ui.click("❯ first try");
     await ui.until("↻ Retry");
     await ui.click("✎ Edit");
     await ui.until("editing message 1");
@@ -441,7 +446,7 @@ describe("atui", () => {
     await ui.escape();
     await ui.until("Edit cancelled");
     expect(await ui.frame()).not.toContain("editing message 1");
-    await ui.click("│ first try");
+    await ui.click("❯ first try");
     await ui.click("✎ Edit");
     await ui.until("editing message 1");
     // (Not C-c: the test renderer quits on it.)
@@ -467,7 +472,7 @@ describe("atui", () => {
     await idle(ui);
     await ui.until(() => (ui?.app.chat()?.checkpoints ?? []).includes(1));
     writeFileSync(path.join(repo, "app.ts"), "const a = 2;\n");
-    await ui.click("│ change the app");
+    await ui.click("❯ change the app");
     await ui.click("↶ Undo files");
     await ui.until("Undo file changes from message 1 on");
     // The dialog opens on "Comparing the files…" and lists them once the preview arrives.
@@ -573,7 +578,7 @@ describe("atui", () => {
     await wait(30);
     ui.keys.pressEnter();
     await ui.until(() => ui?.app.chat()?.title === "first session here");
-    expect(await ui.frame()).toContain("│ first session here");
+    expect(await ui.frame()).toContain("❯ first session here");
   }, 30_000);
 
   it("keeps the context's history across a chat's runs, and the harness's commands while one streams", async () => {

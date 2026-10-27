@@ -66,7 +66,8 @@ export function App(p: {
   const [sideTab, setSideTab] = createSignal<SidebarTab>("sessions");
   const [focus, setFocus] = createSignal<"composer" | "sidebar">("composer");
   const [dialog, setDialog] = createSignal<Dialog>(null);
-  const [showWork, setShowWork] = createSignal(false);
+  // The work shows, as neat-render draws it (nothing folds); C-x e folds every turn to its line.
+  const [showWork, setShowWork] = createSignal(true);
   const [compactChoice, setCompactChoice] = createSignal<boolean | null>(null);
   const [reviewing, setReviewing] = createSignal(false);
   /** A command run from an answer (C-x x), and what it gave once done. */

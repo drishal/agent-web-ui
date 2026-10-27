@@ -245,7 +245,7 @@ describe("the Tern conversation", () => {
       () => undefined,
     );
     // Folded like every row, its +/− count saying how big it is.
-    expect(node.props).toMatchObject({ title: "Update", target: "src/a.ts", targetKind: "path", meta: ["+1", "−1"], collapsed: true });
+    expect(node.props).toMatchObject({ title: "Edit", target: "src/a.ts", targetKind: "path", meta: ["+1", "−1"], collapsed: true });
     expect(node.props.preview).toBeUndefined();
     expect(node.children[0]?.kind).toBe("diff");
     expect(String(node.children[0]?.props.text)).toContain("-a\n+b");

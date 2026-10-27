@@ -93,7 +93,6 @@ export function toolNode(item: ToolItem, workspace: string, age: ConversationCx[
   const running = item.status === "running";
   let target = row.detail ?? "";
   if (item.category === "command" && target.startsWith("$ ")) target = target.slice(2);
-  if (target.startsWith("(") && target.endsWith(")")) target = target.slice(1, -1);
   const targetKind = item.category === "command" ? "command" : item.category === "search" ? "pattern" : item.category === "web" ? "query" : item.paths.length > 0 ? "path" : "text";
   // The web UI's row: the diff count at the end and nothing else (no "4 lines", "2 results").
   const meta: string[] = [];

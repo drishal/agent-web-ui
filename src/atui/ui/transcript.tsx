@@ -1,14 +1,16 @@
-// The conversation, turn by turn as the web UI lays it out: the prompt, one
-// "Worked for …" line that opens to the work (thoughts, tool calls, notices),
-// the answer as Markdown, and the files it changed. Replies the agent wrote
-// between tool calls show in order, each stretch of work folded between them. The look is neat-render's
-// (the pi extension): the prompt in a rounded card with the harness's mark in
-// its top edge, each call a bulleted row with its outcome on a `└` line, an
-// edit's first changed lines under it (the changed words brighter), thinking
-// as one titled line, and a clicked call framed omp-style (command, Output,
-// outcome in the bottom edge). The column is capped at a readable width and
-// centred; a gutter on the right maps every turn and scrolls on a click, and
-// the prompt of the turn you are reading stays pinned at the top.
+// The conversation, turn by turn, drawn as neat-render (the pi extension)
+// draws Pi's: the prompt behind a `❯` on a fill strip, the work shown rather
+// than folded (a lone call a bulleted row with its outcome on a `└` line and
+// an edit's first changed lines under it, calls fired together hung off one
+// tree with each outcome at the end of its line, thinking as one `◇ Thinking`
+// line), the answer marked with an accent `●`, and a Σ line of what the turn
+// did. Replies the agent wrote between tool calls show in order. C-x e folds
+// every turn to a "Worked for …" line (the web UI's), and a running turn keeps
+// that line, with its spinner, over its work. A clicked call is framed
+// omp-style (command, Output, outcome in the bottom edge). The column is capped
+// at a readable width and centred; a gutter on the right maps every turn and
+// scrolls on a click, and the prompt of the turn you are reading stays pinned
+// at the top.
 import { createEffect, createMemo, createResource, createSignal, For, Index, Match, on, onCleanup, Show, Switch, type Accessor } from "solid-js";
 import { BoxRenderable, type Renderable, type ScrollBoxRenderable } from "@opentui/core";
 import { useRenderer, useTerminalDimensions } from "@opentui/solid";
@@ -18,7 +20,7 @@ import { clip, fileUrl, foldLabel, outputTail, unifiedDiff } from "../format.js"
 import { easeOut, flashAt, mix, unrollCounts } from "../fx.js";
 import { filetypeOf, taskBoxes, withCaret } from "../markdown.js";
 import { minimapCells, pinnedTurn, rowToScroll, turnTone, type TurnTone } from "../minimap.js";
-import { harnessGlyph, neatRow, thoughtTitle, thoughtTokens } from "../neat.js";
+import { latestThoughtLine, neatRow, sigmaFacts, thinkingMeta, workRuns, type WorkRun } from "../neat.js";
 import { accentOf, type Theme } from "../theme.js";
 import { highlightPreview } from "../words.js";
 import { useAtui, useTheme } from "./context.js";
@@ -40,11 +42,12 @@ const IMAGE_ROWS = 8;
 const PULSE_TICKS = 4.5;
 const pulseOn = () => Math.floor(tick() / PULSE_TICKS) % 2 === 0;
 
-/** The row's bullet: accent when done, red on failure, pulsing while it runs. */
+/** The row's bullet, neat-render's: quiet when done (success is the normal case), red on failure, filled and hollow in turn while it runs. */
 function Bullet(p: { status: "running" | "done" | "error" }) {
   const t = useTheme();
-  const color = () => (p.status === "running" ? (pulseOn() ? t().warn : t().muted) : p.status === "error" ? t().danger : t().accent);
-  return <span style={{ fg: color() }}>● </span>;
+  const on = () => p.status !== "running" || pulseOn();
+  const color = () => (p.status === "running" ? (on() ? t().warn : t().muted) : p.status === "error" ? t().danger : t().muted);
+  return <span style={{ fg: color() }}>{on() ? "● " : "○ "}</span>;
 }
 
 /**
@@ -183,7 +186,11 @@ function PromptActions(p: { item: UserItem; through: number; onDone: () => void 
   );
 }
 
-/** The prompt in a rounded card, the harness's mark set into its top edge: ╭─π──╮. `glow` (0 to 1) lights its edge in the harness's colour; a click shows what the prompt offers. */
+/**
+ * The prompt as neat-render quotes it: a `❯` over a fill strip the column's
+ * width, the text as Markdown. `glow` (0 to 1) lights the `❯` in the
+ * harness's colour as a run ends; a click shows what the prompt offers.
+ */
 function UserPrompt(p: { item: UserItem; glow: number; through: number }) {
   const t = useTheme();
   const app = useAtui();
@@ -192,28 +199,25 @@ function UserPrompt(p: { item: UserItem; glow: number; through: number }) {
     <box flexDirection="column">
       <box
         onMouseDown={() => p.through > 0 && setActions(!actions())}
-        border
-        borderStyle="rounded"
-        borderColor={p.glow > 0 ? mix(t().ok, accentOf(t(), app.harness()?.accent), p.glow) : t().ok}
-        title={harnessGlyph(app.chat()?.harnessId ?? "")}
-        titleColor={t().danger}
         backgroundColor={app.glass() ? undefined : t().surface}
-        paddingLeft={1}
         paddingRight={1}
         marginTop={1}
-        flexDirection="column"
+        flexDirection="row"
       >
-        <text fg={t().text} wrapMode="word">
-          {p.item.text}
-          <Show when={p.item.imageCount && !p.item.images?.length}>
-            <span style={{ fg: t().muted }}>{`  [${p.item.imageCount} ${p.item.imageCount === 1 ? "image" : "images"}]`}</span>
-          </Show>
+        <text flexShrink={0} fg={p.glow > 0 ? mix(t().muted, accentOf(t(), app.harness()?.accent), p.glow) : t().muted}>
+          {"❯ "}
         </text>
-        <Show when={p.item.images?.length}>
-          <box flexDirection="row" flexWrap="wrap" marginTop={1}>
-            <Index each={p.item.images ?? []}>{(image, i) => <PromptImage image={image()} n={i + 1} />}</Index>
-          </box>
-        </Show>
+        <box flexDirection="column" flexGrow={1} flexShrink={1}>
+          <Md text={p.item.text} streaming={false} fg={t().text} />
+          <Show when={p.item.imageCount && !p.item.images?.length}>
+            <text fg={t().muted}>{`[${p.item.imageCount} ${p.item.imageCount === 1 ? "image" : "images"}]`}</text>
+          </Show>
+          <Show when={p.item.images?.length}>
+            <box flexDirection="row" flexWrap="wrap" marginTop={1}>
+              <Index each={p.item.images ?? []}>{(image, i) => <PromptImage image={image()} n={i + 1} />}</Index>
+            </box>
+          </Show>
+        </box>
       </box>
       <Show when={actions()}>
         <PromptActions item={p.item} through={p.through} onDone={() => setActions(false)} />
@@ -222,23 +226,31 @@ function UserPrompt(p: { item: UserItem; glow: number; through: number }) {
   );
 }
 
-/** One line per thought: "● Thinking: …" while it streams, "▸ Thought: … · ~340 tokens" after; a click opens it. */
+/**
+ * A thought as one line, neat-render's: `◇ Thinking 2.1s ~140 tokens`. While it
+ * streams the marker fills to `◆` on every other beat and the line rolls with
+ * the newest thought; a click opens the reasoning, hung under its label.
+ */
 function Thought(p: { item: AssistantItem }) {
   const t = useTheme();
   const [open, setOpen] = createSignal(false);
-  const streaming = () => p.item.streaming && !p.item.text;
-  const title = () => thoughtTitle(p.item.thinking);
-  const detail = () => (streaming() ? (title() ? `: ${title()}` : "") : `: ${[title(), `~${thoughtTokens(p.item.thinking)} tokens`].filter(Boolean).join(" · ")}`);
+  const live = () => p.item.streaming && !p.item.text;
+  // A live thought's time runs on the clock; a finished one is read once.
+  const meta = () => {
+    if (live()) void tick();
+    return thinkingMeta(p.item);
+  };
+  const latest = () => (live() && !open() ? latestThoughtLine(p.item.thinking) : "");
   return (
     <box flexDirection="column" onMouseDown={() => setOpen(!open())}>
       <text wrapMode="none" truncate>
-        <Show when={streaming()} fallback={<span style={{ fg: t().muted }}>{open() ? "▾ " : "▸ "}</span>}>
-          <span style={{ fg: pulseOn() ? t().warn : t().muted }}>● </span>
+        <span style={{ fg: live() && pulseOn() ? t().warn : t().muted }}>{live() && pulseOn() ? "◆ " : "◇ "}</span>
+        <span style={{ fg: t().thinking }}>Thinking</span>
+        <span style={{ fg: t().muted }}>{` ${meta()}`}</span>
+        <Show when={latest()}>
+          <span style={{ fg: t().border }}>{" │ "}</span>
+          <span style={{ fg: t().muted }}>{latest()}</span>
         </Show>
-        <Show when={streaming()} fallback={<span style={{ fg: t().thinking }}>Thought</span>}>
-          <Shimmer text="Thinking" base={t().thinking} glow={mix(t().thinking, "#ffffff", 0.6)} />
-        </Show>
-        <span style={{ fg: t().muted }}>{detail()}</span>
       </text>
       <Show when={open()}>
         <box paddingLeft={2}>
@@ -496,6 +508,88 @@ function ToolRow(p: { item: ToolItem; workspace: string }) {
   );
 }
 
+/**
+ * One call of a tree, neat-render's batch: connector, bullet, verb and target,
+ * the outcome at the end of the line (the tree already gives the rows their
+ * shape, so there is no `└` line, and no diff under an edit). A running
+ * command's last lines, or the call opened by a click, hang on the trunk.
+ */
+function TreeRow(p: { item: ToolItem; workspace: string; first: boolean; last: boolean }) {
+  const t = useTheme();
+  const [open, setOpen] = createSignal(false);
+  const row = createMemo(() => neatRow(p.item, p.workspace));
+  const running = () => p.item.status === "running";
+  const bad = (f: string) => p.item.status === "error" || /^(failed|exit [1-9])/.test(f);
+  const tail = createMemo(() => (running() && p.item.category === "command" ? outputTail(p.item.output, LIVE_LINES) : []));
+  const href = () => (p.item.paths[0] ? fileUrl(p.item.paths[0], p.workspace) : null);
+  // A remark above the call takes the top corner, so the call under it joins the trunk with a tee.
+  const fork = () => (p.last ? "└─ " : p.first && !row().note ? "┌─ " : "├─ ");
+  return (
+    <box flexDirection="column">
+      <Show when={row().note}>
+        {(note) => (
+          <text wrapMode="none" truncate>
+            <span style={{ fg: t().border }}>{p.first ? "┌  " : "│  "}</span>
+            <i style={{ fg: t().muted }}>{`# ${note()}`}</i>
+          </text>
+        )}
+      </Show>
+      <box flexDirection="row" onMouseDown={() => setOpen(!open())}>
+        <text flexShrink={1} minWidth={0} wrapMode="none" truncate>
+          <span style={{ fg: t().border }}>{fork()}</span>
+          <Bullet status={p.item.status} />
+          <b style={{ fg: t().text }}>{row().label}</b>
+          <Show when={row().detail}>
+            {(d) => (
+              <Show when={href()} fallback={<span style={{ fg: t().link }}>{` ${d()}`}</span>}>
+                {(url) => (
+                  <a href={url()} style={{ fg: t().link }}>
+                    {` ${d()}`}
+                  </a>
+                )}
+              </Show>
+            )}
+          </Show>
+          <Show when={running()}>
+            <span style={{ fg: t().muted }}> · running…</span>
+          </Show>
+        </text>
+        <Show when={!running() && row().facts.length > 0}>
+          <box flexGrow={1} minWidth={2} />
+          <text flexShrink={0} wrapMode="none">
+            <Index each={row().facts}>
+              {(f, i) => (
+                <>
+                  <Show when={i > 0}>
+                    <span style={{ fg: t().muted }}> · </span>
+                  </Show>
+                  <Show when={bad(f())} fallback={<span style={{ fg: t().muted }}>{f()}</span>}>
+                    <u style={{ fg: t().danger }}>{f()}</u>
+                  </Show>
+                </>
+              )}
+            </Index>
+          </text>
+        </Show>
+      </box>
+      <Show when={tail().length > 0 || open()}>
+        <box flexDirection="column" border={p.last ? [] : ["left"]} borderColor={t().border} paddingLeft={p.last ? 3 : 2}>
+          <Index each={tail()}>
+            {(line) => (
+              <text fg={t().muted} wrapMode="none" truncate>
+                {line()}
+              </text>
+            )}
+          </Index>
+          <Show when={open()}>
+            <ToolDetails item={p.item} workspace={p.workspace} />
+          </Show>
+        </box>
+      </Show>
+    </box>
+  );
+}
+
 function Notice(p: { item: NoticeItem }) {
   const t = useTheme();
   const color = () => (p.item.level === "error" ? t().danger : p.item.level === "warning" ? t().warn : t().info);
@@ -535,9 +629,7 @@ function ProcessItem(p: { item: ChatItem; workspace: string; thoughtOnly?: boole
               <Thought item={item()} />
             </Show>
             <Show when={!p.thoughtOnly && saysSomething(item().text)}>
-              <box paddingLeft={2}>
-                <Md text={item().text} streaming={item().streaming} fg={t().text2} />
-              </box>
+              <Md text={item().text} streaming={item().streaming} fg={t().text2} />
             </Show>
           </box>
         )}
@@ -614,13 +706,36 @@ function WorkItems(p: { items: ChatItem[]; answerAt: number; answer: AssistantIt
     } else setShown(steps[step] as number);
   }, UNROLL_MS);
   onCleanup(() => clearInterval(timer));
+  type Row = { item: ChatItem } | { thought: AssistantItem };
+  // Calls one after another hang off one tree, neat-render's way; anything else stands alone.
+  const runs = createMemo(() => workRuns<Row>(rows().slice(0, shown()), (row) => ("item" in row && row.item.kind === "tool" ? row.item : null)));
   return (
-    <box flexDirection="column" paddingLeft={2} marginTop={1}>
-      <Index each={rows().slice(0, shown())}>
-        {(row) => (
+    <box flexDirection="column" marginTop={1}>
+      <Index each={runs()}>
+        {(run, n) => (
           <Switch>
-            <Match when={"thought" in row() && (row() as { thought: AssistantItem }).thought}>{(answer) => <Thought item={answer()} />}</Match>
-            <Match when={"item" in row() && (row() as { item: ChatItem }).item}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Match>
+            <Match when={run().kind === "tree" && (run() as Extract<WorkRun<Row>, { kind: "tree" }>).calls}>
+              {(calls) => (
+                <box flexDirection="column">
+                  <Index each={calls()}>{(call, i) => <TreeRow item={call()} workspace={p.workspace} first={i === 0} last={i === calls().length - 1} />}</Index>
+                </box>
+              )}
+            </Match>
+            <Match when={run().kind === "one" && (run() as Extract<WorkRun<Row>, { kind: "one" }>).row}>
+              {(row) => (
+                <Switch>
+                  {/* The answer's own reasoning belongs to the answer: a blank line keeps it off the work above. */}
+                  <Match when={"thought" in row() && (row() as { thought: AssistantItem }).thought}>
+                    {(answer) => (
+                      <box marginTop={n > 0 ? 1 : 0}>
+                        <Thought item={answer()} />
+                      </box>
+                    )}
+                  </Match>
+                  <Match when={"item" in row() && (row() as { item: ChatItem }).item}>{(item) => <ProcessItem item={item()} workspace={p.workspace} thoughtOnly={p.thoughtOnly} />}</Match>
+                </Switch>
+              )}
+            </Match>
           </Switch>
         )}
       </Index>
@@ -659,7 +774,9 @@ function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; 
               <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
             </Match>
             <Match when={shape(n) === "fold"}>
-              <Fold turn={p.turn} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: place(n) }} fade={p.fade} />
+              <Show when={!p.open || live(n)}>
+                <Fold turn={p.turn} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: place(n) }} fade={p.fade} />
+              </Show>
               <Show when={p.open && segment().items.length > 0}>
                 <WorkItems items={segment().items} answerAt={segment().answerAt} answer={p.turn.answer} workspace={p.workspace} thoughtOnly />
               </Show>
@@ -678,12 +795,20 @@ function SegmentedWork(p: { turn: Turn; segments: WorkSegment[]; open: boolean; 
   );
 }
 
+/** The answer, neat-render's: its first line marked with the accent `●` once it is written, the rest in the same two-column gutter. */
 function Answer(p: { item: AssistantItem }) {
   const t = useTheme();
   return (
     <box flexDirection="column" marginTop={1}>
       <Show when={p.item.text.trim()}>
-        <Md text={p.item.text} streaming={p.item.streaming} fg={t().text} />
+        <box flexDirection="row">
+          <text flexShrink={0} fg={t().accent}>
+            {p.item.streaming ? "  " : "● "}
+          </text>
+          <box flexDirection="column" flexGrow={1} flexShrink={1}>
+            <Md text={p.item.text} streaming={p.item.streaming} fg={t().text} />
+          </box>
+        </box>
       </Show>
       <Show when={p.item.error && p.item.error !== "Stopped"}>
         <text fg={t().danger} wrapMode="word">
@@ -731,6 +856,9 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
   const glow = () => (since() === null ? 0 : flashAt(since() as number));
   const fade = () => (since() === null ? undefined : easeOut(Math.min(1, (since() as number) * 2.5)));
   const files = () => p.turn().changedFiles.map((f) => relativePath(f, p.workspace));
+  // A finished turn closes with what it did, neat-render's Σ line: calls, time, reasoning, failures.
+  const sigma = createMemo(() => sigmaFacts(p.turn()));
+  const sigmaShown = () => !p.turn().live && Boolean(p.turn().prompt) && (sigma().facts.length > 0 || sigma().failed !== null);
   const FILES_SHOWN = 4;
   return (
     <box flexDirection="column" width="100%" maxWidth={MAX_COLUMN}>
@@ -746,7 +874,10 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         when={split()}
         fallback={
           <Show when={hasProcess() || p.turn().live}>
-            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={afterWork() ? { counts: workCounts(p.turn().process), place: "first" } : undefined} fade={fade()} />
+            {/* Shown work needs no line over it (neat-render folds nothing); a folded turn, or one still working, has one. */}
+            <Show when={!p.open || p.turn().live}>
+              <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={afterWork() ? { counts: workCounts(p.turn().process), place: "first" } : undefined} fade={fade()} />
+            </Show>
             <Show when={p.open}>
               <WorkItems items={p.turn().process} answerAt={p.turn().answerAt} answer={p.turn().answer} workspace={p.workspace} />
             </Show>
@@ -759,7 +890,9 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
       <Show when={afterWork()}>
         {(segment) => (
           <>
-            <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: "last" }} fade={fade()} />
+            <Show when={!p.open || p.turn().live}>
+              <Fold turn={p.turn()} open={p.open} onToggle={p.onToggle} part={{ counts: segment().counts, place: "last" }} fade={fade()} />
+            </Show>
             <Show when={p.open}>
               <WorkItems items={segment().items} answerAt={-1} answer={null} workspace={p.workspace} />
             </Show>
@@ -767,8 +900,23 @@ function TurnView(p: { turn: Accessor<Turn>; workspace: string; open: boolean; o
         )}
       </Show>
       <For each={p.turn().errors}>{(item) => <Notice item={item} />}</For>
-      <Show when={files().length > 0 && !p.turn().live}>
+      <Show when={sigmaShown()}>
         <box marginTop={1}>
+          <text fg={t().muted} wrapMode="word">
+            {`Σ ${sigma().facts.join(" · ")}`}
+            <Show when={sigma().failed}>
+              {(failed) => (
+                <>
+                  {sigma().facts.length > 0 ? " · " : ""}
+                  <span style={{ fg: t().danger }}>{failed()}</span>
+                </>
+              )}
+            </Show>
+          </text>
+        </box>
+      </Show>
+      <Show when={files().length > 0 && !p.turn().live}>
+        <box marginTop={sigmaShown() ? 0 : 1}>
           <text fg={t().muted} wrapMode="word">
             {`✎ Changed ${files().length} ${files().length === 1 ? "file" : "files"} · `}
             {/* Each name is a link to its file, where the terminal has links. */}
