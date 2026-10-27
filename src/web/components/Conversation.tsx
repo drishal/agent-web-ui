@@ -575,7 +575,7 @@ function Answer({
     ...(canRestore ? [{ label: "Undo file changes from here", icon: <IconUndo size={16} />, run: () => onRestore(through) }] : []),
   ];
   return (
-    <div className={`answer${arrival}`} data-testid="answer" {...press}>
+    <div className={`answer${arrival}${item.streaming ? " is-streaming" : ""}`} data-testid="answer" {...press}>
       {sheet ? <ActionSheet title="Reply" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
       {item.text ? <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
@@ -771,7 +771,7 @@ function ProcessFold({
 function InterimReply({ item }: { item: AssistantItem }) {
   const arrival = useArrival(item.id);
   return (
-    <div className={`answer answer-interim${arrival}`} data-testid="interim-reply">
+    <div className={`answer answer-interim${arrival}${item.streaming ? " is-streaming" : ""}`} data-testid="interim-reply">
       <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} />
     </div>
   );

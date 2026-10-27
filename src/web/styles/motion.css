@@ -2,10 +2,12 @@
    Short and eased out: popovers grow from the side they open on, dialogs
    settle in, rows that arrive during a run slide into place, and what is
    still working shimmers. Content loaded at once (a resume, a tab switch)
-   never animates; prefers-reduced-motion turns all of it off (top of file). */
+   never animates; prefers-reduced-motion turns all of it off (tokens.css). */
 :root {
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-enter: 0.18s;
+  --dur-hover: 0.12s;
 }
 
 @keyframes pop-up {
@@ -32,6 +34,13 @@
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+}
+
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 
@@ -94,21 +103,22 @@
   animation: fade-in 0.18s ease;
 }
 
-/* Options and menu items: hover fills fade instead of snapping. */
+/* Options, menu items, and sidebar rows: hover fills fade instead of snapping. */
 .harness-option,
 .permission-option,
 .model-option,
 .menu-list button,
 .command-item,
 .session-tab,
+.session,
 .ghost-icon,
 .drow-head,
 .process-head,
 .picker-item {
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease,
-    opacity 0.12s ease;
+    background-color var(--dur-hover) ease,
+    color var(--dur-hover) ease,
+    opacity var(--dur-hover) ease;
 }
 
 /* Dialogs settle in over a fading backdrop. */
@@ -142,10 +152,10 @@
     opacity 0.1s ease;
 }
 
-/* Transcript items that arrive while the chat is on screen. */
+/* Transcript items that arrive while the chat is on screen. A new turn (the
+   prompt bubble, then the answer) rises a few pixels as it fades in. */
 .turn-prompt.is-arriving .bubble {
-  transform-origin: bottom right;
-  animation: settle-in 0.26s var(--ease-out);
+  animation: turn-in var(--dur-enter) var(--ease-out);
 }
 
 .tool-row.is-arriving,
@@ -156,7 +166,50 @@
 }
 
 .answer.is-arriving {
-  animation: fade-in 0.3s ease;
+  animation: turn-in var(--dur-enter) var(--ease-out);
+}
+
+/* A soft caret after the last streamed text, on the last block's own line so
+   Markdown layout is untouched (a list's caret sits on its last item, a quote's
+   on its last paragraph); code blocks and tables get none. It goes the moment
+   the answer stops streaming (Conversation drops .is-streaming). */
+.answer.is-streaming .md > p:last-child::after,
+.answer.is-streaming .md > h1:last-child::after,
+.answer.is-streaming .md > h2:last-child::after,
+.answer.is-streaming .md > h3:last-child::after,
+.answer.is-streaming .md > h4:last-child::after,
+.answer.is-streaming .md > blockquote:last-child > p:last-child::after,
+.answer.is-streaming .md > :is(ul, ol):last-child > li:last-child:not(:has(ul, ol))::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: stream-caret 1s ease-in-out infinite;
+}
+
+@keyframes stream-caret {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* The start screen's mark breathes: a slow, barely-there swell, so the empty state feels alive and calm. */
+.hero-mark svg {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.03);
+  }
 }
 
 /* A call seen running: its icon pops when the spinner gives way. */

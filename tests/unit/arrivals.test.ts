@@ -24,4 +24,14 @@ describe("arrivals", () => {
     a.update("c2", items("v1", "v2", "v3"));
     expect(a.isFresh("v3")).toBe(true);
   });
+
+  it("keeps an item new for a moment, so a part that mounts a render later still rises in", () => {
+    const a = new Arrivals();
+    a.update("c1", items("u1"), 0);
+    a.update("c1", items("u1", "a1"), 1000);
+    // The next render brings nothing new, yet the answer that mounts now still arrived live.
+    a.update("c1", items("u1", "a1", "t1"), 1200);
+    expect(a.isFresh("a1", 1200)).toBe(true);
+    expect(a.isFresh("a1", 2600)).toBe(false);
+  });
 });

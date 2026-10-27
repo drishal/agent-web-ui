@@ -56,7 +56,7 @@ banners-dialogs.css), so search rather than guess.
 | Saved prompts, shortcuts | `SavedPromptsDialog.tsx`, `ShortcutSheet.tsx` | `saved-prompts.css`, `shortcuts.css` | `unified.spec.ts` |
 | A chat beside the main one | `SidePane.tsx` | `side-pane.css` | `unified.spec.ts` |
 | Phones: drawer, sheets, long press | `ActionSheet.tsx`, `gestures.ts` | `phones.css`, `responsive.css` | `phone.spec.ts` |
-| Motion and the ripple | `ripple.ts` | `motion.css`, `ripple.css` | `app.spec.ts` |
+| Motion and the ripple (turn entrance, streaming caret, start-screen mark) | `ripple.ts`, `arrivals.ts` | `motion.css`, `ripple.css` | `app.spec.ts`, `motion.spec.ts` |
 
 Every component opens with a comment saying what it draws and why it is
 shaped that way; read it before changing the file.
