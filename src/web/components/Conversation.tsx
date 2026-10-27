@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
@@ -19,6 +19,7 @@ import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
 import { useLongPress } from "../gestures.js";
 import { ActionSheet, type SheetAction } from "./ActionSheet.js";
 import { formatFullWhen, formatWhen, timingLabel, turnTiming } from "../turn-time.js";
+import { turnMarkdown as turnMarkdownOf } from "../turn-markdown.js";
 import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
@@ -552,6 +553,7 @@ function Answer({
   canRestore,
   onRestore,
   timing = null,
+  turnMarkdown,
 }: {
   item: AssistantItem;
   through: number;
@@ -562,9 +564,17 @@ function Answer({
   onRestore: (through: number) => void;
   /** How fast the turn went ("24s · first token 1.2s"), shown quietly on hover; null when nothing is known. */
   timing?: string | null;
+  /** The whole turn (prompt, work, answer) as Markdown, for pasting into an issue; null where there is no prompt to copy it with. */
+  turnMarkdown?: (() => string) | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [turnCopied, setTurnCopied] = useState(false);
+  const copyTurn = () =>
+    void navigator.clipboard?.writeText(turnMarkdown?.() ?? "").then(() => {
+      setTurnCopied(true);
+      window.setTimeout(() => setTurnCopied(false), 1500);
+    });
   const [sheet, setSheet] = useState(false);
   const press = useLongPress(() => {
     if (!item.streaming && item.text) setSheet(true);
@@ -573,6 +583,7 @@ function Answer({
   const arrival = useArrival(item.id);
   const sheetActions: SheetAction[] = [
     { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
+    ...(turnMarkdown ? [{ label: "Copy turn as Markdown", icon: <IconFile size={16} />, run: copyTurn }] : []),
     // Selecting a passage to quote is fiddly on a phone; this quotes the whole reply.
     { label: "Quote in message", icon: <IconEdit size={16} />, run: () => addToDraft(asQuote(item.text)) },
     ...(canFork ? [{ label: "Fork from here", icon: <IconFork size={16} />, run: () => onFork(through) }] : []),
@@ -608,6 +619,17 @@ function Answer({
           >
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
           </button>
+          {turnMarkdown ? (
+            <button
+              type="button"
+              className="ghost-icon"
+              aria-label={turnCopied ? "Turn copied" : "Copy turn as Markdown"}
+              title="Copy this turn as Markdown: the prompt, a line per tool call, and the answer"
+              onClick={copyTurn}
+            >
+              {turnCopied ? <IconCheck size={14} /> : <IconFile size={14} />}
+            </button>
+          ) : null}
           {canFork ? (
             <button
               type="button"
@@ -927,7 +949,7 @@ const TurnView = memo(function TurnView({
         <PlanCard key={p.id} plan={p.plan} onImplement={onImplement} />
       ))}
       {turn.answer ? (
-        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} timing={turn.live ? null : timingLabel(turnTiming(turn))} />
+        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} timing={turn.live ? null : timingLabel(turnTiming(turn))} turnMarkdown={() => turnMarkdownOf(turn, workspace)} />
       ) : null}
       {afterWork ? (
         <div className="turn-work-after" data-testid="work-after">

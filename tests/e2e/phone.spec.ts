@@ -202,3 +202,19 @@ test("the permission list opens on screen from the settings sheet", async ({ pag
   expect(box.x).toBeGreaterThanOrEqual(8);
   expect(box.x + box.width).toBeLessThanOrEqual(390 - 8);
 });
+
+test("a long press on a reply offers Copy turn as Markdown", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  await newChat(page);
+  await page.keyboard.press("Escape");
+  await sendAndWait(page, "please edit the app");
+  const at = await center(page, '[data-testid="answer"]');
+  await touch(page, [
+    { type: "touchStart", ...at, waitMs: 700 },
+    { type: "touchEnd", ...at },
+  ]);
+  await page.getByRole("dialog", { name: /^Reply/ }).getByRole("menuitem", { name: "Copy turn as Markdown" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/## Prompt\n\nplease edit the app[\s\S]*- \*\*Edit\*\* `src\/app\.ts`[\s\S]*## Answer/);
+});

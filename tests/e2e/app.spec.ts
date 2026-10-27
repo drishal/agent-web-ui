@@ -1454,3 +1454,22 @@ test("the sticky bar goes back at once under reduced motion, and from the keyboa
   await expect(prompts(page).first()).toBeInViewport();
   await expect(bar).toBeHidden();
 });
+
+test("Copy turn as Markdown puts the prompt, a line per tool call, and the answer on the clipboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "please edit the app");
+  const turn = page.getByTestId("turn").last();
+  await turn.getByRole("button", { name: "Copy turn as Markdown" }).click();
+  // The button says so, briefly, as the reply's Copy does.
+  await expect(turn.getByRole("button", { name: "Turn copied" })).toBeVisible();
+  const md = () => page.evaluate(() => navigator.clipboard.readText());
+  await expect.poll(md).toContain("## Prompt\n\nplease edit the app");
+  const text = await md();
+  expect(text).toContain("## Work");
+  expect(text).toMatch(/^- \*\*Edit\*\* `src\/app\.ts` \(\+1 −1\)$/m);
+  expect(text).toContain("## Answer");
+  // Only the one-line summaries: the edit's diff and output are not in it.
+  expect(text).not.toContain("Edited src/app.ts");
+});
