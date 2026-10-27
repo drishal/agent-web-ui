@@ -17,6 +17,7 @@ import { canCaptureScreen, captureScreen } from "../screen-capture.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
 import { ApprovalStack } from "./ApprovalStack.js";
+import { ChipEditor, type ChipEditorHandle } from "./ChipEditor.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
 import { StatusStack } from "./StatusStack.js";
@@ -97,7 +98,7 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
   const thumbs = useRef(new Map<number, HTMLElement>());
-  const area = useRef<HTMLTextAreaElement>(null);
+  const area = useRef<ChipEditorHandle>(null);
   // The divider above the card (pi-vot's): drag it up for a taller prompt. The
   // height is the textarea's, kept per device; double-click or the keyboard resets.
   const [promptHeight, setPromptHeight] = useState<number | null>(() => load<number | null>("composerHeight", null));
@@ -121,13 +122,6 @@ export function Composer({
   useEffect(() => {
     save(draftKey, text);
   }, [draftKey, text]);
-
-  useLayoutEffect(() => {
-    const el = area.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
-  }, [text]);
 
   const tooLong = text.length > maxChars;
 
@@ -359,7 +353,7 @@ export function Composer({
       }
     : undefined;
 
-  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const files = imageFiles(e.clipboardData.files);
     // Spreadsheets and rich editors copy a rendering beside the text; paste the text then.
     if (files.length === 0 || e.clipboardData.getData("text/plain")) {
@@ -448,7 +442,7 @@ export function Composer({
   };
 
   /** Arrow keys move, Tab/Enter complete, Esc closes; true when the key was the menu's. */
-  const menuKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+  const menuKey = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (!menuOpen) return false;
     if (e.key === "Escape") {
       setMenuDismissed(true);
@@ -467,12 +461,13 @@ export function Composer({
     return true;
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (menuKey(e)) {
       e.preventDefault();
       return;
     }
-    const el = e.currentTarget;
+    const el = area.current;
+    if (!el) return;
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing;
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyS") {
       e.preventDefault();
@@ -785,11 +780,10 @@ export function Composer({
               ) : null}
             </div>
           ) : null}
-          <textarea
+          <ChipEditor
             ref={area}
             className="composer-input"
             style={promptHeight !== null ? { minHeight: promptHeight } : undefined}
-            rows={hero ? 2 : 1}
             value={text}
             disabled={closed}
             placeholder={
@@ -803,7 +797,7 @@ export function Composer({
                     ? "Say what to do with the image…"
                     : (placeholder ?? "Message the agent…")
             }
-            onChange={(e) => setText(e.target.value)}
+            onChange={setText}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             aria-label="Message"

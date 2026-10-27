@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * Make the sidebar usable. On phones it is a drawer; `isVisible()` is not a
@@ -95,4 +95,13 @@ export async function commandChat(page: Page): Promise<void> {
   await newChat(page);
   await send(page, "/fake-status");
   await expect(page.getByTestId("chat-status")).toHaveText("Idle");
+}
+
+/**
+ * The chat composer's draft, to assert on (`.toBe`, `.toMatch`). Its box is
+ * contenteditable (ChipEditor, for the chips in the sentence), which
+ * `toHaveValue` does not read, so this polls the `value` the element carries.
+ */
+export function expectDraft(box: Locator) {
+  return expect.poll(() => box.evaluate((el) => (el as unknown as { value: string }).value));
 }

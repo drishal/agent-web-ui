@@ -324,8 +324,98 @@
   line-height: 1.5;
 }
 
-.composer-input::placeholder {
+/* The box is contenteditable (ChipEditor): it wraps and scrolls as the textarea did. */
+.composer-input {
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.composer-input.is-empty::before {
+  content: attr(data-placeholder);
   color: var(--muted-text);
+  pointer-events: none;
+}
+
+.composer-input[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* A chip in the sentence: a file, a line range, a quoted passage. Atomic: a click on
+   its × or Backspace after it takes it out whole. */
+.draft-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 34ch);
+  margin: 0 2px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.88em;
+  line-height: 1.5;
+  vertical-align: baseline;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.draft-chip-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.draft-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.draft-chip.is-file .draft-chip-label,
+.draft-chip-lines,
+.draft-chip.is-lines .draft-chip-label {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.draft-chip-lines {
+  font-weight: 400;
+  color: var(--muted-text);
+}
+
+.draft-chip.is-quote {
+  max-width: min(100%, 44ch);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+  color: color-mix(in srgb, var(--ok) 70%, var(--text));
+  font-style: italic;
+}
+
+.draft-chip.is-quote .draft-chip-icon {
+  color: inherit;
+}
+
+.draft-chip-x {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.draft-chip-x:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .composer.is-hero .composer-input {

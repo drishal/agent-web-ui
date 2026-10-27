@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { chooseHarness, commandChat, newChat, openChat, openSettings, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { chooseHarness, commandChat, newChat, openChat, openSettings, send, sendAndWait, showSidebar, signInAndOpen, expectDraft } from "./helpers.js";
 
 const status = (page: Page) => page.getByTestId("chat-status");
 const answers = (page: Page) => page.getByTestId("answer");
@@ -356,7 +356,7 @@ test("selecting text in an answer offers to quote it into the message", async ({
   });
   await page.getByTestId("quote-btn").click();
   const box = page.getByRole("textbox", { name: "Message" });
-  await expect(box).toHaveValue("> Echo: something to quote\n\n");
+  await expectDraft(box).toBe("> Echo: something to quote\n\n");
   await expect(box).toBeFocused();
   await page.keyboard.type("Why?");
   await page.keyboard.press("Enter");
@@ -379,7 +379,7 @@ test("a one-line shell block in an answer runs in the project and its output can
   await expect(out.locator(".run-text")).toHaveText("hello from alpha");
   await expect(out.locator(".run-meta")).toContainText("exit 0");
   await out.getByRole("button", { name: "Add to message" }).click();
-  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(/^```\n\$ echo hello from .*\nhello from alpha\n```\n\(exit 0\)\n\n$/);
+  await expectDraft(page.getByRole("textbox", { name: "Message" })).toMatch(/^```\n\$ echo hello from .*\nhello from alpha\n```\n\(exit 0\)\n\n$/);
 });
 
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
@@ -933,7 +933,7 @@ test("/ opens the command menu: it filters, completes, runs, and closes", async 
   await box.pressSequentially("fake");
   await expect(menu.getByRole("option")).toHaveCount(1);
   await box.press("Enter");
-  await expect(box).toHaveValue("/fake-status ");
+  await expectDraft(box).toBe("/fake-status ");
   await expect(menu).toBeHidden();
   await box.press("Enter");
   await expect(prompts(page).last()).toHaveText("/fake-status");
@@ -948,7 +948,7 @@ test("/ opens the command menu: it filters, completes, runs, and closes", async 
   await expect(menu).toBeVisible();
   await box.press("Escape");
   await expect(menu).toBeHidden();
-  await expect(box).toHaveValue("/re");
+  await expectDraft(box).toBe("/re");
 });
 
 test("a finished turn forks into a new chat holding just that turn", async ({ page }) => {
@@ -1026,7 +1026,7 @@ test("images can be pasted, dropped, or picked, then removed or sent with the pr
   await page.getByRole("button", { name: "Remove image #3" }).click();
   await page.getByRole("button", { name: "Remove image #2" }).click();
   await expect(strip.getByRole("img")).toHaveCount(1);
-  await expect(box).toHaveAttribute("placeholder", "Say what to do with the image…");
+  await expect(box).toHaveAttribute("aria-placeholder", "Say what to do with the image…");
 
   // A text-only model is called out.
   const pick = async (query: string) => {
@@ -1083,7 +1083,7 @@ test("a window is captured straight into the composer, and a refusal is one line
   await expect(strip.getByRole("img")).toHaveCount(1);
   await expect(strip.locator(".image-label strong")).toHaveText("#1");
   await expect(strip.locator(".image-label span")).toHaveText("32×18");
-  await expect(box).toHaveAttribute("placeholder", "Say what to do with the image…");
+  await expect(box).toHaveAttribute("aria-placeholder", "Say what to do with the image…");
 
   // A capture that fails says why; closing the picker leaves no note at all.
   await page.evaluate(() => {

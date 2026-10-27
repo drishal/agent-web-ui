@@ -3,7 +3,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen, expectDraft } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
@@ -14,12 +14,43 @@ test("↑ and ↓ walk this chat's prompts", async ({ page }) => {
   await sendAndWait(page, "second recall");
   await box(page).focus();
   await page.keyboard.press("ArrowUp");
-  await expect(box(page)).toHaveValue("second recall");
+  await expectDraft(box(page)).toBe("second recall");
   await page.keyboard.press("ArrowUp");
-  await expect(box(page)).toHaveValue("first recall");
+  await expectDraft(box(page)).toBe("first recall");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
-  await expect(box(page)).toHaveValue("");
+  await expectDraft(box(page)).toBe("");
+});
+
+test("references and quotes show as chips in the sentence, and go as the same text", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  const draft = "In @src/web/find.ts at @src/web/find.ts:44-58 the comment says\n\n> a fold opens when a match lands\n\n— make it do that.";
+  await box(page).fill(draft);
+  const chips = box(page).locator(".draft-chip");
+  await expect(chips).toHaveCount(3);
+  await expect(chips.nth(0)).toHaveText("src/web/find.ts");
+  // A range of the file just named says only its lines.
+  await expect(chips.nth(1)).toHaveText("44–58");
+  await expect(chips.nth(2)).toHaveText("“a fold opens when a match lands”");
+  await expectDraft(box(page)).toBe(draft);
+  // A reference stays text while it is typed, and becomes a chip once something follows it.
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type(" Then @src/app.ts");
+  await expect(chips).toHaveCount(3);
+  await page.keyboard.type(" too");
+  await expect(chips).toHaveCount(4);
+  // Backspace after a chip takes it out whole; its × does the same.
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Backspace");
+  await expect(chips).toHaveCount(3);
+  await box(page).getByRole("button", { name: "Remove the quote" }).click();
+  await expect(chips).toHaveCount(2);
+  await expectDraft(box(page)).toBe("In @src/web/find.ts at @src/web/find.ts:44-58 the comment says — make it do that. Then too");
+  // What goes is the text, as before the chips.
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("user-prompt").last()).toHaveText("In @src/web/find.ts at @src/web/find.ts:44-58 the comment says — make it do that. Then too");
+  await expectDraft(box(page)).toBe("");
 });
 
 test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", async ({ page }) => {
@@ -27,11 +58,11 @@ test("Shift+Enter continues a list, Tab indents it, and an empty item ends it", 
   await openChat(page);
   await box(page).pressSequentially("1. one");
   await page.keyboard.press("Shift+Enter");
-  await expect(box(page)).toHaveValue("1. one\n2. ");
+  await expectDraft(box(page)).toBe("1. one\n2. ");
   await page.keyboard.press("Tab");
-  await expect(box(page)).toHaveValue("1. one\n  2. ");
+  await expectDraft(box(page)).toBe("1. one\n  2. ");
   await page.keyboard.press("Shift+Enter");
-  await expect(box(page)).toHaveValue("1. one\n");
+  await expectDraft(box(page)).toBe("1. one\n");
 });
 
 test("the stash parks a draft and gives it back in another chat", async ({ page }) => {
@@ -39,7 +70,7 @@ test("the stash parks a draft and gives it back in another chat", async ({ page 
   await openChat(page);
   await box(page).fill("park this for later");
   await page.keyboard.press("Alt+KeyS");
-  await expect(box(page)).toHaveValue("");
+  await expectDraft(box(page)).toBe("");
   const stash = page.getByRole("button", { name: /^Stash \(\d+ kept\)$/ });
   await expect(stash).toBeVisible();
   // With nothing to stash, the menu still closes on Escape.
@@ -50,7 +81,7 @@ test("the stash parks a draft and gives it back in another chat", async ({ page 
   await openChat(page);
   await page.getByRole("button", { name: /^Stash/ }).click();
   await page.getByRole("menuitem", { name: /park this for later/ }).click();
-  await expect(box(page)).toHaveValue("park this for later");
+  await expectDraft(box(page)).toBe("park this for later");
 });
 
 test("Ctrl+F finds in the chat, opening the fold a match is in, and steps through matches", async ({ page }) => {
@@ -146,7 +177,7 @@ test("search in project finds a line and puts it into the message as @path:line"
   await expect(dialog.getByRole("option")).toContainText("the zebra-quartz line");
   await dialog.getByRole("searchbox").press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(box(page)).toHaveValue("@search-me.txt:2");
+  await expectDraft(box(page)).toBe("@search-me.txt:2");
   // One Escape closes it, even with a query typed.
   await page.keyboard.press("Control+Shift+KeyF");
   await dialog.getByRole("searchbox").fill("zebra");
@@ -183,7 +214,7 @@ test("a prompt link fills the start screen's box, hidden characters taken out", 
   await signInAndOpen(page);
   await page.goto(`/?prompt=${encodeURIComponent("look at the logs​ please")}`);
   await expect(page.getByRole("heading", { name: /^What should .* do in / })).toBeVisible();
-  await expect(box(page)).toHaveValue("look at the logs please");
+  await expectDraft(box(page)).toBe("look at the logs please");
   await expect(page.getByText("From a link: read it before you send it. 1 hidden character was taken out.")).toBeVisible();
   await expect(page).not.toHaveURL(/prompt=/);
   // Nothing spawns until the user sends.

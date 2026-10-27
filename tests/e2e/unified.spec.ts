@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, openChat, sendAndWait, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, sendAndWait, signInAndOpen, expectDraft } from "./helpers.js";
 
 const box = (page: Page) => page.getByRole("textbox", { name: "Message" });
 
@@ -56,7 +56,7 @@ test("$ lists the harness's skills, which leave the / menu, and Tab puts one in"
   const skills = page.getByRole("listbox", { name: "Skills" });
   await expect(skills.getByRole("option")).toHaveText([/\$review\s*Review the work so far/]);
   await page.keyboard.press("Tab");
-  await expect(box(page)).toHaveValue("/skill:review ");
+  await expectDraft(box(page)).toBe("/skill:review ");
   // A $ further in is only a character.
   await box(page).fill("costs $5");
   await expect(page.getByRole("listbox", { name: "Skills" })).toHaveCount(0);
@@ -114,7 +114,7 @@ test("a changed file opens in the viewer, coloured, its added lines marked, and 
   await viewer.getByRole("button", { name: "Line 2", exact: true }).click();
   await viewer.getByRole("button", { name: "Mention line 2" }).click();
   await expect(viewer).toBeHidden();
-  await expect(box(page)).toHaveValue("@src/app.ts:2");
+  await expectDraft(box(page)).toBe("@src/app.ts:2");
   // The palette's Open a file: Go to file finds one by name; what git would not list is refused.
   await openFile(page);
   const picker = page.getByRole("dialog", { name: "Open a file" });
@@ -142,11 +142,11 @@ test("a saved prompt goes in with # and its blanks are filled in with Tab; any d
   await box(page).fill("#ris");
   await expect(page.getByRole("listbox", { name: "Saved prompts" }).getByRole("option")).toHaveText([/#risky\s*Review ‹file› for ‹risk›/]);
   await page.keyboard.press("Enter");
-  await expect(box(page)).toHaveValue("Review {{file}} for {{risk}}");
+  await expectDraft(box(page)).toBe("Review {{file}} for {{risk}}");
   await page.keyboard.type("app.ts");
   await page.keyboard.press("Tab");
   await page.keyboard.type("races");
-  await expect(box(page)).toHaveValue("Review app.ts for races");
+  await expectDraft(box(page)).toBe("Review app.ts for races");
   // Another browser (another device) has it too.
   const other = await browser.newPage();
   await signInAndOpen(other);
@@ -267,7 +267,7 @@ test("Then queues a message on the server for after the run, and a stop pauses t
   await expect(page.getByTestId("chat-status")).toHaveText("Working");
   await box(page).fill("the second, by itself");
   await page.getByRole("button", { name: "Then", exact: true }).click();
-  await expect(box(page)).toHaveValue("");
+  await expectDraft(box(page)).toBe("");
   const chain = page.getByTestId("chain");
   await expect(chain.getByTestId("chain-row")).toHaveText([/Then\s*the second, by itself/]);
   // With the page reloaded mid-run, the server still holds it, and runs it once the run is over.
