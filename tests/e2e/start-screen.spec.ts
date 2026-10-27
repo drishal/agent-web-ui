@@ -33,9 +33,9 @@ test("sending with no folder asks for one, keeps the draft, and the next Enter s
   // The folder picker opens; the draft survives the detour.
   const dialog = page.getByRole("dialog", { name: "Choose a project folder" });
   await expect(dialog).toBeVisible();
-  await dialog.locator(".picker-scroll .picker-item").first().click();
-  await dialog.getByRole("button", { name: "alpha", exact: false }).click();
-  await dialog.getByRole("button", { name: "Open this folder" }).click();
+  // By path: what the Recent and Browse lists hold depends on what other tests opened on the shared server.
+  await dialog.getByLabel("Or type a path").fill(`${process.env.AWUI_E2E_ROOT as string}/alpha`);
+  await dialog.getByRole("button", { name: "Open", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(input).toHaveValue("fix the flaky test");
   await expect(page.getByRole("heading", { name: /What should Fake do in alpha\?/ })).toBeVisible();
@@ -123,9 +123,9 @@ test("New chat opens the folder picker over the start screen, and the picked fol
   // Picking another folder switches the start screen to it, with the cursor in the box.
   await showSidebar(page);
   await page.getByRole("button", { name: "New chat", exact: true }).click();
-  await dialog.locator(".picker-scroll .picker-item").first().click();
-  await dialog.getByRole("button", { name: "beta", exact: false }).click();
-  await dialog.getByRole("button", { name: "Open this folder" }).click();
+  // By path: what the Recent and Browse lists hold depends on what other tests opened on the shared server.
+  await dialog.getByLabel("Or type a path").fill(`${process.env.AWUI_E2E_ROOT as string}/beta`);
+  await dialog.getByRole("button", { name: "Open", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("heading", { name: /What should Fake do in beta\?/ })).toBeVisible();
   await expect(page.getByRole("textbox", { name: box })).toBeFocused();
