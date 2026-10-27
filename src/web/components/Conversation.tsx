@@ -577,7 +577,7 @@ function Answer({
   return (
     <div className={`answer${arrival}`} data-testid="answer" {...press}>
       {sheet ? <ActionSheet title="Reply" actions={sheetActions} onClose={() => setSheet(false)} /> : null}
-      {item.text ? <Markdown text={item.text} allowRun={!item.streaming} /> : null}
+      {item.text ? <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}
       {item.error && !stopped ? <p className="answer-error">{item.error}</p> : null}
@@ -772,7 +772,7 @@ function InterimReply({ item }: { item: AssistantItem }) {
   const arrival = useArrival(item.id);
   return (
     <div className={`answer answer-interim${arrival}`} data-testid="interim-reply">
-      <Markdown text={item.text} allowRun={!item.streaming} />
+      <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} />
     </div>
   );
 }

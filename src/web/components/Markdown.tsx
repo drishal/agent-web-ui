@@ -1,8 +1,8 @@
 // Answers and prompts as Markdown (GitHub-flavoured), rendered safely: raw
 // HTML is shown as the text it is — nothing here parses it into elements —
 // links are http(s)/mailto only and open in a new tab, and remote images never
-// load (their alt text and URL show instead). Code blocks get Copy, and Run on
-// a one-line shell block in a finished answer.
+// load (their alt text and URL show instead). Code blocks get a header (language,
+// Wrap, Copy), and Run on a one-line shell block in a finished answer.
 import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
@@ -59,8 +59,8 @@ interface Hast {
 
 const hastText = (node: Hast | undefined): string => (node ? (node.value ?? "") + (node.children ?? []).map(hastText).join("") : "");
 
-/** Code blocks with Copy, and Run on one-line shell blocks when `allowRun` (a finished answer). */
-function withCode(allowRun: boolean): Components {
+/** Code blocks with a header, and Run on one-line shell blocks when `allowRun` (a finished answer); `streaming` holds back their colours and numbers. */
+function withCode(allowRun: boolean, streaming: boolean): Components {
   return {
     ...components,
     pre: ({ node, children }) => {
@@ -68,7 +68,7 @@ function withCode(allowRun: boolean): Components {
       const classes = Array.isArray(code?.properties?.className) ? (code.properties.className as string[]) : [];
       const lang = classes.find((c) => c.startsWith("language-"))?.slice(9) ?? null;
       return (
-        <CodeBlock lang={lang} code={hastText(code)} allowRun={allowRun}>
+        <CodeBlock lang={lang} code={hastText(code)} allowRun={allowRun} streaming={streaming}>
           {children}
         </CodeBlock>
       );
@@ -76,8 +76,8 @@ function withCode(allowRun: boolean): Components {
   };
 }
 
-function MarkdownImpl({ text, allowRun = false }: { text: string; allowRun?: boolean }) {
-  const parts = useMemo(() => withCode(allowRun), [allowRun]);
+function MarkdownImpl({ text, allowRun = false, streaming = false }: { text: string; allowRun?: boolean; streaming?: boolean }) {
+  const parts = useMemo(() => withCode(allowRun, streaming), [allowRun, streaming]);
   return (
     <div className="md">
       {/* No rehype-raw: without it react-markdown has no path from markdown to

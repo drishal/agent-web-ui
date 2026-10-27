@@ -397,6 +397,37 @@ test("a one-line shell block in an answer runs in the project and its output can
   await expectDraft(page.getByRole("textbox", { name: "Message" })).toMatch(/^```\n\$ echo hello from .*\nhello from alpha\n```\n\(exit 0\)\n\n$/);
 });
 
+test("a code block in an answer has a header with its language, line numbers on a long block, and a Wrap toggle", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const long = Array.from({ length: 8 }, (_, i) => `const v${i + 1} = ${i + 1};`).join("\n");
+  await send(page, `blocks:\n\`\`\`typescript\n${long}\n\`\`\`\n\n\`\`\`\nplain one\nplain two\n\`\`\``);
+  const blocks = page.getByTestId("answer").last().locator(".code-block");
+  await expect(blocks).toHaveCount(2, { timeout: 15_000 });
+  await expect(status(page)).toHaveText("Idle", { timeout: 20_000 });
+  const [typed, plain] = [blocks.nth(0), blocks.nth(1)];
+  await expect(typed.locator(".code-lang")).toHaveText("TypeScript");
+  await expect(plain.locator(".code-lang")).toHaveCount(0);
+  // Eight lines get a gutter drawn by CSS (so it is never copied); two do not, and a keyword is coloured.
+  await expect(typed.locator("pre")).toHaveClass(/has-numbers/);
+  await expect(typed.locator(".cl")).toHaveCount(8);
+  expect(await typed.locator(".cl").nth(2).evaluate((el) => getComputedStyle(el, "::before").content)).toBe("counter(line)");
+  await expect(typed.locator(".tk-keyword").first()).toHaveText("const");
+  await expect(plain.locator("pre")).not.toHaveClass(/has-numbers/);
+  // Wrap is one choice for every block, kept in the browser.
+  const wrap = typed.getByRole("button", { name: "Wrap" });
+  await expect(wrap).toHaveAttribute("aria-pressed", "false");
+  await expect(typed).not.toHaveClass(/is-wrapped/);
+  await typed.hover();
+  await wrap.click();
+  await expect(wrap).toHaveAttribute("aria-pressed", "true");
+  await expect(typed).toHaveClass(/is-wrapped/);
+  await expect(plain).toHaveClass(/is-wrapped/);
+  expect(await page.evaluate(() => window.localStorage.getItem("awui.codeWrap"))).toBe("true");
+  await wrap.click();
+  await expect(typed).not.toHaveClass(/is-wrapped/);
+});
+
 test("reconnects after going offline without duplicating messages", async ({ page, context }) => {
   await signInAndOpen(page);
   await newChat(page);

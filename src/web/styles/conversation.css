@@ -149,24 +149,36 @@
   display: block;
 }
 
-/* Code blocks: a small bar with the language, Run (one-line shell blocks), and Copy. */
+/* Code blocks: a slim header with the language, Wrap, Run (one-line shell blocks), and Copy, over the block.
+   The header is in the flow from the first streamed line, so the block's height never jumps when it is added. */
 .code-block {
   position: relative;
   margin: 0.7em 0;
 }
 
+.code-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 6px 2px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--code-bg);
+}
+
 .md .code-block pre {
   margin: 0;
+  border-top-width: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .code-actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-left: auto;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -183,9 +195,43 @@
 }
 
 .code-lang {
-  margin-right: 4px;
   color: var(--muted-text);
   font: 11px var(--font-mono);
+}
+
+/* Wrap long lines instead of scrolling them sideways (the device's choice, on every block). */
+.code-block.is-wrapped pre {
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A line is a block, so a wrapped one keeps its number beside its first row and an empty one keeps its height. */
+.code-block .cl {
+  display: block;
+  min-height: 1lh;
+}
+
+/* Line numbers are generated content: never selected, never in a copy. */
+.code-block pre.has-numbers {
+  counter-reset: line;
+}
+
+.code-block pre.has-numbers .cl {
+  position: relative;
+  padding-left: calc(var(--digits, 2) * 1ch + 14px);
+  counter-increment: line;
+}
+
+.code-block pre.has-numbers .cl::before {
+  content: counter(line);
+  position: absolute;
+  left: 0;
+  width: calc(var(--digits, 2) * 1ch);
+  color: var(--muted-text);
+  opacity: 0.7;
+  text-align: right;
+  user-select: none;
 }
 
 .code-action {
@@ -196,7 +242,7 @@
   padding: 0 7px;
   border: 0;
   border-radius: 8px;
-  background: var(--card);
+  background: none;
   color: var(--muted-text);
   font-size: 12px;
 }
@@ -204,6 +250,10 @@
 .code-action:hover:not(:disabled) {
   background: var(--hover);
   color: var(--text);
+}
+
+.code-action[aria-pressed="true"] {
+  color: var(--accent);
 }
 
 .code-action.is-run {

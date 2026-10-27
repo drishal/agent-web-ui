@@ -1,15 +1,34 @@
-// A code block in an answer: Copy on every one, and Run on a one-line shell
-// block (T3 Code's), which runs it in the chat's project folder and shows
-// the output under it, ready to add to the message.
-import { useContext, useState } from "react";
+// A code block in an answer: a slim header with its language, Wrap (long lines
+// wrap or scroll, remembered for the device), Copy on every one, and Run on a
+// one-line shell block (T3 Code's), which runs it in the chat's project folder
+// and shows the output under it, ready to add to the message. Once the answer
+// has settled a block of a known language is coloured (highlight.ts) and a long
+// one gets line numbers, drawn by CSS counters so they are never selected or
+// copied; while it streams the text stays plain and the header is already
+// there, so nothing moves but the one-time widening of a gutter at the end.
+import { useContext, useMemo, useState, useSyncExternalStore } from "react";
 import type { RunResult } from "../../shared/protocol.js";
-import { runnable } from "../code-blocks.js";
+import { gutterDigits, highlightLanguage, languageLabel, NUMBERED_FROM, richBlock, runnable } from "../code-blocks.js";
+import { highlightLines } from "../highlight.js";
+import { load, save } from "../storage.js";
 import { api, errorText } from "../api.js";
 import { addToDraft } from "../draft-bus.js";
 import { IconCheck, IconCopy, IconTerminal, IconX, Spinner } from "../icons.js";
 import { formatDuration } from "../turns.js";
 import { ChatIdContext } from "./Subagents.js";
 import { dotted } from "./Dot.js";
+
+// The wrap choice is one per device, so every block on the page follows it.
+const wrapListeners = new Set<() => void>();
+const wrapNow = () => load<boolean>("codeWrap", false);
+const setWrap = (on: boolean) => {
+  save("codeWrap", on);
+  for (const listener of wrapListeners) listener();
+};
+const onWrap = (listener: () => void) => {
+  wrapListeners.add(listener);
+  return () => void wrapListeners.delete(listener);
+};
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false);
@@ -31,8 +50,15 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-export function CodeBlock({ lang, code, children, allowRun }: { lang: string | null; code: string; children: React.ReactNode; allowRun: boolean }) {
+export function CodeBlock({ lang, code, children, allowRun, streaming = false }: { lang: string | null; code: string; children: React.ReactNode; allowRun: boolean; streaming?: boolean }) {
   const chatId = useContext(ChatIdContext);
+  const wrap = useSyncExternalStore(onWrap, wrapNow, () => false);
+  const label = languageLabel(lang);
+  // Colours and numbers wait for the answer to settle (a block that grows would shift) and skip a huge block.
+  const rows = useMemo(() => {
+    if (streaming || !richBlock(code)) return null;
+    return highlightLines(code.replace(/\n$/, ""), highlightLanguage(lang));
+  }, [streaming, code, lang]);
   const run = allowRun && chatId ? runnable(lang, code) : null;
   const [state, setState] = useState<{ running: boolean; result?: RunResult; error?: string } | null>(null);
 
@@ -50,17 +76,42 @@ export function CodeBlock({ lang, code, children, allowRun }: { lang: string | n
   const status = result ? (result.timedOut ? "timed out" : result.exitCode === 0 ? "exit 0" : result.exitCode === null ? "stopped" : `exit ${result.exitCode}`) : "";
 
   return (
-    <div className="code-block">
-      <div className="code-actions">
-        {lang ? <span className="code-lang">{lang}</span> : null}
-        {run ? (
-          <button type="button" className="code-action is-run" title={`Run in the project folder (${run.shell})`} disabled={state?.running} onClick={() => void start()}>
-            {state?.running ? <Spinner size={12} /> : <IconTerminal size={13} />} Run
+    <div className={`code-block${wrap ? " is-wrapped" : ""}`}>
+      <div className="code-head">
+        {label ? <span className="code-lang">{label}</span> : null}
+        <div className="code-actions">
+          {run ? (
+            <button type="button" className="code-action is-run" title={`Run in the project folder (${run.shell})`} disabled={state?.running} onClick={() => void start()}>
+              {state?.running ? <Spinner size={12} /> : <IconTerminal size={13} />} Run
+            </button>
+          ) : null}
+          <button type="button" className="code-action" aria-pressed={wrap} title={wrap ? "Scroll long lines sideways" : "Wrap long lines"} onClick={() => setWrap(!wrap)}>
+            Wrap
           </button>
-        ) : null}
-        <CopyButton text={code.replace(/\n$/, "")} label="Copy code" />
+          <CopyButton text={code.replace(/\n$/, "")} label="Copy code" />
+        </div>
       </div>
-      <pre>{children}</pre>
+      {rows ? (
+        <pre className={rows.length >= NUMBERED_FROM ? "has-numbers" : undefined} style={{ ["--digits" as string]: gutterDigits(rows.length) }}>
+          <code className={lang ? `language-${lang}` : undefined}>
+            {rows.map((tokens, i) => (
+              <span key={i} className="cl">
+                {tokens.map((t, k) =>
+                  t.kind === "plain" ? (
+                    t.text
+                  ) : (
+                    <span key={k} className={`tk-${t.kind}`}>
+                      {t.text}
+                    </span>
+                  ),
+                )}
+              </span>
+            ))}
+          </code>
+        </pre>
+      ) : (
+        <pre>{children}</pre>
+      )}
       {state && !state.running ? (
         <div className={`run-output${result && result.exitCode !== 0 ? " is-failed" : ""}`} data-testid="run-output">
           <div className="run-head">
