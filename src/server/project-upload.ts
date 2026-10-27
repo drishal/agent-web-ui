@@ -32,8 +32,12 @@ export async function writeProjectFile(root: string, name: string, bytes: Buffer
   }
   try {
     await handle.writeFile(bytes);
-  } finally {
-    await handle.close();
+  } catch (error) {
+    // A half-written file would look uploaded and block the retry (409); this call made it, so it goes.
+    await handle.close().catch(() => undefined);
+    await fs.unlink(dest).catch(() => undefined);
+    throw new ChatError(422, "write_failed", error instanceof Error ? error.message : String(error));
   }
+  await handle.close();
   return { path: base, bytes: bytes.length };
 }
