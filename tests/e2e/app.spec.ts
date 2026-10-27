@@ -118,6 +118,21 @@ test("an edit row carries its +N −M badge", async ({ page }) => {
   await expect(row.locator(".diff-line.is-add .diff-text")).toHaveText("b");
 });
 
+test("a finished turn's line counts show on its fold line and its Changed files row", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "please edit the app");
+  const turn = page.getByTestId("turn").last();
+  // With the fold closed, the counts stand beside "Worked for …".
+  await expect(turn.getByTestId("process-toggle")).toHaveAttribute("aria-expanded", "false");
+  await expect(turn.getByTestId("process-toggle").getByTestId("change-stat")).toHaveText("+1 −1");
+  // The Changed files row carries them with the file count, and still opens its list.
+  const changed = turn.getByTestId("changed-files");
+  await expect(changed.getByTestId("change-stat")).toHaveText("+1 −1 · 1 file");
+  await changed.getByRole("button").first().click();
+  await expect(changed.getByRole("button", { name: "src/app.ts", exact: true })).toBeVisible();
+});
+
 test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);

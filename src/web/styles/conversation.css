@@ -725,6 +725,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* "+42 −7" on a turn's fold line and its Changed files row: numbers in the diff colours, quiet words between. */
+.change-stat {
+  font-size: calc(var(--chat-small) - 0.6px);
+  white-space: nowrap;
+}
+
+.change-files {
+  color: var(--muted-text);
+}
+
 .drow-aside {
   flex: none;
   margin-left: auto;

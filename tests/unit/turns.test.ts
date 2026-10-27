@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, countParts, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
+import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -14,6 +14,58 @@ const tool = (id: string, category: "read" | "edit" | "command", extra: Record<s
   summary: "",
   paths: [],
   ...extra,
+});
+
+describe("a turn's change stat", () => {
+  const diffOf = (added: number, removed: number, lines = 3) => ({
+    lines: [...Array.from({ length: lines }, (_, i) => ({ kind: "add" as const, text: `l${i}` })), { kind: "gap" as const, text: "more lines" }],
+    added,
+    removed,
+  });
+  const statOf = (...items: ChatItem[]) => buildTurns([{ kind: "user", id: "u", text: "go" }, ...items], "idle")[0]?.changeStat;
+
+  it("sums the lines of every edit and write, and counts the files", () => {
+    const stat = statOf(
+      tool("t1", "edit", { paths: ["/w/a.ts"], diffStat: { added: 3, removed: 1 } }),
+      tool("t2", "edit", { paths: ["/w/b.ts"], diffStat: { added: 2, removed: 0 } }),
+      tool("t3", "edit", { paths: ["/w/a.ts"], diffStat: { added: 1, removed: 4 } }),
+      tool("t4", "read"),
+    );
+    expect(stat).toEqual({ added: 6, removed: 5, files: 2, partial: false });
+  });
+
+  it("falls back on the diff's own counts, and a cut diff still counts in full", () => {
+    // Three lines kept on the wire, 900 added: the diff's counts are taken before it is cut.
+    const stat = statOf(tool("t1", "edit", { paths: ["/w/a.ts"], diff: diffOf(900, 20) }));
+    expect(stat).toEqual({ added: 900, removed: 20, files: 1, partial: false });
+  });
+
+  it("marks the sums a lower bound when a finished edit reported no counts", () => {
+    const stat = statOf(tool("t1", "edit", { paths: ["/w/a.ts"], diffStat: { added: 2, removed: 1 } }), tool("t2", "edit", { paths: ["/w/b.ts"] }));
+    expect(stat).toEqual({ added: 2, removed: 1, files: 2, partial: true });
+    expect(changeStatLabel(stat!)).toBe("at least 2 additions, 1 deletion, 2 files");
+  });
+
+  it("leaves a failed edit out, and a running one adds its file but no lines yet", () => {
+    const stat = statOf(
+      tool("t1", "edit", { paths: ["/w/a.ts"], diffStat: { added: 5, removed: 5 }, status: "error" }),
+      tool("t2", "edit", { paths: ["/w/b.ts"], status: "running" }),
+      tool("t3", "edit", { paths: ["/w/c.ts"], diff: diffOf(1, 0, 1) }),
+    );
+    expect(stat).toEqual({ added: 1, removed: 0, files: 2, partial: false });
+  });
+
+  it("is null for a turn with no edits, or whose edits counted nothing", () => {
+    expect(statOf(tool("t1", "read"), tool("t2", "command"))).toBeNull();
+    expect(statOf(tool("t1", "edit", { paths: ["/w/a.ts"] }))).toBeNull();
+  });
+
+  it("follows a live turn as edits land", () => {
+    const items: ChatItem[] = [{ kind: "user", id: "u", text: "go" }, tool("t1", "edit", { paths: ["/w/a.ts"], diffStat: { added: 1, removed: 1 } })];
+    expect(buildTurns(items, "running")[0]?.changeStat?.added).toBe(1);
+    items.push(tool("t2", "edit", { paths: ["/w/b.ts"], diffStat: { added: 4, removed: 0 } }));
+    expect(buildTurns(items, "running")[0]?.changeStat).toEqual({ added: 5, removed: 1, files: 2, partial: false });
+  });
 });
 
 describe("buildTurns", () => {

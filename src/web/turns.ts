@@ -3,6 +3,16 @@
 // from DeepSeek Harness (process fold) with OpenCode-style tool counts.
 import type { AssistantItem, ChatItem, ChatStatus, HtmlRenderRef, NoticeItem, ToolCategory, UserItem } from "../shared/protocol.js";
 
+/** The lines a turn's edits and writes added and removed, over the files they changed. */
+export interface ChangeStat {
+  added: number;
+  removed: number;
+  /** How many files the turn changed (0 when the calls named none). */
+  files: number;
+  /** True when a finished edit reported no line counts, so the sums are a lower bound. */
+  partial: boolean;
+}
+
 export interface Turn {
   id: string;
   index: number;
@@ -23,6 +33,8 @@ export interface Turn {
   endedAt?: number;
   counts: Partial<Record<ToolCategory, number>>;
   changedFiles: string[];
+  /** Lines added and removed by this turn's edits, or null when none reported any (no badge). */
+  changeStat: ChangeStat | null;
   /** HTML pages this turn's render calls published, shown full-width above the answer. */
   renders: HtmlRenderRef[];
   /** Plans this turn's calls handed over for review (ExitPlanMode, plan_mode_complete), shown as cards above the answer. */
@@ -110,6 +122,9 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
     for (const item of rest) if (item.kind === "assistant" && item.model) model = item.model;
     const counts: Partial<Record<ToolCategory, number>> = {};
     const changed = new Set<string>();
+    let added = 0;
+    let removed = 0;
+    let unknown = false;
     const renders: HtmlRenderRef[] = [];
     const plans: Array<{ id: string; plan: string }> = [];
     let startedAt = prompt?.at;
@@ -119,6 +134,13 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
         counts[item.category] = (counts[item.category] ?? 0) + 1;
         if ((item.category === "edit" || item.category === "write") && item.status !== "error") {
           for (const p of item.paths) changed.add(p);
+          // The stat counts every line of a diff, including the ones the wire cut, so a cut diff still sums in full.
+          // A finished edit with neither a stat nor a diff (a harness that reports none) is what makes the sums a lower bound.
+          const stat = item.diffStat ?? item.diff;
+          if (stat) {
+            added += stat.added;
+            removed += stat.removed;
+          } else if (item.status === "done") unknown = true;
         }
         if (item.htmlRender) renders.push(item.htmlRender);
         if (item.plan && item.status !== "error") plans.push({ id: item.id, plan: item.plan });
@@ -145,12 +167,24 @@ export function buildTurns(items: ChatItem[], status: ChatStatus): Turn[] {
       ...(endedAt !== undefined ? { endedAt } : {}),
       counts,
       changedFiles: [...changed],
+      changeStat: added + removed > 0 ? { added, removed, files: changed.size, partial: unknown } : null,
       renders,
       plans,
       answerAt: answerAt >= 0 ? answerAt : process.length,
       ...(model ? { model } : {}),
     };
   });
+}
+
+export function sameChangeStat(a: ChangeStat | null, b: ChangeStat | null): boolean {
+  return a === b || (a !== null && b !== null && a.added === b.added && a.removed === b.removed && a.files === b.files && a.partial === b.partial);
+}
+
+/** A change stat in words, for a screen reader: "42 additions, 7 deletions, 3 files" ("at least 42 …" when partial). */
+export function changeStatLabel(stat: ChangeStat, withFiles = true): string {
+  const parts = [`${stat.partial ? "at least " : ""}${stat.added} ${stat.added === 1 ? "addition" : "additions"}`, `${stat.removed} ${stat.removed === 1 ? "deletion" : "deletions"}`];
+  if (withFiles && stat.files > 0) parts.push(`${stat.files} ${stat.files === 1 ? "file" : "files"}`);
+  return parts.join(", ");
 }
 
 const COUNT_LABELS: Array<[ToolCategory, string, string]> = [

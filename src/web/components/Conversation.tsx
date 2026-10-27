@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { ago, buildTurns, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, saysSomething, toolLabel, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
+import { ago, buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -631,7 +631,20 @@ function Answer({
   );
 }
 
-function ChangedFiles({ files, workspace }: { files: string[]; workspace: string }) {
+/** "+42 −7", added in the diff's green and removed in its red; a "+" after a number marks a lower bound (an edit that reported no count). */
+function ChangeCounts({ stat, withFiles = false }: { stat: ChangeStat; withFiles?: boolean }) {
+  const more = stat.partial ? "+" : "";
+  return (
+    <span className="diff-stat change-stat" data-testid="change-stat" aria-label={changeStatLabel(stat, withFiles)}>
+      {stat.added > 0 ? <span className="diff-added">+{stat.added}{more}</span> : null}
+      {stat.added > 0 && stat.removed > 0 ? " " : null}
+      {stat.removed > 0 ? <span className="diff-removed">−{stat.removed}{more}</span> : null}
+      {withFiles && stat.files > 0 ? <span className="change-files"> · {stat.files} {stat.files === 1 ? "file" : "files"}</span> : null}
+    </span>
+  );
+}
+
+function ChangedFiles({ files, workspace, stat }: { files: string[]; workspace: string; stat: ChangeStat | null }) {
   const rel = files.map((f) => relativePath(f, workspace));
   return (
     <div className="changed-files" data-testid="changed-files">
@@ -639,6 +652,7 @@ function ChangedFiles({ files, workspace }: { files: string[]; workspace: string
         icon={<IconEdit size={14} />}
         title={`Changed ${files.length} file${files.length === 1 ? "" : "s"}`}
         summary={rel.slice(0, 3).join(", ") + (rel.length > 3 ? ` +${rel.length - 3}` : "")}
+        aside={stat ? <ChangeCounts stat={stat} withFiles /> : null}
       >
         <ul className="changed-list">
           {rel.map((f) => (
@@ -715,6 +729,8 @@ function ProcessFold({
             </span>
           ) : null}
         </span>
+        {/* Outside the label, which ellipsises: the count stays whole on a narrow screen, and shows with the fold closed. */}
+        {leading && turn.changeStat ? <ChangeCounts stat={turn.changeStat} /> : null}
       </button>
       {thought ? (
         <div className="process-thought" data-testid="live-thought">
@@ -826,6 +842,7 @@ function turnUnchanged(a: Turn, b: Turn): boolean {
     sameArray(a.errors, b.errors) &&
     sameArray(a.after, b.after) &&
     sameArray(a.changedFiles, b.changedFiles) &&
+    sameChangeStat(a.changeStat, b.changeStat) &&
     countKeys.length === Object.keys(b.counts).length &&
     countKeys.every((key) => a.counts[key] === b.counts[key])
   );
@@ -918,7 +935,7 @@ const TurnView = memo(function TurnView({
       {turn.errors.map((item) => (
         <NoticeRow key={item.id} item={item} />
       ))}
-      {turn.changedFiles.length > 0 && !turn.live ? <ChangedFiles files={turn.changedFiles} workspace={workspace} /> : null}
+      {turn.changedFiles.length > 0 && !turn.live ? <ChangedFiles files={turn.changedFiles} workspace={workspace} stat={turn.changeStat} /> : null}
       {turn.after.length > 0 ? (
         <div className="turn-after">
           {turn.after.map((item) => (
