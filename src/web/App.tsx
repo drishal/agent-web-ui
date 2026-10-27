@@ -484,6 +484,18 @@ export function App() {
     setDrawerOpen(false);
   };
 
+  /** A project's +: that project's folder on the start screen, with nothing started yet. */
+  const startIn = async (ws: WorkspaceInfo) => {
+    try {
+      await enterWorkspace(ws);
+    } catch (e) {
+      fail(e);
+      return;
+    }
+    showStart();
+    setStartFocus((n) => n + 1);
+  };
+
   /** The sidebar's New chat: the start screen, with the folder picker open over it. */
   const newChatInFolder = () => {
     showStart();
@@ -1138,7 +1150,7 @@ export function App() {
       label: "New chat in a new tab",
       disabled: newChatDisabled ?? undefined,
       searchOnly: true,
-      run: () => void newChat(workspace, { newTab: true }),
+      run: newTab,
     });
     if (chat && chat.status !== "disposed") {
       if (busy) items.push({ id: "stop", section: "Actions", label: "Stop", run: stop });
@@ -1382,7 +1394,7 @@ export function App() {
         onNewChat={newChatInFolder}
         newChatDisabled={newChatDisabled}
         canStartChat={Boolean(currentHarness?.available) && !opening}
-        onNewChatIn={(ws) => void newChat(ws)}
+        onNewChatIn={(ws) => void startIn(ws)}
         overview={overview}
         sessionsError={sessionsError}
         sessionsLoading={sessionsLoading}

@@ -133,6 +133,24 @@ test("New chat opens the folder picker over the start screen, and the picked fol
   await expect(tabs(page)).toHaveCount(1);
 });
 
+test("a project's + shows the start screen in that folder and starts nothing", async ({ page }) => {
+  await signInAndOpen(page);
+  await sendAndWait(page, "a chat in alpha");
+  await signInAndOpen(page, "beta");
+  await sendAndWait(page, "a chat in beta");
+  const before = await tabs(page).count();
+  await showSidebar(page);
+  // The list is focused on beta; alpha's + is in All projects.
+  await page.getByTestId("focused-project").getByRole("button", { name: "All projects" }).click();
+  await page.getByRole("button", { name: "New chat in alpha" }).click();
+  await expect(page.getByRole("heading", { name: /What should Fake do in alpha\?/ })).toBeVisible();
+  await expect(page.getByTestId("user-prompt")).toHaveCount(0);
+  await expect(tabs(page)).toHaveCount(before);
+  await expect(page.getByRole("textbox", { name: box })).toBeFocused();
+  await sendAndWait(page, "second chat in alpha");
+  await expect(page.getByTestId("user-prompt")).toHaveText(["second chat in alpha"]);
+});
+
 test("a share's text and image wait in the start screen's box and go with the first message", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");
