@@ -283,7 +283,11 @@ export function createApp(deps: AppDeps) {
   const messageJson = express.json({
     limit: `${Math.ceil((MAX_MESSAGE_CHARS * 4 + MAX_IMAGES * Math.ceil(MAX_IMAGE_BYTES / 3) * 4) / 1024) + 64}kb`,
   });
-  app.use("/api", (req, res, next) => (req.method === "POST" && /^\/chats\/[^/]+\/messages$/.test(req.path) ? messageJson : textJson)(req, res, next));
+  app.use("/api", (req, res, next) => {
+    // An upload's body is the file itself, whatever type the browser names; its route reads it raw.
+    if (req.method === "POST" && /^\/workspaces\/[^/]+\/upload$/.test(req.path)) return next();
+    return (req.method === "POST" && /^\/chats\/[^/]+\/messages$/.test(req.path) ? messageJson : textJson)(req, res, next);
+  });
 
   // A broken config.yml keeps the defaults here; the server logged why at startup.
   const browserSettings = () => {

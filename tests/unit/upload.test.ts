@@ -14,8 +14,8 @@ async function setUp() {
   t = await makeTestApp();
   const agent = await signedIn(t);
   const ws = (await agent.post("/api/workspaces/open").send({ path: t.project })).body as { id: string };
-  const post = (name: string, body: Buffer) =>
-    agent.post(`/api/workspaces/${ws.id}/upload`).query({ name }).set("content-type", "application/octet-stream").send(body);
+  const post = (name: string, body: Buffer | string, type = "application/octet-stream") =>
+    agent.post(`/api/workspaces/${ws.id}/upload`).query({ name }).set("content-type", type).send(body);
   return { root: t.project, post };
 }
 
@@ -36,5 +36,13 @@ describe("uploading a file into a project", () => {
     expect((await post("", Buffer.from("x"))).status).toBe(400);
     expect((await post(".", Buffer.from("x"))).status).toBe(400);
     expect((await post("empty.txt", Buffer.alloc(0))).status).toBe(400);
+  });
+
+  it("takes a file as its bytes whatever type the browser names, JSON included", async () => {
+    const { root, post } = await setUp();
+    expect((await post("data.json", '{"a":1}', "application/json")).status).toBe(201);
+    expect(readFileSync(path.join(root, "data.json"), "utf8")).toBe('{"a":1}');
+    expect((await post("broken.json", "{not json", "application/json")).status).toBe(201);
+    expect(readFileSync(path.join(root, "broken.json"), "utf8")).toBe("{not json");
   });
 });
