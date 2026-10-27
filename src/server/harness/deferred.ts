@@ -4,7 +4,8 @@
 // until then; anything that needs the harness waits for it; once it is up,
 // its events flow through, its config replaces the placeholder, and a
 // "settled" moves the chat from Starting to Idle (which also re-reads
-// context, usage, and todos).
+// context, usage, and todos) unless the harness is already running a turn
+// it started itself, which then settles on its own.
 import type {
   ChatConfig,
   ChatItem,
@@ -18,6 +19,10 @@ import type {
 import { EventHub } from "./event-hub.js";
 import type { HarnessEventListener, HarnessUsage, LiveChat } from "./types.js";
 
+/** The warning a reopened chat shows when its harness starts working without a prompt from here. */
+export const UNPROMPTED =
+  "This chat started working on its own when it reopened: nothing was sent from here. Something in the harness (an extension, or a task it was in the middle of) picked it back up. Stop it if you didn't mean it to run.";
+
 const NO_CONFIG: ChatConfig = { model: null, thinkingLevel: null, models: [], thinkingLevels: [] };
 
 export class DeferredLiveChat implements LiveChat {
@@ -28,6 +33,14 @@ export class DeferredLiveChat implements LiveChat {
   private disposed = false;
   /** A run (prompt, steer, follow-up) arrived before the harness did: its own events settle the chat. */
   private asked = false;
+  /**
+   * The harness started a run of its own as it came up, with no prompt from here: an extension's
+   * event can (Pi's background-tasks reconciling a job that died with the last process). Its own
+   * settle ends that run; a made-up one here would show Idle, without Stop, while the agent works.
+   */
+  private running = false;
+  /** The unprompted run's warning went out: once per reopen. */
+  private warned = false;
   private readonly ready: Promise<LiveChat>;
 
   constructor(
@@ -43,10 +56,19 @@ export class DeferredLiveChat implements LiveChat {
           throw new Error("This chat was closed");
         }
         this.real = live;
-        live.subscribe((event) => this.hub.emit(event));
+        live.subscribe((event) => {
+          if (event.type === "busy" && !this.asked && !this.running && !this.warned) {
+            // Nobody here asked for it: say so where it shows, above the work, so a forgotten task picked back up is noticed and stopped.
+            this.warned = true;
+            this.hub.emit({ type: "notice", level: "warning", text: UNPROMPTED });
+          }
+          if (event.type === "busy") this.running = true;
+          else if (event.type === "settled") this.running = false;
+          this.hub.emit(event);
+        });
         const config = await live.getConfig().catch(() => null);
         if (config) this.hub.emit({ type: "config", config });
-        if (!this.asked) this.hub.emit({ type: "settled" });
+        if (!this.asked && !this.running) this.hub.emit({ type: "settled" });
         return live;
       },
       (error: unknown) => {

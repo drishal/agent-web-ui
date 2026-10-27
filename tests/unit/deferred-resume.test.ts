@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ChatSubscriber } from "../../src/server/chats/chat.js";
 import { ChatManager } from "../../src/server/chats/manager.js";
 import { FakeAdapter } from "../../src/server/harness/fake.js";
-import type { LiveChat } from "../../src/server/harness/types.js";
+import { DeferredLiveChat, UNPROMPTED } from "../../src/server/harness/deferred.js";
+import { EventHub } from "../../src/server/harness/event-hub.js";
+import type { HarnessEventListener, LiveChat } from "../../src/server/harness/types.js";
 import type { ChatEvent, ChatStatus } from "../../src/shared/protocol.js";
 
 const ws = { id: "w", path: "/p", name: "p" };
@@ -113,5 +115,31 @@ describe("resume from the session file", () => {
     const chat = await manager.resume(adapter, ws, nativeId);
     await chat.dispose("closed while starting");
     await until(() => started !== null && disposed);
+  });
+});
+
+describe("a harness that is already running when it comes up", () => {
+  it("stays running, not Idle: its own settle ends the run", async () => {
+    // A turn an extension started at load (Pi's background-tasks): the start is buffered before anyone subscribes.
+    const hub = new EventHub();
+    hub.emit({ type: "busy" });
+    const real = { nativeId: "n1", subscribe: (l: HarnessEventListener) => hub.subscribe(l), getConfig: async () => ({ model: "fake/echo", thinkingLevel: null, models: [], thinkingLevels: [] }), dispose: async () => undefined } as unknown as LiveChat;
+    const chat = new DeferredLiveChat("n1", { items: [], title: null }, async () => real, String);
+    const seen: string[] = [];
+    const notices: string[] = [];
+    chat.subscribe((e) => {
+      seen.push(e.type);
+      if (e.type === "notice") notices.push(`${e.level}: ${e.text}`);
+    });
+    await until(() => seen.includes("config"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen).toContain("busy");
+    expect(seen).not.toContain("settled");
+    // Said once, above the work: nothing here asked for this run.
+    expect(notices).toEqual([`warning: ${UNPROMPTED}`]);
+    expect(seen.indexOf("notice")).toBeLessThan(seen.indexOf("busy"));
+    // The harness's own settle is what ends it.
+    hub.emit({ type: "settled" });
+    expect(seen.at(-1)).toBe("settled");
   });
 });
