@@ -337,10 +337,31 @@ unit test; a `tests/atui` case that drives it by keys or clicks.
 - **Atomic commits, one topic each**: a feature, a fix, a refactor, a docs
   change. Stage per topic and check `git diff --cached` before committing. Each
   commit builds and passes on its own.
-- **The subject states the new behaviour, in the present tense**, as the log
-  does: "Checkpoint restore takes file names literally", "atui has a vim
-  navigation mode". The body says what changed and why, wrapped at ~76
-  columns.
+- **The subject is `type(scope): description`**: lowercase, imperative, no
+  trailing period, about 72 characters at most. The type says what kind of
+  change it is:
+  - `feat`: a new capability someone can use (a feature, a setting, a route,
+    a harness). `feat(web): add a sticky prompt bar`
+  - `fix`: something broken now works. `fix(server): remove a half-written upload`
+  - `refactor`: a change of shape with no change of behaviour.
+    `refactor(web): split App.tsx's palette into a hook`
+  - `perf`: the same behaviour, faster or lighter.
+    `perf(server): keep only the newest snapshot in a chat's event log`
+  - `test`: tests only. `test(e2e): hover a tab before looking for its close button`
+  - `docs`: README, AGENTS.md, docs/ only. `docs: describe the density tokens`
+  - `chore`: maintenance with no behaviour change (dependency bumps, build
+    scripts, CI). `chore: bump @playwright/test to 1.56`
+
+  The scope is the part it changes: `web`, `atui`, `tern`, `server`, a
+  harness (`pi`, `omp`, `hermes`, `claude`, `opencode`, `grok`, `awui`), or a
+  narrower area when that reads better (`composer`, `sidebar`, `tabs`,
+  `security`, `doctor`, `e2e`). Leave it out (`docs: …`) when the change is
+  not about one part. Tests and docs that ship with a change go in its commit
+  under its type: a `feat` carries its own tests and README lines.
+
+  The body says what changed and why, wrapped at ~76 columns; it can be left
+  out when the subject says it all. Older commits use present-tense sentences
+  ("Checkpoint restore takes file names literally"); new ones use this form.
 - **Update the README in the same commit** as the behaviour it describes
   (features under "Using it", atui keys under "In a terminal", routes and
   limits under "Security", tests under "Testing").
