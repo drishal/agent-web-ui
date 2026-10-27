@@ -51,6 +51,9 @@ export interface ConversationCx {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/** A finished call shows how long it took only past this, as the web UI's rows do (a "0.2s" on every quick read is noise). */
+const TOOK_AFTER_MS = 1500;
+
 /** Tern's tool icons are picked by name: our categories in its words. */
 const TOOL_NAMES: Record<ToolItem["category"], string> = { read: "read", edit: "edit", write: "write", command: "bash", search: "grep", web: "web", agent: "task", other: "" };
 
@@ -92,11 +95,12 @@ export function toolNode(item: ToolItem, workspace: string, age: ConversationCx[
   if (item.category === "command" && target.startsWith("$ ")) target = target.slice(2);
   if (target.startsWith("(") && target.endsWith(")")) target = target.slice(1, -1);
   const targetKind = item.category === "command" ? "command" : item.category === "search" ? "pattern" : item.category === "web" ? "query" : item.paths.length > 0 ? "path" : "text";
+  // The web UI's row: the diff count at the end and nothing else (no "4 lines", "2 results").
   const meta: string[] = [];
   if (item.diffStat && (item.diffStat.added || item.diffStat.removed)) meta.push(`+${item.diffStat.added}`, `−${item.diffStat.removed}`);
-  else meta.push(...row.facts.filter((f) => f !== "failed"));
   const exit = /^exit (\d+)$/.exec(row.facts.find((f) => f.startsWith("exit ")) ?? "");
   const path = item.paths[0] ? shortPath(item.paths[0], workspace) : undefined;
+  const took = !running && item.at !== undefined && item.endedAt !== undefined ? item.endedAt - item.at : undefined;
 
   let body: Node | Node[] | null = null;
   let collapsed = !running;
@@ -107,10 +111,8 @@ export function toolNode(item: ToolItem, workspace: string, age: ConversationCx[
   } else if (item.plan) {
     body = ui.md({ key: "plan" }, item.plan);
   } else if (item.diff && item.diff.lines.length > 0) {
+    // Folded like every other row, as in the web UI: the +/− count says how big it is, a click shows it.
     body = ui.diff({ key: "diff", text: unifiedDiff(path ?? "file", item.diff), ...(path ? { path } : {}) });
-    // An edit's lines are what it is about: shown, the long ones cut under a fade.
-    collapsed = true;
-    preview = { lines: 12 };
   } else if (item.output.trim()) {
     if (item.category === "read" && path) body = ui.code({ key: "out", text: item.output, path });
     else body = ui.ansi({ key: "out", text: item.output, ...(running ? { follow: true } : {}) });
@@ -127,7 +129,8 @@ export function toolNode(item: ToolItem, workspace: string, age: ConversationCx[
       ...(row.note ? { note: row.note } : {}),
       ...(exit ? { exit: Number(exit[1]) } : {}),
       status: toolStatus(item),
-      ...(running && item.at !== undefined ? { age: age(item.id, item.at) } : item.at !== undefined && item.endedAt !== undefined ? { took: item.endedAt - item.at } : {}),
+      ...(running && item.at !== undefined ? { age: age(item.id, item.at) } : took !== undefined && took >= TOOK_AFTER_MS ? { took } : {}),
+      frame: "inline",
       ...(path ? { href: fileUrl(item.paths[0] as string, workspace) } : {}),
       ...(body ? { collapsible: true, collapsed: running ? false : collapsed } : {}),
       ...(preview ? { preview } : {}),
@@ -137,14 +140,20 @@ export function toolNode(item: ToolItem, workspace: string, age: ConversationCx[
   );
 }
 
-/** A thought: one folded line with its title, the reasoning under it. */
+/** A thought: a row like the calls around it (the web UI's), its title as the target and the reasoning folded under it. */
 function thoughtNode(item: AssistantItem, cx: ConversationCx, key: string): Node {
   const open = cx.folds.get(key) ?? false;
-  return ui.section(
+  const thinking = item.streaming && !item.text;
+  return ui.tool(
     {
       key,
       role: "awui.thought",
-      head: [span(item.streaming && !item.text ? "Thinking" : "Thought", "muted"), span(` · ${thoughtTitle(item.thinking)}`, "dim")],
+      name: "thinking",
+      title: thinking ? "Thinking" : "Thought",
+      target: thoughtTitle(item.thinking),
+      targetKind: "text",
+      status: thinking ? "running" : "done",
+      frame: "inline",
       collapsible: true,
       collapsed: !open,
       onToggle: (e) => cx.on.fold(key, !e.collapsed),
@@ -364,6 +373,9 @@ function turnNode(turn: Turn, cx: ConversationCx): Node {
         ui.icon({ key: "copy", name: "copy", title: "Copy the answer", aria: "Copy the answer", onClick: () => cx.on.copy(answer.text) }),
         turn.through > 0 && cx.chat.capabilities.supportsFork
           ? ui.icon({ key: "fork", name: "branch", title: "Fork: a new session through this answer", aria: "Fork", onClick: () => cx.on.fork(turn.through) })
+          : null,
+        cx.chat.checkpoints.includes(turn.through)
+          ? ui.icon({ key: "undo", name: "undo", title: "Undo files: put them back as they were before this turn", aria: "Undo files", onClick: () => cx.on.undo(turn) })
           : null,
       ),
     );

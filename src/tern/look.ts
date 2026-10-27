@@ -95,7 +95,8 @@ export const STYLESHEET = `
 
 /* The empty chat: a welcome with the harnesses and this project's recent sessions. */
 [data-role='awui.welcome'] { align-items: center; gap: 14px; padding-top: 12vh; }
-[data-role='awui.brand'] { font-size: 1.6em; font-weight: 600; letter-spacing: 0.02em; }
+[data-role='awui.brand'] { font-size: 1.6em; font-weight: 600; letter-spacing: 0.02em; font-family: var(--mono, monospace); color: ${HARNESS}; }
+[data-role='awui.start-title'] { font-size: 1.45em; font-weight: 600; text-align: center; }
 [data-role='awui.harnesses'] { gap: 8px; justify-content: center; flex-wrap: wrap; }
 .pick { border-radius: 999px; padding: 4px 13px; background: ${tint(7)}; color: var(--t2); }
 .pick:hover { background: ${tint(12)}; }
@@ -114,6 +115,10 @@ export const STYLESHEET = `
 .chip:hover { background: ${tint(13)}; color: var(--t1); }
 .chip.think { display: inline-flex; align-items: center; gap: 5px; }
 .chip.harness-chip { color: ${HARNESS}; background: ${tint(18, HARNESS)}; }
+.chip.caution { color: var(--warn); background: ${tint(14, 'var(--warn)')}; }
+
+/* The todo card over the composer, as the web UI's status stack. */
+[data-role='awui.todos'] { border-radius: 14px; }
 .send { border-radius: 999px; min-width: 26px; padding: 2px 8px; text-align: center; color: var(--t1); background: ${tint(16)}; }
 .send.ready { color: var(--page, #000); background: ${INK}; }
 .send.stop { color: var(--page, #000); background: ${HARNESS}; }

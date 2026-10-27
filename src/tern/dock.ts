@@ -33,7 +33,10 @@ export interface DockCx {
   answer: Draft;
   /** The C-x prefix is waiting for its key. */
   leader: boolean;
+  /** The todo card is open (it starts open, as the web UI's does). */
+  todosOpen: boolean;
   on: {
+    toggleTodos: (open: boolean) => void;
     send: () => void;
     stop: () => void;
     answer: (request: InteractionRequest, index: number) => void;
@@ -42,6 +45,7 @@ export interface DockCx {
     pickHarness: () => void;
     pickModel: () => void;
     pickThinking: () => void;
+    pickPermission: () => void;
     sessions: () => void;
     palette: () => void;
     dropStep: (index: number) => void;
@@ -143,6 +147,33 @@ function queueNode(chat: ChatState, cx: DockCx): Node | null {
   return rows.length > 0 ? ui.col({ key: "queue", role: "awui.queue" }, rows) : null;
 }
 
+/** The todo list as the web UI's status stack shows it: a "Todos 1/3" card over the composer, each item's phase beside it. */
+function todosNode(chat: ChatState, cx: DockCx): Node {
+  const status = (s: string) => (s === "completed" || s === "done" ? "done" : s === "in_progress" || s === "active" ? "active" : "pending");
+  const done = chat.todos.filter((t) => status(t.status) === "done").length;
+  // Todos in a row under one phase share its heading, which keeps each item to one line.
+  const phases: Array<{ id: string; title?: string; items: Array<{ id: string; text: string; status: string }> }> = [];
+  chat.todos.forEach((t, i) => {
+    const last = phases.at(-1);
+    const item = { id: String(i), text: t.text, status: status(t.status) };
+    if (last && last.title === t.phase) last.items.push(item);
+    else phases.push({ id: `p${phases.length}`, ...(t.phase ? { title: t.phase } : {}), items: [item] });
+  });
+  return ui.card(
+    {
+      key: "todo",
+      role: "awui.todos",
+      head: [span("Todos", "strong"), span(`  ${done}/${chat.todos.length}`, "muted")],
+      collapsible: true,
+      collapsed: !cx.todosOpen,
+      onToggle: (e) => cx.on.toggleTodos(!e.collapsed),
+    },
+    cx.todosOpen
+      ? ui.checklist({ key: "list", mode: "full", phases })
+      : null,
+  );
+}
+
 /** The composer's git row: branch, how far from upstream, and what changed. */
 function gitNode(git: GitStatus): Node {
   const { counts } = git;
@@ -171,6 +202,7 @@ function composerNode(cx: DockCx): Node {
   const model = config?.models.find((m) => m.key === config.model || m.id === config.model);
   const modelLabel = model?.name ?? config?.model ?? null;
   const level = config?.thinkingLevel ?? null;
+  const permission = config?.permissionModes?.find((m) => m.id === config.permissionMode);
   const caps = chat?.capabilities ?? cx.harness?.capabilities;
   const percent = chat?.context?.percent ?? null;
   const ready = cx.draft.text.trim() !== "";
@@ -203,6 +235,14 @@ function composerNode(cx: DockCx): Node {
         // The effort glyph goes inside the chip, before its level, as the web UI's thinking chip draws it.
         caps?.supportsThinkingLevel
           ? html.button({ key: "t", class: "chip think", title: "Thinking (C-x t)", onClick: cx.on.pickThinking }, level ? ui.effort({ key: "e", level }) : null, `${level ?? "Thinking"} ⌄`)
+          : null,
+        // The web UI's permission pill: the mode in force, open mid-run too; a mode that asks nothing is marked.
+        chat?.capabilities.supportsPermissionMode && config?.permissionModes?.length
+          ? html.button(
+              { key: "p", class: permission?.caution ? "chip think caution" : "chip think", title: permission?.description ?? "Permission mode", onClick: cx.on.pickPermission },
+              ui.icon({ key: "i", name: "shield" }),
+              `${permission?.label ?? config.permissionMode ?? "Default"} ⌄`,
+            )
           : null,
       ),
       ui.row(
@@ -249,13 +289,7 @@ export function dock(cx: DockCx): Node {
     { key: "d", role: "awui.dock" },
     request ? requestNode(request, cx) : null,
     chat ? queueNode(chat, cx) : null,
-    chat && chat.todos.length > 0
-      ? ui.checklist({
-          key: "todo",
-          mode: "hud",
-          phases: [{ id: "todo", items: chat.todos.map((t, i) => ({ id: String(i), text: t.text, status: t.status === "completed" || t.status === "done" ? "done" : t.status === "in_progress" || t.status === "active" ? "active" : "pending" })) }],
-        })
-      : null,
+    chat && chat.todos.length > 0 ? todosNode(chat, cx) : null,
     cx.git ? gitNode(cx.git) : null,
     composerNode(cx),
     statusNode(cx),

@@ -10,7 +10,7 @@
 import { appendFileSync } from "node:fs";
 import { createEffect, createMemo, createRoot, createSignal, on, untrack } from "solid-js";
 import { span, ui, html, type Key, type Node, type Session, type Surface } from "@stencil-hq/tern";
-import type { HarnessStatus, InteractionRequest, ProjectSession, SavedPrompt, SlashCommand } from "../shared/protocol.js";
+import type { HarnessStatus, InteractionRequest, SavedPrompt, SlashCommand } from "../shared/protocol.js";
 import type { ChatState } from "../web/chat-state.js";
 import { buildTurns, ago as agoMs } from "../web/turns.js";
 import { isBusy } from "../web/session-groups.js";
@@ -24,8 +24,9 @@ import { optionsOf } from "../atui/requests.js";
 import { applyEdit, draftState, editKey, insert, lineStep, moveTo, setText, undo as undoDraft, type DraftState } from "./draft.js";
 import { conversation, headNode, TURN_WINDOW } from "./view.js";
 import { ANSWER_ID, dock, EDITOR_ID } from "./dock.js";
-import { AT_CARET, filterItems, menuNode, moveSelection, SHEETS, type Menu, type MenuItem, type MenuKind } from "./overlays.js";
+import { AT_CARET, filterItems, menuNode, moveSelection, sessionRows, SHEETS, type Menu, type MenuItem, type MenuKind } from "./overlays.js";
 import { paletteFor, STYLESHEET } from "./look.js";
+import { startExamples, startHeading, startSetup } from "../web/start-screen.js";
 
 export interface TernOptions {
   /** The server, for links into the web UI. */
@@ -81,6 +82,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     const [files, setFiles] = createSignal<string[]>([]);
     const [notice, setNotice] = createSignal<{ n: number; text: string; tone: "success" | "info" | "error" } | null>(null);
     const [blobTick, setBlobTick] = createSignal(0);
+    const [todosOpen, setTodosOpen] = createSignal(true);
     let recall: Recall | null = null;
     let lastEsc = 0;
     let lastCtrlC = 0;
@@ -250,32 +252,8 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     };
 
     // ---- the explicit menus' rows --------------------------------------------------------
-    const sessionItems = (): MenuItem[] => {
-      const ov = app.overview();
-      const names = new Map(ov.workspaces.map((w) => [w.id, w.name]));
-      const here = app.workspace()?.id;
-      const harnesses = new Map((app.boot()?.harnesses ?? []).map((h) => [h.id, h.displayName]));
-      const sorted = [...ov.sessions].sort((a, b) => Number(b.workspaceId === here) - Number(a.workspaceId === here));
-      return sorted.map((s: ProjectSession) => {
-        const status = s.status;
-        return {
-          id: s.id,
-          label: s.title || "Untitled",
-          // A herdr pane runs it: opening it shows that pane first (state.ts openSession).
-          detail: `${harnesses.get(s.harnessId) ?? s.harnessId}${s.herdr ? ` · in herdr, ${s.herdr.status}` : ""}`,
-          value: s.updatedAt ? agoMs(new Date(s.updatedAt).getTime()) : "",
-          group: names.get(s.workspaceId) ?? "Other projects",
-          ...(s.asking || s.herdr?.status === "blocked"
-            ? { dot: "warning" }
-            : isBusy(status) || s.herdr?.status === "working"
-              ? { dot: "accent" }
-              : status === "error"
-                ? { dot: "error" }
-                : {}),
-          current: s.id === app.chat()?.sessionId,
-        };
-      });
-    };
+    const sessionItems = (): MenuItem[] =>
+      sessionRows(app.overview(), { here: app.workspace()?.id ?? null, current: app.chat()?.sessionId ?? null, harnessName: (id) => app.boot()?.harnesses.find((h) => h.id === id)?.displayName ?? id });
 
     const modelItems = (): MenuItem[] => {
       const config = app.chat()?.config;
@@ -287,6 +265,12 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       const config = app.chat()?.config;
       if (!config) return [];
       return config.thinkingLevels.map((l) => ({ id: l, label: l, current: l === config.thinkingLevel }));
+    };
+
+    const permissionItems = (): MenuItem[] => {
+      const config = app.chat()?.config;
+      if (!config?.permissionModes) return [];
+      return config.permissionModes.map((m) => ({ id: m.id, label: m.label, detail: m.description, current: m.id === config.permissionMode, ...(m.caution ? { dot: "warning" } : {}) }));
     };
 
     const harnessItems = (): MenuItem[] =>
@@ -313,6 +297,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       const caps = c?.capabilities ?? harness()?.capabilities;
       if (caps?.supportsModelSelection) items.push({ id: "x:m", label: "Change the model…", value: "C-x m", icon: "model" });
       if (caps?.supportsThinkingLevel) items.push({ id: "x:t", label: "Change the thinking level…", value: "C-x t", icon: "thinking" });
+      if (c?.capabilities.supportsPermissionMode && c.config.permissionModes?.length) items.push({ id: "permission", label: "Change the permission mode…", icon: "shield" });
       items.push({ id: "x:h", label: c ? "Hand off to another harness…" : "Choose the harness…", value: "C-x h", icon: "handoff" });
       if (c?.capabilities.supportsCompact) items.push({ id: "x:c", label: "Compact the context", value: "C-x c", icon: "compaction", ...(idle ? {} : { disabled: "Wait until the agent is idle" }) });
       if (c && isBusy(c.status)) items.push({ id: "stop", label: "Stop the agent", value: "Esc Esc", icon: "stop" });
@@ -327,8 +312,8 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
     const menuItems = createMemo((): MenuItem[] => {
       const m = menu();
       if (!m) return caretItems();
-      const all =
-        m.kind === "palette" ? paletteItems() : m.kind === "sessions" ? sessionItems() : m.kind === "model" ? modelItems() : m.kind === "thinking" ? thinkingItems() : m.kind === "harness" ? harnessItems() : m.kind === "leader" ? leaderItems() : [];
+      const rows: Partial<Record<MenuKind, () => MenuItem[]>> = { palette: paletteItems, sessions: sessionItems, model: modelItems, thinking: thinkingItems, permission: permissionItems, harness: harnessItems, leader: leaderItems };
+      const all = rows[m.kind]?.() ?? [];
       return SHEETS.has(m.kind) ? filterItems(all, m.query) : all;
     });
 
@@ -339,7 +324,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
         void app.ensureChat().then((c) => c && openMenu(kind));
         return;
       }
-      const items = kind === "model" ? modelItems() : kind === "thinking" ? thinkingItems() : kind === "harness" ? harnessItems() : [];
+      const items = kind === "model" ? modelItems() : kind === "thinking" ? thinkingItems() : kind === "permission" ? permissionItems() : kind === "harness" ? harnessItems() : [];
       const current = Math.max(0, items.findIndex((i) => i.current));
       setMenu({ kind, query: "", selected: current });
     };
@@ -427,6 +412,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
         case "palette":
           if (item.id.startsWith("x:")) return runLeader(item.id.slice(2));
           if (item.id === "stop") return app.stop();
+          if (item.id === "permission") return openMenu("permission");
           if (item.id === "web") {
             // A program cannot open a browser through Tern (links open on a click), so the link goes to the clipboard.
             const c = app.chat();
@@ -446,6 +432,8 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
           return void app.configure({ model: item.id });
         case "thinking":
           return void app.configure({ thinkingLevel: item.id });
+        case "permission":
+          return void app.configure({ permissionMode: item.id });
         case "harness":
           if (item.id === harness()?.id) return;
           return app.chat() ? void app.handoff(item.id) : app.chooseHarness(item.id);
@@ -631,7 +619,9 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
         editing: app.editing()?.through ?? null,
         answer: answer().draft,
         leader: leader(),
+        todosOpen: todosOpen(),
         on: {
+          toggleTodos: setTodosOpen,
           send: () => void sendDraft(),
           stop: app.stop,
           answer: answerRequest,
@@ -640,6 +630,7 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
           pickHarness: () => openMenu("harness"),
           pickModel: () => openMenu("model"),
           pickThinking: () => openMenu("thinking"),
+          pickPermission: () => openMenu("permission"),
           sessions: () => openMenu("sessions"),
           palette: () => openMenu("palette"),
           dropStep: (i) => setChain((c?.chain ?? []).filter((_, j) => j !== i).map(({ id: _id, ...rest }) => rest)),
@@ -705,18 +696,27 @@ export function createTernApp(session: Session, app: Atui, opts: TernOptions) {
       };
     };
 
-    /** The empty chat: what to start with. */
+    /**
+     * The empty chat: the web UI's start screen (its question, three things to try that fill the box), the
+     * harness picked from the composer's chip; and, with no sidebar here, this project's recent sessions under it.
+     */
     const welcome = (): Node => {
-      const harnesses = (app.boot()?.harnesses ?? []).filter((x) => x.available);
+      const h = harness();
       const here = app.workspace();
-      const recent = app.overview().sessions.filter((s) => s.workspaceId === here?.id).slice(0, 6);
+      const recent = app.overview().sessions.filter((s) => s.workspaceId === here?.id && (!h || s.harnessId === h.id)).slice(0, 6);
+      const heading = startHeading(startSetup(app.boot()?.harnesses ?? [], h?.id ?? null, here?.name ?? null, "", 0, false));
+      const sub = h?.id === "awui" ? "It reads, searches, and computes — it never edits your files." : here ? "It runs with its normal tools, as you, in this folder." : "Start awui tern in a project folder to work there.";
       return ui.col(
         { key: "welcome", role: "awui.welcome" },
-        ui.text({ key: "brand", role: "awui.brand", text: "awui" }),
-        ui.text({ key: "where" }, span(here ? here.path.replace(process.env.HOME ?? "\u0000", "~") : "No project: start awui tern in a project folder", "muted")),
+        ui.text({ key: "mark", role: "awui.brand", text: ">_" }),
+        ui.text(
+          { key: "ask", role: "awui.start-title" },
+          heading.project ? [span(heading.before), span(heading.project, "accent"), span(heading.after)] : [span(heading.title)],
+        ),
+        ui.text({ key: "sub" }, span(sub, "muted")),
         ui.row(
-          { key: "harnesses", role: "awui.harnesses" },
-          harnesses.map((x) => html.button({ key: x.id, class: x.id === harness()?.id ? "pick on" : "pick", text: x.displayName, title: x.version ?? "", onClick: () => app.chooseHarness(x.id) })),
+          { key: "try", role: "awui.harnesses" },
+          startExamples(h?.id ?? null).map((text, i) => html.button({ key: `x${i}`, class: "pick", text, title: "Put this in the box", onClick: () => void setDraft((s) => setText(s, text)) })),
         ),
         recent.length > 0
           ? ui.list(

@@ -6,9 +6,12 @@
 // filters and lays out. Pure apart from the handlers it attaches.
 import { span, ui, type Node } from "@stencil-hq/tern";
 import type { IconName, PickerGroup, PickerItem } from "@stencil-hq/tern";
+import type { ProjectSession, SessionsOverview } from "../shared/protocol.js";
+import { isBusy, placeOf, type Place } from "../web/session-groups.js";
+import { ago } from "../web/turns.js";
 import { EDITOR_ID } from "./dock.js";
 
-export type MenuKind = "palette" | "sessions" | "model" | "thinking" | "harness" | "slash" | "skill" | "prompts" | "files" | "leader";
+export type MenuKind = "palette" | "sessions" | "model" | "thinking" | "permission" | "harness" | "slash" | "skill" | "prompts" | "files" | "leader";
 
 /** One row of a menu. */
 export interface MenuItem {
@@ -42,6 +45,7 @@ const TITLES: Record<MenuKind, string> = {
   sessions: "Sessions",
   model: "Model",
   thinking: "Thinking",
+  permission: "Permissions",
   harness: "Harness",
   slash: "Commands",
   skill: "Skills",
@@ -55,6 +59,7 @@ const NOUNS: Record<MenuKind, string> = {
   sessions: "sessions",
   model: "models",
   thinking: "levels",
+  permission: "modes",
   harness: "harnesses",
   slash: "commands",
   skill: "skills",
@@ -62,6 +67,39 @@ const NOUNS: Record<MenuKind, string> = {
   files: "files",
   leader: "keys",
 };
+
+const PLACE_RANK: Record<Place, number> = { needs: 0, working: 1, pinned: 2, project: 3, snoozed: 5, settled: 5, archived: 5 };
+
+/**
+ * The sessions picker's rows, in the web sidebar's order: what needs you, what works, the pins, this
+ * project, then the other projects by their newest session; what is snoozed, settled, or archived goes
+ * last, where a search still finds it. A row outside its project's group names the project.
+ */
+export function sessionRows(overview: SessionsOverview, at: { here: string | null; current: string | null; harnessName: (id: string) => string }, now = Date.now()): MenuItem[] {
+  const names = new Map(overview.workspaces.map((w) => [w.id, w.name]));
+  const opts = { currentId: at.here, query: "", harnessId: null, isActive: (s: ProjectSession) => s.id === at.current, now };
+  const time = (s: ProjectSession) => (s.updatedAt ? new Date(s.updatedAt).getTime() : 0);
+  const newest = new Map<string, number>();
+  for (const s of overview.sessions) newest.set(s.workspaceId, Math.max(newest.get(s.workspaceId) ?? 0, time(s)));
+  const rank = (s: ProjectSession) => PLACE_RANK[placeOf(s, opts)] + (placeOf(s, opts) === "project" && s.workspaceId !== at.here ? 1 : 0);
+  const byProject = (a: ProjectSession, b: ProjectSession) => (newest.get(b.workspaceId) ?? 0) - (newest.get(a.workspaceId) ?? 0) || a.workspaceId.localeCompare(b.workspaceId);
+  const sorted = [...overview.sessions].sort((a, b) => rank(a) - rank(b) || (rank(a) === 4 ? byProject(a, b) : 0) || time(b) - time(a));
+  const GROUPS: Partial<Record<Place, string>> = { needs: "Needs you", working: "Working", pinned: "Pinned" };
+  return sorted.map((s) => {
+    const place = placeOf(s, opts);
+    const project = names.get(s.workspaceId);
+    return {
+      id: s.id,
+      label: s.title || "Untitled",
+      // A herdr pane runs it: opening it shows that pane first (state.ts openSession).
+      detail: `${at.harnessName(s.harnessId)}${s.herdr ? ` · in herdr, ${s.herdr.status}` : ""}${place !== "project" && project ? ` · ${project}` : ""}`,
+      value: s.updatedAt ? ago(time(s), now) : "",
+      group: GROUPS[place] ?? (place === "project" ? (project ?? "Other projects") : "Snoozed, settled, and archived"),
+      ...(s.asking || s.herdr?.status === "blocked" ? { dot: "warning" } : isBusy(s.status) || s.herdr?.status === "working" ? { dot: "accent" } : s.status === "error" ? { dot: "error" } : {}),
+      current: s.id === at.current,
+    };
+  });
+}
 
 /** Menus drawn as Tern's picker sheet (searchable); the rest are small lists. */
 export const SHEETS: ReadonlySet<MenuKind> = new Set(["palette", "sessions", "model", "harness"]);

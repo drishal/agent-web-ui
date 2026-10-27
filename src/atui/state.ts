@@ -555,7 +555,7 @@ export function createAtui(server: Server, opts: AtuiOptions) {
     }
   };
 
-  const configure = async (patch: { model?: string; thinkingLevel?: string }) => {
+  const configure = async (patch: { model?: string; thinkingLevel?: string; permissionMode?: string }) => {
     const c = chat();
     if (!c) return;
     try {

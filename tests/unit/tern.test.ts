@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Key } from "@stencil-hq/tern";
-import type { ChatItem, ToolItem } from "../../src/shared/protocol.js";
+import type { ChatItem, ProjectSession, SessionsOverview, ToolItem } from "../../src/shared/protocol.js";
 import type { ChatState } from "../../src/web/chat-state.js";
 import type { Node } from "@stencil-hq/tern";
 import { applyEdit, draftState, editKey, lineStep, redo, setText, undo, wordStep, type DraftState } from "../../src/tern/draft.js";
-import { filterItems, matchRanges, moveSelection } from "../../src/tern/overlays.js";
-import { decorations, placeholder } from "../../src/tern/dock.js";
+import { filterItems, matchRanges, moveSelection, sessionRows } from "../../src/tern/overlays.js";
+import { decorations, dock, placeholder, type DockCx } from "../../src/tern/dock.js";
 import { paletteFor } from "../../src/tern/look.js";
 import { conversation, foldHead, toolNode, type ConversationCx } from "../../src/tern/view.js";
 import { parseTernArgs } from "../../src/tern/args.js";
@@ -110,12 +110,92 @@ describe("the Tern menus", () => {
   });
 });
 
+describe("the Tern sessions picker", () => {
+  const at = Date.parse("2026-10-27T12:00:00Z");
+  const session = (id: string, over: Partial<ProjectSession>): ProjectSession =>
+    ({ id, harnessId: "fake", workspaceId: "here", title: id, updatedAt: new Date(at - 60_000).toISOString(), status: null, ...over }) as ProjectSession;
+  const overview = {
+    workspaces: [
+      { id: "here", name: "alpha", path: "/p/alpha" },
+      { id: "far", name: "beta", path: "/p/beta" },
+      { id: "old", name: "gamma", path: "/p/gamma" },
+    ],
+    sessions: [
+      session("old-one", { workspaceId: "old", updatedAt: new Date(at - 86_400_000).toISOString() }),
+      session("far-one", { workspaceId: "far" }),
+      session("mine", {}),
+      session("pinned", { pinned: true, workspaceId: "far" }),
+      session("asks", { asking: true }),
+      session("gone", { archived: true }),
+    ],
+    errors: [],
+  } as unknown as SessionsOverview;
+
+  it("orders them as the web sidebar does: what needs you, pins, this project, the others, the put-away last", () => {
+    const rows = sessionRows(overview, { here: "here", current: null, harnessName: () => "Fake" }, at);
+    expect(rows.map((r) => [r.group, r.id])).toEqual([
+      ["Needs you", "asks"],
+      ["Pinned", "pinned"],
+      ["alpha", "mine"],
+      ["beta", "far-one"],
+      ["gamma", "old-one"],
+      ["Snoozed, settled, and archived", "gone"],
+    ]);
+    // Outside its project's group a row names the project.
+    expect(rows.find((r) => r.id === "pinned")?.detail).toBe("Fake · beta");
+    expect(rows.find((r) => r.id === "mine")?.detail).toBe("Fake");
+  });
+});
+
 describe("the Tern dock", () => {
   it("colours @mentions and {{blanks}} in the draft", () => {
     expect(decorations("see @src/a.ts and {{why}}")).toEqual([
       { from: 4, to: 13, s: "accent" },
       { from: 18, to: 25, s: "warning mark" },
     ]);
+  });
+
+  const noop = () => undefined;
+  const dockCx = (chat: Partial<ChatState>, over: Partial<DockCx> = {}): DockCx =>
+    ({
+      chat: { chatId: "c", status: "idle", items: [], pending: [], queue: { steering: [], followUp: [] }, chain: [], todos: [], capabilities: {}, config: { models: [] }, ...chat } as unknown as ChatState,
+      harness: null, git: null, limits: null, connected: true, version: "t", project: null,
+      draft: { text: "", cursor: 0, anchor: null }, ghost: "", editing: null, answer: { text: "", cursor: 0, anchor: null }, leader: false, todosOpen: true,
+      on: new Proxy({}, { get: () => noop }) as DockCx["on"],
+      ...over,
+    }) as DockCx;
+  const all = (n: Node): Node[] => [n, ...n.children.flatMap(all)];
+
+  it("shows the todos as the web UI's card over the composer, grouped by phase", () => {
+    const todos = [
+      { phase: "Plan", text: "Read the code", status: "completed" },
+      { phase: "Plan", text: "Write the fix", status: "in_progress" },
+      { phase: "Verify", text: "Run the tests", status: "pending" },
+    ];
+    const card = all(dock(dockCx({ todos }))).find((n) => n.props.role === "awui.todos");
+    expect(JSON.stringify(card?.props.head)).toContain("1/3");
+    const list = card?.children.find((n) => n.kind === "checklist");
+    expect(list?.props.phases).toEqual([
+      { id: "p0", title: "Plan", items: [{ id: "0", text: "Read the code", status: "done" }, { id: "1", text: "Write the fix", status: "active" }] },
+      { id: "p1", title: "Verify", items: [{ id: "2", text: "Run the tests", status: "pending" }] },
+    ]);
+    // Folded, it keeps its heading and drops the list.
+    const folded = all(dock(dockCx({ todos }, { todosOpen: false }))).find((n) => n.props.role === "awui.todos");
+    expect(folded?.props.collapsed).toBe(true);
+    expect(folded?.children.filter(Boolean)).toEqual([]);
+  });
+
+  it("offers the permission mode as a chip where the harness has modes, marking one that asks nothing", () => {
+    const modes = [
+      { id: "default", label: "Ask first", description: "Asks before edits and commands" },
+      { id: "yolo", label: "Don't ask", description: "Asks nothing", caution: true },
+    ];
+    const chip = (permissionMode: string) =>
+      all(dock(dockCx({ capabilities: { supportsPermissionMode: true } as ChatState["capabilities"], config: { models: [], permissionModes: modes, permissionMode } as unknown as ChatState["config"] }))).find((n) => n.props.key === "p");
+    expect(JSON.stringify(chip("default"))).toContain("Ask first ⌄");
+    expect(chip("default")?.props.class).toBe("chip think");
+    expect(chip("yolo")?.props.class).toBe("chip think caution");
+    expect(all(dock(dockCx({}))).some((n) => n.props.key === "p")).toBe(false);
   });
 
   it("asks for what fits the chat's state", () => {
@@ -141,8 +221,15 @@ describe("the Tern conversation", () => {
   it("draws a command as Tern's tool row, its output folded under it", () => {
     const node = toolNode(tool({ args: JSON.stringify({ command: "npm test" }), output: "ok\n", at: 1000, endedAt: 3500 }), "/w", () => undefined);
     expect(node.kind).toBe("tool");
-    expect(node.props).toMatchObject({ name: "bash", title: "Bash", target: "npm test", targetKind: "command", status: "done", took: 2500, collapsible: true, collapsed: true });
+    expect(node.props).toMatchObject({ name: "bash", title: "Bash", target: "npm test", targetKind: "command", status: "done", took: 2500, collapsible: true, collapsed: true, frame: "inline" });
     expect(node.children[0]?.kind).toBe("ansi");
+    // The web UI's row carries no "1 line" count.
+    expect(node.props.meta).toBeUndefined();
+  });
+
+  it("times a finished call only past a second and a half, as the web UI's rows do", () => {
+    expect(toolNode(tool({ output: "ok\n", at: 1000, endedAt: 1300 }), "/w", () => undefined).props.took).toBeUndefined();
+    expect(toolNode(tool({ output: "ok\n", at: 1000, endedAt: 2600 }), "/w", () => undefined).props.took).toBe(1600);
   });
 
   it("keeps a running command open, following its output, timed from its age", () => {
@@ -157,7 +244,9 @@ describe("the Tern conversation", () => {
       "/w",
       () => undefined,
     );
-    expect(node.props).toMatchObject({ title: "Update", target: "src/a.ts", targetKind: "path", meta: ["+1", "−1"] });
+    // Folded like every row, its +/− count saying how big it is.
+    expect(node.props).toMatchObject({ title: "Update", target: "src/a.ts", targetKind: "path", meta: ["+1", "−1"], collapsed: true });
+    expect(node.props.preview).toBeUndefined();
     expect(node.children[0]?.kind).toBe("diff");
     expect(String(node.children[0]?.props.text)).toContain("-a\n+b");
   });
@@ -175,6 +264,21 @@ describe("the Tern conversation", () => {
     expect(kinds(turn as Node)).not.toContain("section");
     expect(JSON.stringify(turn)).toContain("Earlier conversation was compacted");
     expect(JSON.stringify(turn)).toContain("The build passes now.");
+  });
+
+  it("draws a thought as a row among the calls, its reasoning folded under it", () => {
+    const items: ChatItem[] = [
+      { kind: "user", id: "u1", text: "why", images: [] } as unknown as ChatItem,
+      { kind: "assistant", id: "a1", text: "", thinking: "Considering the config first", streaming: false },
+      tool({ id: "t2", output: "ok\n" }),
+      { kind: "assistant", id: "a2", text: "Because.", thinking: "", streaming: false },
+    ];
+    const chat = { chatId: "c", workspace: { id: "w", path: "/w", name: "w" }, status: "idle", items, capabilities: {}, checkpoints: [] } as unknown as ChatState;
+    const noop = () => undefined;
+    const cx: ConversationCx = { chat, harness: null, webUrl: "http://x", age: () => undefined, shown: 30, folds: new Map([["u1#0", true]]), picked: null, blob: () => null, on: { fold: noop, pick: noop, showEarlier: noop, retry: noop, edit: noop, fork: noop, undo: noop, copy: noop } };
+    const all = (n: Node): Node[] => [n, ...n.children.flatMap(all)];
+    const thought = conversation(cx).flatMap((n) => all(n as Node)).find((n) => n.kind === "tool" && n.props.name === "thinking");
+    expect(thought?.props).toMatchObject({ title: "Thought", target: "Considering the config first", frame: "inline", collapsed: true });
   });
 
   it("words a fold the web UI's way", () => {
