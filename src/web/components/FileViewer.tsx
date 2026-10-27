@@ -16,6 +16,7 @@ import type { FileChanges } from "../review.js";
 import { DiffBadge } from "./ToolBody.js";
 import { Markdown } from "./Markdown.js";
 import { previewKind } from "../preview.js";
+import { uploadToProject } from "../upload.js";
 
 /** Rows drawn per block; a block off screen is skipped by the browser (content-visibility). */
 const CHUNK = 200;
@@ -213,15 +214,8 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
     setUploading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/upload?name=${encodeURIComponent(file.name)}`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
-      if (!res.ok || !body.path) throw new Error(body.error ?? `Upload failed (${res.status})`);
-      setShown({ path: body.path });
+      const added = await uploadToProject(workspace.id, file);
+      setShown({ path: added });
       setMarked(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));

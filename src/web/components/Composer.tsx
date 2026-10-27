@@ -3,7 +3,9 @@
 // T3 Code: ↑/↓ recall this chat's prompts, Shift+Enter continues a Markdown
 // list (Tab indents it), the stash parks a draft for later (Alt+S), a prompt
 // link's text arrives with a note to read it, and a run stopped on a usage
-// limit offers to continue when the limit resets.
+// limit offers to continue when the limit resets. A dropped file that is not
+// an image becomes an `@path` reference when the project has it (matched by
+// name: file-drop.ts), else offers to be added to the project first.
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type ChainStep, type ConfigPatch, IMAGE_MIME_TYPES, type HarnessStatus, type ImageAttachment, type InteractionAnswer, MAX_IMAGES, MAX_PASTE_BYTES, type PasteAttachment, type QueueState, type SendMode, type SlashCommand, type UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
@@ -13,6 +15,8 @@ import { blanks, matchPrompts, nextBlank, promptGist } from "../prompt-blanks.js
 import { managePrompts, useSavedPrompts } from "../saved-prompts.js";
 import { IconArrowUp, IconChevronDown, IconImage, IconLink, IconPlan, IconPlus, IconSpark, IconScreen, IconStash, IconStop, IconTerminal, IconX, Spinner } from "../icons.js";
 import { dataUrl, imageFiles, type PendingImage, pendingImage, prepareImage } from "../images.js";
+import { addQuestion, dropHint, insertReference, matchProjectFile, MAX_CHOICES, otherFiles, uploadProblem } from "../file-drop.js";
+import { UploadError, uploadToProject } from "../upload.js";
 import { canCaptureScreen, captureScreen } from "../screen-capture.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
@@ -96,6 +100,8 @@ export function Composer({
   const [pendingPaste, setPendingPaste] = useState<string | null>(null);
   const [pasteBusy, setPasteBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // What the drag in flight says on the card: files that are not images are for referencing.
+  const [dragHint, setDragHint] = useState("");
   const [viewing, setViewing] = useState<number | null>(null);
   const thumbs = useRef(new Map<number, HTMLElement>());
   const area = useRef<ChipEditorHandle>(null);
@@ -180,6 +186,7 @@ export function Composer({
       setPastes([]);
       setImageError(null);
       setLinked(null);
+      setFileNote(null);
       recall.current = null;
       const ok = await onSend(
         value,
@@ -370,6 +377,72 @@ export function Composer({
   };
 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
+  // Dropped files that are not images (file-drop.ts): `@path` for one the project has, a choice between
+  // several of that name, an offer to add one it lacks. The text is read through a ref, since the
+  // answers arrive after requests and the draft may have moved on.
+  const [choices, setChoices] = useState<Array<{ name: string; paths: string[] }>>([]);
+  const [missing, setMissing] = useState<File[]>([]);
+  const [fileNote, setFileNote] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const draftNow = useRef(text);
+  draftNow.current = text;
+  /** Where the next reference goes: the caret when the files came, then after each one put in. */
+  const referenceAt = useRef(0);
+  const reference = (path: string) => {
+    const at = Math.min(referenceAt.current, draftNow.current.length);
+    const next = insertReference(draftNow.current, at, at, `@${path}`);
+    draftNow.current = next.text;
+    referenceAt.current = next.caret;
+    setTextAt(next.text, next.caret);
+    window.requestAnimationFrame(() => area.current?.focus());
+  };
+  const referenceFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setFileNote(null);
+    referenceAt.current = area.current?.selectionEnd ?? draftNow.current.length;
+    const notes: string[] = [];
+    const absent: File[] = [];
+    const ask: Array<{ name: string; paths: string[] }> = [];
+    for (const file of files) {
+      try {
+        const { files: listed } = await api<{ files: string[] }>(`/api/workspaces/${encodeURIComponent(chat.workspace.id)}/files?q=${encodeURIComponent(file.name)}`);
+        const match = matchProjectFile(file.name, listed);
+        if (match.kind === "one") reference(match.path);
+        else if (match.kind === "many") ask.push({ name: file.name, paths: match.paths });
+        else {
+          const problem = uploadProblem(file);
+          if (problem) notes.push(problem);
+          else absent.push(file);
+        }
+      } catch (error) {
+        notes.push(`${file.name}: ${errorText(error)}`);
+      }
+    }
+    if (ask.length > 0) setChoices((current) => [...current, ...ask]);
+    if (absent.length > 0) setMissing((current) => [...current, ...absent]);
+    if (notes.length > 0) setFileNote(notes.join(". "));
+  };
+  const addMissing = async () => {
+    const files = missing;
+    setAdding(true);
+    setFileNote(null);
+    const notes: string[] = [];
+    for (const file of files) {
+      try {
+        reference(await uploadToProject(chat.workspace.id, file));
+      } catch (error) {
+        // A file by that name is there already (the list leaves out what git ignores): refer to it all the same.
+        if (error instanceof UploadError && error.status === 409) {
+          reference(file.name.trim());
+          notes.push(`${file.name} was already in the project; referenced it`);
+        } else notes.push(`${file.name}: ${errorText(error)}`);
+      }
+    }
+    setMissing([]);
+    setAdding(false);
+    if (notes.length > 0) setFileNote(notes.join(". "));
+  };
 
   // The "/" menu (Hermes Desktop's): open while the first word is still being typed.
   // "$" is the skills' own menu, where the harness has any (elsewhere a "$" is just typed).
@@ -610,6 +683,7 @@ export function Composer({
             if (closed || !hasFiles(e)) return;
             e.preventDefault();
             setDragging(true);
+            setDragHint(dropHint(e.dataTransfer.items));
           }}
           onDragLeave={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
@@ -619,8 +693,14 @@ export function Composer({
             e.preventDefault();
             setDragging(false);
             void addImages(imageFiles(e.dataTransfer.files));
+            void referenceFiles(otherFiles(e.dataTransfer.files));
           }}
         >
+          {dragging ? (
+            <div className="composer-drop" aria-hidden="true">
+              {dragHint}
+            </div>
+          ) : null}
           {pendingPaste !== null ? (
             <div className="paste-offer" role="group" aria-label="Large paste">
               <span className="paste-offer-note">Pasting {(pendingPaste.length / 1024).toFixed(0)} KB ({pendingPaste.split("\n").length.toLocaleString("en-US")} lines)</span>
@@ -704,6 +784,43 @@ export function Composer({
               <button type="button" className="icon-btn" aria-label="Dismiss the link note" onClick={() => setLinked(null)}>
                 <IconX size={11} />
               </button>
+            </p>
+          ) : null}
+          {choices[0] ? (
+            <div className="paste-offer" role="group" aria-label="Which file">
+              <span className="paste-offer-note">{choices[0].name} is in {choices[0].paths.length} places in the project</span>
+              {choices[0].paths.slice(0, MAX_CHOICES).map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  className="btn btn-small"
+                  onClick={() => {
+                    reference(path);
+                    setChoices((current) => current.slice(1));
+                  }}
+                >
+                  {path}
+                </button>
+              ))}
+              <button type="button" className="btn btn-small btn-ghost" onClick={() => setChoices((current) => current.slice(1))}>
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {missing.length > 0 ? (
+            <div className="paste-offer" role="group" aria-label="Add to the project">
+              <span className="paste-offer-note">{addQuestion(missing.map((file) => file.name))}</span>
+              <button type="button" className="btn btn-small" disabled={adding} onClick={() => void addMissing()}>
+                {adding ? "Adding…" : "Add"}
+              </button>
+              <button type="button" className="btn btn-small btn-ghost" disabled={adding} onClick={() => setMissing([])}>
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {fileNote ? (
+            <p className="composer-note" role="status">
+              {fileNote}
             </p>
           ) : null}
           {stashNote ? (

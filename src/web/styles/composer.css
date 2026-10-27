@@ -127,6 +127,30 @@
   box-shadow: var(--shadow-soft), 0 0 0 2px var(--accent);
 }
 
+/* What a drop does, over the card while files are dragged on it; the pointer passes through, so the drag never leaves the card. */
+.composer-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+  animation: composer-drop-in 0.12s var(--ease-out);
+}
+
+@keyframes composer-drop-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Attached images: plain rounded frames, each labelled with its #N and size,
    so a prompt can say "#2". */
 .composer-pastes {

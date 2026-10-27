@@ -1,6 +1,6 @@
 // Features borrowed from T3 Code, one test each: in the composer, the
 // conversation, the sidebar, and the page title.
-import { writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { commandChat, newChat, openChat, send, sendAndWait, showSidebar, signInAndOpen, expectDraft } from "./helpers.js";
@@ -418,4 +418,119 @@ test("clicking a paste chip, or Enter on its label, turns it back into plain tex
   await page.keyboard.press("Enter");
   await expect(box(page).locator(".draft-chip")).toHaveCount(0);
   await expectDraft(box(page)).toBe(rows);
+});
+
+/** Dragover (and, unless `over` only, the drop) of files on the composer card, as a browser sends them. */
+async function dropFiles(page: Page, files: Array<{ name: string; type: string; text?: string; bytes?: number }>, only?: "over" | "leave") {
+  await page.evaluate(
+    ({ files, only }) => {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(new File([f.bytes ? new Uint8Array(f.bytes) : (f.text ?? "x\n")], f.name, { type: f.type }));
+      const card = document.querySelector(".composer-card") as HTMLElement;
+      const fire = (type: string) => card.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire("dragover");
+      if (only === "leave") fire("dragleave");
+      else if (only !== "over") fire("drop");
+    },
+    { files, only },
+  );
+}
+
+test("a dropped file that is not an image becomes an @path when the project has it, and is added when it does not", async ({ page }) => {
+  const project = path.join(process.env.AWUI_E2E_ROOT ?? "", "drop-files");
+  mkdirSync(path.join(project, "web"), { recursive: true });
+  mkdirSync(path.join(project, "server"), { recursive: true });
+  writeFileSync(path.join(project, "plan.md"), "# plan\n");
+  writeFileSync(path.join(project, "web", "find.ts"), "export {};\n");
+  writeFileSync(path.join(project, "server", "find.ts"), "export {};\n");
+  // A dot-file is on disk but not in the project's list (the @ list skips them), so adding it meets a 409.
+  writeFileSync(path.join(project, ".local.txt"), "mine\n");
+  await signInAndOpen(page, "drop-files");
+  await openChat(page);
+  const card = page.locator(".composer-card");
+
+  // The card says what a drop does: images attach, other files are referenced.
+  await dropFiles(page, [{ name: "shot.png", type: "image/png" }], "over");
+  await expect(card.getByText("Drop images to attach", { exact: true })).toBeVisible();
+  await dropFiles(page, [{ name: "shot.png", type: "image/png" }, { name: "plan.md", type: "text/markdown" }], "leave");
+  await expect(card.getByText("Drop images to attach, or files to reference")).toHaveCount(0);
+  await dropFiles(page, [{ name: "plan.md", type: "text/markdown" }], "over");
+  await expect(card.getByText("Drop images to attach, or files to reference")).toBeVisible();
+  await dropFiles(page, [{ name: "plan.md", type: "text/markdown" }], "leave");
+
+  // The one file of that name: a chip at the caret.
+  await dropFiles(page, [{ name: "plan.md", type: "text/markdown" }]);
+  await expectDraft(box(page)).toBe("@plan.md ");
+  await expect(box(page).locator(".draft-chip")).toHaveCount(1);
+
+  // Two of that name: pick one in the composer's note.
+  await dropFiles(page, [{ name: "find.ts", type: "video/mp2t" }]);
+  const which = card.getByRole("group", { name: "Which file" });
+  await expect(which).toContainText("find.ts is in 2 places");
+  await which.getByRole("button", { name: "web/find.ts" }).click();
+  await expect(which).toHaveCount(0);
+  await expectDraft(box(page)).toBe("@plan.md @web/find.ts ");
+
+  // None: offered first, and nothing is written until Add.
+  await dropFiles(page, [{ name: "scratch.json", type: "application/json", text: '{"a":1}\n' }]);
+  const add = card.getByRole("group", { name: "Add to the project" });
+  await expect(add).toContainText("scratch.json is not in the project — Add it to the project?");
+  expect(() => readFileSync(path.join(project, "scratch.json"))).toThrow();
+  const uploaded = page.waitForResponse((r) => r.url().includes("/upload?name=scratch.json") && r.request().method() === "POST");
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  expect((await uploaded).status()).toBe(201);
+  await expect(add).toHaveCount(0);
+  await expectDraft(box(page)).toBe("@plan.md @web/find.ts @scratch.json ");
+  expect(readFileSync(path.join(project, "scratch.json"), "utf8")).toBe('{"a":1}\n');
+
+  // Cancel leaves the project and the draft alone.
+  await dropFiles(page, [{ name: "other.json", type: "application/json" }]);
+  await expect(add).toBeVisible();
+  await add.getByRole("button", { name: "Cancel" }).click();
+  await expect(add).toHaveCount(0);
+  await expectDraft(box(page)).toBe("@plan.md @web/find.ts @scratch.json ");
+  expect(() => readFileSync(path.join(project, "other.json"))).toThrow();
+
+  // A name already on disk (the list leaves it out): referenced all the same, and the note says so.
+  await dropFiles(page, [{ name: ".local.txt", type: "text/plain" }]);
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(card.getByRole("status")).toContainText(".local.txt was already in the project; referenced it");
+  await expectDraft(box(page)).toBe("@plan.md @web/find.ts @scratch.json @.local.txt ");
+  expect(readFileSync(path.join(project, ".local.txt"), "utf8")).toBe("mine\n");
+
+  // Past the upload limit: said before anything is sent, and no Add is offered.
+  const sent: string[] = [];
+  page.on("request", (r) => r.url().includes("/upload") && sent.push(r.url()));
+  await dropFiles(page, [{ name: "huge.bin", type: "application/octet-stream", bytes: 8 * 1024 * 1024 + 1 }]);
+  await expect(card.getByRole("status")).toContainText("huge.bin is 8.0 MB; a file added to the project can be at most 8 MB");
+  await expect(add).toHaveCount(0);
+  expect(sent).toEqual([]);
+});
+
+test("several dropped files are each handled, and images in the same drop still attach", async ({ page }) => {
+  const project = path.join(process.env.AWUI_E2E_ROOT ?? "", "drop-files-many");
+  mkdirSync(project, { recursive: true });
+  writeFileSync(path.join(project, "known.txt"), "k\n");
+  await signInAndOpen(page, "drop-files-many");
+  await openChat(page);
+  const card = page.locator(".composer-card");
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  await page.evaluate((b64) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "shot.png", { type: "image/png" }));
+    dt.items.add(new File(["k\n"], "known.txt", { type: "text/plain" }));
+    dt.items.add(new File(["1\n"], "one.txt", { type: "text/plain" }));
+    dt.items.add(new File(["2\n"], "two.txt", { type: "text/plain" }));
+    const target = document.querySelector(".composer-card") as HTMLElement;
+    for (const t of ["dragover", "drop"]) target.dispatchEvent(new DragEvent(t, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, PNG);
+  await expect(page.getByRole("list", { name: "Attached images" }).getByRole("img")).toHaveCount(1);
+  await expectDraft(box(page)).toBe("@known.txt ");
+  const add = card.getByRole("group", { name: "Add to the project" });
+  await expect(add).toContainText("2 files are not in the project — Add them to the project?");
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(add).toHaveCount(0);
+  await expectDraft(box(page)).toBe("@known.txt @one.txt @two.txt ");
+  expect(readFileSync(path.join(project, "one.txt"), "utf8")).toBe("1\n");
+  expect(readFileSync(path.join(project, "two.txt"), "utf8")).toBe("2\n");
 });
