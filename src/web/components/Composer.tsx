@@ -649,6 +649,7 @@ export function Composer({
         harnessName={name}
         onChain={setChain}
         base={git ? <GitRow git={git} onOpen={() => setGitOpen(true)} /> : null}
+        working={busy}
       />
       {gitOpen && git ? <GitPanel chatId={chat.chatId} git={git} at={gitAt} onRefresh={refreshGit} onClose={() => setGitOpen(false)} /> : null}
       {stopped && !busy && pending.length === 0 && !closed ? (

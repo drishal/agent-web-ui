@@ -692,6 +692,9 @@ test("todos from the harness show in the status stack, which can be hidden", asy
   await expect(stack).toContainText("Todos");
   await expect(stack).toContainText("1/3");
   await expect(stack.locator(".stack-row")).toHaveCount(3);
+  // The run has settled: the step left in progress shows a still mark, not a spinner.
+  await expect(stack.getByRole("img", { name: "Started, not running now" })).toHaveCount(1);
+  await expect(stack.locator(".todo-in_progress .spinner")).toHaveCount(0);
   await stack.getByRole("button", { name: "Hide status" }).click();
   await expect(stack.locator(".stack-row")).toHaveCount(0);
   await page.reload();

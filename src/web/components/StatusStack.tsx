@@ -15,9 +15,22 @@ import { addToDraft } from "../draft-bus.js";
 import { IconCheck, IconChevronDown, IconCircle, IconClock, IconEdit, IconQueue, IconSteer, IconSwap, IconWarning, IconX, Spinner } from "../icons.js";
 import { load, save } from "../storage.js";
 
-function TodoIcon({ status }: { status: string }) {
+/**
+ * A todo's mark. One the agent marked as in progress spins only while the chat is working: a run that
+ * was stopped, or a session reopened later, leaves its last list behind, and a spinner there reads as
+ * work going on when nothing is.
+ */
+function TodoIcon({ status, working }: { status: string; working: boolean }) {
   if (/done|complete/.test(status)) return <IconCheck size={13} />;
-  if (/progress|active|doing/.test(status)) return <Spinner size={12} />;
+  if (/progress|active|doing/.test(status)) {
+    return working ? (
+      <Spinner size={12} />
+    ) : (
+      <span className="todo-stalled" role="img" aria-label="Started, not running now" title="Started, not running now">
+        <IconClock size={13} />
+      </span>
+    );
+  }
   return <IconCircle size={13} />;
 }
 
@@ -56,6 +69,7 @@ export function StatusStack({
   harnessName = (id) => id,
   onChain,
   base,
+  working = false,
 }: {
   chatId: string;
   /** The harness's own status line (`<harness>:status`), when it has one. */
@@ -72,6 +86,8 @@ export function StatusStack({
   onChain?: (steps: ChainStep[], resume?: boolean) => Promise<boolean>;
   /** Always shown under the rest, even when it is hidden (the git row). */
   base?: React.ReactNode;
+  /** The chat is running now: an in-progress todo spins only then. */
+  working?: boolean;
 }) {
   const key = `stack.${chatId}`;
   const [hidden, setHidden] = useState(() => load<boolean>(key, false));
@@ -228,7 +244,7 @@ export function StatusStack({
                 {todos.map((todo, i) => (
                   <li key={`${i}:${todo.text}`} className={`stack-row todo-${todo.status.replace(/[^a-z_]/gi, "")}`}>
                     <span className="stack-icon">
-                      <TodoIcon status={todo.status} />
+                      <TodoIcon status={todo.status} working={working} />
                     </span>
                     <span className="stack-text">{todo.text}</span>
                     {todo.phase && todo.phase !== todos[i - 1]?.phase ? <span className="stack-meta">{todo.phase}</span> : null}

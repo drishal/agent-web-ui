@@ -113,6 +113,12 @@
   color: var(--text);
 }
 
+/* Started, but the chat is not running: a still mark in the quiet colour, not a spinner. */
+.todo-stalled {
+  display: inline-flex;
+  color: var(--muted-text);
+}
+
 .stack-group-head {
   display: flex;
   align-items: center;
