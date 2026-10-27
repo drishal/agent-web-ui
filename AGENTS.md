@@ -48,6 +48,7 @@ Match the task to a guide before opening code:
 | `npm test` | Vitest: `tests/unit/**` (and `tests/smoke/**`, which skips itself unless `SMOKE=1`). |
 | `npm run test:e2e` | Build, then Playwright (`tests/e2e`) against the built server with fake harnesses on port 4791. ~2.5 min. |
 | `npm run test:atui` | Build, then `bun test tests/atui` (atui in OpenTUI's test renderer, and the Tern client against a stand-in Tern, both against a real server). |
+| `awui doctor [--json]` | Checks config.yml, Node/Bun, each harness, workspace roots, the state folder's mode, the port, remote sign-in, herdr; prints ✓/!/✗ lines, exit 1 on a ✗ (`src/server/doctor.ts`). |
 | `awui tern` | The Tern client in a Tern pane (`bun --conditions=browser src/tern/main.ts`; Solid's default Bun build is its server one, where effects never run). |
 | `npm run smoke` | Opt-in tests against the real installed harnesses. No model is called unless `SMOKE_MODEL` (and `SMOKE_CLAUDE_MODEL`) name one. |
 | `node scripts/ui-shot.mjs <url> <selector> <out.png>` | Screenshot one element of a running UI and print every control's size, radius, padding, and font (`--phone`, `--narrow`, `--light`). See docs/ui.md. |

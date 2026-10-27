@@ -17,6 +17,7 @@ import "./assets.gen.js";
 import { installTui } from "./install-tui.js";
 import { installService } from "./install-service.js";
 import { runTern } from "./tern-client.js";
+import { runDoctor } from "./doctor.js";
 import { SessionMarks } from "./session-marks.js";
 import { Routines } from "./routines.js";
 import { startDue } from "./routines-timer.js";
@@ -295,6 +296,7 @@ const HELP = `awui ${embeddedVersion ?? ""} — local web UI for coding agents
 Usage:
   awui [flags]           Run the web UI + API (default)
   awui tern [options]    awui drawn natively in a Tern pane (also awui --tern; awui tern --help)
+  awui doctor [--json]   Check the setup (config, harnesses, state folder, port) and print a report; exit 1 on a problem
   awui install tui       Fetch and install the atui terminal client (~/.local/bin/atui) and the Tern client
   awui install service   Install the binary to ~/.local/bin and enable the systemd user service
                          [--link symlinks it instead of copying, for a dev checkout]
@@ -336,7 +338,15 @@ function parseFlags(argv: string[]): { port?: string; host?: string; stateDir?: 
 
 /** `awui install tui|service`, or flags that run the web server; anything else is a usage error. */
 const args = process.argv.slice(2);
-if (args[0] === "tern" || args.includes("--tern")) {
+if (args[0] === "doctor") {
+  runDoctor(args.slice(1)).then(
+    (code) => process.exit(code),
+    (error: unknown) => {
+      console.error(`awui: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    },
+  );
+} else if (args[0] === "tern" || args.includes("--tern")) {
   // The Tern client takes its own options (--url, --harness, --resume, --chat), not the server's.
   const rest = args[0] === "tern" ? args.slice(1) : args.filter((a) => a !== "--tern");
   const config = loadConfig({});

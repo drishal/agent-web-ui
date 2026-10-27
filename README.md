@@ -37,6 +37,7 @@ curl -fsSL https://github.com/drishal/agent-web-ui/releases/latest/download/awui
 chmod +x ~/.local/bin/awui
 awui                 # web UI + API on http://127.0.0.1:4783
 awui install tui     # also drop the atui terminal client on your PATH (~/.local/bin/atui)
+awui doctor          # check the setup (config, harnesses, state folder, port); --json for machines
 awui tern            # in a Tern pane: awui drawn natively by Tern (after awui install tui)
 ```
 
