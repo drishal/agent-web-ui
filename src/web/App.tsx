@@ -218,6 +218,12 @@ export function App() {
     else if (chatWidth === "full") root.setProperty("--chat-col", "100%");
     else root.removeProperty("--chat-col");
   }, [chatWidth]);
+  // Compact density is an attribute on <html>: tokens.css swaps the spacing tokens under it.
+  const density = boot?.ui.density ?? null;
+  useEffect(() => {
+    if (density === "compact") document.documentElement.setAttribute("data-density", "compact");
+    else document.documentElement.removeAttribute("data-density");
+  }, [density]);
 
   const available = useMemo(() => boot?.harnesses.filter((h) => h.available) ?? [], [boot]);
   useEffect(() => {
@@ -1130,7 +1136,7 @@ export function App() {
   const chooseTheme = async (theme: ThemeChoice) => {
     try {
       const next = await api<ServerSettings>("/api/settings", { method: "PUT", body: { theme } });
-      setBoot((b) => (b ? { ...b, ui: { ...b.ui, theme: next.values.theme, textScale: next.values.textScale, chatWidth: next.values.chatWidth, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
+      setBoot((b) => (b ? { ...b, ui: { ...b.ui, theme: next.values.theme, textScale: next.values.textScale, chatWidth: next.values.chatWidth, density: next.values.density, autocollapseSidebar: next.values.autocollapseSidebar } } : b));
     } catch (e) {
       fail(e);
     }

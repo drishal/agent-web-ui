@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
-import { chatWidthSchema, themeChoiceSchema, type ChatWidth, type ThemeChoice } from "../shared/protocol.js";
+import { chatWidthSchema, densitySchema, themeChoiceSchema, type ChatWidth, type Density, type ThemeChoice } from "../shared/protocol.js";
 
 export const CONFIG_FILE = "config.yml";
 export const THEME_FILE = "theme.yml";
@@ -23,6 +23,8 @@ export interface UiSettings {
   textScale: number | null;
   /** Shared conversation width; null: comfortable. */
   chatWidth: ChatWidth | null;
+  /** Shared row and gap density; null: comfortable. */
+  density: Density | null;
   /** Work with herdr (config.yml's `herdr`, or AWUI_HERDR): atui reads it to report its chats to a herdr pane. */
   herdr: boolean;
 }
@@ -58,6 +60,8 @@ const schema = z
     text_scale: z.number().min(0.5).max(2).optional(),
     /** Shared conversation width: comfortable (960px), wide (1400px), or full. */
     chat_width: chatWidthSchema.optional(),
+    /** Shared density of the web UI's rows and gaps: comfortable (today's look) or compact. */
+    density: densitySchema.optional(),
     /** Work with herdr (herdr.ts, atui/herdr.ts); on unless false. */
     herdr: z.boolean().optional(),
     /** Herdr's API socket, when not the default session's (file-only; HERDR_SOCKET_PATH wins). */
@@ -188,6 +192,7 @@ export function uiSettings(c: UserConfig | undefined, env: NodeJS.ProcessEnv = p
     showStatusBar: c?.show_status_bar ?? true,
     textScale: c?.text_scale ?? null,
     chatWidth: c?.chat_width ?? null,
+    density: c?.density ?? null,
     herdr: herdrEnabled(c, env),
   };
 }

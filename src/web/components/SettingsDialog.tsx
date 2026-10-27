@@ -5,7 +5,7 @@
 // the device making it), and what takes a restart says so, with a Restart
 // button when systemd supervises.
 import { useEffect, useState, type CSSProperties } from "react";
-import type { Bootstrap, ChatWidth, RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
+import type { Bootstrap, ChatWidth, Density, RestartSetting, ServerSettings, ServerSettingsValues, SettingsPatch, ThemeChoice } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
 import { TEXT_SCALES } from "./Sidebar.js";
@@ -83,6 +83,7 @@ interface Draft {
   theme: ThemeChoice | "";
   textScale: number;
   chatWidth: ChatWidth;
+  density: Density;
   autocollapseSidebar: boolean;
   showStatusBar: boolean;
   herdr: boolean;
@@ -101,6 +102,7 @@ function draftOf(v: ServerSettingsValues): Draft {
     theme: v.theme ?? "",
     textScale: v.textScale ?? 1,
     chatWidth: v.chatWidth ?? "comfortable",
+    density: v.density ?? "comfortable",
     autocollapseSidebar: v.autocollapseSidebar,
     showStatusBar: v.showStatusBar,
     herdr: v.herdr,
@@ -125,6 +127,8 @@ function patchOf(d: Draft, v: ServerSettingsValues): SettingsPatch {
   // Comfortable is the default: saved as no setting at all.
   const width = d.chatWidth === "comfortable" ? null : d.chatWidth;
   if (width !== v.chatWidth) p.chatWidth = width;
+  const density = d.density === "comfortable" ? null : d.density;
+  if (density !== v.density) p.density = density;
   if (d.autocollapseSidebar !== v.autocollapseSidebar) p.autocollapseSidebar = d.autocollapseSidebar;
   if (d.showStatusBar !== v.showStatusBar) p.showStatusBar = d.showStatusBar;
   if (d.herdr !== v.herdr) p.herdr = d.herdr;
@@ -200,6 +204,7 @@ export function SettingsDialog({
         patch.theme !== undefined ||
         patch.textScale !== undefined ||
         patch.chatWidth !== undefined ||
+        patch.density !== undefined ||
         patch.autocollapseSidebar !== undefined ||
         patch.showStatusBar !== undefined ||
         patch.herdr !== undefined
@@ -208,6 +213,7 @@ export function SettingsDialog({
           theme: next.values.theme,
           textScale: next.values.textScale,
           chatWidth: next.values.chatWidth,
+          density: next.values.density,
           autocollapseSidebar: next.values.autocollapseSidebar,
           showStatusBar: next.values.showStatusBar,
           ...(patch.herdr !== undefined ? { herdr: next.values.herdr } : {}),
@@ -427,6 +433,13 @@ export function SettingsDialog({
                 <option value="comfortable">Comfortable (960px)</option>
                 <option value="wide">Wide (1400px)</option>
                 <option value="full">Full: the whole pane</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              <span className="settings-label">Density</span>
+              <select className="select" aria-label="Density" disabled={!editable} value={draft.density} onChange={(e) => update({ density: e.target.value as Density })}>
+                <option value="comfortable">Comfortable</option>
+                <option value="compact">Compact: tighter rows and gaps</option>
               </select>
             </label>
             <label className="settings-row settings-check">

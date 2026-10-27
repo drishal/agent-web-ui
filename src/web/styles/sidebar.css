@@ -313,7 +313,7 @@
 }
 
 .date-divider {
-  padding: 8px 10px 3px;
+  padding: var(--section-pad-top) 10px 3px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -323,7 +323,7 @@
 
 /* Project groups (Hermes Desktop): a folder row with its sessions on a rail below. */
 .project-group + .project-group {
-  margin-top: 6px;
+  margin-top: var(--section-gap);
 }
 
 .project-head {
@@ -343,7 +343,7 @@
   gap: 7px;
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: var(--head-h);
   padding: 0 4px 0 6px;
   border: 0;
   background: none;
@@ -485,7 +485,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 34px;
+  min-height: var(--row-h);
   padding: 0 10px;
   border: 0;
   border-radius: var(--r-sm);

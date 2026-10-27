@@ -611,6 +611,9 @@ export type ThemeChoice = Exclude<z.infer<typeof themeChoiceSchema>, "custom">;
 /** How wide the conversation and composer run: 960px, 1400px, or the whole pane. */
 export const chatWidthSchema = z.enum(["comfortable", "wide", "full"]);
 export type ChatWidth = z.infer<typeof chatWidthSchema>;
+/** How tight the web UI's rows and gaps sit: today's look, or tighter sidebar rows, turns, tool rows, composer, and tab strip. */
+export const densitySchema = z.enum(["comfortable", "compact"]);
+export type Density = z.infer<typeof densitySchema>;
 
 export interface Bootstrap {
   version: string;
@@ -623,7 +626,7 @@ export interface Bootstrap {
   home: string;
   theme: { active: string; problem?: string };
   /** From config.yml: the shared look (theme null lets theme.yml decide, scale null is 100%). Re-read on every page load. */
-  ui: { theme: ThemeChoice | null; textScale: number | null; chatWidth: ChatWidth | null; autocollapseSidebar: boolean; showStatusBar: boolean; herdr: boolean };
+  ui: { theme: ThemeChoice | null; textScale: number | null; chatWidth: ChatWidth | null; density: Density | null; autocollapseSidebar: boolean; showStatusBar: boolean; herdr: boolean };
   pairing: { urls: string[] };
   limits: { maxMessageChars: number };
 }
@@ -1053,6 +1056,8 @@ export interface ServerSettingsValues {
   textScale: number | null;
   /** null is comfortable. */
   chatWidth: ChatWidth | null;
+  /** null is comfortable. */
+  density: Density | null;
   autocollapseSidebar: boolean;
   /** Show the bar under the conversation (connection, harness, model, folder, version). */
   showStatusBar: boolean;
@@ -1091,6 +1096,7 @@ export const settingsPatchSchema = z
     theme: themeChoiceSchema.nullable().optional(),
     textScale: z.number().min(0.5).max(2).nullable().optional(),
     chatWidth: chatWidthSchema.nullable().optional(),
+    density: densitySchema.nullable().optional(),
     autocollapseSidebar: z.boolean().optional(),
     showStatusBar: z.boolean().optional(),
     herdr: z.boolean().optional(),

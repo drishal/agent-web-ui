@@ -122,6 +122,34 @@
   --chat-font: calc(14.5px * var(--chat-scale));
   --chat-small: calc(13px * var(--chat-scale));
   --chat-code: calc(12.5px * var(--chat-scale));
+  /* Spacing the area stylesheets share (Settings → Density); compact overrides them below. */
+  --row-h: 34px;
+  --head-h: 30px;
+  --section-gap: 6px;
+  --section-pad-top: 8px;
+  --gap-turn: 26px;
+  --gap-process: 12px;
+  --drow-h: 26px;
+  --composer-pad-top: 10px;
+  --composer-pad-bottom: 8px;
+  --tab-h: 36px;
+}
+
+/* Compact density: tighter sidebar rows, turn gaps, tool rows, composer, and tab strip.
+   Only with a fine pointer: a touch screen keeps the comfortable sizes (touch targets, phones.css). */
+@media (pointer: fine) {
+  :root[data-density="compact"] {
+    --row-h: 28px;
+    --head-h: 26px;
+    --section-gap: 2px;
+    --section-pad-top: 4px;
+    --gap-turn: 16px;
+    --gap-process: 8px;
+    --drow-h: 22px;
+    --composer-pad-top: 6px;
+    --composer-pad-bottom: 5px;
+    --tab-h: 28px;
+  }
 }
 
 *,

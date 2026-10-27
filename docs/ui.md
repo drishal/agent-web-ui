@@ -80,6 +80,12 @@ a literal colour.
   `--r-panel` 24 (px). Pills and round buttons use `999px` / `50%`.
 - **Widths:** `--col` 960 px (review drawers), `--chat-col` (the conversation
   and composer; config.yml's `chat_width`), `--sidebar-w`.
+- **Density:** `--row-h`, `--head-h`, `--section-gap`, `--gap-turn`, `--gap-process`,
+  `--drow-h`, `--composer-pad-*`, `--tab-h` (sidebar rows, turn and tool-row
+  spacing, composer, tab strip). config.yml's `density: compact` sets
+  `data-density="compact"` on `<html>`, and `tokens.css` overrides them there,
+  for a fine pointer only (touch keeps the comfortable sizes). Use a token, not
+  a literal, for a new row height or gap.
 - **Text:** `--chat-font` = 14.5 px × `--chat-scale` (config.yml's text size).
 - **Control sizes:** the composer's row is 32 px tall, every control in it
   round; phones raise touch targets to 36–44 px in `phones.css`. Keep a row of

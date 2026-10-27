@@ -40,7 +40,7 @@
 }
 
 .turn {
-  padding-bottom: 26px;
+  padding-bottom: var(--gap-turn);
 }
 
 .turn-preamble {
@@ -586,7 +586,7 @@
 
 /* "Worked for …" process fold (DeepSeek Harness), counts (OpenCode). */
 .process {
-  margin: 2px 0 12px;
+  margin: 2px 0 var(--gap-process);
 }
 
 .process-head {
@@ -675,7 +675,7 @@
   align-items: center;
   width: 100%;
   min-width: 0;
-  height: calc(26px * var(--chat-scale));
+  height: calc(var(--drow-h) * var(--chat-scale));
   padding: 0;
   border: 0;
   background: none;

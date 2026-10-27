@@ -79,4 +79,47 @@ test.describe("shared look in config.yml", () => {
     const scale = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--chat-scale").trim());
     expect(scale).toBe("1.22");
   });
+
+  test("density compact sets the attribute, tightens a session row, and comes back on reload", async ({ page }) => {
+    const { base, configFile } = ctx as NonNullable<typeof ctx>;
+    // One session for the sidebar to draw, made through the API (this server has its own project folder).
+    const project = path.join(path.dirname(path.dirname(configFile)), "workspaces", "proj");
+    const opened = await page.request.post(`${base}/api/workspaces/open`, { data: { path: project } });
+    const workspaceId = ((await opened.json()) as { id: string }).id;
+    const created = await page.request.post(`${base}/api/chats`, { data: { harnessId: "fake", workspaceId } });
+    const chatId = (JSON.parse(await created.text()) as { chatId: string }).chatId;
+    await page.request.post(`${base}/api/chats/${chatId}/messages`, { data: { text: "density probe", mode: "normal" } });
+
+    await page.goto(`${base}/`);
+    const row = page.locator(".session", { hasText: "density probe" }).first();
+    await expect(row).toBeVisible();
+    await expect(page.locator("html")).not.toHaveAttribute("data-density", "compact");
+    const comfortable = (await row.boundingBox())?.height ?? 0;
+    expect(comfortable).toBeGreaterThanOrEqual(34);
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await expect(settings).toBeVisible();
+    await settings.getByLabel("Density", { exact: true }).selectOption("compact");
+    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(settings.getByText("Saved.", { exact: true })).toBeVisible();
+    expect(readFileSync(configFile, "utf8")).toContain("density: compact");
+    // Applies at once, without a reload.
+    await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect.poll(async () => (await row.boundingBox())?.height ?? 0).toBeLessThan(comfortable);
+
+    // And on the next page load.
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+    await expect.poll(async () => (await page.locator(".session", { hasText: "density probe" }).first().boundingBox())?.height ?? 0).toBeLessThan(comfortable);
+
+    // Back to comfortable leaves no setting behind.
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await settings.getByLabel("Density", { exact: true }).selectOption("comfortable");
+    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(settings.getByText("Saved.", { exact: true })).toBeVisible();
+    expect(readFileSync(configFile, "utf8")).not.toContain("density");
+    await expect(page.locator("html")).not.toHaveAttribute("data-density", "compact");
+  });
 });
