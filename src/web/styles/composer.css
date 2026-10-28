@@ -356,8 +356,20 @@
   cursor: text;
 }
 
+.composer-input.is-empty {
+  position: relative;
+}
+
 .composer-input.is-empty::before {
   content: attr(data-placeholder);
+  position: absolute;
+  /* Keep the caret at the text's start: an inline ::before on an empty contenteditable
+     makes Chromium measure the caret after the placeholder instead. */
+  inset: 4px auto auto 2px;
+  max-width: calc(100% - 2px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted-text);
   pointer-events: none;
 }
