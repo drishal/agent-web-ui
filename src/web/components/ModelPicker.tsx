@@ -11,6 +11,8 @@ import { load, save } from "../storage.js";
 import { Dot } from "./Dot.js";
 
 const MAX_RECENT = 5;
+/** How long the closing motion runs before the panel is removed (the CSS leave animation is as long). */
+const LEAVE_MS = 120;
 
 /** Visible vertical band for a popover under `el`: the viewport cut by any clipping ancestor. */
 export function clipBand(el: HTMLElement): { top: number; bottom: number } {
@@ -47,6 +49,9 @@ export function ModelPicker({
   onRefresh: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  // Closing plays the opening backwards for a moment before the panel goes (see .model-pop.is-leaving).
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<number | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [place, setPlace] = useState<{ below: boolean; maxHeight: number }>({ below: false, maxHeight: 520 });
@@ -74,9 +79,23 @@ export function ModelPicker({
   const flat = useMemo(() => sections.flatMap((s) => s.models), [sections]);
 
   const close = (refocus = true) => {
-    setOpen(false);
+    if (!open || leaving) return;
     setQuery("");
     if (refocus) trigger.current?.focus();
+    setLeaving(true);
+    leaveTimer.current = window.setTimeout(() => {
+      setOpen(false);
+      setLeaving(false);
+    }, LEAVE_MS);
+  };
+  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
+
+  /** Open the picker, with `text` already typed into its search. */
+  const openWith = (text: string) => {
+    window.clearTimeout(leaveTimer.current);
+    setLeaving(false);
+    setQuery(text);
+    setOpen(true);
   };
 
   const choose = (model: ModelInfo) => {
@@ -97,8 +116,10 @@ export function ModelPicker({
     // Fit the side it opens on; never taller than the room (that would push it off-screen).
     setPlace({ below: useBelow, maxHeight: Math.max(120, Math.min(520, useBelow ? below : above)) });
     const start = flat.findIndex((m) => m.key === current);
-    setActive(start >= 0 ? start : 0);
+    // Typed ahead, the first match is the one Enter takes; opened plain, the current model is.
+    setActive(start >= 0 && !query ? start : 0);
     input.current?.focus();
+    input.current?.setSelectionRange(query.length, query.length);
     // Runs only when the picker opens.
   }, [open]);
 
@@ -164,7 +185,13 @@ export function ModelPicker({
         title={currentModel ? `${currentModel.name} · ${currentModel.provider}` : label}
         disabled={disabled || models.length === 0}
         data-testid="model-picker"
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => (open && !leaving ? close() : openWith(""))}
+        onKeyDown={(e) => {
+          // Type-ahead: a letter typed on the focused chip opens the list with it already searched.
+          if (open || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || e.key === " ") return;
+          e.preventDefault();
+          openWith(e.key);
+        }}
       >
         <span className="pill-label">{shortName(label)}</span>
         <IconChevronDown size={12} />
@@ -173,7 +200,7 @@ export function ModelPicker({
         <>
           <div className="model-backdrop" aria-hidden="true" onClick={() => close(false)} />
           <div
-            className={`model-pop${place.below ? " is-below" : ""}`}
+            className={`model-pop${place.below ? " is-below" : ""}${leaving ? " is-leaving" : ""}`}
             role="dialog"
             aria-label="Choose a model"
             style={{ ["--pop-max-h" as string]: `${place.maxHeight}px` }}

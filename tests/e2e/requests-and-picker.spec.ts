@@ -1,7 +1,7 @@
 // An answered request folds into one line, a queued message glides into the
 // conversation, and the model picker grows out of its chip (type to search).
 import { expect, test } from "@playwright/test";
-import { newChat, send, signInAndOpen } from "./helpers.js";
+import { newChat, openChat, send, signInAndOpen } from "./helpers.js";
 
 test("an answered request folds into one line naming the answer", async ({ page }) => {
   await signInAndOpen(page);
@@ -41,4 +41,20 @@ test("a queued follow-up leaves the queue and becomes the next prompt", async ({
   await expect(page.getByTestId("user-prompt").last()).toHaveClass(/is-landed/);
   await expect(page.getByTestId("user-prompt")).toHaveText(["slow work", "then summarize"]);
   await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+});
+
+test("typing on the focused model chip opens the picker with that text searched", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  const picker = page.getByTestId("model-picker");
+  await picker.focus();
+  await page.keyboard.type("gpt55");
+  const dialog = page.getByRole("dialog", { name: "Choose a model" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Search models" })).toHaveValue("gpt55");
+  await expect(dialog.getByRole("option")).toHaveText([/GPT-5\.5/, /GPT-5\.5 Mini/]);
+  // The first match is the one Enter takes.
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(picker).toHaveAccessibleName(/^Model: GPT-5\.5$/);
 });
