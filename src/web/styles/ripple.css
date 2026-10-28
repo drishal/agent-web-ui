@@ -1,12 +1,14 @@
 /* ---- Material-style ink ripple (ripple.ts) --------------------------------- */
 
-.ripple-pos {
-  position: relative;
-}
-
-.ripple-host {
+/* The ink's own clip: the host's box and corners, behind its label (ripple.ts sets the host's position and
+   isolation inline, which a re-render can't take away the way it takes a class). */
+.ripple-clip {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   overflow: hidden;
-  isolation: isolate;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .ripple {
@@ -25,15 +27,15 @@
   opacity: 0;
 }
 
-.btn-primary > .ripple,
-.btn-danger > .ripple,
-.round-btn > .ripple {
+.btn-primary > .ripple-clip > .ripple,
+.btn-danger > .ripple-clip > .ripple,
+.round-btn > .ripple-clip > .ripple {
   opacity: 0.26;
 }
 
-.btn-primary > .ripple.is-out,
-.btn-danger > .ripple.is-out,
-.round-btn > .ripple.is-out {
+.btn-primary > .ripple-clip > .ripple.is-out,
+.btn-danger > .ripple-clip > .ripple.is-out,
+.round-btn > .ripple-clip > .ripple.is-out {
   opacity: 0;
 }
 

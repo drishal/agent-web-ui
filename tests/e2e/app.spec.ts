@@ -1242,6 +1242,23 @@ test("buttons show a Material ripple from the press point; reduced motion turns 
   expect(await btn.locator(".ripple").count()).toBe(0);
 });
 
+test("a button that re-renders on its own click keeps its ripple inside it", async ({ page }) => {
+  await signInAndOpen(page);
+  await showSidebar(page);
+  await page.getByRole("button", { name: /^Usage/ }).first().click();
+  // Choosing a range re-renders its button (is-on) while the ink is still fading: the clip must survive that.
+  const btn = page.getByRole("dialog", { name: "Usage" }).getByRole("button", { name: "90 days" });
+  await expect(btn).toBeVisible();
+  await btn.click();
+  const clip = btn.locator(".ripple-clip");
+  await expect(clip).toHaveCount(1);
+  expect(await clip.evaluate((el) => getComputedStyle(el).overflow)).toBe("hidden");
+  const [inner, outer] = [await clip.boundingBox(), await btn.boundingBox()];
+  expect(Math.abs(inner!.width - outer!.width)).toBeLessThan(1);
+  expect(Math.abs(inner!.height - outer!.height)).toBeLessThan(1);
+  await expect(clip).toHaveCount(0, { timeout: 3000 });
+});
+
 test("the sidebar collapses and expands from its header, and stays that way", async ({ page }) => {
   await signInAndOpen(page);
   const sidebar = page.locator(".sidebar");

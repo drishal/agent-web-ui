@@ -2,6 +2,12 @@
 // The ink grows from the press point while held and fades on release;
 // keyboard activation (Enter/Space) ripples from the centre. Skipped for
 // disabled controls, elements marked data-no-ripple, and reduced motion.
+//
+// Each ink sits in its own clip (the host's corners, inherited), and what the host
+// needs is set as inline style, never as a class: React writes a host's whole
+// className when its state changes (a chosen range's is-on, on the very click that
+// rippled), which wiped a clipping class and let the fading ink spill out. React
+// leaves inline style properties it does not manage alone.
 const HOST_SELECTOR = "button, .pill-select, [data-ripple]";
 const SKIP_SELECTOR = "[data-no-ripple], .rail-mark";
 const MIN_VISIBLE_MS = 220;
@@ -19,8 +25,9 @@ function hostFor(target: EventTarget | null): HTMLElement | null {
 }
 
 function spawn(host: HTMLElement, x: number, y: number): HTMLSpanElement {
-  if (getComputedStyle(host).position === "static") host.classList.add("ripple-pos");
-  host.classList.add("ripple-host");
+  // The clip is placed against the host, and its z-index -1 stays inside the host's own stacking context.
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  host.style.isolation = "isolate";
   const rect = host.getBoundingClientRect();
   // Radius reaching the farthest corner from the press point.
   const dx = Math.max(x - rect.left, rect.right - x);
@@ -33,7 +40,11 @@ function spawn(host: HTMLElement, x: number, y: number): HTMLSpanElement {
   ink.style.left = `${x - rect.left - radius}px`;
   ink.style.top = `${y - rect.top - radius}px`;
   ink.dataset.born = String(performance.now());
-  host.appendChild(ink);
+  const clip = document.createElement("span");
+  clip.className = "ripple-clip";
+  clip.setAttribute("aria-hidden", "true");
+  clip.appendChild(ink);
+  host.appendChild(clip);
   return ink;
 }
 
@@ -42,7 +53,7 @@ function release(ink: HTMLSpanElement): void {
   const age = performance.now() - Number(ink.dataset.born ?? 0);
   window.setTimeout(() => {
     ink.classList.add("is-out");
-    const remove = () => ink.remove();
+    const remove = () => (ink.parentElement?.classList.contains("ripple-clip") ? ink.parentElement : ink).remove();
     ink.addEventListener("transitionend", remove, { once: true });
     window.setTimeout(remove, 600);
   }, Math.max(0, MIN_VISIBLE_MS - age));
