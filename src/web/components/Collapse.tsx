@@ -7,7 +7,7 @@
 import { useLayoutEffect, useState, type ReactNode } from "react";
 
 /** How long the grow or shrink takes (motion.css's .collapse), and so when a closed body leaves. */
-const COLLAPSE_MS = 240;
+const COLLAPSE_MS = 290;
 
 export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
   const [mounted, setMounted] = useState(open);

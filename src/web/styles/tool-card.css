@@ -25,6 +25,9 @@
   padding: 6px 12px 6px 10px;
   border-bottom: 0;
   border-radius: var(--r-md);
+  /* The head becomes the card's header as the body grows: ease its corners square, so
+     the row morphs into the head of one container instead of snapping square at once. */
+  transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease, border-radius 0.28s var(--ease-spring);
   color: var(--text-2);
 }
 

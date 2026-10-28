@@ -142,11 +142,15 @@
    the rows below glide instead of jumping; the content fades with it. Chevrons turn. */
 .collapse {
   display: grid;
+  /* A touch longer and sprung at the end, so an opening card reads as the row's
+     container growing (Material's container transform), not content mounted under a
+     fixed row. Grow and fade share the duration/easing so it is one surface, not a
+     peel; the fade lags, so the container's edge leads and the content follows. */
   grid-template-rows: 0fr;
   opacity: 0;
   transition:
-    grid-template-rows 0.24s var(--ease-out),
-    opacity 0.18s ease;
+    grid-template-rows 0.28s var(--ease-spring),
+    opacity 0.2s var(--ease-out) 0.05s;
 }
 
 .collapse.is-open {

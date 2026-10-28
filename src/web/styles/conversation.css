@@ -662,6 +662,13 @@
   color: var(--text-2);
 }
 
+/* An open disclosure keeps a clear collapse affordance: the whole head reads as the
+   row's handle (rounded surface), and its chevron stays put instead of hovering back. */
+.drow.is-open > .drow-head {
+  background: var(--hover);
+  border-radius: var(--r-sm);
+}
+
 .drow-lead {
   position: relative;
   display: inline-grid;
