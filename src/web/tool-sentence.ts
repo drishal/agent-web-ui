@@ -1,0 +1,195 @@
+// A tool call worded as a sentence the way a person would report the work:
+// "Read src/app.ts", "Searching for quokka in src", "Couldn't run npm test".
+// Running uses the present participle, done the past tense, a failure "Couldn't …".
+// The facts beside it ("412 lines", "+12 −3") are only what the item itself holds;
+// nothing is guessed, so a call this module cannot read shows just its time.
+// Pure, so the web tool card and its unit tests share it. atui keeps its own verb
+// table (neat.ts) because the terminal prints it differently.
+import type { ToolItem } from "../shared/protocol.js";
+import { formatSpan } from "./turn-time.js";
+import { relativePath } from "./turns.js";
+
+export interface ToolSentence {
+  /** "Read", "Searching for", "Couldn't read". */
+  verb: string;
+  /** What it acted on: a path, a pattern, a command, a server. */
+  target: string;
+  /** What follows the target: "in src", ": list issues", "(7 steps)". */
+  rest?: string;
+  /** True when the target is code (a path, a pattern, a command) and reads in the mono face. */
+  code: boolean;
+  /** What is known of the result: ["412 lines"]. Empty when nothing can be said. */
+  facts: string[];
+  /** The first line of the failure, for a call that errored. */
+  error?: string;
+  /** The whole sentence as plain words, for a name and for the live phase. */
+  text: string;
+}
+
+type Args = Record<string, unknown>;
+type Tense = "running" | "done" | "error";
+
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const COMMAND_CUT = 60;
+const ERROR_CUT = 140;
+
+function parseArgs(raw: string): Args {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Args) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** `list_issues`, `listIssues`, `list-issues` → "list issues". */
+export function toolWords(name: string): string {
+  return name
+    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+    .split(/[_\-.\s]+/)
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+/** An MCP tool's name, `mcp__<server>__<tool>`, split in two. */
+function mcpParts(name: string): { server: string; tool: string } | undefined {
+  const m = /^mcp__(.+?)__(.+)$/.exec(name);
+  return m ? { server: m[1] as string, tool: m[2] as string } : undefined;
+}
+
+/** Output lines, not counting the newline that ends it. */
+function lineCount(output: string): number {
+  const trimmed = output.replace(/\n+$/, "");
+  return trimmed ? trimmed.split("\n").length : 0;
+}
+
+/** The first non-empty line of a failure, cut to a line a row can carry. */
+export function errorLine(output: string): string | undefined {
+  const line = output.split("\n").map((l) => l.trim()).find(Boolean);
+  if (!line) return undefined;
+  return line.length > ERROR_CUT ? `${line.slice(0, ERROR_CUT - 1)}…` : line;
+}
+
+/** A command's first line worth showing: the model's leading `# note` lines are skipped, a shebang is not a note. Cut to 60 characters. */
+function commandLine(cmd: string): string {
+  const lines = cmd.split("\n").map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => !l.startsWith("#") || l.startsWith("#!")) ?? lines[0] ?? "";
+  return line.length > COMMAND_CUT ? `${line.slice(0, COMMAND_CUT - 1)}…` : line;
+}
+
+function hostAndPath(url: string): string {
+  return url.replace(/^[a-z][a-z\d+.-]*:\/\//i, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+}
+
+const VERBS: Record<string, Record<Tense, string>> = {
+  read: { running: "Reading", done: "Read", error: "Couldn't read" },
+  search: { running: "Searching for", done: "Searched for", error: "Couldn't search for" },
+  edit: { running: "Editing", done: "Edited", error: "Couldn't edit" },
+  write: { running: "Writing", done: "Wrote", error: "Couldn't write" },
+  command: { running: "Running", done: "Ran", error: "Couldn't run" },
+  fetch: { running: "Fetching", done: "Fetched", error: "Couldn't fetch" },
+  websearch: { running: "Searching the web for", done: "Searched the web for", error: "Couldn't search the web for" },
+  mcp: { running: "Asking", done: "Asked", error: "Couldn't ask" },
+  agents: { running: "Running", done: "Ran", error: "Couldn't run" },
+  plan: { running: "Updating", done: "Updated", error: "Couldn't update" },
+  render: { running: "Rendering", done: "Rendered", error: "Couldn't render" },
+  other: { running: "Using", done: "Used", error: "Couldn't use" },
+};
+
+/** "412 lines" for the output a read printed; "partial" when the harness cut it. */
+function readFacts(item: ToolItem): string[] {
+  const n = lineCount(item.output);
+  if (n === 0) return [];
+  return item.truncated ? ["partial"] : [plural(n, "line")];
+}
+
+/** "+12 −3" for an edit, from the diff the harness reported. */
+export function changeFact(added: number, removed: number): string | undefined {
+  const parts = [added > 0 ? `+${added}` : "", removed > 0 ? `−${removed}` : ""].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+function todoCount(args: Args): { done: number; total: number } | undefined {
+  if (!Array.isArray(args.todos)) return undefined;
+  const todos = args.todos.filter((t): t is Args => typeof t === "object" && t !== null);
+  return { done: todos.filter((t) => /done|complete/.test(String(t.status ?? ""))).length, total: todos.length };
+}
+
+/**
+ * A call as a sentence. `workspace` makes paths project-relative. `parsedFacts`
+ * are what tool-facts.ts read from the output; when it read none, the basic
+ * counts the table in docs/ui.md lists stand in.
+ */
+export function toolSentence(item: ToolItem, workspace: string, parsedFacts: string[] = []): ToolSentence {
+  const tense: Tense = item.status;
+  const args = parseArgs(item.args);
+  const settled = item.status !== "running";
+  const path = item.paths[0] ?? str(args.path) ?? str(args.file_path);
+  const rel = (p: string) => relativePath(p, workspace);
+  const make = (kind: string, target: string, code: boolean, rest: string | undefined, facts: string[]): ToolSentence => {
+    const verb = (VERBS[kind] as Record<Tense, string>)[tense];
+    const known = item.status === "error" ? [] : parsedFacts.length > 0 ? parsedFacts : facts;
+    const error = item.status === "error" ? errorLine(item.output) : undefined;
+    const tail = rest ? (rest.startsWith(":") ? rest : ` ${rest}`) : "";
+    return { verb, target, ...(rest ? { rest } : {}), code, facts: known, ...(error ? { error } : {}), text: `${verb}${target ? ` ${target}` : ""}${tail}` };
+  };
+
+  if (item.subagents) {
+    const runs = item.subagents.runs;
+    const names = [...new Set(runs.map((r) => r.agent).filter(Boolean))].slice(0, 3);
+    const counts = (["done", "failed", "running"] as const).map((s) => [s, runs.filter((r) => r.status === s).length] as const).filter(([, n]) => n > 0);
+    return make("agents", plural(runs.length, "agent"), false, names.length > 0 ? `: ${names.join(", ")}` : undefined, counts.map(([s, n]) => `${n} ${s}`));
+  }
+  if (item.htmlRender) return make("render", item.htmlRender.title, false, undefined, []);
+
+  const mcp = mcpParts(item.name);
+  if (mcp) return make("mcp", mcp.server, false, `: ${toolWords(mcp.tool)}`, []);
+
+  if (/todo|exitplanmode|plan_mode|(^|_)plan($|_)/i.test(item.name) || item.plan !== undefined) {
+    const todos = todoCount(args);
+    return make("plan", "the plan", false, todos ? `(${plural(todos.total, "step")})` : undefined, todos && todos.total > 0 ? [`${todos.done} of ${todos.total} done`] : []);
+  }
+
+  switch (item.category) {
+    case "read":
+      return make("read", path ? rel(path) : item.summary, true, undefined, settled ? readFacts(item) : []);
+    case "edit":
+    case "write": {
+      const stat = item.diffStat ?? item.diff;
+      const change = stat ? changeFact(stat.added, stat.removed) : undefined;
+      const facts = item.category === "write" ? (stat && stat.added > 0 ? [`+${stat.added}`] : []) : change ? [change] : [];
+      return make(item.category, path ? rel(path) : item.summary, true, undefined, settled ? facts : []);
+    }
+    case "command": {
+      const cmd = str(args.command) ?? str(args.cmd) ?? str(args.script) ?? str(args.code) ?? str(args.input) ?? item.summary;
+      const n = lineCount(item.output);
+      return make("command", commandLine(cmd), true, undefined, settled ? [n > 0 ? plural(n, "line") : "no output"] : []);
+    }
+    case "search": {
+      const pattern = str(args.pattern) ?? str(args.query) ?? str(args.regex) ?? str(args.glob) ?? str(args.name) ?? str(args.q) ?? item.summary;
+      const dir = str(args.path) ?? str(args.directory) ?? str(args.dir) ?? item.paths[0];
+      const where = dir && rel(dir) !== "." && dir !== workspace ? rel(dir) : undefined;
+      const n = lineCount(item.output);
+      // A cut output cannot be counted, so it shows no count rather than a wrong one.
+      const facts = !settled ? [] : n === 0 ? ["no results"] : item.truncated ? [] : [plural(n, "result")];
+      return make("search", pattern, true, where ? `in ${where}` : undefined, facts);
+    }
+    case "web": {
+      const url = str(args.url) ?? (Array.isArray(args.urls) ? str(args.urls[0]) : undefined);
+      if (url) return make("fetch", hostAndPath(url), true, undefined, []);
+      const query = str(args.query) ?? str(args.q) ?? (Array.isArray(args.queries) ? str(args.queries[0]) : undefined) ?? item.summary;
+      return make("websearch", query, false, undefined, []);
+    }
+    case "agent":
+      return make("agents", item.summary || toolWords(item.name), false, undefined, []);
+    default:
+      return make("other", toolWords(item.name), false, undefined, []);
+  }
+}
+
+/** A call's time as a row shows it: milliseconds under a second, tenths under ten seconds, then the fold's "2m 5s". */
+export function callTime(ms: number): string {
+  return ms < 1000 ? `${Math.round(Math.max(0, ms))}ms` : formatSpan(ms);
+}

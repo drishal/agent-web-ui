@@ -1,0 +1,173 @@
+import { describe, expect, it } from "vitest";
+import type { ToolItem } from "../../src/shared/protocol.js";
+import { callTime, errorLine, toolSentence, toolWords } from "../../src/web/tool-sentence.js";
+
+const WS = "/home/me/proj";
+function tool(over: Partial<ToolItem> & Pick<ToolItem, "name" | "category">): ToolItem {
+  return { kind: "tool", id: "t1", args: "{}", status: "done", output: "", truncated: false, summary: "", paths: [], ...over };
+}
+const args = (o: object) => JSON.stringify(o);
+
+describe("toolWords", () => {
+  it("turns snake, kebab and camel case into words", () => {
+    expect(toolWords("list_issues")).toBe("list issues");
+    expect(toolWords("resolve-library-id")).toBe("resolve library id");
+    expect(toolWords("getPullRequest")).toBe("get pull request");
+  });
+});
+
+describe("toolSentence: read", () => {
+  const read = tool({ name: "read", category: "read", paths: [`${WS}/src/app.ts`], output: "a\nb\nc\n" });
+  it("words the three states", () => {
+    expect(toolSentence({ ...read, status: "running", output: "" }, WS).text).toBe("Reading src/app.ts");
+    expect(toolSentence(read, WS).text).toBe("Read src/app.ts");
+    expect(toolSentence({ ...read, status: "error", output: "ENOENT: no such file\nmore" }, WS).text).toBe("Couldn't read src/app.ts");
+  });
+  it("counts lines and says partial for a cut output", () => {
+    expect(toolSentence(read, WS).facts).toEqual(["3 lines"]);
+    expect(toolSentence({ ...read, truncated: true }, WS).facts).toEqual(["partial"]);
+    expect(toolSentence({ ...read, output: "" }, WS).facts).toEqual([]);
+  });
+  it("keeps a path outside the project whole", () => {
+    expect(toolSentence({ ...read, paths: ["/etc/hosts"] }, WS).target).toBe("/etc/hosts");
+  });
+  it("gives the error's first line on a failure and no facts", () => {
+    const s = toolSentence({ ...read, status: "error", output: "\nENOENT: no such file\nat x" }, WS);
+    expect(s.error).toBe("ENOENT: no such file");
+    expect(s.facts).toEqual([]);
+  });
+});
+
+describe("toolSentence: search", () => {
+  const search = tool({ name: "grep", category: "search", args: args({ pattern: "quokka", path: `${WS}/src` }), output: "src/a.ts:1:quokka\nsrc/b.ts:2:quokka\n" });
+  it("words the three states with the directory", () => {
+    expect(toolSentence({ ...search, status: "running" }, WS).text).toBe("Searching for quokka in src");
+    expect(toolSentence(search, WS).text).toBe("Searched for quokka in src");
+    expect(toolSentence({ ...search, status: "error" }, WS).text).toBe("Couldn't search for quokka in src");
+  });
+  it("counts results, says no results, and does not count a cut output", () => {
+    expect(toolSentence(search, WS).facts).toEqual(["2 results"]);
+    expect(toolSentence({ ...search, output: "x\n" }, WS).facts).toEqual(["1 result"]);
+    expect(toolSentence({ ...search, output: "" }, WS).facts).toEqual(["no results"]);
+    expect(toolSentence({ ...search, truncated: true }, WS).facts).toEqual([]);
+    expect(toolSentence({ ...search, status: "running", output: "" }, WS).facts).toEqual([]);
+  });
+  it("leaves out the directory when it is the project itself", () => {
+    expect(toolSentence({ ...search, args: args({ pattern: "x", path: WS }) }, WS).rest).toBeUndefined();
+    expect(toolSentence({ ...search, args: args({ pattern: "x", path: "." }) }, WS).rest).toBeUndefined();
+  });
+});
+
+describe("toolSentence: edit and write", () => {
+  const edit = tool({ name: "edit", category: "edit", paths: [`${WS}/src/turns.ts`], diffStat: { added: 12, removed: 3 } });
+  it("words edit and shows +a −r", () => {
+    expect(toolSentence({ ...edit, status: "running" }, WS).text).toBe("Editing src/turns.ts");
+    expect(toolSentence(edit, WS).text).toBe("Edited src/turns.ts");
+    expect(toolSentence({ ...edit, status: "error" }, WS).text).toBe("Couldn't edit src/turns.ts");
+    expect(toolSentence(edit, WS).facts).toEqual(["+12 −3"]);
+    expect(toolSentence({ ...edit, diffStat: { added: 0, removed: 2 } }, WS).facts).toEqual(["−2"]);
+    expect(toolSentence({ ...edit, diffStat: undefined }, WS).facts).toEqual([]);
+  });
+  it("words write and shows +a lines", () => {
+    const write = tool({ name: "write", category: "write", paths: [`${WS}/notes.md`], diffStat: { added: 4, removed: 0 } });
+    expect(toolSentence({ ...write, status: "running" }, WS).text).toBe("Writing notes.md");
+    expect(toolSentence(write, WS).text).toBe("Wrote notes.md");
+    expect(toolSentence({ ...write, status: "error" }, WS).text).toBe("Couldn't write notes.md");
+    expect(toolSentence(write, WS).facts).toEqual(["+4"]);
+  });
+});
+
+describe("toolSentence: commands", () => {
+  const bash = tool({ name: "bash", category: "command", args: args({ command: "npm test" }), output: "a\nb" });
+  it("words the three states", () => {
+    expect(toolSentence({ ...bash, status: "running" }, WS).text).toBe("Running npm test");
+    expect(toolSentence(bash, WS).text).toBe("Ran npm test");
+    expect(toolSentence({ ...bash, status: "error" }, WS).text).toBe("Couldn't run npm test");
+  });
+  it("counts output lines, or says no output", () => {
+    expect(toolSentence(bash, WS).facts).toEqual(["2 lines"]);
+    expect(toolSentence({ ...bash, output: "" }, WS).facts).toEqual(["no output"]);
+    expect(toolSentence({ ...bash, status: "running", output: "" }, WS).facts).toEqual([]);
+  });
+  it("takes the first line, skips a leading comment, and cuts at 60 characters", () => {
+    expect(toolSentence({ ...bash, args: args({ command: "# check it\nrg -n listen src\nwc -l" }) }, WS).target).toBe("rg -n listen src");
+    const long = toolSentence({ ...bash, args: args({ command: `echo ${"x".repeat(100)}` }) }, WS).target;
+    expect(long).toHaveLength(60);
+    expect(long.endsWith("…")).toBe(true);
+  });
+  it("falls back to the item's summary when the arguments do not parse", () => {
+    expect(toolSentence({ ...bash, args: "not json", summary: "ls -la" }, WS).target).toBe("ls -la");
+  });
+});
+
+describe("toolSentence: web", () => {
+  it("fetches a host and path", () => {
+    const fetch = tool({ name: "web_fetch", category: "web", args: args({ url: "https://example.com/docs/listen?x=1" }), output: "Example" });
+    expect(toolSentence({ ...fetch, status: "running" }, WS).text).toBe("Fetching example.com/docs/listen");
+    expect(toolSentence(fetch, WS).text).toBe("Fetched example.com/docs/listen");
+    expect(toolSentence({ ...fetch, status: "error" }, WS).text).toBe("Couldn't fetch example.com/docs/listen");
+    expect(toolSentence(fetch, WS).facts).toEqual([]);
+  });
+  it("searches the web for a query", () => {
+    const search = tool({ name: "web_search", category: "web", args: args({ query: "quokka facts" }) });
+    expect(toolSentence({ ...search, status: "running" }, WS).text).toBe("Searching the web for quokka facts");
+    expect(toolSentence(search, WS).text).toBe("Searched the web for quokka facts");
+    expect(toolSentence({ ...search, status: "error" }, WS).text).toBe("Couldn't search the web for quokka facts");
+  });
+});
+
+describe("toolSentence: MCP, agents, plan, unknown", () => {
+  it("names an MCP call by its server and the tool's words", () => {
+    const mcp = tool({ name: "mcp__linear__list_issues", category: "other" });
+    expect(toolSentence({ ...mcp, status: "running" }, WS).text).toBe("Asking linear: list issues");
+    expect(toolSentence(mcp, WS).text).toBe("Asked linear: list issues");
+    expect(toolSentence({ ...mcp, status: "error" }, WS).text).toBe("Couldn't ask linear: list issues");
+    expect(toolSentence(mcp, WS).code).toBe(false);
+  });
+  it("counts agents and their states", () => {
+    const run = (agent: string, status: "done" | "failed" | "running") => ({ id: agent, agent, task: "t", status });
+    const agents = tool({ name: "subagent", category: "agent", subagents: { runs: [run("scout", "done"), run("worker", "done"), run("critic", "running")] } });
+    expect(toolSentence({ ...agents, status: "running" }, WS).text).toBe("Running 3 agents: scout, worker, critic");
+    expect(toolSentence(agents, WS).text).toBe("Ran 3 agents: scout, worker, critic");
+    expect(toolSentence(agents, WS).facts).toEqual(["2 done", "1 running"]);
+    expect(toolSentence({ ...agents, status: "error" }, WS).text).toBe("Couldn't run 3 agents: scout, worker, critic");
+    expect(toolSentence({ ...agents, subagents: { runs: [run("scout", "failed")] } }, WS).facts).toEqual(["1 failed"]);
+  });
+  it("updates the plan and counts finished steps from a whole list", () => {
+    const todos = [{ content: "a", status: "completed" }, { content: "b", status: "in_progress" }, { content: "c", status: "pending" }];
+    const plan = tool({ name: "TodoWrite", category: "other", args: args({ todos }) });
+    expect(toolSentence({ ...plan, status: "running" }, WS).text).toBe("Updating the plan (3 steps)");
+    expect(toolSentence(plan, WS).text).toBe("Updated the plan (3 steps)");
+    expect(toolSentence(plan, WS).facts).toEqual(["1 of 3 done"]);
+    expect(toolSentence({ ...plan, status: "error" }, WS).text).toBe("Couldn't update the plan (3 steps)");
+  });
+  it("shows no step count for a todo call that is not a whole list", () => {
+    const ops = tool({ name: "todo_write", category: "other", args: args({ ops: [{ op: "done", task: "a" }] }) });
+    expect(toolSentence(ops, WS).text).toBe("Updated the plan");
+    expect(toolSentence(ops, WS).facts).toEqual([]);
+  });
+  it("uses an unknown tool by its words and invents no fact", () => {
+    const odd = tool({ name: "lspDiagnostics", category: "other", output: "a\nb\nc" });
+    expect(toolSentence({ ...odd, status: "running" }, WS).text).toBe("Using lsp diagnostics");
+    expect(toolSentence(odd, WS).text).toBe("Used lsp diagnostics");
+    expect(toolSentence({ ...odd, status: "error" }, WS).text).toBe("Couldn't use lsp diagnostics");
+    expect(toolSentence(odd, WS).facts).toEqual([]);
+  });
+  it("lets parsed facts replace the basic ones, but never on a failure", () => {
+    const bash = tool({ name: "bash", category: "command", args: args({ command: "npm test" }), output: "a\nb" });
+    expect(toolSentence(bash, WS, ["12 passed"]).facts).toEqual(["12 passed"]);
+    expect(toolSentence({ ...bash, status: "error" }, WS, ["12 passed"]).facts).toEqual([]);
+  });
+});
+
+describe("helpers", () => {
+  it("cuts a long error line", () => {
+    expect(errorLine("x".repeat(300))).toHaveLength(140);
+    expect(errorLine("\n  \n")).toBeUndefined();
+  });
+  it("words a call's time", () => {
+    expect(callTime(760)).toBe("760ms");
+    expect(callTime(1200)).toBe("1.2s");
+    expect(callTime(38_000)).toBe("38s");
+  });
+});

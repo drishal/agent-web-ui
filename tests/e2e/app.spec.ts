@@ -153,11 +153,11 @@ test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", a
   await expect(tool("grep").locator(".tool-chip")).toHaveText("listen\\(");
   await expect(tool("web_fetch").getByRole("link", { name: "https://example.com/docs/listen" })).toBeVisible();
   // Todos read as a checklist, never as JSON.
-  await expect(tool("TodoWrite").locator(".drow-summary")).toHaveText("1/3 todos done · Shipping the diff view");
+  await expect(tool("TodoWrite").locator(".drow-summary")).toHaveText("the plan (3 steps) · 1 of 3 done");
   await tool("TodoWrite").getByRole("button").first().click();
   await expect(tool("TodoWrite").locator(".todo-card-row.is-done")).toHaveText("Normalize each harness's diff");
   await expect(tool("TodoWrite").locator(".todo-card-row.is-active")).toHaveText("Ship the diff view");
-  await expect(tool("todo_write").locator(".drow-summary")).toHaveText("Done: Normalize each harness's diff, Ship the diff view");
+  await expect(tool("todo_write").locator(".drow-summary")).toHaveText("the plan");
   await expect(page.getByTestId("process-toggle").last()).toContainText("1 read, 1 search, 1 edit, …");
 });
 
@@ -1351,7 +1351,7 @@ test("subagents show live, then their answers, and open their own transcripts", 
   // Settled, it opens like any other row.
   await row.getByRole("button").first().click();
   await expect(row.locator(".runs")).toBeVisible();
-  await expect(row.locator(".drow-summary")).toHaveText("2 agents · 2 done");
+  await expect(row.locator(".drow-summary")).toHaveText("2 agents: scout, worker · 2 done");
   await expect(row.locator(".tool-card-meta")).toHaveText("2/2 done");
   await expect(row.locator(".run-agent")).toHaveText(["scout", "worker"]);
   await row.locator(".run-head").first().click();

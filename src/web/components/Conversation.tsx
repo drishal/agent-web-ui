@@ -10,6 +10,7 @@ import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
+import { toolSentence } from "../tool-sentence.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
@@ -26,7 +27,7 @@ import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { CopyButton } from "./CopyButton.js";
-import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
+import { AgentsCard, ChatIdContext } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 import { StickyPrompt } from "./StickyPrompt.js";
@@ -137,7 +138,16 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const ms = elapsedMs ?? tookMs;
   const time = ms !== undefined && ms >= TIMER_AFTER_MS ? formatDuration(ms) : null;
   const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
-  const summary = item.subagents ? runsSummary(item.subagents) : item.paths.length > 0 && item.summary === item.paths[0] ? relativePath(item.summary, workspace) : item.summary;
+  const sentence = toolSentence(item, workspace);
+  // An edit's counts already have their badge at the end of the line.
+  const facts = item.diffStat ? [] : sentence.facts;
+  const summary = (
+    <>
+      {sentence.target}
+      {sentence.rest ? (sentence.rest.startsWith(":") ? sentence.rest : ` ${sentence.rest}`) : null}
+      {facts.length > 0 ? ` · ${facts.join(" · ")}` : null}
+    </>
+  );
   const arrival = useArrival(item.id);
   // Seen running: its icon change (spinner to done) animates.
   const [live] = useState(item.status === "running");
@@ -147,18 +157,8 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
     <div className={`tool-row${arrival}${live ? " is-live" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
       <DisclosureRow
         icon={icon}
-        title={toolLabel(item.name)}
-        summary={
-          <>
-            {summary}
-            {failed ? (
-              <span className="drow-suffix">
-                <Dot />
-                failed
-              </span>
-            ) : null}
-          </>
-        }
+        title={sentence.verb}
+        summary={summary}
         after={
           time ? (
             <span className="drow-time">
