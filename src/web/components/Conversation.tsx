@@ -11,6 +11,7 @@ import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { callTime, toolSentence } from "../tool-sentence.js";
+import { retryLabel, retryPrompt, type RetryMode } from "../tool-retry.js";
 import { iconStack, monogram, serverHue, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -137,6 +138,9 @@ function KindChip({ kind, running = false }: { kind: ToolKind; running?: boolean
   );
 }
 
+/** What "Ask to retry" does in the latest turn: its mode and how to send. Absent elsewhere (older turns get no button). */
+const RetryContext = createContext<{ mode: RetryMode; send: (text: string) => void } | null>(null);
+
 const STATUS_WORD = { running: "running", done: "done", error: "failed" } as const;
 
 const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; workspace: string }) {
@@ -158,6 +162,8 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const [open, setOpen] = useState(Boolean(item.subagents) && live);
   // The full-output sheet, which follows the item as its output streams in.
   const [full, setFull] = useState(false);
+  const retry = useContext(RetryContext);
+  const [asked, setAsked] = useState(false);
   const factText = sentence.facts.join(" · ");
   const status = STATUS_WORD[item.status];
   const label = `${sentence.text}${factText ? `, ${factText}` : ""}${time ? `, ${time}` : ""}, ${status}`;
@@ -180,9 +186,29 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
           </span>
           <IconChevronDown size={14} className="tool-chevron" />
         </button>
-        {sentence.error ? (
-          <div className="tool-error" data-testid="tool-error">
-            {sentence.error}
+        {sentence.error || (failed && retry) ? (
+          <div className="tool-failure">
+            {sentence.error ? (
+              <div className="tool-error" data-testid="tool-error">
+                {sentence.error}
+              </div>
+            ) : null}
+            {failed && retry ? (
+              <button
+                type="button"
+                className="btn btn-small btn-ghost tool-retry"
+                aria-label={retryLabel(item, workspace)}
+                disabled={retry.mode === "blocked" || asked}
+                title={retry.mode === "blocked" ? "This agent cannot take a message while it works" : retry.mode === "queue" ? "Queued as a follow-up for when the agent is free" : "Ask the agent to run this call again"}
+                onClick={() => {
+                  setAsked(true);
+                  retry.send(retryPrompt(item, workspace));
+                }}
+              >
+                <IconRefresh size={13} />
+                {asked ? (retry.mode === "queue" ? "Queued" : "Asked") : "Ask to retry"}
+              </button>
+            ) : null}
           </div>
         ) : null}
         {open ? (
@@ -927,6 +953,7 @@ const TurnView = memo(function TurnView({
   hasCheckpoint,
   promptActions,
   onImplement,
+  retry,
 }: {
   turn: Turn;
   open: boolean;
@@ -941,6 +968,8 @@ const TurnView = memo(function TurnView({
   promptActions: PromptActions;
   /** The latest turn's plan can be acted on (idle, nothing asked): Implement sends it on. */
   onImplement: (() => void) | null;
+  /** What "Ask to retry" does, for the latest turn only (null: no button). */
+  retry: { mode: RetryMode; send: (text: string) => void } | null;
 }) {
   if (!turn.prompt) {
     // What comes before any prompt (startup notices, or what a compaction kept): plain rows, no fold, and the
@@ -964,6 +993,7 @@ const TurnView = memo(function TurnView({
   // Work the agent did after writing its reply draws below it, as its own fold.
   const afterWork = workAfterSegment(turn);
   return (
+    <RetryContext.Provider value={retry}>
     <section className="turn" id={`turn-${turn.id}`} data-turn-id={turn.id} data-testid="turn">
       <UserPrompt item={turn.prompt} through={turn.through} canBranch={canBranch} hasCheckpoint={hasCheckpoint} actions={promptActions} />
       {split ? (
@@ -1010,6 +1040,7 @@ const TurnView = memo(function TurnView({
         </div>
       ) : null}
     </section>
+    </RetryContext.Provider>
   );
 });
 
@@ -1026,6 +1057,8 @@ export function Conversation({
   models,
   onSend,
   asking = false,
+  retryMode: retryModeNow = null,
+  onRetryCall,
   findRequest = null,
   pane = "main",
 }: {
@@ -1045,6 +1078,9 @@ export function Conversation({
   onSend?: (text: string) => void;
   /** The harness is asking something (an approval, a question): a plan's buttons wait. */
   asking?: boolean;
+  /** What "Ask to retry" on a failed call does in the latest turn (null: no button); `onRetryCall` sends or queues its prompt. */
+  retryMode?: RetryMode | null;
+  onRetryCall?: (text: string) => void;
   /** Open Find with this word (a chat opened from Search every chat); each new `nonce` asks again. */
   findRequest?: { query: string; nonce: number; chatId: string } | null;
   /** Which pane it is in, with a chat beside the main one: Ctrl+F finds in the pane that has the focus (the main one otherwise). */
@@ -1126,6 +1162,9 @@ export function Conversation({
   const sendRef = useRef(onSend);
   sendRef.current = onSend;
   const implement = useCallback(() => sendRef.current?.(IMPLEMENT_TEXT), []);
+  const retryRef = useRef(onRetryCall);
+  retryRef.current = onRetryCall;
+  const retry = useMemo(() => (retryModeNow && onRetryCall ? { mode: retryModeNow, send: (text: string) => retryRef.current?.(text) } : null), [retryModeNow, Boolean(onRetryCall)]);
   const lastTurn = turns[turns.length - 1];
   const canImplement = Boolean(onSend) && idle && !asking;
 
@@ -1432,6 +1471,7 @@ export function Conversation({
                     hasCheckpoint={turn.through > 0 && checkpoints.includes(turn.through)}
                     promptActions={actions}
                     onImplement={canImplement && turn === lastTurn && turn.plans.length > 0 ? implement : null}
+                    retry={turn === lastTurn ? retry : null}
                   />
                 </Fragment>
               ))}

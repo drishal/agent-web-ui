@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { newChat, sendAndWait, signInAndOpen } from "./helpers.js";
+import { newChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
 // The tool card: a run of calls as one card with a header, sentence rows, facts, and a status column.
 
@@ -81,6 +81,45 @@ test("a running call reads in the present tense with a spinner, then settles wit
   await expect(row.locator('.tool-status[aria-label="running"]')).toBeVisible();
   await expect(row.locator(".tool-sentence")).toHaveText("Ran npm test", { timeout: 20_000 });
   await expect(row.locator('.tool-status[aria-label="done"]')).toBeVisible();
+});
+
+test("Ask to retry sends a prompt naming the call when idle, and only the latest turn has it", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "toolfail");
+  const retry = page.getByRole("button", { name: "Ask the agent to retry running npm run e2e" });
+  await expect(retry).toBeVisible();
+  await expect(retry).toHaveText("Ask to retry");
+  await retry.click();
+  await expect(page.getByTestId("user-prompt").last()).toHaveText("Retry the failed tool call (running npm run e2e). It failed with: Error: port 4791 is already in use");
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 20_000 });
+  // The older turn's failed call no longer offers it.
+  await expect(retry).toHaveCount(0);
+});
+
+test("an earlier turn's failed call has no retry while a new turn runs", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "toolfail");
+  await send(page, "slow please");
+  await expect(page.getByRole("button", { name: /^Ask the agent to retry/ })).toHaveCount(0);
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test("the facts sit under the sentence and the retry button is full width", async ({ page }) => {
+    await signInAndOpen(page);
+    await page.keyboard.press("Escape");
+    await newChat(page);
+    await sendAndWait(page, "testrun toolfail");
+    const row = page.locator('[data-tool="bash"]').first();
+    const [sentence, facts] = [await row.locator(".tool-sentence").boundingBox(), await row.locator(".tool-facts").boundingBox()];
+    expect(facts!.y).toBeGreaterThan(sentence!.y + sentence!.height - 2);
+    const failed = page.locator('[data-status="error"]');
+    const [button, card] = [await failed.getByRole("button", { name: /^Ask the agent to retry/ }).boundingBox(), await failed.boundingBox()];
+    expect(button!.width).toBeGreaterThan(card!.width * 0.7);
+    expect(button!.height).toBeGreaterThanOrEqual(44);
+  });
 });
 
 test.describe("reduced motion", () => {

@@ -78,6 +78,7 @@ import { useSessions } from "./sessions.js";
 import { useSidebarLayout } from "./sidebar-layout.js";
 import { forgetWorkspace, load, rememberWorkspace, save } from "./storage.js";
 import { themeModeOf, useTheme } from "./theme.js";
+import { retryMode } from "./tool-retry.js";
 
 export function App() {
   const { banner, setBanner, fail } = useBanner();
@@ -1751,6 +1752,8 @@ export function App() {
                   checkpoints={chat.checkpoints ?? []}
                   onRestore={setRestoreTurn}
                   onSend={(text) => void send(text, "normal")}
+                  retryMode={retryMode(chat.status, chat.capabilities.supportsFollowUp)}
+                  onRetryCall={(text) => void send(text, chat.status === "idle" || chat.status === "error" ? "normal" : "followUp")}
                   asking={chat.pending.length > 0}
                   findRequest={
                     findAsk && (chat.sessionId === findAsk.sessionId || chat.chatId === findAsk.chatId) ? { query: findAsk.query, nonce: findAsk.nonce, chatId: chat.chatId } : null
