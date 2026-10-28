@@ -6,6 +6,8 @@
    tokens; motion is short and eased out (tokens.css switches it off). */
 .process-card {
   position: relative;
+  /* One rectangle: rows, hovers, and an opened call's panel run edge to edge and take the card's corners. */
+  overflow: hidden;
   border-radius: var(--r-md);
   background: var(--card);
   box-shadow:
@@ -140,8 +142,14 @@
 /* The rows: hairlines between, the card's padding around. */
 .process-card .process-body {
   gap: 0;
-  padding: 4px;
+  padding: 0;
   border-top: 1px solid var(--hairline);
+}
+
+/* Everything in the card shares the header's gutter. */
+.process-card .process-body > .drow,
+.process-card .process-body > .process-step {
+  padding-inline: 12px;
 }
 
 .process-card .process-body > * + * {
@@ -154,7 +162,7 @@
 }
 
 .tool-row {
-  border-radius: var(--r-sm);
+  border-radius: 0;
 }
 
 .tool-row.is-failed {
@@ -165,13 +173,13 @@
   gap: 10px;
   height: auto;
   min-height: calc((var(--drow-h) + 8px) * var(--chat-scale));
-  padding: 3px 8px;
-  border-radius: var(--r-sm);
+  padding: 3px 12px 3px 10px;
+  border-radius: 0;
   color: var(--text);
 }
 
-.tool-head:hover,
-.tool-row.is-open > .tool-line > .tool-head {
+/* A hover fills the row's whole width; an open row needs no shade of its own, its panel says it is open. */
+.tool-head:hover {
   background: var(--hover);
   color: var(--text);
 }
@@ -238,7 +246,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-right: 8px;
+  padding-right: 12px;
 }
 
 .tool-failure .tool-error {
@@ -266,15 +274,18 @@
 }
 
 .tool-line > .drow-body {
-  padding: 0 10px 10px 38px;
+  padding: 0;
 }
 
 /* An opened call: one quiet panel under the sentence (no border, no head that repeats the row), its
    "Full output" at the foot. The cards inside lose their own frame so it is one box, not boxes in boxes. */
 .tool-body {
-  overflow: hidden;
-  border-radius: var(--r-sm);
+  border-top: 1px solid var(--hairline);
   background: var(--code-bg);
+}
+
+.tool-body .io-section {
+  padding-inline: 12px;
 }
 
 .tool-body > .tool-card {
@@ -417,9 +428,9 @@
   display: block;
   width: 100%;
   min-height: calc(var(--drow-h) * var(--chat-scale));
-  padding: 3px 8px;
+  padding: 3px 12px;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   background: transparent;
   color: var(--muted-text);
   font-size: calc(var(--chat-small) - 0.6px);
