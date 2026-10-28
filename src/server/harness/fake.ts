@@ -17,6 +17,7 @@
 //   "testrun" run a command that prints a Vitest summary with one failing test
 //   "manycalls" twelve quick reads in a row (a run long enough to fold)
 //   "toolfail" a command call that fails (port in use), then the run carries on
+//   "widethought" a call, thinking that narrates with a code line wider than the column, another call
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -68,6 +69,20 @@ const FAKE_MODELS: ModelInfo[] = [
   { key: "zeta/glm-5.3-flash", provider: "zeta", id: "glm-5.3-flash", name: "GLM-5.3-Flash", reasoning: true, vision: false, levels: ["low", "high", "max"] },
 ];
 const FAKE_THINKING = ["off", "low", "high"];
+
+/** Narration between calls, as a reasoning model writes it: a numbered list, code spans, and a fenced line far wider than any column. */
+const WIDE_THOUGHT = [
+  "Key findings:",
+  "",
+  "1. The sound card symlink goes through the **USB interface** `5-1.1:1.1`, not the device. The interface has no `product` / `idVendor`, so `ATTRS{product}` walks up to the parent.",
+  "2. udev sets `ID_MODEL=ACCENTUM_Plus`, derived from the USB product string; `ID_MODEL_ENC=ACCENTUM\\x20Plus` is its encoded form.",
+  "",
+  "```",
+  `SUBSYSTEM=="sound", KERNEL=="card*", ENV{ID_USB_MODEL}=="ACCENTUM_Plus", RUN+="${"/run/current-system/sw/bin/amixer -c %n sset PCM 0dB ".repeat(4)}"`,
+  "```",
+  "",
+  "Which is better? Both match by name; combine them for robustness.",
+].join("\n");
 const FAKE_PERMISSION_MODES: PermissionModeInfo[] = [
   { id: "default", label: "Ask first", description: "Asks before edits and commands" },
   { id: "acceptEdits", label: "Accept edits", description: "Edits files without asking; asks before commands" },
@@ -520,6 +535,12 @@ class FakeLiveChat implements LiveChat {
         await this.reply("this is reply block 1", signal);
         await this.call({ name: "bash", args: { command: "sleep 1" }, output: "" }, signal);
       }
+      if (/\bwidethought\b/i.test(text)) {
+        // A call, then a step that only thinks and reads as narration (drawn as Markdown in the card), then another call.
+        await this.call({ name: "bash", args: { command: "ls -l /sys/class/sound/card0" }, output: "card0 -> ../../devices/usb5/5-1.1/5-1.1:1.1/sound/card0" }, signal);
+        await this.think(WIDE_THOUGHT, signal);
+        await this.call({ name: "bash", args: { command: "udevadm info /sys/class/sound/card0" }, output: "E: ID_MODEL=ACCENTUM_Plus" }, signal);
+      }
       if (/\bafterreply\b/i.test(text)) {
         // The answer, then a tool call after it: that work keeps its place below the reply.
         await this.reply("The answer comes first.\n\nThen the agent keeps working.", signal);
@@ -626,6 +647,17 @@ class FakeLiveChat implements LiveChat {
       usage: { ...usage, cost },
     });
     this.emit({ type: "assistant_end", text: body, thinking, usage });
+  }
+
+  /** A step that only thinks: no text and no call, as a model narrates between its calls. */
+  private async think(thinking: string, signal: AbortSignal): Promise<void> {
+    this.emit({ type: "assistant_start", model: this.model });
+    for (const chunk of chunks(thinking, Math.ceil(thinking.length / 6))) {
+      await this.pause(signal);
+      this.emit({ type: "assistant_delta", field: "thinking", delta: chunk });
+    }
+    this.record({ role: "assistant", content: [{ type: "thinking", thinking }], stopReason: "stop", model: this.model });
+    this.emit({ type: "assistant_end", text: "", thinking });
   }
 
   private async tool(kind: "read" | "big" | "edit", signal: AbortSignal): Promise<void> {

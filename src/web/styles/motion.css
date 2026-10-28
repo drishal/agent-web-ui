@@ -158,7 +158,11 @@
   opacity: 1;
 }
 
+/* min-width: 0 keeps the grid's one column at the container's width. Without it, once the body settles and
+   stops clipping (below), the column grows to the body's widest unbreakable line (a long code line in a
+   thought), every paragraph is laid out that wide, and the card cuts them off at its edge. */
 .collapse-inner {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }

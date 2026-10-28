@@ -39,6 +39,22 @@ test("a test run's summary is read from its output: the counts and the failing t
   await expect(row.getByTestId("tool-error")).toHaveText("keeps the order of two lists");
 });
 
+test("a thought with a line wider than the card wraps inside it, once the card has opened and settled", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  // Two calls with narration between: the thought is drawn as Markdown, with a code line far wider than the column.
+  await sendAndWait(page, "widethought");
+  const card = page.locator(".process-card").last();
+  const toggle = card.getByTestId("process-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  const text = card.locator(".process-text");
+  await expect(text).toContainText("Key findings:");
+  // Settled, the body stops clipping; its column must still be the card's, the code line scrolling in its block.
+  await expect(card.locator(".collapse.is-settled")).toHaveCount(1);
+  const [cardWidth, textWidth] = await Promise.all([card.evaluate((el) => el.clientWidth), text.evaluate((el) => el.getBoundingClientRect().width)]);
+  expect(textWidth).toBeLessThanOrEqual(cardWidth);
+});
+
 test("a failed call tints its row with the reason, opens its card, and the tally goes to it", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
