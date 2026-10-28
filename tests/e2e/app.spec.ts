@@ -543,6 +543,8 @@ test("model and thinking changes apply while idle", async ({ page }) => {
   await expect(page.locator(".status-bar")).toContainText("Fake · Fake Slow · high");
   // A click on the track jumps to the nearest stop: the weakest, at its left end.
   await page.getByTestId("thinking-picker").click();
+  // The panel unfurls from its chip on a spring: measure the track once it has landed.
+  await page.getByRole("dialog", { name: "Thinking effort" }).evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   const track = page.locator(".effort-track");
   const box = (await track.boundingBox()) as { x: number; y: number; width: number; height: number };
   await page.mouse.click(box.x + 4, box.y + box.height / 2);

@@ -1,26 +1,47 @@
 /* ---- motion ----------------------------------------------------------------
    Short and eased out: popovers grow from the side they open on, dialogs
    settle in, rows that arrive during a run slide into place, and what is
-   still working shimmers. Content loaded at once (a resume, a tab switch)
-   never animates; prefers-reduced-motion turns all of it off (tokens.css). */
+   still working shimmers. What you touch, and what arrives because you did
+   (a menu, a dialog, a toast, your own prompt), lands on --spring; what streams
+   in during a run stays eased out, since a bounce repeated every second is
+   noise. Leaving is never sprung: it is quick, and some exits time their
+   unmount. Content loaded at once (a resume, a tab switch) never animates;
+   prefers-reduced-motion turns all of it off (tokens.css). */
 :root {
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  /* A real spring, which cubic-bezier can't draw: a damped oscillator's step (damping 0.72, launched at
+     about ease-out's speed), sampled. It reaches its mark at 31%, runs 5.5% past it at 45%, and settles. */
+  --spring: linear(0, 0.261 5.2%, 0.424 8.8%, 0.569 12.2%, 0.693 15.8%, 0.796 19.2%, 0.882 23%, 0.948 26.8%, 0.996 30.8%, 1.023 34%, 1.041 37.2%, 1.051 41%, 1.055 45.2%, 1.049 51.7%, 1.008 76.8%, 1);
+  --dur-spring: 0.38s;
   --dur-enter: 0.18s;
   --dur-hover: 0.12s;
 }
 
+/* The pops unfurl from the side they open on: a clip uncovers them from their anchor while they settle a few
+   pixels, as a tool card unfurls. Never a scale: while a scale animates, the browser draws the text once and
+   stretches that picture until it lands, so it reads hazy (Firefox most of all); a clip and a short move keep it
+   sharp. The clip runs 24 px wide of the box so the shadow is never cut, and ends there (the spring's overshoot
+   only widens it). */
 @keyframes pop-up {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.98);
+    transform: translateY(6px);
+    clip-path: inset(100% -24px -24px -24px);
+  }
+  to {
+    clip-path: inset(-24px);
   }
 }
 
 @keyframes pop-down {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.98);
+    transform: translateY(-6px);
+    clip-path: inset(-24px -24px 100% -24px);
+  }
+  to {
+    clip-path: inset(-24px);
   }
 }
 
@@ -80,7 +101,7 @@
 .usage-pop,
 .model-pop {
   transform-origin: bottom left;
-  animation: pop-up 0.16s var(--ease-out);
+  animation: pop-up var(--dur-spring) var(--spring);
 }
 
 .usage-pop {
@@ -95,7 +116,7 @@
 
 .menu-list {
   transform-origin: top right;
-  animation: pop-down 0.16s var(--ease-out);
+  animation: pop-down var(--dur-spring) var(--spring);
 }
 
 .model-backdrop,
@@ -121,9 +142,17 @@
     opacity var(--dur-hover) ease;
 }
 
-/* Dialogs settle in over a fading backdrop. */
+/* Dialogs rise into place over a fading backdrop, a little past it and back. No scale, so their text stays sharp
+   while they move (see the pops above). */
 .dialog[open] {
-  animation: settle-in 0.22s var(--ease-out);
+  animation: dialog-in var(--dur-spring) var(--spring);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
 }
 
 .dialog[open]::backdrop {
@@ -134,7 +163,7 @@
   .model-pop,
   .model-pop.is-below {
     transform-origin: bottom center;
-    animation: rise-in 0.22s var(--ease-out);
+    animation: rise-in var(--dur-spring) var(--spring);
   }
 }
 
@@ -202,17 +231,19 @@
   animation: slide-in 0.18s var(--ease-out);
 }
 
+/* Chevrons turn on the spring: a slight over-turn, then they settle. */
 .drow-chevron,
 .process-chevron {
   transition:
-    transform 0.2s var(--ease-out),
+    transform var(--dur-spring) var(--spring),
     opacity 0.1s ease;
 }
 
 /* Transcript items that arrive while the chat is on screen. A new turn (the
-   prompt bubble, then the answer) rises a few pixels as it fades in. */
+   prompt bubble, then the answer) rises a few pixels as it fades in; your own
+   prompt lands on the spring, since you just sent it. */
 .turn-prompt.is-arriving .bubble {
-  animation: turn-in var(--dur-enter) var(--ease-out);
+  animation: turn-in var(--dur-spring) var(--spring);
 }
 
 .notice-row.is-arriving,
@@ -330,13 +361,13 @@
 }
 
 .jump {
-  animation: rise-in-centered 0.2s var(--ease-out);
+  animation: rise-in-centered var(--dur-spring) var(--spring);
 }
 
 @keyframes rise-in-centered {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translate(-50%, 14px);
   }
 }
 
@@ -352,12 +383,17 @@
   }
 }
 
-/* Buttons give a little under the pointer. */
+/* Buttons give a little under the pointer, quickly, and spring back when it lets go. */
 .btn:active:not(:disabled),
 .ghost-icon:active:not(:disabled),
 .round-btn:active:not(:disabled),
 .pill-btn:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.95);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.08s var(--ease-out),
+    box-shadow 0.12s ease;
 }
 
 .btn,
@@ -367,7 +403,7 @@
   transition:
     background-color 0.12s ease,
     color 0.12s ease,
-    transform 0.12s var(--ease-out),
+    transform var(--dur-spring) var(--spring),
     box-shadow 0.12s ease;
 }
 

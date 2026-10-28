@@ -130,7 +130,7 @@
   box-shadow: var(--shadow-float);
   color: var(--text);
   font-size: 13px;
-  animation: pop-down 0.14s var(--ease-out);
+  animation: pop-down var(--dur-spring) var(--spring);
 }
 
 .bubble-quote {
@@ -1600,7 +1600,15 @@
   color: var(--text-2);
   font-size: calc(var(--chat-small) - 0.5px);
   text-align: left;
-  animation: fade-in 0.14s var(--ease-out);
+  animation: bar-in var(--dur-spring) var(--spring);
+}
+
+/* The sticky bar drops in from the conversation's top edge. */
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
 }
 
 .sticky-prompt:hover {

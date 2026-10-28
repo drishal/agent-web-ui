@@ -101,7 +101,7 @@
 .run-chevron {
   flex: none;
   color: var(--muted-text);
-  transition: transform 0.2s var(--ease-out);
+  transition: transform var(--dur-spring) var(--spring);
 }
 
 .run.is-open .run-chevron {

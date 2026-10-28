@@ -253,7 +253,7 @@
   color: var(--muted);
   font-size: 0.86em;
   animation:
-    approval-fold var(--dur-enter) var(--ease-out) both,
+    approval-fold var(--dur-spring) var(--spring) both,
     approval-fold-away 0.3s var(--ease-out) 2.3s forwards;
 }
 

@@ -85,11 +85,12 @@ body {
   }
 
   .dialog[open] {
-    animation: rise-in 0.24s var(--ease-out);
+    animation: rise-in var(--dur-spring) var(--spring);
   }
 
+  /* Let go of a sheet short of dismissing it, and it springs back up. */
   .dialog-body {
-    transition: transform 0.2s var(--ease-out);
+    transition: transform var(--dur-spring) var(--spring);
   }
 
   .sheet-grip {

@@ -130,7 +130,7 @@
 }
 
 .tab-list.is-dragging .session-tab:not(.is-lifted) {
-  transition: transform 0.16s var(--ease-out);
+  transition: transform var(--dur-spring) var(--spring);
 }
 
 .session-tab.is-lifted {
@@ -156,7 +156,7 @@
 
 /* The shown tab's accent underline is one element that glides to it (see
    SlidingIndicator): the edge toward the target moves at --dur-enter, the
-   trailing edge a beat later, so it stretches and settles. A drag pins it to
+   trailing edge follows on the spring, so it stretches, gives a little, and settles. A drag pins it to
    the lifted tab. prefers-reduced-motion (tokens.css) turns the glide off. */
 .sliding-indicator.tab-active-line {
   position: absolute;
@@ -166,11 +166,11 @@
   pointer-events: none;
   /* The left edge is the trailing one when gliding right, and the reverse. */
   transition:
-    left var(--dur-lag, 0.22s) var(--ease-out),
+    left var(--dur-lag, var(--dur-spring)) var(--spring),
     width var(--dur-lead, 0.16s) var(--ease-out);
 }
 .sliding-indicator.tab-active-line[style*="--lead: left"] {
   transition:
     left var(--dur-lead, 0.16s) var(--ease-out),
-    width var(--dur-lag, 0.22s) var(--ease-out);
+    width var(--dur-lag, var(--dur-spring)) var(--spring);
 }

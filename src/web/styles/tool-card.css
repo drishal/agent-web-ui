@@ -240,7 +240,7 @@
   flex: none;
   color: var(--muted-text);
   opacity: 0.6;
-  transition: transform 0.2s var(--ease-out);
+  transition: transform var(--dur-spring) var(--spring);
 }
 
 .tool-row.is-open .tool-chevron {

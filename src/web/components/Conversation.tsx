@@ -497,7 +497,9 @@ function UserPrompt({
       if (!el) return;
       const off = glideOffset(spot, el.getBoundingClientRect());
       if (off && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        el.animate([{ transform: `translate(${off.dx}px, ${off.dy}px)`, opacity: 0.6 }, { transform: "none", opacity: 1 }], { duration: 600, easing: "cubic-bezier(0.16, 1, 0.3, 1)" });
+        // On the spring (motion.css), so it lands with a little give, like the prompt it becomes.
+        const easing = getComputedStyle(el).getPropertyValue("--spring").trim() || "cubic-bezier(0.16, 1, 0.3, 1)";
+        el.animate([{ transform: `translate(${off.dx}px, ${off.dy}px)`, opacity: 0.6 }, { transform: "none", opacity: 1 }], { duration: 520, easing });
       }
       el.classList.add("is-landed");
       window.setTimeout(() => el.classList.remove("is-landed"), 1800);

@@ -671,7 +671,7 @@
 /* The switch's chevron does not collapse; it opens the project menu, so it tips up. */
 .focus-group .group-chevron {
   margin-left: 2px;
-  transition: transform 0.12s ease;
+  transition: transform var(--dur-spring) var(--spring);
 }
 
 .focus-group .project-toggle[aria-expanded="true"] .group-chevron {

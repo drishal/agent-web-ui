@@ -588,15 +588,16 @@ button.harness-chip:disabled {
 }
 
 /* The panel grows out of its chip: from the chip's corner (the panel opens above it, or below when short
-   of room) it fades and scales up, and closing plays that backwards. Phones keep the sheet's own motion. */
+   of room) it fades in as a clip uncovers it, and closing shrinks it back quickly. Phones keep the sheet's own motion. */
 @media (min-width: 820px) {
   .model-picker .model-pop {
     transform-origin: bottom left;
-    animation: model-grow var(--dur-enter) var(--ease-out);
+    animation: model-grow var(--dur-spring) var(--spring);
   }
 
   .model-picker .model-pop.is-below {
     transform-origin: top left;
+    animation-name: model-grow-below;
   }
 
   .model-picker .model-pop.is-leaving {
@@ -605,10 +606,25 @@ button.harness-chip:disabled {
   }
 }
 
+/* Uncovered from the chip's corner rather than scaled up from it, so the list's text is sharp as it opens
+   (motion.css's pops say why); the clip ends 24 px wide of the panel, past its shadow. */
 @keyframes model-grow {
   from {
     opacity: 0;
-    transform: scale(0.88);
+    clip-path: inset(100% 100% -24px -24px);
+  }
+  to {
+    clip-path: inset(-24px);
+  }
+}
+
+@keyframes model-grow-below {
+  from {
+    opacity: 0;
+    clip-path: inset(-24px 100% 100% -24px);
+  }
+  to {
+    clip-path: inset(-24px);
   }
 }
 

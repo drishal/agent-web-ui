@@ -26,7 +26,7 @@ test("a chat's history loads still; a prompt sent live rises in; reduced motion 
   const bubble = page.locator(".turn-prompt.is-arriving .bubble");
   await expect(bubble).toHaveCount(1);
   await expect(bubble).toContainText("motion live");
-  expect(await animation(bubble)).toEqual({ name: "turn-in", duration: "0.18s" });
+  expect(await animation(bubble)).toEqual({ name: "turn-in", duration: "0.38s" });
   const answer = page.locator(".answer.is-arriving");
   await expect(answer).toHaveCount(1);
   expect((await animation(answer)).name).toBe("turn-in");

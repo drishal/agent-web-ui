@@ -47,10 +47,12 @@
   transform-origin: top center;
   transform: translateX(var(--dx, 0px)) translateY(var(--rest-y)) scale(var(--rest-scale));
   opacity: calc(1 - var(--slot) * 0.25);
+  /* Arriving, and fanning out or back, land on the spring; a dismissed card leaves on the same
+     transition, which only moves it 10 px. */
   transition:
-    transform var(--dur-enter) var(--ease-out),
+    transform var(--dur-spring) var(--spring),
     opacity var(--dur-enter) var(--ease-out);
-  animation: toast-in var(--dur-enter) var(--ease-out);
+  animation: toast-in var(--dur-spring) var(--spring);
   pointer-events: auto;
   touch-action: pan-y;
 }
@@ -58,7 +60,7 @@
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.96);
+    transform: translateY(-14px);
   }
 }
 

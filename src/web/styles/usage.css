@@ -73,7 +73,7 @@
 }
 
 /* The chosen option's face is one element that glides to it (SlidingIndicator):
-   the edge toward the target moves at --dur-lead, the trailing one a beat later. */
+   the edge toward the target moves at --dur-lead, the trailing one follows on the spring. */
 .sliding-indicator.segmented-pill {
   position: absolute;
   top: 3px;
@@ -83,14 +83,14 @@
   box-shadow: var(--shadow-soft);
   pointer-events: none;
   transition:
-    left var(--dur-lag, 0.22s) var(--ease-out),
+    left var(--dur-lag, var(--dur-spring)) var(--spring),
     width var(--dur-lead, 0.16s) var(--ease-out);
 }
 
 .sliding-indicator.segmented-pill[style*="--lead: left"] {
   transition:
     left var(--dur-lead, 0.16s) var(--ease-out),
-    width var(--dur-lag, 0.22s) var(--ease-out);
+    width var(--dur-lag, var(--dur-spring)) var(--spring);
 }
 
 /* Pressing squeezes the pill's face a little; the pill itself does not move. */
