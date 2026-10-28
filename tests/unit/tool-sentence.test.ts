@@ -165,6 +165,18 @@ describe("helpers", () => {
     expect(errorLine("x".repeat(300))).toHaveLength(140);
     expect(errorLine("\n  \n")).toBeUndefined();
   });
+  it("finds the line that says why, not a command's banner", () => {
+    expect(errorLine("Running 1 test using 1 worker\n  ✘ 1 failed\n  Error: port 4791 is already in use\n  at global-setup.ts:71")).toBe("Error: port 4791 is already in use");
+    expect(errorLine("compiling...\nsegmentation fault")).toBe("segmentation fault");
+    // A grep -c that found nothing exits 1 with "0": no reason to show.
+    expect(errorLine("0\n")).toBeUndefined();
+  });
+  it("leaves out the cd into the project a command starts with", () => {
+    const bash = (command: string) => toolSentence(tool({ name: "bash", category: "command", args: args({ command }), output: "" }), WS).target;
+    expect(bash("cd /home/me/app && git status --short")).toBe("git status --short");
+    expect(bash('cd "/tmp/a b"; cd src && ls')).toBe("ls");
+    expect(bash("cdk deploy")).toBe("cdk deploy");
+  });
   it("words a call's time", () => {
     expect(callTime(760)).toBe("760ms");
     expect(callTime(1200)).toBe("1.2s");

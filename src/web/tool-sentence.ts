@@ -57,17 +57,25 @@ function lineCount(output: string): number {
   return trimmed ? trimmed.split("\n").length : 0;
 }
 
-/** The first non-empty line of a failure, cut to a line a row can carry. */
+/** Words a failure's own line carries; a command's first line is usually its banner ("Running 1 test"), not the reason. */
+const ERROR_WORDS = /\b(error|errors|fail(ed|ure)?|fatal|exception|denied|not found|no such|cannot|can't|unable|invalid|timed? ?out|refused|panic)\b/i;
+
+/**
+ * The line that says why a call failed, cut to a line a row can carry: the last line naming an error, else
+ * the last line. A line too short to say anything (a `grep -c`'s "0") is no reason, and none is shown.
+ */
 export function errorLine(output: string): string | undefined {
-  const line = output.split("\n").map((l) => l.trim()).find(Boolean);
-  if (!line) return undefined;
+  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const line = lines.findLast((l) => ERROR_WORDS.test(l)) ?? lines[lines.length - 1];
+  if (!line || !/[a-z]{3}/i.test(line)) return undefined;
   return line.length > ERROR_CUT ? `${line.slice(0, ERROR_CUT - 1)}…` : line;
 }
 
 /** A command's first line worth showing: the model's leading `# note` lines are skipped, a shebang is not a note. Cut to 60 characters. */
 function commandLine(cmd: string): string {
   const lines = cmd.split("\n").map((l) => l.trim()).filter(Boolean);
-  const line = lines.find((l) => !l.startsWith("#") || l.startsWith("#!")) ?? lines[0] ?? "";
+  // Agents start most commands by changing into the project ("cd /home/me/app && …"); the row says what ran, not where.
+  const line = (lines.find((l) => !l.startsWith("#") || l.startsWith("#!")) ?? lines[0] ?? "").replace(/^(?:cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:&&|;)\s*)+/, "");
   return line.length > COMMAND_CUT ? `${line.slice(0, COMMAND_CUT - 1)}…` : line;
 }
 
