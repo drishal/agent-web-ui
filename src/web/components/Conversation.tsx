@@ -13,6 +13,7 @@ import { useNow } from "../hooks.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
+import { claimLanding, glideOffset } from "../queue-glide.js";
 import { Markdown } from "./Markdown.js";
 import { QuoteButton } from "./QuoteButton.js";
 import { addToDraft, asQuote, quoteParts } from "../draft-bus.js";
@@ -433,6 +434,21 @@ function UserPrompt({
       window.setTimeout(() => setLinkCopied(false), 1500);
     });
   const arrival = useArrival(item.id);
+  const bubble = useRef<HTMLDivElement>(null);
+  // A prompt that was a queued message glides from the queue row it left, then lights up softly (queue-glide.ts).
+  useEffect(() => {
+    if (!arrival) return;
+    return claimLanding(item.text, (spot) => {
+      const el = bubble.current;
+      if (!el) return;
+      const off = glideOffset(spot, el.getBoundingClientRect());
+      if (off && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        el.animate([{ transform: `translate(${off.dx}px, ${off.dy}px)`, opacity: 0.6 }, { transform: "none", opacity: 1 }], { duration: 600, easing: "cubic-bezier(0.16, 1, 0.3, 1)" });
+      }
+      el.classList.add("is-landed");
+      window.setTimeout(() => el.classList.remove("is-landed"), 1800);
+    });
+  }, [arrival, item.text]);
   // A long press on a phone: the hover actions as a sheet a thumb can use.
   const sheetActions: SheetAction[] = [
     ...(canBranch
@@ -462,7 +478,7 @@ function UserPrompt({
             }}
           />
         ) : (
-          <div className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt" {...press}>
+          <div ref={bubble} className={`bubble${long && !expanded ? " is-clamped" : ""}`} data-testid="user-prompt" {...press}>
             {quoteParts(item.text).map((part, i) =>
               part.quote ? (
                 <blockquote key={i} className="bubble-quote">

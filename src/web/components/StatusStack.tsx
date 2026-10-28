@@ -9,10 +9,11 @@
 // an edit whose message ran meanwhile goes to the composer instead of being lost.
 // Under the queue, the chain: what the server runs after this run (a message,
 // a handoff), each step removable, with Resume and Clear when it is paused.
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChainStep, QueueState, TodoItem } from "../../shared/protocol.js";
 import { addToDraft } from "../draft-bus.js";
 import { IconCheck, IconChevronDown, IconCircle, IconClock, IconEdit, IconQueue, IconSteer, IconSwap, IconWarning, IconX, Spinner } from "../icons.js";
+import { announceLanding, ranFromQueue, type Spot } from "../queue-glide.js";
 import { load, save } from "../storage.js";
 
 /**
@@ -95,9 +96,32 @@ export function StatusStack({
   const queued = [...queue.steering.map((t, i) => ({ t, k: "Steering", i })), ...queue.followUp.map((t, i) => ({ t, k: "Follow-up", i }))];
   const [editing, setEditing] = useState<{ k: string; i: number; original: string; draft: string } | null>(null);
   const [lost, setLost] = useState(false);
+  // Where each queued row is, and which messages the user took out, so one that left because it ran
+  // can glide from its row into the prompt it became (queue-glide.ts).
+  const queueList = useRef<HTMLUListElement>(null);
+  const last = useRef<{ texts: string[]; spots: Map<string, Spot> }>({ texts: [], spots: new Map() });
+  const taken = useRef(new Set<string>());
+  const queuedTexts = queued.map((q) => q.t).join("\u0000");
+  useLayoutEffect(() => {
+    const texts = queued.map((q) => q.t);
+    for (const text of ranFromQueue(last.current.texts, texts, taken.current)) {
+      const spot = last.current.spots.get(text);
+      if (spot) announceLanding(text, spot);
+    }
+    taken.current.clear();
+    const rows = [...(queueList.current?.children ?? [])];
+    const spots = new Map<string, Spot>();
+    texts.forEach((t, i) => {
+      const box = rows[i]?.getBoundingClientRect();
+      if (box && !spots.has(t)) spots.set(t, { left: box.left, top: box.top });
+    });
+    last.current = { texts, spots };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedTexts]);
   /** The queue with this message changed (or, with null, removed), from the queue as it is now. */
   const change = async (k: string, i: number, original: string, next: string | null) => {
     const field = k === "Steering" ? "steering" : "followUp";
+    taken.current.add(original);
     const list = queue[field];
     const at = list[i] === original ? i : list.indexOf(original);
     if (at < 0) {
@@ -159,7 +183,7 @@ export function StatusStack({
             </div>
           ) : null}
           {queued.length > 0 ? (
-            <ul className="stack-queue" aria-label="Queued messages">
+            <ul ref={queueList} className="stack-queue" aria-label="Queued messages">
               {queued.map((q) => {
                 const open = editing && editing.k === q.k && editing.i === q.i ? editing : null;
                 return (

@@ -337,3 +337,40 @@
     transform: translateY(-0.55em);
   }
 }
+
+/* A queued message that has become its prompt (queue-glide.ts): it glides in from the queue row,
+   then its bubble is lit softly for a moment. */
+.bubble.is-landed {
+  animation: bubble-landed 1.6s var(--ease-out);
+}
+
+@keyframes bubble-landed {
+  0% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+/* The status stack grows to its content instead of appearing at full height, and a queued row grows in. */
+.status-stack {
+  animation: stack-grow var(--dur-enter) var(--ease-out);
+}
+
+.stack-queue > .stack-row {
+  animation: stack-grow var(--dur-enter) var(--ease-out);
+}
+
+@keyframes stack-grow {
+  from {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+  }
+  to {
+    max-height: 40vh;
+    opacity: 1;
+    overflow: hidden;
+  }
+}
