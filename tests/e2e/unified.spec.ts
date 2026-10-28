@@ -2,7 +2,7 @@
 // search across every chat, the file viewer, saved prompts, usage, the split
 // view, the checkpoint timeline, and chained follow-ups.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newChat, openChat, sendAndWait, signInAndOpen, expectDraft } from "./helpers.js";
@@ -257,6 +257,47 @@ test("the file timeline compares any two points of a chat's checkpoints, and off
   await timeline.getByRole("button", { name: "Undo to before #2…" }).click();
   await expect(timeline).toBeHidden();
   await expect(page.getByRole("dialog").filter({ hasText: "notes.md" })).toBeVisible();
+});
+
+test("Undo restores files only after a held press; a tap does nothing", async ({ page }) => {
+  const project = path.join(process.env.AWUI_E2E_ROOT ?? "", "hold-repo");
+  mkdirSync(project, { recursive: true });
+  writeFileSync(path.join(project, "app.ts"), "const a = 1;\n");
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: project });
+  git("init", "-q");
+  git("add", ".");
+  git("commit", "-qm", "init");
+  await signInAndOpen(page, "hold-repo");
+  await newChat(page);
+  await sendAndWait(page, "first turn");
+  await sendAndWait(page, "second turn");
+  // Change the file only after both prompts, so undoing to before #2 must put it back.
+  writeFileSync(path.join(project, "app.ts"), "const a = 2;\n");
+  await page.getByRole("button", { name: "Chat actions" }).click();
+  await page.getByRole("menuitem", { name: "File timeline" }).click();
+  const timeline = page.getByRole("dialog", { name: "File timeline" });
+  await expect(timeline).toBeVisible();
+  await timeline.getByRole("navigation", { name: "Points" }).getByRole("button", { name: /Before prompt 2/ }).click();
+  await timeline.getByRole("button", { name: "Undo to before #2…" }).click();
+  const restore = page.getByRole("dialog", { name: "Undo file changes" });
+  await expect(restore).toBeVisible();
+  await expect(restore.getByRole("list", { name: "Files" })).toContainText("app.ts");
+  const hold = restore.getByRole("button", { name: /Undo 1 file/ });
+
+  // A quick press lets go too early: nothing restored yet.
+  const boxB = (await hold.boundingBox())!;
+  await page.mouse.move(boxB.x + boxB.width / 2, boxB.y + boxB.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+  expect(readFileSync(path.join(project, "app.ts"), "utf8")).toBe("const a = 2;\n");
+
+  // A held press fires: 700ms covers the 600ms fill.
+  await page.mouse.down();
+  await page.waitForTimeout(750);
+  await page.mouse.up();
+  await expect(page.getByRole("status").filter({ hasText: "Undid changes" })).toBeVisible({ timeout: 10_000 });
+  expect(readFileSync(path.join(project, "app.ts"), "utf8")).toBe("const a = 1;\n");
 });
 
 test("Then queues a message on the server for after the run, and a stop pauses the chain until Resume", async ({ page }) => {

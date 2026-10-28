@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { CheckpointChange, CheckpointPreview } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { Dialog } from "./Dialog.js";
+import { HoldButton } from "./HoldButton.js";
 
 const CHANGE: Record<CheckpointChange, string> = {
   restore: "put back",
@@ -81,20 +82,20 @@ export function RestoreDialog({
         <button type="button" className="btn" onClick={onClose}>
           Cancel
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
+        {/* The files come back with real pressure: hold ~600ms so a stray click can't. */}
+        <HoldButton
+          label={chosen.length === 0 ? "Undo" : `Undo ${chosen.length} ${chosen.length === 1 ? "file" : "files"}`}
+          holdLabel="Hold to undo"
+          doneLabel="File changes undone"
           disabled={busy || chosen.length === 0}
-          onClick={() => {
+          onFire={() => {
             setBusy(true);
             void onRestore(
               chosen.map((f) => f.path),
               fork,
             ).finally(() => setBusy(false));
           }}
-        >
-          {chosen.length === 0 ? "Undo" : `Undo ${chosen.length} ${chosen.length === 1 ? "file" : "files"}`}
-        </button>
+        />
       </div>
     </Dialog>
   );

@@ -199,3 +199,56 @@
   background: var(--danger);
   color: var(--bg);
 }
+
+/* ---- hold to confirm -------------------------------------------------------
+   The button fills from the left in the danger colour while held (600ms;
+   HoldButton). An early let-go resets it. The fill is a custom property,
+   stepped per frame by the requestAnimationFrame in the component; reduced
+   motion holds the same 600ms (no animation makes the wait less, not more). */
+
+.hold-button {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.hold-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* --hold runs 0..1 with the press (the component sets it each rAF tick). */
+  transform: scaleX(var(--hold, 0));
+  transform-origin: left center;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.hold-button.is-holding {
+  border-color: var(--danger);
+}
+
+.hold-button-label,
+.hold-button-hint {
+  position: relative;
+}
+
+.hold-button-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--danger) 70%, var(--muted-text));
+  letter-spacing: 0.01em;
+}
