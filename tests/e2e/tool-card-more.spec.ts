@@ -36,7 +36,8 @@ test("find in chat reaches a call the fold hides", async ({ page }) => {
 test("a test run wears the test icon in its row and in the header stack", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await sendAndWait(page, "testrun");
+  // With another call beside it, so the card has a header and its stack.
+  await sendAndWait(page, "tool testrun");
   const toggle = page.getByTestId("process-toggle").last();
   await expect(toggle.getByTestId("kind-stack").locator(".kind-chip.is-test")).toHaveCount(1);
   await toggle.click();
@@ -46,7 +47,8 @@ test("a test run wears the test icon in its row and in the header stack", async 
 test("the working mark is eight rays, and gives way to a check that draws itself", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await send(page, "ticking");
+  // Two calls: a settled card of one call drops its header, and the check is the header's.
+  await send(page, "tool ticking");
   const toggle = page.getByTestId("process-toggle").last();
   await expect(toggle.locator(".rays path")).toHaveCount(8);
   const ray = await toggle.locator(".rays path").nth(3).evaluate((el) => getComputedStyle(el).animationName);
@@ -61,7 +63,7 @@ test("the working mark is eight rays, and gives way to a check that draws itself
 test("a turn loaded from history shows no check", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await sendAndWait(page, "tool");
+  await sendAndWait(page, "tool edit");
   await page.reload();
   await expect(page.getByTestId("process-toggle").last()).toContainText("Worked for");
   await expect(page.locator(".check-draw")).toHaveCount(0);
@@ -72,7 +74,7 @@ test.describe("reduced motion", () => {
   test("the rays and the check do not animate", async ({ page }) => {
     await signInAndOpen(page);
     await newChat(page);
-    await send(page, "ticking");
+    await send(page, "tool ticking");
     const toggle = page.getByTestId("process-toggle").last();
     expect(await toggle.locator(".rays path").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
     await expect(toggle).toHaveText(/Worked for/, { timeout: 20_000 });

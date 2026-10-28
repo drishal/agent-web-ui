@@ -115,6 +115,9 @@ function firstLine(text: string): string {
   return text.trim().split("\n").find((l) => l.trim()) ?? "";
 }
 
+/** Past this many lines a call's output scrolls in its panel, and "Full output" opens it in a sheet. */
+const FULL_OUTPUT_LINES = 16;
+
 const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking: string; streaming: boolean }) {
   return (
     <DisclosureRow
@@ -219,21 +222,24 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
             {item.subagents ? (
               <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
             ) : (
-              <>
-                <ToolBody item={item} workspace={workspace} />
-                {item.output ? (
-                  <button
-                    type="button"
-                    className="btn btn-small btn-ghost tool-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFull(true);
-                    }}
-                  >
-                    Full output
-                  </button>
+              <div className="tool-body">
+                <ToolBody item={item} workspace={workspace} bare />
+                {/* Only when there is more than the panel shows: a short output is all here already. */}
+                {item.output && (item.truncated || item.output.split("\n").length > FULL_OUTPUT_LINES) ? (
+                  <div className="tool-body-foot">
+                    <button
+                      type="button"
+                      className="btn btn-small btn-ghost tool-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFull(true);
+                      }}
+                    >
+                      Full output
+                    </button>
+                  </div>
                 ) : null}
-              </>
+              </div>
             )}
           </div>
         ) : null}
@@ -840,9 +846,12 @@ function ProcessFold({
     }
   }, [open]);
   const bodyId = `fold-${foldId}`;
+  // One settled call is its own card: a header saying "Used 1 tool" over that call would only say it twice.
+  // A live card keeps its header, which carries the phase and the clock while the run goes.
+  const single = !live && toolCount === 1 && items.every((item) => item.kind === "tool" || item.kind === "assistant");
   return (
-    <div ref={root} className={`process process-card${open ? " is-open" : ""}${live ? " is-live" : ""}${failedCalls > 0 ? " has-failed" : ""}`}>
-      <div className="process-bar">
+    <div ref={root} className={`process process-card${open || single ? " is-open" : ""}${single ? " is-single" : ""}${live ? " is-live" : ""}${failedCalls > 0 ? " has-failed" : ""}`}>
+      {single ? null : <div className="process-bar">
         <button type="button" className="process-head" aria-expanded={open} aria-controls={bodyId} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
           {live ? <RaySpinner size={14} /> : wasLive ? <span className="process-done"><IconCheck size={14} draw /></span> : null}
           {stack.shown.length > 0 ? (
@@ -890,14 +899,14 @@ function ProcessFold({
             {failedCalls} failed
           </button>
         ) : null}
-      </div>
+      </div>}
       {thought ? (
         <div className="process-thought" data-testid="live-thought">
           <IconSpark size={13} />
           <span>{thought}</span>
         </div>
       ) : null}
-      {open ? (
+      {open || single ? (
         <div className="process-body" id={bodyId}>
           {(() => {
             // The answer's own thought sits where the answer came, before any work that followed it.

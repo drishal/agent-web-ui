@@ -54,10 +54,18 @@
   padding-right: 112px;
 }
 
+/* The chevron stays the last thing on the line, right of the tally. */
+.process-card.has-failed .process-chevron {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  translate: 0 -50%;
+}
+
 .process-failed {
   position: absolute;
   top: 50%;
-  right: 38px;
+  right: 34px;
   transform: translateY(-50%);
   padding: 2px 9px;
   border: 0;
@@ -136,8 +144,13 @@
   border-top: 1px solid var(--hairline);
 }
 
-.process-card .process-body > .tool-row + .tool-row {
+.process-card .process-body > * + * {
   border-top: 1px solid var(--hairline);
+}
+
+/* A single settled call is the card: no header, so no rule above its row. */
+.process-card.is-single .process-body {
+  border-top: 0;
 }
 
 .tool-row {
@@ -253,7 +266,66 @@
 }
 
 .tool-line > .drow-body {
-  padding: 2px 8px 10px 38px;
+  padding: 0 10px 10px 38px;
+}
+
+/* An opened call: one quiet panel under the sentence (no border, no head that repeats the row), its
+   "Full output" at the foot. The cards inside lose their own frame so it is one box, not boxes in boxes. */
+.tool-body {
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--code-bg);
+}
+
+.tool-body > .tool-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.tool-body > .tool-card.is-failed {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.tool-card-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px 0;
+  color: var(--muted-text);
+  font-family: var(--font-sans);
+  font-size: calc(var(--chat-small) - 0.6px);
+}
+
+.tool-card-caption .file-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+
+.tool-card-caption .tool-card-meta {
+  margin-left: auto;
+}
+
+.tool-body-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 6px 6px;
+}
+
+.tool-body-foot .tool-full {
+  margin: 0;
+  min-height: 0;
+  padding: 2px 8px;
+  color: var(--muted-text);
+  font-size: calc(var(--chat-small) - 0.6px);
+}
+
+.tool-body-foot .tool-full:hover {
+  color: var(--text);
 }
 
 /* Motion: the check draws itself (motion.css) and a failed mark fades in when a call settles in view; the verb shimmers while it runs. */

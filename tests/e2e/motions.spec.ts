@@ -7,9 +7,8 @@ test("a labelled copy button (a tool output sheet's Copy) says Copied for a mome
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await signInAndOpen(page);
   await newChat(page);
-  await sendAndWait(page, "hello tool");
-  const toggle = page.getByTestId("process-toggle").last();
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await sendAndWait(page, "hello big");
+  // One call is its own card, already open.
   const rows = page.getByTestId("tool-row");
   const count = await rows.count();
   let opened = false;

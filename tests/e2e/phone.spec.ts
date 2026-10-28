@@ -179,9 +179,8 @@ test("a phone keeps prompts and tool rows compact", async ({ page }) => {
   expect(box.height).toBeLessThanOrEqual(4 * box.line + 16.5);
   // A tool call is a line and, when it has facts, a muted second line under it: ten of them must not be a screen and a half.
   await newChat(page);
+  // One call is its own card, its row in view.
   await sendAndWait(page, "tool please");
-  const fold = page.getByTestId("process-toggle").last();
-  if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
   const row = page.locator(".drow-head").first();
   await expect(row).toBeVisible();
   expect((await row.boundingBox())!.height).toBeLessThanOrEqual(58);

@@ -3,7 +3,7 @@
 // terminal, a read under its file, a search under its pattern, a fetch under
 // its URL, and anything else as its arguments' key-value rows. Each sits in
 // one card with a header naming what it touched.
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useMemo, useState, type ReactNode } from "react";
 import type { DiffLine, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { IconCheck, IconCircle, IconDot, IconFile, IconGlobe, IconSearch, IconTerminal, IconX } from "../icons.js";
 import { parseJsonContainer } from "../json-tree.js";
@@ -195,7 +195,25 @@ export function DiffBadge({ added, removed }: { added: number; removed: number }
   );
 }
 
-function CardHead({ icon, children, meta }: { icon: ReactNode; children: ReactNode; meta?: ReactNode }) {
+/** Inside a tool card's row the row already names the call: a head that only repeats it is left out (ToolBody's `bare`). */
+const BareContext = createContext(false);
+
+/**
+ * `repeats` says what of the head the row already shows: "all" (it says nothing new), "meta" (the diff count;
+ * the file link stays), or "icon" (only the icon; the link and the line range stay). Bare, what is left is a
+ * one-line caption, so the file still opens (and previews) from the body.
+ */
+function CardHead({ icon, children, meta, repeats }: { icon: ReactNode; children: ReactNode; meta?: ReactNode; repeats?: "all" | "meta" | "icon" }) {
+  const bare = useContext(BareContext);
+  if (bare && repeats === "all") return null;
+  if (bare && repeats) {
+    return (
+      <div className="tool-card-caption">
+        {children}
+        {repeats === "icon" && meta ? <span className="tool-card-meta">{meta}</span> : null}
+      </div>
+    );
+  }
   return (
     <div className="tool-card-head">
       <span className="tool-card-icon">{icon}</span>
@@ -317,7 +335,16 @@ function TodoList({ entries }: { entries: TodoEntry[] }) {
   );
 }
 
-export function ToolBody({ item, workspace }: { item: ToolItem; workspace: string }) {
+/** A call's body: its diff, terminal, file, or input and output. `bare` (inside a card's row) leaves out heads that repeat the row. */
+export function ToolBody({ item, workspace, bare = false }: { item: ToolItem; workspace: string; bare?: boolean }) {
+  return (
+    <BareContext.Provider value={bare}>
+      <CallBody item={item} workspace={workspace} />
+    </BareContext.Provider>
+  );
+}
+
+function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
   const args = useMemo(() => parseArgs(item.args), [item.args]);
   const failed = item.status === "error";
   const path = item.paths[0] ? relativePath(item.paths[0], workspace) : null;
@@ -331,7 +358,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
   if ((item.category === "edit" || item.category === "write") && item.diff) {
     const settledNote = item.output && item.status !== "running" && (failed || item.output.length < 400);
     return card(
-      <CardHead icon={<IconFile size={13} />} meta={<DiffBadge added={item.diff.added} removed={item.diff.removed} />}>
+      <CardHead icon={<IconFile size={13} />} meta={<DiffBadge added={item.diff.added} removed={item.diff.removed} />} repeats="meta">
         {path ? <FileLink path={path} /> : item.name}
       </CardHead>,
       <>
@@ -375,7 +402,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
 
   if (item.category === "read" && path) {
     return card(
-      <CardHead icon={<IconFile size={13} />} meta={lineRange(args)}>
+      <CardHead icon={<IconFile size={13} />} meta={lineRange(args)} repeats="icon">
         <FileLink path={path} />
       </CardHead>,
       <Output item={item} label={null} />,
@@ -386,7 +413,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
   if (pattern !== null) {
     const where = path && path !== "." ? path : null;
     return card(
-      <CardHead icon={<IconSearch size={13} />}>
+      <CardHead icon={<IconSearch size={13} />} repeats="all">
         <code className="tool-chip">{pattern}</code>
         {where ? (
           <>

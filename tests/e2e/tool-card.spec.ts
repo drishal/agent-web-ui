@@ -32,8 +32,8 @@ test("a run of calls is one card: a header that counts and stacks the kinds, a s
 test("a test run's summary is read from its output: the counts and the failing test", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
+  // One call is its own card: its row is in view without opening anything.
   await sendAndWait(page, "testrun");
-  await page.getByTestId("process-toggle").last().click();
   const row = page.locator('[data-tool="bash"]');
   await expect(row.locator(".tool-fact")).toHaveText("1 passed · 1 failed");
   await expect(row.getByTestId("tool-error")).toHaveText("keeps the order of two lists");
@@ -42,7 +42,8 @@ test("a test run's summary is read from its output: the counts and the failing t
 test("a failed call tints its row with the reason, opens its card, and the tally goes to it", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await sendAndWait(page, "toolfail");
+  // Two calls, so the card has a header and its tally.
+  await sendAndWait(page, "tool toolfail");
   const toggle = page.getByTestId("process-toggle").last();
   // A failed run stays open once it settles.
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -128,11 +129,12 @@ test.describe("on a phone", () => {
 test("the working label names what the agent is doing, then settles on Worked for", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  await send(page, "ticking");
+  // Two calls: a settled card of one call drops its header, and this checks the header's last word.
+  await send(page, "tool ticking");
   const toggle = page.getByTestId("process-toggle").last();
   const phase = toggle.getByRole("status");
   await expect(phase).toHaveText("Running npm test");
-  await expect(toggle).toHaveText(/Worked for \d+s · Used 1 tool/, { timeout: 20_000 });
+  await expect(toggle).toHaveText(/Worked for \d+s · Used 2 tools/, { timeout: 20_000 });
   await expect(toggle.getByRole("status")).toHaveCount(0);
 });
 
@@ -141,7 +143,7 @@ test.describe("reduced motion", () => {
   test("a settled mark and the card's chevron do not animate", async ({ page }) => {
     await signInAndOpen(page);
     await newChat(page);
-    await sendAndWait(page, "ticking");
+    await sendAndWait(page, "tool ticking");
     await page.getByTestId("process-toggle").last().click();
     const animated = await page.locator(".tool-row .tool-status > svg, .process-chevron").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName + getComputedStyle(el).transitionDuration));
     for (const a of animated) expect(a).toMatch(/^none0s/);
