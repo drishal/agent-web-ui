@@ -307,3 +307,29 @@
     margin: 0;
   }
 }
+
+/* The working phase in the header ("Thinking", "Running npm test", "Writing"): a new one rises in
+   as the old one is replaced. It shimmers on its own, since the label's shimmer cannot clip a
+   layer that moves. */
+.process.is-live .process-label .phase {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: bottom;
+  text-overflow: ellipsis;
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--text) 50%, var(--muted) 65%, var(--muted) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    shimmer 1.8s linear infinite,
+    phase-in var(--dur-enter) var(--ease-out);
+}
+
+@keyframes phase-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(2px);
+  }
+}

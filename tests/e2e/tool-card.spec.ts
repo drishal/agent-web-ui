@@ -122,6 +122,17 @@ test.describe("on a phone", () => {
   });
 });
 
+test("the working label names what the agent is doing, then settles on Worked for", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "ticking");
+  const toggle = page.getByTestId("process-toggle").last();
+  const phase = toggle.getByRole("status");
+  await expect(phase).toHaveText("Running npm test");
+  await expect(toggle).toHaveText(/Worked for \d+s · Used 1 tool/, { timeout: 20_000 });
+  await expect(toggle.getByRole("status")).toHaveCount(0);
+});
+
 test.describe("reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
   test("a settled mark and the card's chevron do not animate", async ({ page }) => {

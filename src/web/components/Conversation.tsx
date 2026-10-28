@@ -11,6 +11,7 @@ import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { callTime, toolSentence } from "../tool-sentence.js";
+import { phaseDelay, workingPhase } from "../working-phase.js";
 import { retryLabel, retryPrompt, type RetryMode } from "../tool-retry.js";
 import { iconStack, monogram, serverHue, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
 import { Dot } from "./Dot.js";
@@ -723,6 +724,21 @@ function ChangedFiles({ files, workspace, stat }: { files: string[]; workspace: 
  */
 const FoldContext = createContext<Record<string, boolean>>({});
 
+/** The phase to show: a new one waits out the hold since the last change (the first shows at once), so fast calls do not flicker. */
+function useSteadyPhase(wanted: string): string {
+  const [shown, setShown] = useState(wanted);
+  const changedAt = useRef(0);
+  useEffect(() => {
+    if (wanted === shown) return;
+    const timer = window.setTimeout(() => {
+      changedAt.current = Date.now();
+      setShown(wanted);
+    }, phaseDelay(changedAt.current, Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [wanted, shown]);
+  return shown;
+}
+
 function ProcessFold({
   turn,
   open: turnOpen,
@@ -747,13 +763,14 @@ function ProcessFold({
   const open = foldId === turn.id ? turnOpen : (folds[foldId] ?? (turnOpen || failedCalls > 0));
   const live = turn.live && (place === undefined || place === "last");
   const now = useNow(live);
+  const phase = useSteadyPhase(live ? workingPhase(turn, workspace) : "");
   const answerAt = segment ? segment.answerAt : turn.answerAt;
   const toolCount = items.filter((item) => item.kind === "tool").length;
   const stack = iconStack(toolKinds(items));
   const duration =
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
   const leading = place === undefined || place === "first";
-  const label = live ? "Working" : leading ? (duration ? `Worked for ${duration}` : "Worked") : null;
+  const label = live ? <span className="phase" role="status" key={phase}>{phase || "Working"}</span> : leading ? (duration ? `Worked for ${duration}` : "Worked") : null;
   const answerThinking = answerAt >= 0 && turn.answer?.thinking ? turn.answer : null;
   const thought = live && !open ? latestThought(turn) : null;
   const root = useRef<HTMLDivElement>(null);
