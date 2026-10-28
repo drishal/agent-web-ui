@@ -6,9 +6,10 @@
 // draft's estimated size once it is worth a mention (token-estimate.ts), which stays
 // even where the ring is hidden; the panel adds what sending it does to the context.
 import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ContextCategory, ContextUsage, SessionUsage } from "../../shared/protocol.js";
+import type { ContextCategory, ContextPoint, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 import { coarse } from "../gestures.js";
 import { useDismiss } from "../hooks.js";
+import { sparkline, SPARK_H, SPARK_W } from "../sparkline.js";
 import { type DraftSize, draftRow, draftSize, draftWarning } from "../token-estimate.js";
 import { Dialog } from "./Dialog.js";
 import { Dot } from "./Dot.js";
@@ -54,9 +55,10 @@ function Row({ label, value, color, title }: { label: string; value: string; col
 }
 
 /** The popover's sections. Drawn inside the desktop's anchored panel and inside the phone's bottom sheet alike. */
-function UsageBody({ context, usage, draft, canCompact }: { context: ContextUsage; usage: SessionUsage | null; draft: DraftSize | null; canCompact: boolean }) {
+function UsageBody({ context, usage, draft, canCompact, history }: { context: ContextUsage; usage: SessionUsage | null; draft: DraftSize | null; canCompact: boolean; history: ContextPoint[] }) {
   const pct = Math.max(0, Math.min(100, context.percent ?? 0));
   const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
+  const spark = useMemo(() => sparkline(history), [history]);
   const warning = draft ? draftWarning(draft, canCompact) : null;
 
   const uncached = usage ? usage.input + usage.cacheWrite : 0;
@@ -75,6 +77,13 @@ function UsageBody({ context, usage, draft, canCompact }: { context: ContextUsag
           </span>
           <span className="usage-value">{context.tokens !== null ? `${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}</span>
         </div>
+        {spark ? (
+          <svg className="usage-spark" viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} width={SPARK_W} height={SPARK_H} role="img" aria-label={spark.label} data-testid="context-sparkline">
+            <line className="usage-spark-warn" x1="0" x2={SPARK_W} y1={spark.warnY} y2={spark.warnY} />
+            <path className="usage-spark-line" d={spark.path} fill="none" />
+            {spark.points.map((p, i) => (p.drop ? <circle key={i} className="usage-spark-drop" cx={p.x} cy={p.y} r="2.5" /> : null))}
+          </svg>
+        ) : null}
         <div className="usage-bar" aria-hidden="true">
           {categories.length > 0 ? (
             categories.map((x, i) => <span key={x.id} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />)
@@ -128,7 +137,7 @@ function UsageBody({ context, usage, draft, canCompact }: { context: ContextUsag
 }
 
 /** `draft` is the composer's text and image count, for the figure of what sending adds; `canCompact` whether the harness can answer a full window with Compact. */
-export function ContextRing({ context, usage, draft, canCompact }: { context: ContextUsage | null; usage: SessionUsage | null; draft: { text: string; images: number }; canCompact: boolean }) {
+export function ContextRing({ context, usage, draft, canCompact, history }: { context: ContextUsage | null; usage: SessionUsage | null; draft: { text: string; images: number }; canCompact: boolean; history: ContextPoint[] }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
@@ -191,11 +200,11 @@ export function ContextRing({ context, usage, draft, canCompact }: { context: Co
       {open ? (
         coarse() ? (
           <Dialog title="Context and usage" onClose={() => setOpen(false)} className="usage-sheet">
-            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} />
           </Dialog>
         ) : (
           <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
-            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} />
           </div>
         )
       ) : null}

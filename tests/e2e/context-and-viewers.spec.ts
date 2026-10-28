@@ -1,7 +1,7 @@
 // Presence in the header (how many devices have a chat open) and the context panel
 // (its sparkline and its hover). Each test opens its own chat.
 import { expect, test } from "@playwright/test";
-import { openChat, signInAndOpen } from "./helpers.js";
+import { openChat, sendAndWait, signInAndOpen } from "./helpers.js";
 
 test("a second page on the same chat shows '2 devices' in the header, and it goes away again", async ({ page, context }) => {
   await signInAndOpen(page);
@@ -16,4 +16,13 @@ test("a second page on the same chat shows '2 devices' in the header, and it goe
   await expect(other.getByTestId("chat-viewers")).toHaveText("2 devices", { timeout: 10_000 });
   await other.close();
   await expect(page.getByTestId("chat-viewers")).toHaveCount(0, { timeout: 10_000 });
+});
+
+test("the context panel draws how the context grew, with a name a screen reader can read", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  await sendAndWait(page, "second question");
+  await page.getByTestId("context-ring").click();
+  const panel = page.getByRole("dialog", { name: "Context and usage" });
+  await expect(panel.getByRole("img", { name: /^Context per turn: \d+% … \d+%/ })).toBeVisible();
 });

@@ -1046,7 +1046,7 @@ export function Composer({
                   {compactFirst ? "Compact" : "Full"} {formatTokens(chat.context?.tokens ?? 0)}
                 </button>
               ) : null}
-              <ContextRing context={chat.context} usage={chat.usage} draft={{ text, images: images.length }} canCompact={caps.supportsCompact} />
+              <ContextRing context={chat.context} usage={chat.usage} draft={{ text, images: images.length }} canCompact={caps.supportsCompact} history={chat.contextHistory} />
               {busy ? (
                 <>
                   {caps.supportsSteer ? (
