@@ -14,7 +14,7 @@ import { callTime, toolSentence } from "../tool-sentence.js";
 import { phaseDelay, workingPhase } from "../working-phase.js";
 import { retryLabel, retryPrompt, type RetryMode } from "../tool-retry.js";
 import { foldRun, moreLabel } from "../run-fold.js";
-import { iconStack, monogram, serverHue, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
+import { iconStack, monogram, serverHue, toolKind, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
@@ -135,8 +135,8 @@ const TIMER_AFTER_MS = 1500;
 /** A call's kind as a 20px chip: the category's glyph, or an MCP server's monogram in a hue drawn from the theme. */
 function KindChip({ kind, running = false }: { kind: ToolKind; running?: boolean }) {
   return (
-    <span className={`kind-chip${kind.server ? ` is-server hue-${serverHue(kind.server)}` : ""}`} aria-hidden="true">
-      {running ? <Spinner size={12} /> : kind.server ? <span className="kind-mono">{monogram(kind.server)}</span> : <ToolIcon category={kind.category} size={12} />}
+    <span className={`kind-chip${kind.server ? ` is-server hue-${serverHue(kind.server)}` : ""}${kind.test ? " is-test" : ""}`} aria-hidden="true">
+      {running ? <Spinner size={12} /> : kind.server ? <span className="kind-mono">{monogram(kind.server)}</span> : <ToolIcon category={kind.category} size={12} test={kind.test === true} />}
     </span>
   );
 }
@@ -157,7 +157,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const ms = elapsedMs ?? tookMs;
   const time = ms !== undefined && ms >= TIMER_AFTER_MS ? (running ? formatDuration(ms) : callTime(ms)) : null;
   const sentence = toolSentence(item, workspace);
-  const kind = toolKinds([item])[0] as ToolKind;
+  const kind = toolKind(item);
   const arrival = useArrival(item.id);
   // Seen running: its status mark draws in when the spinner gives way.
   const [live] = useState(item.status === "running");

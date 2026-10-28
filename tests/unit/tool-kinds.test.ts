@@ -19,6 +19,16 @@ describe("toolKinds", () => {
   });
 });
 
+describe("a test run", () => {
+  const bash = (output: string): ChatItem => ({ ...(tool("bash", "command") as object), args: '{"command":"npm test"}', output }) as ChatItem;
+  it("is a kind of its own, only when the output reads as one", () => {
+    const run = bash(" Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Duration  200ms");
+    expect(toolKinds([run])[0]).toEqual({ key: "test", category: "command", test: true });
+    expect(toolKinds([bash("hello, all tests passed I think")])[0]?.key).toBe("command");
+    expect(toolKinds([run, bash("ls"), run]).map((k) => k.key)).toEqual(["test", "command"]);
+  });
+});
+
 describe("iconStack", () => {
   const k = (key: string) => ({ key, category: "other" as const });
   it("shows three and counts the rest", () => {

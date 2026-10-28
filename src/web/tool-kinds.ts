@@ -2,6 +2,7 @@
 // kind in first-use order, an MCP server counting as a kind of its own, "+N" for
 // the rest. Also the monogram and hue an MCP server's chip wears. Pure.
 import type { ChatItem, ToolCategory } from "../shared/protocol.js";
+import { toolFacts } from "./tool-facts.js";
 
 export interface ToolKind {
   /** Distinct per kind: the category, or `mcp:<server>`. */
@@ -9,6 +10,16 @@ export interface ToolKind {
   category: ToolCategory;
   /** The MCP server, for a monogram chip. */
   server?: string;
+  /** A command whose output was a test run: it wears the test glyph, and is a kind of its own. */
+  test?: boolean;
+}
+
+/** The kind of one call: its MCP server, a test run (a command whose output tool-facts reads as one), else its category. */
+export function toolKind(item: Extract<ChatItem, { kind: "tool" }>): ToolKind {
+  const server = /^mcp__(.+?)__/.exec(item.name)?.[1];
+  if (server) return { key: `mcp:${server}`, category: item.category, server };
+  if (item.category === "command" && toolFacts(item).kind === "test") return { key: "test", category: "command", test: true };
+  return { key: item.category, category: item.category };
 }
 
 /** The distinct kinds of tool the items called, in the order each was first used. */
@@ -16,9 +27,8 @@ export function toolKinds(items: readonly ChatItem[]): ToolKind[] {
   const seen = new Map<string, ToolKind>();
   for (const item of items) {
     if (item.kind !== "tool") continue;
-    const server = /^mcp__(.+?)__/.exec(item.name)?.[1];
-    const key = server ? `mcp:${server}` : item.category;
-    if (!seen.has(key)) seen.set(key, { key, category: item.category, ...(server ? { server } : {}) });
+    const kind = toolKind(item);
+    if (!seen.has(kind.key)) seen.set(kind.key, kind);
   }
   return [...seen.values()];
 }

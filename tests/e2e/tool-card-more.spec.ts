@@ -32,3 +32,13 @@ test("find in chat reaches a call the fold hides", async ({ page }) => {
   await expect(page.getByTestId("tool-row")).toHaveCount(12);
   await expect(page.getByRole("button", { name: /^Show \d+ more/ })).toHaveCount(0);
 });
+
+test("a test run wears the test icon in its row and in the header stack", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "testrun");
+  const toggle = page.getByTestId("process-toggle").last();
+  await expect(toggle.getByTestId("kind-stack").locator(".kind-chip.is-test")).toHaveCount(1);
+  await toggle.click();
+  await expect(page.locator('[data-tool="bash"] .kind-chip.is-test')).toHaveCount(1);
+});

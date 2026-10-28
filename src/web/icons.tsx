@@ -47,6 +47,13 @@ export const IconTerminal = (p: IconProps) => (
     <path d="M4.5 6.25l2 1.75-2 1.75M8 10.25h3.25" />
   </Svg>
 );
+/** A test run: a flask with its liquid line. */
+export const IconFlask = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.25 1.75h3.5M6.75 1.75v4.5L2.9 12.4a1.2 1.2 0 001.05 1.85h8.1a1.2 1.2 0 001.05-1.85L9.25 6.25v-4.5" />
+    <path d="M4.6 10h6.8" />
+  </Svg>
+);
 export const IconSearch = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="7" cy="7" r="4.25" />
@@ -313,8 +320,9 @@ export function Spinner({ size = 14 }: { size?: number }) {
   );
 }
 
-export function ToolIcon({ category, size }: { category: ToolCategory; size?: number }) {
+export function ToolIcon({ category, size, test = false }: { category: ToolCategory; size?: number; test?: boolean }) {
   const props = size ? { size } : {};
+  if (test) return <IconFlask {...props} />;
   switch (category) {
     case "read":
       return <IconFile {...props} />;
