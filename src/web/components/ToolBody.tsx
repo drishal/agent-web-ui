@@ -348,8 +348,10 @@ function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
   const args = useMemo(() => parseArgs(item.args), [item.args]);
   const failed = item.status === "error";
   const path = item.paths[0] ? relativePath(item.paths[0], workspace) : null;
-  const card = (head: ReactNode, body: ReactNode) => (
-    <div className={`tool-card is-${item.category}${failed ? " is-failed" : ""}`}>
+  // `names`: the body spells out what the row's sentence names (the whole command, the file, the address), so an
+  // opened row leaves it out of its sentence (tool-card.css) and the call reads once, as one tile.
+  const card = (head: ReactNode, body: ReactNode, names = false) => (
+    <div className={`tool-card is-${item.category}${failed ? " is-failed" : ""}${names ? " names-target" : ""}`}>
       {head}
       {body}
     </div>
@@ -371,6 +373,7 @@ function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
           </details>
         ) : null}
       </>,
+      path !== null,
     );
   }
 
@@ -397,6 +400,7 @@ function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
         {item.status === "running" ? <span className="term-cursor" aria-hidden="true" /> : null}
         {item.truncated ? <div className="term-note">Output truncated</div> : null}
       </div>,
+      true,
     );
   }
 
@@ -406,6 +410,7 @@ function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
         <FileLink path={path} />
       </CardHead>,
       <Output item={item} label={null} />,
+      true,
     );
   }
 
@@ -440,6 +445,7 @@ function CallBody({ item, workspace }: { item: ToolItem; workspace: string }) {
         )}
       </CardHead>,
       <Output item={item} label={null} json />,
+      true,
     );
   }
 

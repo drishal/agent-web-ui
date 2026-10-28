@@ -286,8 +286,41 @@
 /* An opened call: one quiet panel under the sentence (no border, no head that repeats the row), its
    "Full output" at the foot. The cards inside lose their own frame so it is one box, not boxes in boxes. */
 .tool-body {
-  border-top: 1px solid var(--hairline);
   background: var(--code-bg);
+}
+
+/* An opened call is one tile: its sentence, any failure line, and its body share the code surface, with no rule
+   between them (a hover still shades the sentence: --hover is see-through). */
+.tool-line {
+  transition: background-color var(--dur-hover) ease;
+}
+
+.tool-row.is-open > .tool-line {
+  background: var(--code-bg);
+}
+
+/* A failed call keeps its tint as a tile, and its red edge runs the tile's whole height. */
+.tool-row.is-failed.is-open > .tool-line {
+  background: color-mix(in srgb, var(--danger) 7%, var(--code-bg));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.tool-row.is-failed.is-open > .tool-line > .collapse > .collapse-inner > .drow-body > .tool-body {
+  background: transparent;
+}
+
+/* What the body spells out in full (the whole command, the file, the address: ToolBody's .names-target) leaves the
+   sentence, so the opened call says it once: the verb and the facts head the tile, and the body carries on under
+   them. The chain is exact, so a subagent's own calls, deeper in, never hide their parent's sentence. */
+.tool-row.is-open:has(> .tool-line > .collapse > .collapse-inner > .drow-body > .tool-body > .names-target) > .tool-line > .tool-head .tool-target {
+  display: none;
+}
+
+/* The reason line under a failed call (or a test run's failing test) is read from its output, which the opened
+   tile shows: open, only its retry stays. */
+.tool-row.is-open > .tool-line > .tool-failure > .tool-error,
+.tool-row.is-open > .tool-line > .tool-failure:not(:has(.tool-retry)) {
+  display: none;
 }
 
 .tool-body .io-section {

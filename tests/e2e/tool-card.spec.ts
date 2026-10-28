@@ -39,6 +39,29 @@ test("a test run's summary is read from its output: the counts and the failing t
   await expect(row.getByTestId("tool-error")).toHaveText("keeps the order of two lists");
 });
 
+test("an opened call is one tile: the sentence keeps its verb and facts, the body says the command and the reason once", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "testrun");
+  const row = page.locator('[data-tool="bash"]');
+  const head = row.locator(".tool-head");
+  await expect(head.locator(".tool-target")).toBeVisible();
+  await expect(row.getByTestId("tool-error")).toBeVisible();
+  await head.click();
+  // The whole command is in the body, so the sentence leaves it out; the failing test is in the output.
+  await expect(row.locator(".term-command")).toBeVisible();
+  await expect(head.locator(".tool-target")).toBeHidden();
+  await expect(head.locator(".tool-verb")).toHaveText("Ran");
+  await expect(head.locator(".tool-fact")).toHaveText("1 passed · 1 failed");
+  await expect(row.getByTestId("tool-error")).toBeHidden();
+  // The button still names the whole call.
+  await expect(head).toHaveAccessibleName(/^Ran npm test/);
+  // Shut again, the sentence says it all.
+  await head.click();
+  await expect(head.locator(".tool-target")).toBeVisible();
+  await expect(row.getByTestId("tool-error")).toBeVisible();
+});
+
 test("a thought with a line wider than the card wraps inside it, once the card has opened and settled", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
