@@ -1,0 +1,183 @@
+/* ---- a turn's time as a waterfall -------------------------------------------------------- */
+
+.dialog.timing-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.timing-empty,
+.timing-total {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The axis and every row share these columns, so the ticks sit over the tracks. */
+.timing-line {
+  display: grid;
+  grid-template-columns: minmax(0, 36%) minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 12px;
+}
+
+.timing-axis {
+  position: relative;
+  height: 18px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timing-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.timing-tick:first-child {
+  transform: none;
+}
+
+.timing-tick:last-child {
+  transform: translateX(-100%);
+}
+
+.timing-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: min(60dvh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.timing-row {
+  min-height: 30px;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+}
+
+.timing-row:hover,
+.timing-row:focus-visible {
+  background: var(--hover);
+}
+
+.timing-row[data-depth="1"] .timing-label {
+  padding-left: 16px;
+  color: var(--muted);
+}
+
+.timing-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+.timing-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timing-extra {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.timing-slowest {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.timing-track {
+  position: relative;
+  height: 14px;
+}
+
+.timing-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hairline);
+}
+
+.timing-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: left var(--dur-hover) var(--ease-out), width var(--dur-hover) var(--ease-out);
+}
+
+.timing-row.is-thinking .timing-bar {
+  background: var(--thinking);
+}
+
+.timing-row.is-reply .timing-bar {
+  background: var(--ok);
+}
+
+.timing-row.is-agent .timing-bar {
+  background: var(--orange);
+}
+
+.timing-row.is-subagent .timing-bar {
+  background: color-mix(in srgb, var(--orange) 65%, transparent);
+}
+
+.timing-row.is-slowest .timing-bar {
+  background: var(--warn);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+.timing-row.is-running .timing-bar {
+  opacity: 0.7;
+}
+
+.timing-dur {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* A phone: the label gets its own line over the track, so the bars keep their width. */
+@media (max-width: 640px) {
+  .timing-line {
+    grid-template-columns: minmax(0, 1fr) 56px;
+    gap: 2px 8px;
+  }
+
+  .timing-row .timing-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .timing-axisrow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timing-axisrow > :first-child,
+  .timing-axisrow > :last-child {
+    display: none;
+  }
+
+  .timing-row {
+    padding: 4px;
+  }
+}

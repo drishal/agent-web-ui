@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { createContext, Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
@@ -35,6 +35,7 @@ import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 import { StickyPrompt } from "./StickyPrompt.js";
 import { IMPLEMENT_TEXT, PlanCard } from "./PlanCard.js";
+import { TurnTiming } from "./TurnTiming.js";
 
 const PIN_DISTANCE_PX = 96;
 /**
@@ -595,6 +596,8 @@ function Answer({
   onRestore,
   timing = null,
   turnMarkdown,
+  turn,
+  workspace,
 }: {
   item: AssistantItem;
   through: number;
@@ -607,7 +610,11 @@ function Answer({
   timing?: string | null;
   /** The whole turn (prompt, work, answer) as Markdown, for pasting into an issue; null where there is no prompt to copy it with. */
   turnMarkdown?: (() => string) | null;
+  /** The turn, for its Timing view (a waterfall of every step and call); left out where there is no turn to time. */
+  turn?: Turn;
+  workspace?: string;
 }) {
+  const [timingOpen, setTimingOpen] = useState(false);
   const copyTurn = () => navigator.clipboard?.writeText(turnMarkdown?.() ?? "");
   const [sheet, setSheet] = useState(false);
   const press = useLongPress(() => {
@@ -620,12 +627,14 @@ function Answer({
     ...(turnMarkdown ? [{ label: "Copy turn as Markdown", icon: <IconFile size={16} />, run: () => void copyTurn() }] : []),
     // Selecting a passage to quote is fiddly on a phone; this quotes the whole reply.
     { label: "Quote in message", icon: <IconEdit size={16} />, run: () => addToDraft(asQuote(item.text)) },
+    ...(turn ? [{ label: "Timing", icon: <IconClock size={16} />, run: () => setTimingOpen(true) }] : []),
     ...(canFork ? [{ label: "Fork from here", icon: <IconFork size={16} />, run: () => onFork(through) }] : []),
     ...(canRestore ? [{ label: "Undo file changes from here", icon: <IconUndo size={16} />, run: () => onRestore(through) }] : []),
   ];
   return (
     <div className={`answer${arrival}${item.streaming ? " is-streaming" : ""}`} data-testid="answer" {...press}>
       {sheet ? <ActionSheet title={timing ? `Reply · ${timing}` : "Reply"} actions={sheetActions} onClose={() => setSheet(false)} /> : null}
+      {timingOpen && turn ? <TurnTiming turn={turn} workspace={workspace ?? ""} onClose={() => setTimingOpen(false)} /> : null}
       {item.text ? <Markdown text={item.text} allowRun={!item.streaming} streaming={item.streaming} /> : null}
       {item.streaming && !item.text ? <span className="typing" aria-label="Writing">…</span> : null}
       {stopped ? <span className="stopped-pill">Stopped</span> : null}
@@ -641,6 +650,11 @@ function Answer({
               icon={<IconFile size={14} />}
               onCopy={copyTurn}
             />
+          ) : null}
+          {turn ? (
+            <button type="button" className="ghost-icon" aria-label="Timing" title="Timing: when each step and call of this turn ran" onClick={() => setTimingOpen(true)}>
+              <IconClock size={14} />
+            </button>
           ) : null}
           {canFork ? (
             <button
@@ -1030,7 +1044,7 @@ const TurnView = memo(function TurnView({
         <PlanCard key={p.id} plan={p.plan} onImplement={onImplement} />
       ))}
       {turn.answer ? (
-        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} timing={turn.live ? null : timingLabel(turnTiming(turn))} turnMarkdown={() => turnMarkdownOf(turn, workspace)} />
+        <Answer item={turn.answer} through={turn.through} canFork={canFork && turn.through > 0} onFork={onFork} canRestore={canRestore} onRestore={onRestore} timing={turn.live ? null : timingLabel(turnTiming(turn))} turnMarkdown={() => turnMarkdownOf(turn, workspace)} turn={turn} workspace={workspace} />
       ) : null}
       {afterWork ? (
         <div className="turn-work-after" data-testid="work-after">

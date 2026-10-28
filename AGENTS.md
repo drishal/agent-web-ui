@@ -117,6 +117,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               public/sw.js: push, Approve/Deny from a notification, the share target, the
                               offline page (it never caches the app).
   turn-time.ts                A turn's time and speed as hover text: the prompt's clock time, the answer row's "24s · first token 1.2s" (pure; nothing unknown is shown).
+  waterfall.ts                A turn's time as rows on a nice axis (steps, calls, subagent runs, the slowest call), for the Timing dialog (pure).
   sticky-prompt.ts            The sticky prompt bar: which turn's prompt has scrolled out above the view (pure; StickyPrompt.tsx measures and draws).
   toast-stack.ts              The notice stack: order, the cap of three plus "+N", merging a chat's repeats, timers that hold while hovered (pure; ToastStack.tsx draws it).
   sidebar-filter.ts           The sidebar's quick filter chips (Running, Needs you, Today): matching, counts, and the narrowed overview.
