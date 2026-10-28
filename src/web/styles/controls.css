@@ -94,6 +94,55 @@
   color: var(--text);
 }
 
+/* CopyButton: the icon blurs and shrinks out as the check (or the cross, when the copy was refused) comes in.
+   The polite live region beside it is only for screen readers. */
+.copy-btn {
+  position: relative;
+}
+
+.copy-glyph {
+  display: inline-flex;
+  transition:
+    opacity 0.24s var(--ease-out),
+    transform 0.24s var(--ease-out),
+    filter 0.24s var(--ease-out);
+}
+
+.copy-glyph.is-after {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.6);
+  filter: blur(3px);
+}
+
+.copy-btn[data-state="failed"] .copy-glyph.is-after {
+  color: var(--danger);
+}
+
+.copy-btn:not([data-state="idle"]) .copy-glyph.is-rest {
+  opacity: 0;
+  transform: scale(0.6);
+  filter: blur(3px);
+}
+
+.copy-btn:not([data-state="idle"]) .copy-glyph.is-after {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+.copy-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .link-btn {
   padding: 0;
   border: 0;

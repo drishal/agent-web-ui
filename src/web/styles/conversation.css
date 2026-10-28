@@ -392,25 +392,34 @@
   overflow-wrap: anywhere;
 }
 
-/* A prompt's time, Retry, Edit, and Copy: revealed on hover (Claude's chat), faint on touch screens. */
+/* A prompt's time, Retry, Edit, and Copy. Like the row under an answer they sit quiet (45%) until the turn is
+   hovered or has focus, and are always full on the latest turn, on touch screens (no hover there), and under
+   reduced motion (a fade is the only thing the quiet was). */
 .prompt-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-top: -2px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 0.45;
+  transition: opacity var(--dur-enter) var(--ease-out);
 }
 
-.turn-prompt:hover .prompt-actions,
-.prompt-actions:focus-within {
+.turn:hover .prompt-actions,
+.turn:focus-within .prompt-actions,
+.thread > .turn:last-of-type .prompt-actions {
   opacity: 1;
 }
 
-@media (hover: none) {
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
   .prompt-actions {
-    opacity: 0.7;
+    opacity: 1;
   }
+}
+
+/* Retry's arrow turns once on a press (the span is keyed by the press count, so every press restarts it). */
+.turn-once {
+  display: inline-flex;
+  animation: spin var(--dur-enter) var(--ease-out) 1;
 }
 
 .prompt-actions .ghost-icon {
@@ -1345,6 +1354,20 @@
   display: flex;
   gap: 2px;
   margin: 6px 0 0 -6px;
+  opacity: 0.45;
+  transition: opacity var(--dur-enter) var(--ease-out);
+}
+
+.turn:hover .answer-actions,
+.turn:focus-within .answer-actions,
+.thread > .turn:last-of-type .answer-actions {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .answer-actions {
+    opacity: 1;
+  }
 }
 
 /* How the turn went, beside Copy and Fork. It only fades in (the row never reflows) on hover or keyboard focus

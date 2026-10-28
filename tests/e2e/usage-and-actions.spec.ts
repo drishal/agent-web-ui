@@ -1,6 +1,6 @@
 // The Usage heatmap of days, and the quieter action rows under a prompt and an answer.
-import { expect, test } from "@playwright/test";
-import { newChat, signInAndOpen } from "./helpers.js";
+import { expect, test, type Locator } from "@playwright/test";
+import { newChat, sendAndWait, signInAndOpen } from "./helpers.js";
 
 const totals = (tokens: number, cost: number) => ({ input: tokens, cachedInput: 0, cacheWrite: 0, output: 0, cost, calls: tokens > 0 ? 1 : 0, unpriced: 0 });
 
@@ -71,4 +71,54 @@ test("Usage draws a heatmap of the days, shaded by tokens or by cost, and the ar
   await expect(grid.getByRole("gridcell")).toHaveCount(90);
   await usage.getByRole("button", { name: "7 days" }).click();
   await expect(grid.getByRole("gridcell")).toHaveCount(7);
+});
+
+const opacityOf = (loc: Locator) => loc.evaluate((el) => Number(getComputedStyle(el).opacity));
+
+test("the rows under a prompt and an answer sit quiet until the turn is wanted, and Copy reply says Copied and goes back", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first question");
+  await sendAndWait(page, "second question");
+  const turns = page.getByTestId("turn");
+  await expect(turns).toHaveCount(2);
+  const [older, latest] = [turns.nth(0), turns.nth(1)];
+  // At rest the older turn's rows are faint and the latest turn's are full.
+  await page.mouse.move(2, 2);
+  await expect.poll(() => opacityOf(older.locator(".answer-actions"))).toBeCloseTo(0.45, 1);
+  await expect.poll(() => opacityOf(older.getByTestId("prompt-actions"))).toBeCloseTo(0.45, 1);
+  await expect.poll(() => opacityOf(latest.locator(".answer-actions"))).toBe(1);
+  // Hovering the turn lights both its rows; so does focus inside it.
+  await older.hover();
+  await expect.poll(() => opacityOf(older.locator(".answer-actions"))).toBe(1);
+  await expect.poll(() => opacityOf(older.getByTestId("prompt-actions"))).toBe(1);
+  await page.mouse.move(2, 2);
+  await expect.poll(() => opacityOf(older.locator(".answer-actions"))).toBeCloseTo(0.45, 1);
+  await older.getByRole("button", { name: "Copy reply" }).focus();
+  await expect.poll(() => opacityOf(older.locator(".answer-actions"))).toBe(1);
+  // Copy reply becomes Copied (announced), the clipboard has the reply, then the name comes back.
+  await older.getByRole("button", { name: "Copy reply" }).click();
+  await expect(older.getByRole("button", { name: "Copied" })).toBeVisible();
+  await expect(older.getByRole("status").filter({ hasText: "Copied" })).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).not.toBe("");
+  await expect(older.getByRole("button", { name: "Copy reply" })).toBeVisible();
+  // The prompt's two copies say their own names.
+  await older.getByRole("button", { name: "Copy prompt link" }).click();
+  await expect(older.getByRole("button", { name: "Link copied" })).toBeVisible();
+  await older.getByRole("button", { name: "Copy message" }).click();
+  await expect(older.getByRole("button", { name: "Copied" })).toBeVisible();
+  await expect(older.getByRole("button", { name: "Copy message" })).toBeVisible();
+});
+
+test("with reduced motion the rows under a turn are simply visible", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "first question");
+  await sendAndWait(page, "second question");
+  await page.mouse.move(2, 2);
+  const older = page.getByTestId("turn").nth(0);
+  expect(await opacityOf(older.locator(".answer-actions"))).toBe(1);
+  expect(await opacityOf(older.getByTestId("prompt-actions"))).toBe(1);
 });

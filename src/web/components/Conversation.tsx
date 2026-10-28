@@ -25,6 +25,7 @@ import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
+import { CopyButton } from "./CopyButton.js";
 import { AgentsCard, ChatIdContext, runsSummary } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
@@ -423,16 +424,11 @@ function UserPrompt({
   const long = item.text.length > LONG_PROMPT_CHARS || item.text.split("\n").length > LONG_PROMPT_LINES;
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [retried, setRetried] = useState(0);
   const [sheet, setSheet] = useState(false);
   const press = useLongPress(() => setSheet(true));
   // A link that opens a new chat with this prompt ready to read and send (prompt-link.ts).
-  const copyLink = () =>
-    void navigator.clipboard?.writeText(promptLink(window.location.origin, item.text)).then(() => {
-      setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 1500);
-    });
+  const copyLink = () => navigator.clipboard?.writeText(promptLink(window.location.origin, item.text));
   const arrival = useArrival(item.id);
   const bubble = useRef<HTMLDivElement>(null);
   // A prompt that was a queued message glides from the queue row it left, then lights up softly (queue-glide.ts).
@@ -458,7 +454,7 @@ function UserPrompt({
         ]
       : []),
     { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
-    { label: "Copy prompt link", icon: <IconLink size={16} />, run: copyLink },
+    { label: "Copy prompt link", icon: <IconLink size={16} />, run: () => void copyLink() },
   ];
   return (
     <div className={`turn-prompt${arrival}${editing ? " is-editing" : ""}`}>
@@ -516,9 +512,15 @@ function UserPrompt({
                   className="ghost-icon"
                   aria-label="Retry"
                   title={actions.inPlace ? "Retry: run this again, replacing what followed (files stay as they are)" : "Retry: run this again as a new branch (files stay as they are)"}
-                  onClick={() => actions.retry(through, item)}
+                  onClick={() => {
+                    setRetried((n) => n + 1);
+                    actions.retry(through, item);
+                  }}
                 >
-                  <IconRefresh size={14} />
+                  {/* Keyed by the press count, so each press starts the half turn over. */}
+                  <span key={retried} className={retried > 0 ? "turn-once" : undefined} aria-hidden="true">
+                    <IconRefresh size={14} />
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -531,29 +533,8 @@ function UserPrompt({
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              className="ghost-icon"
-              aria-label={copied ? "Copied" : "Copy message"}
-              title="Copy"
-              onClick={() => {
-                void navigator.clipboard?.writeText(item.text).then(() => {
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1500);
-                });
-              }}
-            >
-              {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            </button>
-            <button
-              type="button"
-              className="ghost-icon"
-              aria-label={linkCopied ? "Link copied" : "Copy prompt link"}
-              title="Copy a link that opens a new chat with this prompt, ready to send"
-              onClick={copyLink}
-            >
-              {linkCopied ? <IconCheck size={14} /> : <IconLink size={14} />}
-            </button>
+            <CopyButton label="Copy message" title="Copy" icon={<IconCopy size={14} />} onCopy={() => navigator.clipboard?.writeText(item.text)} />
+            <CopyButton label="Copy prompt link" doneLabel="Link copied" title="Copy a link that opens a new chat with this prompt, ready to send" icon={<IconLink size={14} />} onCopy={copyLink} />
           </div>
         ) : null}
       </div>
@@ -583,14 +564,7 @@ function Answer({
   /** The whole turn (prompt, work, answer) as Markdown, for pasting into an issue; null where there is no prompt to copy it with. */
   turnMarkdown?: (() => string) | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-  const [turnCopied, setTurnCopied] = useState(false);
-  const copyTurn = () =>
-    void navigator.clipboard?.writeText(turnMarkdown?.() ?? "").then(() => {
-      setTurnCopied(true);
-      window.setTimeout(() => setTurnCopied(false), 1500);
-    });
+  const copyTurn = () => navigator.clipboard?.writeText(turnMarkdown?.() ?? "");
   const [sheet, setSheet] = useState(false);
   const press = useLongPress(() => {
     if (!item.streaming && item.text) setSheet(true);
@@ -599,7 +573,7 @@ function Answer({
   const arrival = useArrival(item.id);
   const sheetActions: SheetAction[] = [
     { label: "Copy", icon: <IconCopy size={16} />, run: () => void navigator.clipboard?.writeText(item.text) },
-    ...(turnMarkdown ? [{ label: "Copy turn as Markdown", icon: <IconFile size={16} />, run: copyTurn }] : []),
+    ...(turnMarkdown ? [{ label: "Copy turn as Markdown", icon: <IconFile size={16} />, run: () => void copyTurn() }] : []),
     // Selecting a passage to quote is fiddly on a phone; this quotes the whole reply.
     { label: "Quote in message", icon: <IconEdit size={16} />, run: () => addToDraft(asQuote(item.text)) },
     ...(canFork ? [{ label: "Fork from here", icon: <IconFork size={16} />, run: () => onFork(through) }] : []),
@@ -614,37 +588,15 @@ function Answer({
       {item.error && !stopped ? <p className="answer-error">{item.error}</p> : null}
       {!item.streaming && item.text ? (
         <div className="answer-actions">
-          <button
-            type="button"
-            className="ghost-icon"
-            aria-label={copied ? "Copied" : copyFailed ? "Copy failed" : "Copy reply"}
-            onClick={() => {
-              void navigator.clipboard
-                ?.writeText(item.text)
-                .then(() => {
-                  setCopyFailed(false);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1500);
-                })
-                .catch(() => {
-                  setCopied(false);
-                  setCopyFailed(true);
-                  window.setTimeout(() => setCopyFailed(false), 1500);
-                });
-            }}
-          >
-            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-          </button>
+          <CopyButton label="Copy reply" icon={<IconCopy size={14} />} onCopy={() => navigator.clipboard?.writeText(item.text)} />
           {turnMarkdown ? (
-            <button
-              type="button"
-              className="ghost-icon"
-              aria-label={turnCopied ? "Turn copied" : "Copy turn as Markdown"}
+            <CopyButton
+              label="Copy turn as Markdown"
+              doneLabel="Turn copied"
               title="Copy this turn as Markdown: the prompt, a line per tool call, and the answer"
-              onClick={copyTurn}
-            >
-              {turnCopied ? <IconCheck size={14} /> : <IconFile size={14} />}
-            </button>
+              icon={<IconFile size={14} />}
+              onCopy={copyTurn}
+            />
           ) : null}
           {canFork ? (
             <button
