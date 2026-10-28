@@ -65,4 +65,6 @@ test("with reduced motion the drawn check and the blurred word are plain", async
   await expect.poll(() => page.locator(".tool-status svg.check-draw path").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
   await expect(page.getByTestId("chat-status").locator(".word-in")).toHaveCount(1);
   await expect.poll(() => page.getByTestId("chat-status").locator(".word-in").evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+  // Let the run settle here: left going, it finishes under the next test, whose page shows a "finished" notice over it.
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle", { timeout: 15_000 });
 });
