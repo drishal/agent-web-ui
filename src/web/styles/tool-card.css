@@ -256,8 +256,8 @@
   padding: 2px 8px 10px 38px;
 }
 
-/* Motion: the mark fades in when a call settles in view; the verb shimmers while it runs. */
-.tool-row.is-live:not([data-status="running"]) .tool-status > svg {
+/* Motion: the check draws itself (motion.css) and a failed mark fades in when a call settles in view; the verb shimmers while it runs. */
+.tool-row.is-live.is-failed .tool-status > svg {
   animation: fade-in var(--dur-enter) var(--ease-out);
 }
 

@@ -184,7 +184,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
             {time ? <span className="tool-time"><Rolling text={time} /></span> : null}
           </span>
           <span className="tool-status" role="img" aria-label={status}>
-            {running ? <Spinner size={14} /> : failed ? <IconAlertCircle size={15} /> : <IconCheck size={14} />}
+            {running ? <Spinner size={14} /> : failed ? <IconAlertCircle size={15} /> : <IconCheck size={14} draw={live} />}
           </span>
           <IconChevronDown size={14} className="tool-chevron" />
         </button>

@@ -98,9 +98,10 @@ export const IconChevronLeft = (p: IconProps) => (
     <path d="M10 4l-4 4 4 4" />
   </Svg>
 );
-export const IconCheck = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M3 8.5l3 3 7-7" />
+/** `draw` makes the stroke draw itself in (motion.css, .check-draw); set it only for a check that appears in place, never on first paint. */
+export const IconCheck = ({ draw, className, ...p }: IconProps & { draw?: boolean }) => (
+  <Svg {...p} className={draw ? `check-draw${className ? ` ${className}` : ""}` : className}>
+    <path d="M3 8.5l3 3 7-7" pathLength={1} />
   </Svg>
 );
 export const IconX = (p: IconProps) => (

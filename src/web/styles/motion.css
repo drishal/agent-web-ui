@@ -375,3 +375,17 @@
     overflow: hidden;
   }
 }
+
+/* A check that appears in place (a todo marked done, a call settling in view) draws its stroke. pathLength is 1, so
+   the dash is one unit long and the gap is two; the offset starts a little past 1 so the round cap does not leave a
+   dot at the path's start. Reduced motion sets animation to none (tokens.css), which leaves the finished check. */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1.1;
+  }
+}
+
+.check-draw path {
+  stroke-dasharray: 1 2;
+  animation: check-draw 0.36s var(--ease-out) 0.08s backwards;
+}

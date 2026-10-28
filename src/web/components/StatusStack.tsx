@@ -22,7 +22,15 @@ import { load, save } from "../storage.js";
  * work going on when nothing is.
  */
 function TodoIcon({ status, working }: { status: string; working: boolean }) {
-  if (/done|complete/.test(status)) return <IconCheck size={13} />;
+  const done = /done|complete/.test(status);
+  // The check draws only when this row changes to done while it is on screen (not when a list first appears), and keeps its class
+  // after, so a later re-render does not cut the drawing short.
+  const was = useRef(status);
+  const drew = useRef(false);
+  if (!done) drew.current = false;
+  else if (was.current !== status && !/done|complete/.test(was.current)) drew.current = true;
+  was.current = status;
+  if (done) return <IconCheck size={13} draw={drew.current} />;
   if (/progress|active|doing/.test(status)) {
     return working ? (
       <Spinner size={12} />
