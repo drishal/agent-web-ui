@@ -8,21 +8,21 @@ test("a run of calls is one card: a header that counts and stacks the kinds, a s
   await newChat(page);
   await sendAndWait(page, "showcase");
   const toggle = page.getByTestId("process-toggle").last();
-  await expect(toggle).toContainText("Used 8 tools");
-  // Seven kinds of tool: three chips and the rest counted.
+  await expect(toggle).toContainText("Used 9 tools");
+  // More kinds of tool than the stack draws: the rest are counted.
   const stack = toggle.getByTestId("kind-stack");
   await expect(stack.locator(".kind-chip")).toHaveCount(4);
-  await expect(stack.locator(".kind-more")).toHaveText("+4");
+  await expect(stack.locator(".kind-more")).toHaveText("+5");
   await toggle.click();
   const rows = page.getByTestId("tool-row");
-  await expect(rows).toHaveCount(8);
+  await expect(rows).toHaveCount(9);
   await expect(rows.first().locator(".tool-sentence")).toHaveText("Edited src/server.ts");
   await expect(page.locator('[data-tool="bash"] .tool-sentence')).toHaveText("Ran npm test -- --run tool-diff");
   await expect(page.locator('[data-tool="bash"] .tool-fact')).toHaveText("5 passed");
   await expect(page.locator('[data-tool="grep"] .tool-fact')).toHaveText("2 results in 2 files");
   await expect(page.locator('[data-tool="web_fetch"] .tool-sentence')).toHaveText("Fetched example.com/docs/listen");
   // Every row has its mark in one column, and the button's name is the whole sentence and its state.
-  await expect(rows.locator('.tool-status[aria-label="done"]')).toHaveCount(8);
+  await expect(rows.locator('.tool-status[aria-label="done"]')).toHaveCount(9);
   await expect(page.locator('[data-tool="grep"] .tool-head')).toHaveAccessibleName("Searched for listen\\( in src, 2 results in 2 files, done");
 });
 
