@@ -2,7 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Browsers come from nixpkgs via PLAYWRIGHT_BROWSERS_PATH; @playwright/test is
 // pinned to the matching playwright-driver version. Never `playwright install`.
-export const E2E_PORT = 4791;
+// AWUI_E2E_PORT moves the suite off 4791, so two checkouts can run it at once.
+export const E2E_PORT = Number(process.env.AWUI_E2E_PORT) || 4791;
 
 export default defineConfig({
   testDir: "tests/e2e",
