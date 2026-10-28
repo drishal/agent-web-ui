@@ -102,8 +102,9 @@ export function useEdgeSwipe(open: boolean, setOpen: (open: boolean) => void): v
     let start: Point | null = null;
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      // A session row swipes left for its own actions; that is not the drawer closing.
-      if ((e.target as Element | null)?.closest?.("[data-row-swipe]")) {
+      // A session row swipes left for its own actions; that is not the drawer closing. A closed
+      // drawer's rows can sit under the screen's edge, where a swipe still means "open".
+      if (state.current.open && (e.target as Element | null)?.closest?.("[data-row-swipe]")) {
         start = null;
         return;
       }
