@@ -458,3 +458,124 @@
     grid-template-columns: 1fr auto auto;
   }
 }
+
+/* The heatmap of days: weeks as columns, Sunday on top. Five shades of the accent over the hover
+   colour; the last day has a ring, a focused cell the focus ring. */
+.usage-heat {
+  --heat-cell: 14px;
+  --heat-gap: 3px;
+  margin-top: 16px;
+  padding: 12px 14px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.usage-heat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.usage-heat-head h3 {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.usage-heat-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.usage-heat-months,
+.usage-heat-row {
+  display: grid;
+  column-gap: var(--heat-gap);
+  width: max-content;
+}
+
+.usage-heat-months {
+  height: 14px;
+  color: var(--muted-text);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.usage-heat-months span {
+  white-space: nowrap;
+}
+
+.usage-heat-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--heat-gap);
+}
+
+.usage-heat-cell {
+  width: var(--heat-cell);
+  height: var(--heat-cell);
+  border-radius: 3px;
+  background: var(--hover);
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+
+.usage-heat-cell[data-level="1"] {
+  background: color-mix(in srgb, var(--accent) 22%, var(--hover));
+}
+
+.usage-heat-cell[data-level="2"] {
+  background: color-mix(in srgb, var(--accent) 45%, var(--hover));
+}
+
+.usage-heat-cell[data-level="3"] {
+  background: color-mix(in srgb, var(--accent) 70%, var(--hover));
+}
+
+.usage-heat-cell[data-level="4"] {
+  background: var(--accent);
+}
+
+.usage-heat-cell.is-today {
+  box-shadow: 0 0 0 1.5px var(--text);
+}
+
+.usage-heat-grid .usage-heat-cell:hover,
+.usage-heat-grid .usage-heat-cell:focus-visible {
+  transform: scale(1.18);
+}
+
+.usage-heat-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.usage-heat-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-heat-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.usage-heat-cell.is-key {
+  width: 10px;
+  height: 10px;
+}

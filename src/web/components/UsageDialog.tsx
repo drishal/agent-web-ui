@@ -3,11 +3,13 @@
 // (usage-report.ts, read from the harnesses' own files): the totals as cards, a
 // bar a day split by harness in its colour, the harnesses and models side by
 // side, and the chats that used the most (a click opens one). Days are the
-// browser's.
+// browser's. Above the bars, a heatmap of the days (heatmap.ts): weeks as
+// columns, shaded by tokens or by cost, an arrow-key grid.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HarnessStatus, ProjectSession, UsageLimits, UsageReport, UsageTotals, WorkspaceInfo } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { harnessColor } from "../harness-colors.js";
+import { heatMonths, heatmapCells, heatStep, type HeatMetric } from "../heatmap.js";
 import { Spinner } from "../icons.js";
 import { ago } from "../turns.js";
 import { cacheShare, dayBars, dayLabels, dollars, shortTokens, tokensOf } from "../usage.js";
@@ -43,6 +45,97 @@ function BarRow({ label, share, value, detail, style }: { label: React.ReactNode
 }
 
 const cost = (t: UsageTotals) => dollars(t.cost, t.calls > t.unpriced);
+
+/** "Oct 12 · 1.2M tokens · $3.40" */
+function dayText(day: string, t: UsageTotals): string {
+  const date = new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${date} · ${shortTokens(tokensOf(t))} tokens · ${cost(t)}`;
+}
+
+/** The days as a grid of weeks: one cell a day, shaded by the chosen measure, the last day outlined. One cell is in the tab order; the arrow keys move between them. */
+function Heatmap({ byDay }: { byDay: UsageReport["byDay"] }) {
+  const [metric, setMetric] = useState<HeatMetric>("tokens");
+  const [active, setActive] = useState(byDay.length - 1);
+  const [shown, setShown] = useState<number | null>(null);
+  const cellRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const metricsRef = useRef<HTMLDivElement>(null);
+  const { cells, weeks } = useMemo(() => heatmapCells(byDay.map((d) => ({ day: d.day, tokens: tokensOf(d.totals), cost: d.totals.cost })), metric), [byDay, metric]);
+  const months = useMemo(() => heatMonths(cells), [cells]);
+  const rows = [0, 1, 2, 3, 4, 5, 6];
+  const roving = Math.min(active, cells.length - 1);
+  const caption = shown !== null ? byDay[shown] : undefined;
+  const move = (e: React.KeyboardEvent, i: number) => {
+    const to = heatStep(i, e.key, cells.length);
+    if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") e.preventDefault();
+    if (to === null) return;
+    setActive(to);
+    cellRefs.current[to]?.focus();
+  };
+  if (cells.length === 0) return null;
+  return (
+    <section className="usage-heat" aria-label="Activity by day">
+      <div className="usage-heat-head">
+        <h3>Activity</h3>
+        <div className="segmented" role="group" aria-label="Shade by" ref={metricsRef}>
+          {(["tokens", "cost"] as const).map((m) => (
+            <button key={m} type="button" className={m === metric ? "is-on" : undefined} aria-pressed={m === metric} onClick={() => setMetric(m)}>
+              {m === "tokens" ? "Tokens" : "Cost"}
+            </button>
+          ))}
+          <SlidingIndicator target={metricsRef} active={metric === "tokens" ? 0 : 1} of="button" className="segmented-pill" />
+        </div>
+      </div>
+      <div className="usage-heat-scroll">
+        <div className="usage-heat-months" style={{ gridTemplateColumns: `repeat(${weeks}, var(--heat-cell))` }} aria-hidden="true">
+          {months.map((m) => (
+            <span key={m.col} style={{ gridColumn: m.col + 1 }}>
+              {m.label}
+            </span>
+          ))}
+        </div>
+        <div className="usage-heat-grid" role="grid" aria-label={`Days, shaded by ${metric}`} onMouseLeave={() => setShown(null)}>
+          {rows.map((r) => (
+            <div key={r} role="row" className="usage-heat-row" style={{ gridTemplateColumns: `repeat(${weeks}, var(--heat-cell))` }}>
+              {cells.map((c, i) =>
+                c.row !== r ? null : (
+                  <div
+                    key={c.day}
+                    ref={(el) => {
+                      cellRefs.current[i] = el;
+                    }}
+                    role="gridcell"
+                    tabIndex={i === roving ? 0 : -1}
+                    className={`usage-heat-cell${i === cells.length - 1 ? " is-today" : ""}`}
+                    data-level={c.level}
+                    style={{ gridColumn: c.col + 1 }}
+                    aria-label={dayText(c.day, byDay[i]!.totals)}
+                    onKeyDown={(e) => move(e, i)}
+                    onFocus={() => {
+                      setActive(i);
+                      setShown(i);
+                    }}
+                    onBlur={() => setShown((s) => (s === i ? null : s))}
+                    onMouseEnter={() => setShown(i)}
+                  />
+                ),
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="usage-heat-caption muted" aria-hidden="true">
+        {caption ? dayText(caption.day, caption.totals) : "Hover or arrow to a day"}
+        <span className="usage-heat-scale">
+          Less
+          {[0, 1, 2, 3, 4].map((l) => (
+            <span key={l} className="usage-heat-cell is-key" data-level={l} />
+          ))}
+          More
+        </span>
+      </p>
+    </section>
+  );
+}
 
 export function UsageDialog({
   harnesses,
@@ -125,6 +218,8 @@ export function UsageDialog({
               <Card label="Cost" value={cost(t)} sub={t.unpriced > 0 ? `${t.unpriced.toLocaleString()} ${t.unpriced === 1 ? "call" : "calls"} not priced` : "every call priced"} tone="warn" />
               <Card label="Chats" value={t.sessions.toLocaleString()} sub={`with calls in ${days} days`} />
             </div>
+
+            <Heatmap byDay={report.byDay} />
 
             <section className="usage-chart" aria-label="Tokens by day">
               <div className="usage-bars">

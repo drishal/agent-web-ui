@@ -54,7 +54,7 @@ banners-dialogs.css), so search rather than guess.
 | Dialogs: settings, folders, restore, palette, images | `Dialog.tsx`, `SettingsDialog.tsx`, `WorkspacePicker.tsx`, `RestoreDialog.tsx`, `HerdrDialog.tsx`, `CommandPalette.tsx`, `ImageViewer.tsx`, `LoginForm.tsx` | `banners-dialogs.css`, `settings.css` | `settings.spec.ts`, `app.spec.ts`, `herdr.spec.ts`, `remote-login.spec.ts` |
 | Searches: every chat, in project, find in chat | `ChatSearch.tsx`, `ProjectSearch.tsx`, `find.ts` | `chat-search.css`, `project-search.css`, `find.css` | `unified.spec.ts`, `composer-extras.spec.ts` |
 | File viewer, review, file timeline | `FileViewer.tsx`, `ReviewPanel.tsx`, `TimelineDialog.tsx` | `file-viewer.css`, `timeline.css` | `unified.spec.ts` |
-| Usage and limits | `UsageDialog.tsx`, `LimitsMeter.tsx` | `usage.css` | `unified.spec.ts` |
+| Usage and limits (the heatmap of days: `heatmap.ts`) | `UsageDialog.tsx`, `LimitsMeter.tsx` | `usage.css` | `unified.spec.ts`, `usage-and-actions.spec.ts` |
 | Saved prompts, shortcuts | `SavedPromptsDialog.tsx`, `ShortcutSheet.tsx` | `saved-prompts.css`, `shortcuts.css` | `unified.spec.ts` |
 | A chat beside the main one | `SidePane.tsx` | `side-pane.css` | `unified.spec.ts` |
 | Notice cards (finished, needs you, Undo): stacked, fanned on hover, swiped away on a phone | `ToastStack.tsx` (`toast-stack.ts`) | `toasts.css` | `toasts-and-swipes.spec.ts`, `tabs.spec.ts` |
