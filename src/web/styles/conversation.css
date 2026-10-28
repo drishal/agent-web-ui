@@ -194,6 +194,33 @@
   }
 }
 
+/* A block with no language and nothing to run has no header: where the actions wait for a hover, the band
+   would be blank. Wrap and Copy float over its top corner instead, on a patch of the block's own colour so the
+   code under them stays out of the way. A touch screen keeps the header, whose actions always show there. */
+@media (hover: hover) {
+  .code-block.is-bare .code-head {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    z-index: 1;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .code-block.is-bare .code-actions {
+    border-radius: 9px;
+    background: var(--code-bg);
+    box-shadow: 0 0 0 1px var(--hairline);
+  }
+
+  .md .code-block.is-bare pre {
+    border-top-width: 1px;
+    border-radius: var(--r-md);
+  }
+}
+
 .code-lang {
   color: var(--muted-text);
   font: 11px var(--font-mono);

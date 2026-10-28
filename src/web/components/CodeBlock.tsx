@@ -56,8 +56,10 @@ export function CodeBlock({ lang, code, children, allowRun, streaming = false }:
   const result = state?.result;
   const status = result ? (result.timedOut ? "timed out" : result.exitCode === 0 ? "exit 0" : result.exitCode === null ? "stopped" : `exit ${result.exitCode}`) : "";
 
+  // Nothing to name and nothing to run: no header band, only the actions over its corner (conversation.css).
+  const bare = !label && !run;
   return (
-    <div className={`code-block${wrap ? " is-wrapped" : ""}`}>
+    <div className={`code-block${wrap ? " is-wrapped" : ""}${bare ? " is-bare" : ""}`}>
       <div className="code-head">
         {label ? <span className="code-lang">{label}</span> : null}
         <div className="code-actions">

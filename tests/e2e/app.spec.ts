@@ -427,7 +427,7 @@ test("a one-line shell block in an answer runs in the project and its output can
   await expectDraft(page.getByRole("textbox", { name: "Message" })).toMatch(/^```\n\$ echo hello from .*\nhello from alpha\n```\n\(exit 0\)\n\n$/);
 });
 
-test("a code block in an answer has a header with its language, line numbers on a long block, and a Wrap toggle", async ({ page }) => {
+test("a code block in an answer has a header with its language (none without one), line numbers on a long block, and a Wrap toggle", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
   const long = Array.from({ length: 8 }, (_, i) => `const v${i + 1} = ${i + 1};`).join("\n");
@@ -438,6 +438,11 @@ test("a code block in an answer has a header with its language, line numbers on 
   const [typed, plain] = [blocks.nth(0), blocks.nth(1)];
   await expect(typed.locator(".code-lang")).toHaveText("TypeScript");
   await expect(plain.locator(".code-lang")).toHaveCount(0);
+  // With no language there is no blank header band: the code starts at the block's top, and Copy floats over its corner.
+  const [plainBox, plainPre] = [await plain.boundingBox(), await plain.locator("pre").boundingBox()];
+  expect(Math.abs(plainBox!.y - plainPre!.y)).toBeLessThan(1);
+  await plain.hover();
+  await expect(plain.getByRole("button", { name: "Copy code" })).toBeVisible();
   // Eight lines get a gutter drawn by CSS (so it is never copied); two do not, and a keyword is coloured.
   await expect(typed.locator("pre")).toHaveClass(/has-numbers/);
   await expect(typed.locator(".cl")).toHaveCount(8);
