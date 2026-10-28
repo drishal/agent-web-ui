@@ -178,6 +178,34 @@ test("a share's text and image wait in the start screen's box and go with the fi
   await expect(page.getByTestId("user-prompt")).toHaveText(["describe it"]);
 });
 
+test("an image pasted or dropped on the start screen's box waits there and goes with the first message", async ({ page }) => {
+  await signInAndOpen(page);
+  await page.keyboard.press("Escape");
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==";
+  const attached = page.getByRole("list", { name: "Attached images" }).getByRole("listitem");
+  // As the browser sends a pasted screenshot: a file on the clipboard and no text.
+  await page.evaluate((b64) => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "pasted.png", { type: "image/png" }));
+    document.querySelector('textarea[aria-label="Message"]')?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(attached).toHaveCount(1);
+  // And one dropped on the card.
+  await page.evaluate((b64) => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "dropped.png", { type: "image/png" }));
+    const card = document.querySelector(".start-screen .composer-card") as HTMLElement;
+    for (const type of ["dragover", "drop"]) card.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(attached).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Attach images" })).toBeEnabled();
+  // Nothing exists until the send; then both images go with the message.
+  await expect(page.getByTestId("user-prompt")).toHaveCount(0);
+  await send(page, "what do these show");
+  await expect(page.getByTestId("user-prompt")).toHaveText(["what do these show"]);
+  await expect(page.getByRole("img", { name: /image #2/i })).toBeVisible();
+});
+
 test("at full chat width the start screen's box keeps a gutter from the sidebar and the pane's edge", async ({ page }) => {
   await signInAndOpen(page);
   await page.keyboard.press("Escape");

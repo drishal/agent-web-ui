@@ -5,10 +5,11 @@
 // chat (hero.css, Composer's card), and the box and button carry the real
 // composer's names ("Message", "Send") so every shortcut and test finds them.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { HarnessStatus } from "../../shared/protocol.js";
+import { IMAGE_MIME_TYPES, MAX_IMAGES, type HarnessStatus } from "../../shared/protocol.js";
+import { useAddImagesToDraft } from "../draft-bus.js";
 import { useDismiss } from "../hooks.js";
-import { IconArrowUp, IconChevronDown, IconFolder, IconLink, IconX, Spinner } from "../icons.js";
-import { dataUrl, type PendingImage } from "../images.js";
+import { IconArrowUp, IconChevronDown, IconFolder, IconImage, IconLink, IconPlus, IconX, Spinner } from "../icons.js";
+import { dataUrl, imageFiles, prepareImage, type PendingImage } from "../images.js";
 import { recentForChip, startAction, startExamples, startHeading, startSendBlocked, startSetup, type StartSetup } from "../start-screen.js";
 import { HarnessMenu } from "./HarnessMenu.js";
 
@@ -56,7 +57,10 @@ export function StartScreen({
   const [text, setText] = useState(initialText);
   const [images, setImages] = useState<PendingImage[]>(initialImages ?? []);
   const [linkedHidden, setLinkedHidden] = useState<number | null>(initialLinkedHidden);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
   const setup = (): StartSetup => startSetup(harnesses, harnessId, workspace?.name ?? null, text, images.length, busy);
   const heading = startHeading(setup());
   const blocked = startSendBlocked(setup());
@@ -77,6 +81,30 @@ export function StartScreen({
     if (autoFocus) area.current?.focus();
   }, [autoFocus, focusKey]);
 
+  // Images go in as in the real composer: pasted, dropped, picked, or sent here from elsewhere in the app.
+  const addImages = async (files: File[]) => {
+    if (files.length === 0) return;
+    setImageError(null);
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
+      setImageError(`Up to ${MAX_IMAGES} images per message`);
+      return;
+    }
+    const added: PendingImage[] = [];
+    for (const file of files.slice(0, room)) {
+      try {
+        added.push(await prepareImage(file));
+      } catch (error) {
+        setImageError(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (files.length > room) setImageError(`Up to ${MAX_IMAGES} images per message`);
+    setImages((current) => [...current, ...added].slice(0, MAX_IMAGES));
+    area.current?.focus();
+  };
+  useAddImagesToDraft((files) => void addImages(files));
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
   const submit = async () => {
     if (busy) return;
     const action = startAction(setup());
@@ -90,6 +118,7 @@ export function StartScreen({
     if (ok) {
       setText("");
       setImages([]);
+      setImageError(null);
       setLinkedHidden(null);
     }
   };
@@ -143,7 +172,28 @@ export function StartScreen({
           ))}
         </ul>
         <div className="composer is-hero">
-          <div className="composer-card">
+          <div
+            className={`composer-card${dragging ? " is-dragging" : ""}`}
+            onDragOver={(e) => {
+              if (busy || !hasFiles(e)) return;
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+            }}
+            onDrop={(e) => {
+              if (busy || !hasFiles(e)) return;
+              e.preventDefault();
+              setDragging(false);
+              void addImages(imageFiles(e.dataTransfer.files));
+            }}
+          >
+            {dragging ? (
+              <div className="composer-drop" aria-hidden="true">
+                Drop images to attach them
+              </div>
+            ) : null}
             {images.length > 0 ? (
               <ul className="composer-images" aria-label="Attached images">
                 {images.map((image, i) => (
@@ -155,6 +205,11 @@ export function StartScreen({
                   </li>
                 ))}
               </ul>
+            ) : null}
+            {imageError ? (
+              <p className="composer-note" role="status">
+                {imageError}
+              </p>
             ) : null}
             {linkedHidden !== null ? (
               <p className="composer-note composer-linked" role="status">
@@ -178,10 +233,39 @@ export function StartScreen({
               aria-label="Message"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={(e) => {
+                // Spreadsheets and rich editors copy a rendering beside the text; paste the text then.
+                const files = imageFiles(e.clipboardData.files);
+                if (files.length === 0 || e.clipboardData.getData("text/plain")) return;
+                e.preventDefault();
+                void addImages(files);
+              }}
               enterKeyHint="send"
             />
             <div className="composer-bar">
               <div className="composer-controls">
+                <button
+                  type="button"
+                  className="icon-btn composer-attach"
+                  aria-label="Attach images"
+                  title="Attach images (or paste / drop them)"
+                  disabled={busy || images.length >= MAX_IMAGES}
+                  onClick={() => filePicker.current?.click()}
+                >
+                  <IconImage size={16} className="attach-image" />
+                  <IconPlus size={16} className="attach-plus" />
+                </button>
+                <input
+                  ref={filePicker}
+                  type="file"
+                  accept={IMAGE_MIME_TYPES.join(",")}
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    void addImages(imageFiles(e.target.files));
+                    e.target.value = "";
+                  }}
+                />
                 <HarnessMenu
                   variant="chip"
                   label="Agent for this chat"
