@@ -10,10 +10,13 @@ const tab = (page: Page, title: string) => page.getByRole("tablist", { name: "Op
 /** Two chats left running in the background, and a third shown, so both finish "while away". */
 async function twoFinishInTheBackground(page: Page, tag: string): Promise<void> {
   await signInAndOpen(page);
-  await newChat(page);
-  await send(page, `slow ${tag} one`);
-  await newChat(page);
-  await send(page, `slow ${tag} two`);
+  // A send from the start screen returns before its chat is shown, and showing it closes the drawer: wait for
+  // the prompt, or the next New chat's drawer can open first and be shut under it.
+  for (const which of ["one", "two"]) {
+    await newChat(page);
+    await send(page, `slow ${tag} ${which}`);
+    await expect(page.getByTestId("user-prompt").last()).toHaveText(`slow ${tag} ${which}`);
+  }
   await newChat(page);
   await sendAndWait(page, `meanwhile ${tag}`);
 }
