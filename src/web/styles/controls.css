@@ -96,8 +96,15 @@
 
 /* CopyButton: the icon blurs and shrinks out as the check (or the cross, when the copy was refused) comes in.
    The polite live region beside it is only for screen readers. */
-.copy-btn {
+.copy-icons {
   position: relative;
+  display: inline-flex;
+}
+
+.copy-btn:has(.copy-text) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .copy-glyph {

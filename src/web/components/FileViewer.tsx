@@ -11,10 +11,11 @@ import { api, errorText } from "../api.js";
 import { addToDraft } from "../draft-bus.js";
 import type { FileRequest } from "../file-bus.js";
 import { highlightLines, languageOf } from "../highlight.js";
-import { IconCheck, IconCopy, IconFile, IconSearch, IconX, Spinner } from "../icons.js";
+import { IconCopy, IconFile, IconSearch, IconX, Spinner } from "../icons.js";
 import type { FileChanges } from "../review.js";
 import { DiffBadge } from "./ToolBody.js";
 import { Markdown } from "./Markdown.js";
+import { CopyButton } from "./CopyButton.js";
 import { previewKind } from "../preview.js";
 import { uploadToProject } from "../upload.js";
 
@@ -150,7 +151,6 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
   const [marked, setMarked] = useState<number | null>(request?.line ?? null);
   const [file, setFile] = useState<{ path: string; view: FileView } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   // The path shown rendered rather than as source (the toggle): keyed by path, so
   // another file opens as source.
@@ -293,18 +293,7 @@ export function FileViewer({ workspace, request, changes, onClose }: { workspace
                   </button>
                 </span>
               ) : null}
-              <button
-                type="button"
-                className="btn btn-small btn-ghost"
-                onClick={() =>
-                  void navigator.clipboard?.writeText(path).then(() => {
-                    setCopied(true);
-                    window.setTimeout(() => setCopied(false), 1400);
-                  })
-                }
-              >
-                {copied ? <IconCheck size={13} /> : <IconCopy size={13} />} {copied ? "Copied" : "Copy path"}
-              </button>
+              <CopyButton className="btn btn-small btn-ghost" label="Copy path" text="Copy path" icon={<IconCopy size={13} />} iconSize={13} onCopy={() => navigator.clipboard?.writeText(path)} />
               <button type="button" className="btn btn-small btn-primary" onClick={mention} title="Put this file, or the marked line, into your message">
                 Mention {marked ? `line ${marked}` : "file"}
               </button>

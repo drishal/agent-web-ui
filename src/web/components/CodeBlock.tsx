@@ -13,10 +13,11 @@ import { highlightLines } from "../highlight.js";
 import { load, save } from "../storage.js";
 import { api, errorText } from "../api.js";
 import { addToDraft } from "../draft-bus.js";
-import { IconCheck, IconCopy, IconTerminal, IconX, Spinner } from "../icons.js";
+import { IconCopy, IconTerminal, IconX, Spinner } from "../icons.js";
 import { formatDuration } from "../turns.js";
 import { ChatIdContext } from "./Subagents.js";
 import { dotted } from "./Dot.js";
+import { CopyButton } from "./CopyButton.js";
 
 // The wrap choice is one per device, so every block on the page follows it.
 const wrapListeners = new Set<() => void>();
@@ -29,26 +30,6 @@ const onWrap = (listener: () => void) => {
   wrapListeners.add(listener);
   return () => void wrapListeners.delete(listener);
 };
-
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      className="code-action"
-      aria-label={done ? "Copied" : label}
-      title={label}
-      onClick={() =>
-        void navigator.clipboard?.writeText(text).then(() => {
-          setDone(true);
-          window.setTimeout(() => setDone(false), 1500);
-        })
-      }
-    >
-      {done ? <IconCheck size={13} /> : <IconCopy size={13} />}
-    </button>
-  );
-}
 
 export function CodeBlock({ lang, code, children, allowRun, streaming = false }: { lang: string | null; code: string; children: React.ReactNode; allowRun: boolean; streaming?: boolean }) {
   const chatId = useContext(ChatIdContext);
@@ -88,7 +69,7 @@ export function CodeBlock({ lang, code, children, allowRun, streaming = false }:
           <button type="button" className="code-action" aria-pressed={wrap} title={wrap ? "Scroll long lines sideways" : "Wrap long lines"} onClick={() => setWrap(!wrap)}>
             Wrap
           </button>
-          <CopyButton text={code.replace(/\n$/, "")} label="Copy code" />
+          <CopyButton className="code-action" iconSize={13} label="Copy code" title="Copy code" icon={<IconCopy size={13} />} onCopy={() => navigator.clipboard?.writeText(code.replace(/\n$/, ""))} />
         </div>
       </div>
       {rows ? (
@@ -123,7 +104,7 @@ export function CodeBlock({ lang, code, children, allowRun, streaming = false }:
             ) : null}
             {result ? (
               <>
-                <CopyButton text={result.output} label="Copy output" />
+                <CopyButton className="code-action" iconSize={13} label="Copy output" title="Copy output" icon={<IconCopy size={13} />} onCopy={() => navigator.clipboard?.writeText(result.output)} />
                 <button
                   type="button"
                   className="code-action"

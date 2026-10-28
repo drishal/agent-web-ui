@@ -3,6 +3,7 @@
 // their counts, long strings cut with "…more". Copy hands back the raw JSON
 // text, not what is drawn. Everything is text, never markup.
 import { useMemo, useState } from "react";
+import { CopyButton } from "./CopyButton.js";
 import { flattenJson, MAX_NODES } from "../json-tree.js";
 
 const KIND_CLASS = { object: "", array: "", string: "tk-string", number: "tk-number", boolean: "tk-literal", null: "tk-literal" } as const;
@@ -16,22 +17,10 @@ function toggle(set: ReadonlySet<string>, path: string): Set<string> {
 export function JsonTree({ value, raw, label }: { value: object; raw: string; label: string }) {
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
   const [whole, setWhole] = useState<ReadonlySet<string>>(new Set());
-  const [copied, setCopied] = useState(false);
   const { rows, capped } = useMemo(() => flattenJson(value, toggled, whole), [value, toggled, whole]);
   return (
     <div className="json-tree" role="tree" aria-label={label}>
-      <button
-        type="button"
-        className="json-copy"
-        onClick={() =>
-          void navigator.clipboard?.writeText(raw).then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
-          })
-        }
-      >
-        {copied ? "Copied" : "Copy JSON"}
-      </button>
+      <CopyButton className="json-copy" label="Copy JSON" text="Copy JSON" onCopy={() => navigator.clipboard?.writeText(raw)} />
       {rows.map((r) => {
         const name = r.key === null ? null : <span className="tk-key json-key">{r.key}</span>;
         const body = (
