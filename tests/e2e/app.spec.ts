@@ -744,6 +744,22 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await expect(rail.getByRole("button")).toHaveCount(await prompts(page).count());
   await rail.getByRole("button").first().click();
   await expect(prompts(page).first()).toBeInViewport();
+  // A rail jump scrolls only the conversation: it must never scroll the app frame
+  // (`.app`/`.main`) up by the header's height, which left a blank band below the
+  // composer. Regression for the turn-rail jump dragging the whole page.
+  await expect.poll(async () =>
+    page.evaluate(() => {
+      const app = document.querySelector(".app");
+      const main = document.querySelector(".main");
+      // With the bug, scrollIntoView scrolls `.app` (its overflow shows a stray page
+      // scrollbar) and `.main` slides up by the header's height (~-97), leaving a blank
+      // band at the bottom.
+      return {
+        appScroll: Math.round((app as HTMLElement).scrollTop),
+        mainTop: Math.round((main as HTMLElement).getBoundingClientRect().top),
+      };
+    }),
+  ).toEqual({ appScroll: 0, mainTop: 0 });
 });
 
 test("chat text size comes from config.yml, read-only without a settings folder", async ({ page }) => {

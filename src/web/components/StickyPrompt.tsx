@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Turn } from "../turns.js";
 import { stickyLabel, stickyLine, stickyTurn } from "../sticky-prompt.js";
+import { scrollTurnIntoView } from "./scroll-into-turn.js";
 
 /** `hidden`: something else owns the top of the view (the find bar). `onBeforeGo`: the view is about to leave the end of the chat. */
 export function StickyPrompt({ turns, scroller, hidden, onBeforeGo }: { turns: Turn[]; scroller: React.RefObject<HTMLDivElement | null>; hidden: boolean; onBeforeGo: () => void }) {
@@ -57,7 +58,8 @@ export function StickyPrompt({ turns, scroller, hidden, onBeforeGo }: { turns: T
       onClick={() => {
         onBeforeGo();
         const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-        document.getElementById(`turn-${turn.id}`)?.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+        const node = document.getElementById(`turn-${turn.id}`);
+        if (node && scroller.current) scrollTurnIntoView(scroller.current, node, reduced ? "auto" : "smooth");
       }}
     >
       <span className="sticky-number" aria-hidden="true">

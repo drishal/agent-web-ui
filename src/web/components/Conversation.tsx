@@ -36,6 +36,7 @@ import { AgentsCard, ChatIdContext } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { TurnRail } from "./TurnRail.js";
 import { StickyPrompt } from "./StickyPrompt.js";
+import { scrollTurnIntoView } from "./scroll-into-turn.js";
 import { IMPLEMENT_TEXT, PlanCard } from "./PlanCard.js";
 import { TurnTiming } from "./TurnTiming.js";
 
@@ -1223,7 +1224,9 @@ export function Conversation({
     const id = revealing.current;
     if (from > 0 || !id) return;
     revealing.current = null;
-    document.getElementById(`turn-${id}`)?.scrollIntoView({ block: "start" });
+    const el = scroller.current;
+    const node = document.getElementById(`turn-${id}`);
+    if (el && node) scrollTurnIntoView(el, node, "auto");
   }, [from]);
 
   // `open` is what the fold shows now, so a fold that was following its turn flips from what it showed.
@@ -1568,7 +1571,15 @@ export function Conversation({
         </ChatIdContext.Provider>
       </div>
       <QuoteButton scope={scroller} />
-      <TurnRail turns={turns} scroller={scroller} onReveal={reveal} />
+      <TurnRail
+        turns={turns}
+        scroller={scroller}
+        onReveal={reveal}
+        onBeforeGo={() => {
+          pinned.current = false;
+          jumpingRef.current = false;
+        }}
+      />
       {/* The find bar owns the top corner while it is open; going back leaves the end of the chat, so the end stops pulling the view down. */}
       <StickyPrompt
         turns={turns}

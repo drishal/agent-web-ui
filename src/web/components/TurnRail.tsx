@@ -2,11 +2,12 @@
 // navigator). Desktop only; hidden by CSS on narrow screens and for short chats.
 import { useEffect, useState } from "react";
 import type { Turn } from "../turns.js";
+import { scrollTurnIntoView } from "./scroll-into-turn.js";
 
 const MIN_TURNS = 3;
 
 /** `onReveal`: the turn is not drawn yet (a long chat draws its older turns after its end). */
-export function TurnRail({ turns, scroller, onReveal }: { turns: Turn[]; scroller: React.RefObject<HTMLDivElement | null>; onReveal: (id: string) => void }) {
+export function TurnRail({ turns, scroller, onReveal, onBeforeGo }: { turns: Turn[]; scroller: React.RefObject<HTMLDivElement | null>; onReveal: (id: string) => void; onBeforeGo: () => void }) {
   const prompted = turns.filter((t) => t.prompt !== null);
   const [active, setActive] = useState<string | null>(null);
   const ids = prompted.map((t) => t.id).join(",");
@@ -50,8 +51,9 @@ export function TurnRail({ turns, scroller, onReveal }: { turns: Turn[]; scrolle
             aria-label={`Turn ${i + 1}: ${preview}`}
             aria-current={turn.id === active ? "true" : undefined}
             onClick={() => {
+              onBeforeGo();
               const node = document.getElementById(`turn-${turn.id}`);
-              if (node) node.scrollIntoView({ block: "start", behavior: "smooth" });
+              if (node && scroller.current) scrollTurnIntoView(scroller.current, node, "smooth");
               else onReveal(turn.id);
             }}
           >
