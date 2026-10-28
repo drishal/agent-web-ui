@@ -44,6 +44,8 @@
 
 /* A row of buttons where one is chosen: the range, and any other either/or. */
 .segmented {
+  /* The sliding pill's box: without it the pill's top and bottom reach the scrolling body's. */
+  position: relative;
   display: inline-flex;
   padding: 3px;
   border-radius: 999px;
