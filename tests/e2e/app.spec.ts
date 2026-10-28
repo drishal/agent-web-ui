@@ -69,7 +69,7 @@ test("a new chat opens as a hero composer; a turn folds its work above a plain a
   await expect(prompts(page)).toHaveText(["hello tool **bold**"]);
   await expect(answers(page).last().locator("strong", { hasText: "bold" })).toBeVisible();
   const toggle = page.getByTestId("process-toggle").last();
-  await expect(toggle).toHaveText(/Worked for \d+s · 1 read/);
+  await expect(toggle).toHaveText(/Worked for \d+s · Used 1 tool/);
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await openFold(page);
   const row = page.getByTestId("tool-row").last();
@@ -153,12 +153,12 @@ test("tool cards: the harness's numbered diff, a terminal, a search, a fetch", a
   await expect(tool("grep").locator(".tool-chip")).toHaveText("listen\\(");
   await expect(tool("web_fetch").getByRole("link", { name: "https://example.com/docs/listen" })).toBeVisible();
   // Todos read as a checklist, never as JSON.
-  await expect(tool("TodoWrite").locator(".drow-summary")).toHaveText("the plan (3 steps) · 1 of 3 done");
+  await expect(tool("TodoWrite").locator(".tool-sentence")).toHaveText("Updated the plan (3 steps)");
   await tool("TodoWrite").getByRole("button").first().click();
   await expect(tool("TodoWrite").locator(".todo-card-row.is-done")).toHaveText("Normalize each harness's diff");
   await expect(tool("TodoWrite").locator(".todo-card-row.is-active")).toHaveText("Ship the diff view");
-  await expect(tool("todo_write").locator(".drow-summary")).toHaveText("the plan");
-  await expect(page.getByTestId("process-toggle").last()).toContainText("1 read, 1 search, 1 edit, …");
+  await expect(tool("todo_write").locator(".tool-sentence")).toHaveText("Updated the plan");
+  await expect(page.getByTestId("process-toggle").last()).toContainText("Used 8 tools");
 });
 
 test("an expanded thought shows its text once, not in the header and the body", async ({ page }) => {
@@ -662,7 +662,7 @@ test("a reply written before a tool call shows as a reply, in order, with only t
   // Folded, the reply stays in view, above the fold holding the command, and the answer comes after.
   const fold = turn.getByTestId("process-toggle");
   await expect(fold).toHaveAttribute("aria-expanded", "false");
-  await expect(fold.last()).toContainText("1 command");
+  await expect(fold.last()).toContainText("Used 1 tool");
   const top = async (l: ReturnType<typeof page.locator>) => (await l.boundingBox())?.y ?? 0;
   expect(await top(reply)).toBeLessThan(await top(fold.last()));
   expect(await top(fold.last())).toBeLessThan(await top(turn.getByTestId("answer")));
@@ -679,7 +679,7 @@ test("work the agent runs after its answer keeps its place below the reply", asy
   // The command that ran after the reply is a fold below it, not above.
   const after = turn.getByTestId("work-after");
   await expect(after).toBeVisible();
-  await expect(after.getByTestId("process-toggle")).toContainText("1 command");
+  await expect(after.getByTestId("process-toggle")).toContainText("Used 1 tool");
   const top = (l: ReturnType<typeof page.locator>) => l.boundingBox().then((b) => b?.y ?? 0);
   expect(await top(after)).toBeGreaterThan(await top(answer));
 });
@@ -722,7 +722,7 @@ test("context ring, edited files, and the turn rail", async ({ page }) => {
   await sendAndWait(page, "please edit the app");
   await expect(page.getByTestId("changed-files")).toContainText("Changed 1 file");
   await expect(page.getByTestId("changed-files")).toContainText("src/app.ts");
-  await expect(page.getByTestId("process-toggle").last()).toHaveText(/1 edit/);
+  await expect(page.getByTestId("process-toggle").last()).toHaveText(/Used 1 tool/);
   await expect(page.getByTestId("context-ring")).toBeVisible();
   await expect(page.getByTestId("context-ring")).toHaveAccessibleName(/% of context used · .* tokens/);
   // One panel: what fills the window, the session's tokens, and model timing.
@@ -840,7 +840,7 @@ test("work the agent does after writing its reply stays below the reply", async 
   const answer = turn.getByTestId("answer");
   const after = turn.getByTestId("work-after");
   await expect(answer).toContainText("The answer comes first.");
-  await expect(after).toContainText("1 command");
+  await expect(after).toContainText("Used 1 tool");
   // In the page, not in the fold above.
   const reply = await answer.boundingBox();
   const work = await after.boundingBox();
@@ -1351,7 +1351,7 @@ test("subagents show live, then their answers, and open their own transcripts", 
   // Settled, it opens like any other row.
   await row.getByRole("button").first().click();
   await expect(row.locator(".runs")).toBeVisible();
-  await expect(row.locator(".drow-summary")).toHaveText("2 agents: scout, worker · 2 done");
+  await expect(row.locator(".tool-sentence")).toHaveText("Ran 2 agents: scout, worker");
   await expect(row.locator(".tool-card-meta")).toHaveText("2/2 done");
   await expect(row.locator(".run-agent")).toHaveText(["scout", "worker"]);
   await row.locator(".run-head").first().click();

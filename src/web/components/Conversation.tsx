@@ -5,12 +5,13 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { createContext, Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
-import { toolSentence } from "../tool-sentence.js";
+import { callTime, toolSentence } from "../tool-sentence.js";
+import { iconStack, monogram, serverHue, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
 import { Arrivals, ArrivalsContext, useArrival } from "../arrivals.js";
@@ -127,6 +128,17 @@ const ThoughtRow = memo(function ThoughtRow({ thinking, streaming }: { thinking:
 /** A call shows its time only once it has run this long — a flash of "1s" on a
  *  200ms call is noise, not feedback (neat-render does the same). */
 const TIMER_AFTER_MS = 1500;
+/** A call's kind as a 20px chip: the category's glyph, or an MCP server's monogram in a hue drawn from the theme. */
+function KindChip({ kind, running = false }: { kind: ToolKind; running?: boolean }) {
+  return (
+    <span className={`kind-chip${kind.server ? ` is-server hue-${serverHue(kind.server)}` : ""}`} aria-hidden="true">
+      {running ? <Spinner size={12} /> : kind.server ? <span className="kind-mono">{monogram(kind.server)}</span> : <ToolIcon category={kind.category} size={12} />}
+    </span>
+  );
+}
+
+const STATUS_WORD = { running: "running", done: "done", error: "failed" } as const;
+
 const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; workspace: string }) {
   const failed = item.status === "error";
   const running = item.status === "running";
@@ -136,62 +148,67 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const elapsedMs = running && item.at !== undefined ? Math.max(0, now - item.at) : undefined;
   const tookMs = !running && item.at !== undefined && item.endedAt !== undefined ? item.endedAt - item.at : undefined;
   const ms = elapsedMs ?? tookMs;
-  const time = ms !== undefined && ms >= TIMER_AFTER_MS ? formatDuration(ms) : null;
-  const icon = item.status === "running" ? <Spinner size={13} /> : failed ? <IconX size={14} /> : <ToolIcon category={item.category} size={14} />;
+  const time = ms !== undefined && ms >= TIMER_AFTER_MS ? (running ? formatDuration(ms) : callTime(ms)) : null;
   const sentence = toolSentence(item, workspace);
-  // An edit's counts already have their badge at the end of the line.
-  const facts = item.diffStat ? [] : sentence.facts;
-  const summary = (
-    <>
-      {sentence.target}
-      {sentence.rest ? (sentence.rest.startsWith(":") ? sentence.rest : ` ${sentence.rest}`) : null}
-      {facts.length > 0 ? ` · ${facts.join(" · ")}` : null}
-    </>
-  );
+  const kind = toolKinds([item])[0] as ToolKind;
   const arrival = useArrival(item.id);
-  // Seen running: its icon change (spinner to done) animates.
+  // Seen running: its status mark draws in when the spinner gives way.
   const [live] = useState(item.status === "running");
+  // Agents seen working start open, so their progress shows as it happens.
+  const [open, setOpen] = useState(Boolean(item.subagents) && live);
   // The full-output sheet, which follows the item as its output streams in.
   const [full, setFull] = useState(false);
+  const factText = sentence.facts.join(" · ");
+  const status = STATUS_WORD[item.status];
+  const label = `${sentence.text}${factText ? `, ${factText}` : ""}${time ? `, ${time}` : ""}, ${status}`;
   return (
-    <div className={`tool-row${arrival}${live ? " is-live" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
-      <DisclosureRow
-        icon={icon}
-        title={sentence.verb}
-        summary={summary}
-        after={
-          time ? (
-            <span className="drow-time">
-              <Dot />
-              <Rolling text={time} />
-            </span>
-          ) : null
-        }
-        aside={item.diffStat ? <DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /> : null}
-        {...(failed ? { tone: "error" as const } : {})}
-        // Agents seen working start open, so their progress shows as it happens.
-        defaultOpen={Boolean(item.subagents) && live}
-      >
-        {item.subagents ? (
-          <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
-        ) : (
-          <>
-            <ToolBody item={item} workspace={workspace} />
-            {item.output ? (
-              <button
-                type="button"
-                className="btn btn-small btn-ghost tool-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFull(true);
-                }}
-              >
-                Full output
-              </button>
-            ) : null}
-          </>
-        )}
-      </DisclosureRow>
+    <div className={`tool-row${arrival}${live ? " is-live" : ""}${failed ? " is-failed" : ""}${open ? " is-open" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
+      <div className="drow tool-line">
+        <button type="button" className="drow-head tool-head" aria-expanded={open} aria-label={label} onClick={() => setOpen((v) => !v)}>
+          <KindChip kind={kind} running={running} />
+          <span className="tool-sentence">
+            <span className="tool-verb">{sentence.verb}</span>
+            {sentence.target ? <> <span className={sentence.code ? "tool-target is-code" : "tool-target"}>{sentence.target}</span></> : null}
+            {sentence.rest ? (sentence.rest.startsWith(":") ? sentence.rest : <> {sentence.rest}</>) : null}
+          </span>
+          <span className="tool-facts">
+            {item.diffStat ? <span className="drow-aside"><DiffBadge added={item.diffStat.added} removed={item.diffStat.removed} /></span> : factText ? <span className="tool-fact">{factText}</span> : null}
+            {time ? <span className="tool-time"><Rolling text={time} /></span> : null}
+          </span>
+          <span className="tool-status" role="img" aria-label={status}>
+            {running ? <Spinner size={14} /> : failed ? <IconAlertCircle size={15} /> : <IconCheck size={14} />}
+          </span>
+          <IconChevronDown size={14} className="tool-chevron" />
+        </button>
+        {sentence.error ? (
+          <div className="tool-error" data-testid="tool-error">
+            {sentence.error}
+          </div>
+        ) : null}
+        {open ? (
+          <div className="drow-body">
+            {item.subagents ? (
+              <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
+            ) : (
+              <>
+                <ToolBody item={item} workspace={workspace} />
+                {item.output ? (
+                  <button
+                    type="button"
+                    className="btn btn-small btn-ghost tool-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFull(true);
+                    }}
+                  >
+                    Full output
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
+      </div>
       {full ? <OutputPanel title={toolLabel(item.name)} output={item.output ?? ""} onClose={() => setFull(false)} /> : null}
     </div>
   );
@@ -698,50 +715,89 @@ function ProcessFold({
   const folds = useContext(FoldContext);
   // Keyed by the stretch of work it holds; a turn's only fold is the turn (Find opens it by that id).
   const foldId = segment?.key ?? turn.id;
-  const open = foldId === turn.id ? turnOpen : (folds[foldId] ?? turnOpen);
+  const items = segment?.items ?? turn.process;
+  const failedCalls = items.filter((item) => item.kind === "tool" && item.status === "error").length;
+  // A fold nobody touched follows its turn, and stays open when a call in it failed, so the failure is seen.
+  const open = foldId === turn.id ? turnOpen : (folds[foldId] ?? (turnOpen || failedCalls > 0));
   const live = turn.live && (place === undefined || place === "last");
   const now = useNow(live);
-  const items = segment?.items ?? turn.process;
   const answerAt = segment ? segment.answerAt : turn.answerAt;
-  const counts = countSummary(segment?.counts ?? turn.counts);
+  const toolCount = items.filter((item) => item.kind === "tool").length;
+  const stack = iconStack(toolKinds(items));
   const duration =
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
   const leading = place === undefined || place === "first";
-  const label = live ? "Working" : leading ? (duration ? `Worked for ${duration}` : "Worked") : counts ? counts.charAt(0).toUpperCase() + counts.slice(1) : "Worked";
+  const label = live ? "Working" : leading ? (duration ? `Worked for ${duration}` : "Worked") : null;
   const answerThinking = answerAt >= 0 && turn.answer?.thinking ? turn.answer : null;
   const thought = live && !open ? latestThought(turn) : null;
+  const root = useRef<HTMLDivElement>(null);
+  const wantFailed = useRef(false);
+  const showFailed = () => {
+    const row = root.current?.querySelector<HTMLElement>(".tool-row.is-failed .tool-head");
+    if (row) {
+      row.scrollIntoView({ block: "center" });
+      row.focus();
+    }
+  };
+  // The tally opens the card, then goes to the first failed row once it is drawn.
+  useEffect(() => {
+    if (open && wantFailed.current) {
+      wantFailed.current = false;
+      showFailed();
+    }
+  }, [open]);
+  const bodyId = `fold-${foldId}`;
   return (
-    <div className={`process${open ? " is-open" : ""}${live ? " is-live" : ""}`}>
-      <button type="button" className="process-head" aria-expanded={open} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
-        <IconChevronDown size={14} className="process-chevron" />
-        {live ? <Spinner size={13} /> : null}
-        <span className="process-label">
-          {label}
-          {live && duration ? (
-            <span className="process-time">
-              <Dot />
-              <Rolling text={duration} />
+    <div ref={root} className={`process process-card${open ? " is-open" : ""}${live ? " is-live" : ""}${failedCalls > 0 ? " has-failed" : ""}`}>
+      <div className="process-bar">
+        <button type="button" className="process-head" aria-expanded={open} aria-controls={bodyId} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
+          {live ? <Spinner size={13} /> : null}
+          {stack.shown.length > 0 ? (
+            <span className="kind-stack" data-testid="kind-stack" aria-hidden="true">
+              {stack.shown.map((kind) => (
+                <KindChip key={kind.key} kind={kind} />
+              ))}
+              {stack.more > 0 ? <span className="kind-chip kind-more">+{stack.more}</span> : null}
             </span>
           ) : null}
-          {counts && (live || leading) ? (
-            <span className="process-counts">
-              <Dot />
-              {/* Each number rolls like the stopwatch; the word beside it does not, and neither does a part added later. */}
-              {countParts(segment?.counts ?? turn.counts)
-                .slice(0, 3)
-                .map((part, i) => (
-                  <span key={part.category}>
-                    {i ? ", " : null}
-                    <Rolling text={String(part.n)} /> {part.word}
-                  </span>
-                ))}
-              {countParts(segment?.counts ?? turn.counts).length > 3 ? ", …" : null}
-            </span>
-          ) : null}
-        </span>
-        {/* Outside the label, which ellipsises: the count stays whole on a narrow screen, and shows with the fold closed. */}
-        {leading && turn.changeStat ? <ChangeCounts stat={turn.changeStat} /> : null}
-      </button>
+          <span className="process-label">
+            {label}
+            {live && duration ? (
+              <span className="process-time">
+                <Dot />
+                <Rolling text={duration} />
+              </span>
+            ) : null}
+            {toolCount > 0 ? (
+              <span className="process-counts" title={countSummary(segment?.counts ?? turn.counts)}>
+                {label ? <Dot /> : null}
+                {/* The number rolls like the stopwatch; the words beside it do not. */}
+                Used <Rolling text={String(toolCount)} /> {toolCount === 1 ? "tool" : "tools"}
+              </span>
+            ) : null}
+          </span>
+          {/* Outside the label, which ellipsises: the count stays whole on a narrow screen, and shows with the fold closed. */}
+          {leading && turn.changeStat ? <ChangeCounts stat={turn.changeStat} /> : null}
+          <IconChevronDown size={14} className="process-chevron" />
+        </button>
+        {failedCalls > 0 ? (
+          <button
+            type="button"
+            className="process-failed"
+            data-testid="failed-tally"
+            aria-label={`${failedCalls} failed, show ${failedCalls === 1 ? "it" : "the first"}`}
+            onClick={() => {
+              if (open) showFailed();
+              else {
+                wantFailed.current = true;
+                onToggle(foldId, open);
+              }
+            }}
+          >
+            {failedCalls} failed
+          </button>
+        ) : null}
+      </div>
       {thought ? (
         <div className="process-thought" data-testid="live-thought">
           <IconSpark size={13} />
@@ -749,7 +805,7 @@ function ProcessFold({
         </div>
       ) : null}
       {open ? (
-        <div className="process-body">
+        <div className="process-body" id={bodyId}>
           {(() => {
             // The answer's own thought sits where the answer came, before any work that followed it.
             const answerThought = answerThinking ? <ThoughtRow thinking={answerThinking.thinking} streaming={answerThinking.streaming && !answerThinking.text} /> : null;
@@ -1365,7 +1421,7 @@ export function Conversation({
                   ) : null}
                   <TurnView
                     turn={turn}
-                    open={overrides[turn.id] ?? turn.live}
+                    open={overrides[turn.id] ?? (turn.live || [...turn.process, ...turn.workAfter].some((i) => i.kind === "tool" && i.status === "error"))}
                     onToggle={onToggle}
                     workspace={workspace}
                     canFork={canFork}

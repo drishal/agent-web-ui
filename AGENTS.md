@@ -111,6 +111,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
   tool-sentence.ts            A tool call worded as a sentence ("Read src/app.ts", "Couldn't run npm test") with the facts it holds (pure).
   tool-facts.ts               Facts read from a call's output (test runs, tsc/eslint, rg, git, installs, JSON arrays); claims an output only when sure (pure).
+  tool-kinds.ts               The kinds of tool a run used (the card header's icon stack, an MCP server's monogram) (pure).
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
                               app's shortcuts, shares, and prompt links (?new, ?sessions, ?share, ?prompt).
                               public/sw.js: push, Approve/Deny from a notification, the share target, the

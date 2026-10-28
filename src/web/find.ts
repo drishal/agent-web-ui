@@ -3,6 +3,7 @@
 // folded "Worked for …" process opens that fold first, which the browser's own
 // find cannot do. Matching is pure here; the component walks the DOM's text
 // and paints with the CSS Custom Highlight API, so the page is never rewritten.
+import { toolSentence } from "./tool-sentence.js";
 import type { Turn } from "./turns.js";
 
 /** Where `needle` starts in `haystack`, case-insensitively, without overlaps. */
@@ -20,7 +21,11 @@ function processText(turn: Turn): string {
   const parts: string[] = [];
   for (const item of [...turn.process, ...turn.workAfter]) {
     if (item.kind === "assistant") parts.push(item.text, item.thinking);
-    else if (item.kind === "tool") parts.push(item.name, item.summary);
+    else if (item.kind === "tool") {
+      // What the row says: its sentence, the facts beside it, and a failure's line.
+      const sentence = toolSentence(item, "");
+      parts.push(item.name, item.summary, sentence.text, sentence.facts.join(" "), sentence.error ?? "");
+    }
     else if (item.kind === "notice") parts.push(item.text);
   }
   if (turn.answer?.thinking) parts.push(turn.answer.thinking);

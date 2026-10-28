@@ -333,3 +333,11 @@ export function ToolIcon({ category, size }: { category: ToolCategory; size?: nu
       return <IconTool {...props} />;
   }
 }
+
+/** A failed call's mark: a ring with an exclamation point. */
+export const IconAlertCircle = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="6.25" />
+    <path d="M8 4.75v4M8 11.2v.05" />
+  </Svg>
+);

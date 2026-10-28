@@ -1,0 +1,96 @@
+import { expect, test } from "@playwright/test";
+import { newChat, sendAndWait, signInAndOpen } from "./helpers.js";
+
+// The tool card: a run of calls as one card with a header, sentence rows, facts, and a status column.
+
+test("a run of calls is one card: a header that counts and stacks the kinds, a sentence and a mark per row", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "showcase");
+  const toggle = page.getByTestId("process-toggle").last();
+  await expect(toggle).toContainText("Used 8 tools");
+  // Seven kinds of tool: three chips and the rest counted.
+  const stack = toggle.getByTestId("kind-stack");
+  await expect(stack.locator(".kind-chip")).toHaveCount(4);
+  await expect(stack.locator(".kind-more")).toHaveText("+4");
+  await toggle.click();
+  const rows = page.getByTestId("tool-row");
+  await expect(rows).toHaveCount(8);
+  await expect(rows.first().locator(".tool-sentence")).toHaveText("Edited src/server.ts");
+  await expect(page.locator('[data-tool="bash"] .tool-sentence')).toHaveText("Ran npm test -- --run tool-diff");
+  await expect(page.locator('[data-tool="bash"] .tool-fact')).toHaveText("5 passed");
+  await expect(page.locator('[data-tool="grep"] .tool-fact')).toHaveText("2 results in 2 files");
+  await expect(page.locator('[data-tool="web_fetch"] .tool-sentence')).toHaveText("Fetched example.com/docs/listen");
+  // Every row has its mark in one column, and the button's name is the whole sentence and its state.
+  await expect(rows.locator('.tool-status[aria-label="done"]')).toHaveCount(8);
+  await expect(page.locator('[data-tool="grep"] .tool-head')).toHaveAccessibleName("Searched for listen\\( in src, 2 results in 2 files, done");
+});
+
+test("a test run's summary is read from its output: the counts and the failing test", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "testrun");
+  await page.getByTestId("process-toggle").last().click();
+  const row = page.locator('[data-tool="bash"]');
+  await expect(row.locator(".tool-fact")).toHaveText("1 passed · 1 failed");
+  await expect(row.getByTestId("tool-error")).toHaveText("keeps the order of two lists");
+});
+
+test("a failed call tints its row with the reason, opens its card, and the tally goes to it", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "toolfail");
+  const toggle = page.getByTestId("process-toggle").last();
+  // A failed run stays open once it settles.
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const row = page.locator('[data-tool="bash"]');
+  await expect(row).toHaveAttribute("data-status", "error");
+  await expect(row.locator(".tool-sentence")).toHaveText("Couldn't run npm run e2e");
+  await expect(row.getByTestId("tool-error")).toHaveText("Error: port 4791 is already in use");
+  await expect(row.locator('.tool-status[aria-label="failed"]')).toBeVisible();
+  const tint = await row.evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(tint).not.toBe("rgba(0, 0, 0, 0)");
+  // Closed, the tally opens the card and puts focus on the failed row.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.getByTestId("failed-tally").click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(row.locator(".tool-head")).toBeFocused();
+});
+
+test("find in chat opens a closed card that holds the match", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "showcase");
+  const toggle = page.getByTestId("process-toggle").last();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.locator(".chat-header h1").click();
+  await page.keyboard.press("Control+KeyF");
+  await page.getByRole("searchbox", { name: "Find in chat" }).fill("results in 2 files");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator('[data-tool="grep"] .tool-fact')).toBeVisible();
+});
+
+test("a running call reads in the present tense with a spinner, then settles with its mark", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await page.getByRole("textbox", { name: "Message" }).fill("ticking");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const row = page.locator('[data-tool="bash"]');
+  await expect(row.locator(".tool-sentence")).toHaveText("Running npm test");
+  await expect(row.locator('.tool-status[aria-label="running"]')).toBeVisible();
+  await expect(row.locator(".tool-sentence")).toHaveText("Ran npm test", { timeout: 20_000 });
+  await expect(row.locator('.tool-status[aria-label="done"]')).toBeVisible();
+});
+
+test.describe("reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+  test("a settled mark and the card's chevron do not animate", async ({ page }) => {
+    await signInAndOpen(page);
+    await newChat(page);
+    await sendAndWait(page, "ticking");
+    await page.getByTestId("process-toggle").last().click();
+    const animated = await page.locator(".tool-row .tool-status > svg, .process-chevron").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName + getComputedStyle(el).transitionDuration));
+    for (const a of animated) expect(a).toMatch(/^none0s/);
+  });
+});

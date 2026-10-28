@@ -1,0 +1,47 @@
+import { describe, expect, it } from "vitest";
+import type { ChatItem, ToolCategory } from "../../src/shared/protocol.js";
+import { iconStack, monogram, serverHue, toolKinds, usedLabel } from "../../src/web/tool-kinds.js";
+
+const tool = (name: string, category: ToolCategory): ChatItem => ({ kind: "tool", id: name, name, args: "{}", status: "done", output: "", truncated: false, category, summary: "", paths: [] });
+
+describe("toolKinds", () => {
+  it("lists each kind once, in first-use order", () => {
+    const kinds = toolKinds([tool("read", "read"), tool("bash", "command"), tool("read", "read"), tool("grep", "search"), tool("bash", "command")]);
+    expect(kinds.map((k) => k.key)).toEqual(["read", "command", "search"]);
+  });
+  it("counts each MCP server as its own kind", () => {
+    const kinds = toolKinds([tool("mcp__linear__list_issues", "other"), tool("mcp__github__get_pr", "other"), tool("mcp__linear__get_issue", "other"), tool("lsp", "other")]);
+    expect(kinds.map((k) => k.key)).toEqual(["mcp:linear", "mcp:github", "other"]);
+    expect(kinds[0]?.server).toBe("linear");
+  });
+  it("skips what is not a tool", () => {
+    expect(toolKinds([{ kind: "notice", id: "n", level: "info", text: "x" }])).toEqual([]);
+  });
+});
+
+describe("iconStack", () => {
+  const k = (key: string) => ({ key, category: "other" as const });
+  it("shows three and counts the rest", () => {
+    expect(iconStack([k("a"), k("b"), k("c"), k("d"), k("e")])).toEqual({ shown: [k("a"), k("b"), k("c")], more: 2 });
+    expect(iconStack([k("a"), k("b")])).toEqual({ shown: [k("a"), k("b")], more: 0 });
+  });
+});
+
+describe("server chips", () => {
+  it("takes one letter, or two for a multi-word name", () => {
+    expect(monogram("linear")).toBe("L");
+    expect(monogram("git-hub")).toBe("GH");
+    expect(monogram("context7")).toBe("C");
+  });
+  it("hashes a name to a stable slot", () => {
+    expect(serverHue("linear")).toBe(serverHue("linear"));
+    expect([0, 1, 2, 3]).toContain(serverHue("github"));
+  });
+});
+
+describe("usedLabel", () => {
+  it("is singular for one", () => {
+    expect(usedLabel(1)).toBe("Used 1 tool");
+    expect(usedLabel(6)).toBe("Used 6 tools");
+  });
+});

@@ -1,0 +1,271 @@
+/* ---- tool card: a run of tool calls as one card ------------------------------
+   The process fold drawn as a card (affectUI's Tool Call Card, rebuilt): a header
+   with the kinds of tool used as an icon stack, "Used N tools", a failure tally,
+   then one row per call: chip | sentence | facts | status | chevron. A failed
+   row is tinted and carries its error line. Every colour derives from the theme
+   tokens; motion is short and eased out (tokens.css switches it off). */
+.process-card {
+  position: relative;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 1px 2px rgb(0 0 0 / calc(var(--shadow-strength) * 0.4));
+}
+
+.process-bar {
+  position: relative;
+}
+
+.process-card .process-head {
+  gap: 10px;
+  min-height: calc(38px * var(--chat-scale));
+  padding: 6px 12px 6px 10px;
+  border-bottom: 0;
+  border-radius: var(--r-md);
+  color: var(--text-2);
+}
+
+.process-card.is-open .process-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.process-card .process-head:hover {
+  background: var(--hover);
+}
+
+.process-card .process-label {
+  flex: 1 1 auto;
+}
+
+.process-card .process-chevron {
+  margin-left: auto;
+  color: var(--muted-text);
+  transform: none;
+}
+
+.process-card.is-open .process-chevron {
+  transform: rotate(180deg);
+}
+
+/* "1 failed": a button over the header's right side that opens the card and goes to the first failed row. */
+.process-card.has-failed .process-head {
+  padding-right: 112px;
+}
+
+.process-failed {
+  position: absolute;
+  top: 50%;
+  right: 38px;
+  transform: translateY(-50%);
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: calc(var(--chat-small) - 0.6px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: background-color var(--dur-hover) ease;
+}
+
+.process-failed:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.process-card .process-thought {
+  padding: 0 12px 8px;
+}
+
+/* The icon stack: one chip per kind of tool, overlapping, each ringed in the card's colour. */
+.kind-stack {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.kind-stack .kind-chip + .kind-chip {
+  margin-left: -6px;
+}
+
+.kind-chip {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 9%, var(--card));
+  box-shadow: 0 0 0 1.5px var(--card);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.kind-more {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-text);
+}
+
+.kind-chip.is-server {
+  color: var(--text);
+}
+
+.kind-chip.hue-0 {
+  background: color-mix(in srgb, var(--accent) 25%, var(--card));
+}
+
+.kind-chip.hue-1 {
+  background: color-mix(in srgb, var(--ok) 25%, var(--card));
+}
+
+.kind-chip.hue-2 {
+  background: color-mix(in srgb, var(--warn) 25%, var(--card));
+}
+
+.kind-chip.hue-3 {
+  background: color-mix(in srgb, var(--thinking) 25%, var(--card));
+}
+
+/* The rows: hairlines between, the card's padding around. */
+.process-card .process-body {
+  gap: 0;
+  padding: 4px;
+  border-top: 1px solid var(--hairline);
+}
+
+.process-card .process-body > .tool-row + .tool-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.tool-row {
+  border-radius: var(--r-sm);
+}
+
+.tool-row.is-failed {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.tool-head {
+  gap: 10px;
+  height: auto;
+  min-height: calc((var(--drow-h) + 8px) * var(--chat-scale));
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+}
+
+.tool-head:hover,
+.tool-row.is-open > .tool-line > .tool-head {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tool-sentence {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-target.is-code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.tool-facts {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-text);
+  font-size: calc(var(--chat-small) - 0.6px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tool-facts .drow-aside {
+  margin: 0;
+  padding: 0;
+}
+
+.tool-status {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: color-mix(in srgb, var(--ok) 80%, transparent);
+}
+
+.tool-row[data-status="running"] .tool-status {
+  color: var(--muted-text);
+}
+
+.tool-row.is-failed .tool-status {
+  color: var(--danger);
+}
+
+.tool-chevron {
+  flex: none;
+  color: var(--muted-text);
+  opacity: 0.6;
+  transition: transform 0.2s var(--ease-out);
+}
+
+.tool-row.is-open .tool-chevron {
+  transform: rotate(180deg);
+}
+
+/* A failure's reason in one muted line under its sentence (and a test run's failing test). */
+.tool-error {
+  padding: 0 8px 6px 38px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: calc(var(--chat-small) - 0.6px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-line > .drow-body {
+  padding: 2px 8px 10px 38px;
+}
+
+/* Motion: the mark fades in when a call settles in view; the verb shimmers while it runs. */
+.tool-row.is-live:not([data-status="running"]) .tool-status > svg {
+  animation: fade-in var(--dur-enter) var(--ease-out);
+}
+
+.tool-row[data-status="running"] .tool-verb {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--text) 50%, var(--muted) 65%, var(--muted) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* Phones: the facts drop under the sentence rather than squeezing it; status and chevron stay on the first line. */
+@media (pointer: coarse), (max-width: 640px) {
+  .tool-head {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+
+  .tool-sentence {
+    flex: 1 1 0;
+  }
+
+  .tool-facts {
+    order: 5;
+    flex: 1 0 100%;
+    padding-left: 30px;
+  }
+
+  .process-failed {
+    min-height: 32px;
+  }
+}

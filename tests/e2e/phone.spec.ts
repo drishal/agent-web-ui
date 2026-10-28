@@ -177,14 +177,14 @@ test("a phone keeps prompts and tool rows compact", async ({ page }) => {
   await expect(bubble).toHaveClass(/is-clamped/);
   const box = await bubble.evaluate((el) => ({ height: el.getBoundingClientRect().height, line: Number.parseFloat(getComputedStyle(el).lineHeight) }));
   expect(box.height).toBeLessThanOrEqual(4 * box.line + 16.5);
-  // A tool call is one line, 34 px: ten of them must not be a screen and a half.
+  // A tool call is a line and, when it has facts, a muted second line under it: ten of them must not be a screen and a half.
   await newChat(page);
   await sendAndWait(page, "tool please");
   const fold = page.getByTestId("process-toggle").last();
   if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
   const row = page.locator(".drow-head").first();
   await expect(row).toBeVisible();
-  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(35);
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(58);
 });
 
 test("the permission list opens on screen from the settings sheet", async ({ page }) => {
