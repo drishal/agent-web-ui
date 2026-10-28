@@ -1303,11 +1303,30 @@ export function Conversation({
     [armSettle],
   );
 
+  // Going back to a turn (the rail, the sticky prompt) leaves the end, and the end must not pull the view
+  // back before the glide gets going: a row still settling at the end shrinks the thread and clamps
+  // scrollTop, that scroll read as "at the end" again, and the next resize snapped the view down,
+  // cancelling the glide. The trip ends once the view has left the end (from there, pinning is right
+  // again), or on a timer when the turn was already near the end and the view never leaves it.
+  const travelling = useRef(false);
+  const travelTimer = useRef(0);
+  const leaveEnd = useCallback(() => {
+    pinned.current = false;
+    jumpingRef.current = false;
+    travelling.current = true;
+    window.clearTimeout(travelTimer.current);
+    travelTimer.current = window.setTimeout(() => {
+      travelling.current = false;
+    }, 1500);
+  }, []);
+
   const onScroll = useCallback(() => {
     const el = scroller.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinned.current = distance <= PIN_DISTANCE_PX;
+    const away = distance > PIN_DISTANCE_PX;
+    if (away) travelling.current = false;
+    pinned.current = !travelling.current && !away;
     if (jumpingRef.current) armSettle();
     setShowJump(!pinned.current && !jumpingRef.current);
   }, [armSettle]);
@@ -1335,6 +1354,7 @@ export function Conversation({
     shownChat.current = chatId;
     pinned.current = true;
     jumpingRef.current = false;
+    travelling.current = false;
     turnCountRef.current = turnsRef.current.length;
     setShowJump(false);
     const thread = scroller.current?.firstElementChild;
@@ -1391,6 +1411,7 @@ export function Conversation({
     // Listen on the wrap so a turn-rail click also takes over from a glide.
     const takeOver = () => {
       jumpingRef.current = false;
+      travelling.current = false;
     };
     outer.addEventListener("wheel", takeOver, { passive: true });
     outer.addEventListener("pointerdown", takeOver);
@@ -1403,6 +1424,7 @@ export function Conversation({
       outer.removeEventListener("keydown", takeOver);
       el.removeEventListener("scrollend", settle);
       window.clearTimeout(settleTimer.current);
+      window.clearTimeout(travelTimer.current);
     };
   }, [settle]);
 
@@ -1583,20 +1605,14 @@ export function Conversation({
         turns={turns}
         scroller={scroller}
         onReveal={reveal}
-        onBeforeGo={() => {
-          pinned.current = false;
-          jumpingRef.current = false;
-        }}
+        onBeforeGo={leaveEnd}
       />
       {/* The find bar owns the top corner while it is open; going back leaves the end of the chat, so the end stops pulling the view down. */}
       <StickyPrompt
         turns={turns}
         scroller={scroller}
         hidden={find !== null}
-        onBeforeGo={() => {
-          pinned.current = false;
-          jumpingRef.current = false;
-        }}
+        onBeforeGo={leaveEnd}
       />
       {showJump ? (
         <button type="button" className="jump" onClick={jump}>
