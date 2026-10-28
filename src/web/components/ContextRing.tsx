@@ -5,7 +5,7 @@
 // anchored popover. Hidden until the harness reports a percentage. Beside it, the
 // draft's estimated size once it is worth a mention (token-estimate.ts), which stays
 // even where the ring is hidden; the panel adds what sending it does to the context.
-import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ContextCategory, ContextPoint, ContextUsage, SessionUsage } from "../../shared/protocol.js";
 import { coarse } from "../gestures.js";
 import { useDismiss } from "../hooks.js";
@@ -13,6 +13,7 @@ import { sparkline, SPARK_H, SPARK_W } from "../sparkline.js";
 import { type DraftSize, draftRow, draftSize, draftWarning } from "../token-estimate.js";
 import { Dialog } from "./Dialog.js";
 import { Dot } from "./Dot.js";
+import { Rolling } from "./Rolling.js";
 
 function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
@@ -42,9 +43,34 @@ const SWATCH: Record<string, string> = {
 const FALLBACK = ["var(--accent)", "var(--danger)", "var(--text-2)"];
 const swatch = (c: ContextCategory, i: number) => SWATCH[c.id] ?? FALLBACK[i % FALLBACK.length];
 
-function Row({ label, value, color, title }: { label: string; value: string; color?: string | undefined; title?: string }) {
+function Row({
+  label,
+  value,
+  color,
+  title,
+  hover,
+  state,
+}: {
+  label: string;
+  value: string;
+  color?: string | undefined;
+  title?: string;
+  /** Makes the row focusable and reports it being looked at (pointer or keyboard); null when it is left. */
+  hover?: (on: boolean) => void;
+  /** "dim" while another row is looked at; "busy" while the harness works on it (compacting). */
+  state?: "dim" | "busy" | undefined;
+}) {
   return (
-    <div className="usage-row" title={title}>
+    <div
+      className="usage-row"
+      title={title}
+      data-state={state}
+      tabIndex={hover ? 0 : undefined}
+      onMouseEnter={hover ? () => hover(true) : undefined}
+      onMouseLeave={hover ? () => hover(false) : undefined}
+      onFocus={hover ? () => hover(true) : undefined}
+      onBlur={hover ? () => hover(false) : undefined}
+    >
       <span className="usage-label">
         {color ? <span className="usage-swatch" style={{ background: color }} aria-hidden="true" /> : null}
         {label}
@@ -54,10 +80,17 @@ function Row({ label, value, color, title }: { label: string; value: string; col
   );
 }
 
+/** A share of the window as the headline writes it. */
+const share = (pct: number) => (pct < 1 ? "<1%" : `${Math.round(pct)}%`);
+
 /** The popover's sections. Drawn inside the desktop's anchored panel and inside the phone's bottom sheet alike. */
-function UsageBody({ context, usage, draft, canCompact, history }: { context: ContextUsage; usage: SessionUsage | null; draft: DraftSize | null; canCompact: boolean; history: ContextPoint[] }) {
+function UsageBody({ context, usage, draft, canCompact, history, compacting, compacted }: { context: ContextUsage; usage: SessionUsage | null; draft: DraftSize | null; canCompact: boolean; history: ContextPoint[]; compacting: boolean; compacted: boolean }) {
   const pct = Math.max(0, Math.min(100, context.percent ?? 0));
   const categories = context.categories?.filter((x) => x.tokens > 0) ?? [];
+  // Looking at a row (hover or focus) puts that part in the headline and dims the others.
+  const [look, setLook] = useState<string | null>(null);
+  const looked = categories.find((x) => x.id === look) ?? null;
+  const headline = looked ? share((looked.tokens / context.window) * 100) : share(pct);
   const spark = useMemo(() => sparkline(history), [history]);
   const warning = draft ? draftWarning(draft, canCompact) : null;
 
@@ -73,7 +106,10 @@ function UsageBody({ context, usage, draft, canCompact, history }: { context: Co
       <section className="usage-section" aria-label="Context">
         <div className="usage-head">
           <span>
-            <strong>{pct < 1 ? "<1" : Math.round(pct)}%</strong> of context used
+            <strong data-testid="context-headline">
+              <Rolling text={headline} />
+            </strong>{" "}
+            {looked ? looked.label : "of context used"}
           </span>
           <span className="usage-value">{context.tokens !== null ? `${compact(context.tokens)} / ${compact(context.window)}` : compact(context.window)}</span>
         </div>
@@ -86,14 +122,29 @@ function UsageBody({ context, usage, draft, canCompact, history }: { context: Co
         ) : null}
         <div className="usage-bar" aria-hidden="true">
           {categories.length > 0 ? (
-            categories.map((x, i) => <span key={x.id} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />)
+            categories.map((x, i) => (
+              <span key={x.id} className={look !== null && look !== x.id ? "is-dim" : undefined} style={{ width: `${(x.tokens / context.window) * 100}%`, background: swatch(x, i) }} />
+            ))
           ) : (
             <span style={{ width: `${pct}%`, background: "currentColor" }} />
           )}
         </div>
         {categories.map((x, i) => (
-          <Row key={x.id} label={x.label} value={compact(x.tokens)} color={swatch(x, i)} title={`${full(x.tokens)} tokens (estimated)`} />
+          <Row
+            key={x.id}
+            label={x.label}
+            value={compact(x.tokens)}
+            color={swatch(x, i)}
+            title={`${full(x.tokens)} tokens (estimated)`}
+            hover={(on) => setLook((cur) => (on ? x.id : cur === x.id ? null : cur))}
+            state={compacting && x.id === "messages" ? "busy" : look !== null && look !== x.id ? "dim" : undefined}
+          />
         ))}
+        {compacted ? (
+          <p className="usage-note usage-compacted" role="status" data-testid="compacted">
+            Compacted ✓
+          </p>
+        ) : null}
         {draft ? (
           <p className={`usage-note usage-draft${draft.near ? " is-near" : ""}`} data-testid="draft-row">
             {draftRow(draft)}
@@ -137,7 +188,7 @@ function UsageBody({ context, usage, draft, canCompact, history }: { context: Co
 }
 
 /** `draft` is the composer's text and image count, for the figure of what sending adds; `canCompact` whether the harness can answer a full window with Compact. */
-export function ContextRing({ context, usage, draft, canCompact, history }: { context: ContextUsage | null; usage: SessionUsage | null; draft: { text: string; images: number }; canCompact: boolean; history: ContextPoint[] }) {
+export function ContextRing({ context, usage, draft, canCompact, history, compacting }: { context: ContextUsage | null; usage: SessionUsage | null; draft: { text: string; images: number }; canCompact: boolean; history: ContextPoint[]; compacting: boolean }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
@@ -161,6 +212,21 @@ export function ContextRing({ context, usage, draft, canCompact, history }: { co
     const shift = Math.min(Math.max(0, 8 - left), Math.max(0, slack));
     if (shift > 0) el.style.setProperty("--usage-shift", `${shift}px`);
   }, [open]);
+
+  // "Compacted ✓" for two seconds after a compaction ends; the numbers roll down on their own.
+  const [compacted, setCompacted] = useState(false);
+  const was = useRef(false);
+  useEffect(() => {
+    if (compacting) setCompacted(false);
+    if (was.current && !compacting) {
+      setCompacted(true);
+      const t = setTimeout(() => setCompacted(false), 2000);
+      was.current = compacting;
+      return () => clearTimeout(t);
+    }
+    was.current = compacting;
+    return undefined;
+  }, [compacting]);
 
   // The estimate lags a keystroke rather than holding one up: a draft can be a huge paste.
   const text = useDeferredValue(draft.text);
@@ -200,11 +266,11 @@ export function ContextRing({ context, usage, draft, canCompact, history }: { co
       {open ? (
         coarse() ? (
           <Dialog title="Context and usage" onClose={() => setOpen(false)} className="usage-sheet">
-            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} compacting={compacting} compacted={compacted} />
           </Dialog>
         ) : (
           <div className="usage-pop" ref={pop} role="dialog" aria-label="Context and usage" data-testid="usage-panel">
-            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} />
+            <UsageBody context={context} usage={usage} draft={size} canCompact={canCompact} history={history} compacting={compacting} compacted={compacted} />
           </div>
         )
       ) : null}

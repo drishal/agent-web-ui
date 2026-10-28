@@ -1,7 +1,7 @@
 // Presence in the header (how many devices have a chat open) and the context panel
 // (its sparkline and its hover). Each test opens its own chat.
 import { expect, test } from "@playwright/test";
-import { openChat, sendAndWait, signInAndOpen } from "./helpers.js";
+import { openChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
 
 test("a second page on the same chat shows '2 devices' in the header, and it goes away again", async ({ page, context }) => {
   await signInAndOpen(page);
@@ -16,6 +16,37 @@ test("a second page on the same chat shows '2 devices' in the header, and it goe
   await expect(other.getByTestId("chat-viewers")).toHaveText("2 devices", { timeout: 10_000 });
   await other.close();
   await expect(page.getByTestId("chat-viewers")).toHaveCount(0, { timeout: 10_000 });
+});
+
+test("focusing a row in the context panel puts its share in the headline and dims the rest", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  await page.getByTestId("context-ring").click();
+  const panel = page.getByRole("dialog", { name: "Context and usage" });
+  const headline = panel.getByTestId("context-headline");
+  // The fake harness: 8,400 tokens of 100,000, of which the system prompt is 1,500.
+  await expect(headline).toHaveText("8%");
+  const row = panel.locator(".usage-row", { hasText: "System prompt" });
+  await row.focus();
+  await expect(headline).toHaveText("2%");
+  await expect(panel.locator(".usage-row", { hasText: "Tool definitions" })).toHaveAttribute("data-state", "dim");
+  await expect(panel.locator(".usage-bar span.is-dim")).toHaveCount(2);
+  await panel.locator(".usage-row", { hasText: "Tool definitions" }).focus();
+  await expect(headline).toHaveText("5%");
+  await page.getByTestId("context-ring").focus();
+  await expect(headline).toHaveText("8%");
+  await expect(panel.locator(".usage-bar span.is-dim")).toHaveCount(0);
+});
+
+test("after a compaction the panel says 'Compacted' for a moment", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  await send(page, "/compact");
+  // Sending takes focus out of the panel and closes it, so open it again inside the two seconds.
+  await page.getByTestId("context-ring").click();
+  const note = page.getByRole("dialog", { name: "Context and usage" }).getByTestId("compacted");
+  await expect(note).toHaveText("Compacted ✓");
+  await expect(note).toBeHidden({ timeout: 5000 });
 });
 
 test("the context panel draws how the context grew, with a name a screen reader can read", async ({ page }) => {

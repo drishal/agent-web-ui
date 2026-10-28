@@ -933,6 +933,45 @@
   stroke-width: 1.25;
 }
 
+.usage-bar span {
+  transition: opacity var(--dur-hover) var(--ease-out);
+}
+
+.usage-bar span.is-dim {
+  opacity: 0.25;
+}
+
+/* A row looked at (hover or focus) keeps its colour; the others step back. */
+.usage-row[tabindex] {
+  margin: 0 -6px;
+  padding: 0 6px;
+  border-radius: var(--r-sm, 6px);
+  transition: opacity var(--dur-hover) var(--ease-out), background-color var(--dur-hover) var(--ease-out);
+}
+
+.usage-row[tabindex]:hover,
+.usage-row[tabindex]:focus-visible {
+  background: var(--hover);
+}
+
+.usage-row[data-state="dim"] {
+  opacity: 0.5;
+}
+
+/* Compacting: the conversation's row shimmers while the harness works on it. */
+.usage-row[data-state="busy"] .usage-label {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--text) 50%, var(--muted) 65%, var(--muted) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+.usage-compacted {
+  color: var(--ok);
+  animation: rise-in var(--dur-enter) var(--ease-out);
+}
+
 .usage-row {
   display: flex;
   align-items: center;
