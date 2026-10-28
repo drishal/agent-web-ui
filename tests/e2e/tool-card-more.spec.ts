@@ -55,7 +55,7 @@ test("the working mark is eight rays, and gives way to a check that draws itself
   await expect(toggle.locator(".rays")).toHaveCount(0);
   const check = toggle.locator(".check-draw path");
   await expect(check).toHaveAttribute("pathLength", "1");
-  expect(await check.evaluate((el) => getComputedStyle(el).strokeDasharray)).toBe("1px");
+  expect(await check.evaluate((el) => getComputedStyle(el).strokeDasharray)).toBe("1px, 2px");
 });
 
 test("a turn loaded from history shows no check", async ({ page }) => {
