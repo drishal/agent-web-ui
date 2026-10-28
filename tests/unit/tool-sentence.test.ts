@@ -46,7 +46,7 @@ describe("toolSentence: search", () => {
     expect(toolSentence({ ...search, status: "error" }, WS).text).toBe("Couldn't search for quokka in src");
   });
   it("counts results, says no results, and does not count a cut output", () => {
-    expect(toolSentence(search, WS).facts).toEqual(["2 results"]);
+    expect(toolSentence(search, WS).facts).toEqual(["2 results in 2 files"]);
     expect(toolSentence({ ...search, output: "x\n" }, WS).facts).toEqual(["1 result"]);
     expect(toolSentence({ ...search, output: "" }, WS).facts).toEqual(["no results"]);
     expect(toolSentence({ ...search, truncated: true }, WS).facts).toEqual([]);
@@ -153,10 +153,10 @@ describe("toolSentence: MCP, agents, plan, unknown", () => {
     expect(toolSentence({ ...odd, status: "error" }, WS).text).toBe("Couldn't use lsp diagnostics");
     expect(toolSentence(odd, WS).facts).toEqual([]);
   });
-  it("lets parsed facts replace the basic ones, but never on a failure", () => {
+  it("reads a plain output as lines and claims no more", () => {
     const bash = tool({ name: "bash", category: "command", args: args({ command: "npm test" }), output: "a\nb" });
-    expect(toolSentence(bash, WS, ["12 passed"]).facts).toEqual(["12 passed"]);
-    expect(toolSentence({ ...bash, status: "error" }, WS, ["12 passed"]).facts).toEqual([]);
+    expect(toolSentence(bash, WS).facts).toEqual(["2 lines"]);
+    expect(toolSentence({ ...bash, status: "error" }, WS).facts).toEqual([]);
   });
 });
 

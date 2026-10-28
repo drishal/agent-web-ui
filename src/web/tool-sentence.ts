@@ -6,6 +6,7 @@
 // Pure, so the web tool card and its unit tests share it. atui keeps its own verb
 // table (neat.ts) because the terminal prints it differently.
 import type { ToolItem } from "../shared/protocol.js";
+import { toolArgs, toolFacts } from "./tool-facts.js";
 import { formatSpan } from "./turn-time.js";
 import { relativePath } from "./turns.js";
 
@@ -33,15 +34,6 @@ const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const COMMAND_CUT = 60;
 const ERROR_CUT = 140;
-
-function parseArgs(raw: string): Args {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Args) : {};
-  } catch {
-    return {};
-  }
-}
 
 /** `list_issues`, `listIssues`, `list-issues` → "list issues". */
 export function toolWords(name: string): string {
@@ -118,20 +110,22 @@ function todoCount(args: Args): { done: number; total: number } | undefined {
 }
 
 /**
- * A call as a sentence. `workspace` makes paths project-relative. `parsedFacts`
- * are what tool-facts.ts read from the output; when it read none, the basic
- * counts the table in docs/ui.md lists stand in.
+ * A call as a sentence. `workspace` makes paths project-relative. What
+ * tool-facts.ts read from the output wins; when it read none, the basic counts
+ * (lines, results, +a −r) stand in, except on a failure, whose output is the error.
  */
-export function toolSentence(item: ToolItem, workspace: string, parsedFacts: string[] = []): ToolSentence {
+export function toolSentence(item: ToolItem, workspace: string): ToolSentence {
+  const parsed = toolFacts(item);
   const tense: Tense = item.status;
-  const args = parseArgs(item.args);
+  const args = toolArgs(item.args);
   const settled = item.status !== "running";
   const path = item.paths[0] ?? str(args.path) ?? str(args.file_path);
   const rel = (p: string) => relativePath(p, workspace);
   const make = (kind: string, target: string, code: boolean, rest: string | undefined, facts: string[]): ToolSentence => {
     const verb = (VERBS[kind] as Record<Tense, string>)[tense];
-    const known = item.status === "error" ? [] : parsedFacts.length > 0 ? parsedFacts : facts;
-    const error = item.status === "error" ? errorLine(item.output) : undefined;
+    const known = parsed.facts.length > 0 ? parsed.facts : item.status === "error" ? [] : facts;
+    // A run that finished with a failing test says which one, though the call itself did not fail.
+    const error = parsed.error ?? (item.status === "error" ? errorLine(item.output) : undefined);
     const tail = rest ? (rest.startsWith(":") ? rest : ` ${rest}`) : "";
     return { verb, target, ...(rest ? { rest } : {}), code, facts: known, ...(error ? { error } : {}), text: `${verb}${target ? ` ${target}` : ""}${tail}` };
   };

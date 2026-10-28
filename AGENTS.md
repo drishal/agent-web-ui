@@ -109,6 +109,8 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               styles/*.css (one file per area) in cascade order. docs/ui.md maps which part is where.
   api.ts, stream.ts           fetch wrapper (ApiError) and the reconnecting SSE stream.
   turns.ts                    Items → turns (prompt, process fold, answer); shared with atui.
+  tool-sentence.ts            A tool call worded as a sentence ("Read src/app.ts", "Couldn't run npm test") with the facts it holds (pure).
+  tool-facts.ts               Facts read from a call's output (test runs, tsc/eslint, rg, git, installs, JSON arrays); claims an output only when sure (pure).
   gestures.ts, launch.ts      Phones: edge swipe, sheet drag, long press (pure deciders + hooks); the installed
                               app's shortcuts, shares, and prompt links (?new, ?sessions, ?share, ?prompt).
                               public/sw.js: push, Approve/Deny from a notification, the share target, the
@@ -249,7 +251,9 @@ if every test passes.
   whose output arrives a line at a time), `afterreply` (the answer, then a tool
   call after it), `unfinished` (a call whose result never comes: the run
   settles with it open), `midcompact` (compact inside a run, then carry on),
-  `contended` (refuse a prompt while a run is going). Add a word there when a
+  `contended` (refuse a prompt while a run is going), `testrun` (a command
+  printing a Vitest summary with one failure), `toolfail` (a command call that
+  errors). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give

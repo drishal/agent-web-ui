@@ -14,6 +14,8 @@
 //   "midcompact" compact the context inside the run, then carry on
 //   "contended" refuse a prompt because a run is going (pi's "already processing")
 //   "ticking" run a command whose output arrives a line at a time
+//   "testrun" run a command that prints a Vitest summary with one failing test
+//   "toolfail" a command call that fails (port in use), then the run carries on
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -53,6 +55,8 @@ interface FakeCall {
   details?: Record<string, unknown>;
   /** The output as it arrives while the call runs, one update per entry (else one "partial output…"). */
   updates?: string[];
+  /** The call failed: its result is an error. */
+  isError?: boolean;
 }
 
 const FAKE_MODELS: ModelInfo[] = [
@@ -541,6 +545,14 @@ class FakeLiveChat implements LiveChat {
         const updates = lines.map((_, i) => lines.slice(0, i + 1).join("\n"));
         await this.call({ name: "bash", args: { command: "npm test" }, output: `${updates[updates.length - 1]}\n\n Tests  6 passed (6)`, updates }, signal);
       }
+      if (/\btestrun\b/i.test(text)) {
+        // A test run that ends with one failure, as Vitest prints it.
+        const output = " RUN  v5.0.3 /work\n\n \u276f tests/unit/sum.test.ts (2 tests | 1 failed) 10ms\n   \u00d7 keeps the order of two lists 7ms\n\n FAIL  tests/unit/sum.test.ts > keeps the order of two lists\nAssertionError: expected [ 1, 2 ] to deeply equal [ 2, 1 ]\n\n Test Files  1 failed (1)\n      Tests  1 failed | 1 passed (2)\n   Duration  220ms";
+        await this.call({ name: "bash", args: { command: "npm test" }, output }, signal);
+      }
+      if (/\btoolfail\b/i.test(text)) {
+        await this.call({ name: "bash", args: { command: "npm run e2e" }, output: "Error: port 4791 is already in use\n    at Server.setupListenHandle", isError: true }, signal);
+      }
       if (/\bplanned\b/i.test(text)) {
         // A plan handed over for review, as Claude Code's ExitPlanMode does it.
         const plan = "## Plan\n\n1. Read `src/app.ts`\n2. Split the handler\n3. Add a test\n4. Run the suite\n5. Update the README\n6. Check the build\n7. Tidy the imports\n8. Write the commit\n9. Push it\n10. Tell the user";
@@ -743,8 +755,8 @@ class FakeLiveChat implements LiveChat {
       await this.pause(signal, call.updates ? 10 : 2);
     }
     const details = call.details ? { details: call.details } : {};
-    this.record({ role: "toolResult", toolCallId, toolName: call.name, content: [{ type: "text", text: call.output }], isError: false, ...details });
-    this.emit({ type: "tool_end", toolCallId, output: call.output, isError: false, ...details });
+    this.record({ role: "toolResult", toolCallId, toolName: call.name, content: [{ type: "text", text: call.output }], isError: call.isError ?? false, ...details });
+    this.emit({ type: "tool_end", toolCallId, output: call.output, isError: call.isError ?? false, ...details });
   }
 
   /**
