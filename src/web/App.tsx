@@ -49,7 +49,7 @@ import { UsageDialog } from "./components/UsageDialog.js";
 import { SidePane } from "./components/SidePane.js";
 import { TimelineDialog } from "./components/TimelineDialog.js";
 import { useManagePrompts } from "./saved-prompts.js";
-import { useFileRequests, type FileRequest } from "./file-bus.js";
+import { setPreviewWorkspace, useFileRequests, type FileRequest } from "./file-bus.js";
 import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
 import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
@@ -1083,6 +1083,10 @@ export function App() {
   };
 
   const searchWorkspace = chat?.workspace ?? workspace;
+  // A file link's hover preview reads from the same project the viewer opens in.
+  useEffect(() => {
+    setPreviewWorkspace(searchWorkspace?.id ?? null);
+  }, [searchWorkspace?.id]);
   keysRef.current = {
     step: (step) => stepVisits(step),
     reopen: () => reopenClosedTab(),

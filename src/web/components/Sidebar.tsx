@@ -7,6 +7,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus, Checkout, HarnessStatus, ProjectSession, SessionsOverview, WorkspaceInfo } from "../../shared/protocol.js";
 import { useDismiss, useNow, useViewSlide } from "../hooks.js";
+import { useHoverCard } from "../hover-card.js";
 import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp, IconClock, IconDot, IconMore, IconNewTab, IconPin, IconPlus, IconSearch, IconSettings, IconSidebar, IconTerminal, IconWarning, IconSplit } from "../icons.js";
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import type { UsageLimits } from "../../shared/protocol.js";
@@ -330,26 +331,9 @@ function SessionRow({
   const markable = !s.id.includes(":live-");
   const { warm } = useContext(RowActions);
   const hover = useRef(0);
-  const cardTimer = useRef(0);
-  const [cardAt, setCardAt] = useState<DOMRect | null>(null);
+  const { anchor: cardAt, show: showCard, hide: hideCard } = useHoverCard(HOVER_CARD_MS);
   const cardId = useId();
-  const hideCard = () => {
-    window.clearTimeout(cardTimer.current);
-    setCardAt(null);
-  };
-  useEffect(
-    () => () => {
-      window.clearTimeout(hover.current);
-      window.clearTimeout(cardTimer.current);
-    },
-    [],
-  );
-  // The card follows the row; a scroll of the list would leave it behind, so it goes.
-  useEffect(() => {
-    if (!cardAt) return;
-    window.addEventListener("scroll", hideCard, { capture: true, passive: true });
-    return () => window.removeEventListener("scroll", hideCard, { capture: true });
-  }, [cardAt]);
+  useEffect(() => () => window.clearTimeout(hover.current), []);
   return (
     <li
       className={`session-item${menuAt ? " is-menu-open" : ""}${drag?.dragging ? " is-dragging" : ""}${drag?.drop ? ` is-drop-${drag.drop}` : ""}`}
@@ -382,9 +366,8 @@ function SessionRow({
           if (e.pointerType !== "mouse") return;
           window.clearTimeout(hover.current);
           hover.current = window.setTimeout(() => warm(s, "hover"), HOVER_WARM_MS);
-          const row = e.currentTarget;
-          window.clearTimeout(cardTimer.current);
-          if (markable) cardTimer.current = window.setTimeout(() => setCardAt(row.getBoundingClientRect()), HOVER_CARD_MS);
+          if (markable) showCard(e.currentTarget);
+          else hideCard();
         }}
         onPointerLeave={() => {
           window.clearTimeout(hover.current);

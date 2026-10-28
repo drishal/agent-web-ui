@@ -43,6 +43,7 @@ banners-dialogs.css), so search rather than guess.
 | Session tabs (drag to reorder, pin) | `TabStrip.tsx` (order logic: `tab-order.ts`) | `session-tabs.css` | `tabs.spec.ts` |
 | Conversation: turns, answers, thoughts | `Conversation.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `QuoteButton.tsx`, `TurnRail.tsx`, `StickyPrompt.tsx` (`sticky-prompt.ts`), a turn's time on hover (`turn-time.ts`), Copy turn as Markdown (`turn-markdown.ts`) | `conversation.css` | `app.spec.ts` |
 | Tool rows and their bodies (diffs, terminals) | `ToolBody.tsx` (inside `Conversation.tsx`) | `conversation.css` | `app.spec.ts` (tool cards) |
+| A file path's hover preview | `FileLink.tsx` (shared by every path link) → `FilePreview.tsx`; delay and placement in `hover-card.ts` (also the sidebar's session card) | `file-viewer.css` (`.file-preview*`) | `json-and-preview.spec.ts` |
 | JSON arguments and results as a tree | `JsonTree.tsx` (rows from `json-tree.ts`), drawn by `ToolBody.tsx` | `conversation.css` (`.json-*`), colours `.tk-*` in `file-viewer.css` | `json-and-preview.spec.ts` |
 | Subagents, agent-rendered pages, plans | `Subagents.tsx`, `HtmlRenderFrame.tsx`, `PlanCard.tsx` | `subagents.css`, `plan-card.css` | `app.spec.ts`, `composer-extras.spec.ts` |
 | Empty chat, opening a chat | `App.tsx` (hero), `SwitchSplash.tsx`, `Loader.tsx` | `hero.css`, `opening-chat.css`, `loader.css` | `app.spec.ts`, `tabs.spec.ts` |

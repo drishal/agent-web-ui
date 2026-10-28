@@ -31,3 +31,16 @@ export function useFileRequests(handler: (request: FileRequest) => void): void {
 export function fileLinkable(rel: string): boolean {
   return rel !== "" && !rel.startsWith("/") && rel !== ".." && !rel.startsWith("../");
 }
+
+// The project whose files a link names, for the hover preview (the link knows
+// only a relative path). The shell sets it to the shown chat's project, the same
+// one the viewer opens in.
+let previewWorkspace: string | null = null;
+
+export function setPreviewWorkspace(id: string | null): void {
+  previewWorkspace = id;
+}
+
+export function previewWorkspaceId(): string | null {
+  return previewWorkspace;
+}
