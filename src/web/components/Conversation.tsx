@@ -30,6 +30,7 @@ import { DiffBadge, ToolBody } from "./ToolBody.js";
 import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
+import { Collapse } from "./Collapse.js";
 import { CopyButton } from "./CopyButton.js";
 import { AgentsCard, ChatIdContext } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
@@ -106,7 +107,11 @@ function DisclosureRow({
         {after ? <span className="drow-after">{after}</span> : null}
         {aside ? <span className="drow-aside">{aside}</span> : null}
       </button>
-      {open && expandable ? <div className="drow-body">{children}</div> : null}
+      {expandable ? (
+        <Collapse open={open}>
+          <div className="drow-body">{children}</div>
+        </Collapse>
+      ) : null}
     </div>
   );
 }
@@ -217,7 +222,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
             ) : null}
           </div>
         ) : null}
-        {open ? (
+        <Collapse open={open}>
           <div className="drow-body">
             {item.subagents ? (
               <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
@@ -242,7 +247,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
               </div>
             )}
           </div>
-        ) : null}
+        </Collapse>
       </div>
       {full ? <OutputPanel title={toolLabel(item.name)} output={item.output ?? ""} onClose={() => setFull(false)} /> : null}
     </div>
@@ -906,7 +911,7 @@ function ProcessFold({
           <span>{thought}</span>
         </div>
       ) : null}
-      {open || single ? (
+      <Collapse open={open || single}>
         <div className="process-body" id={bodyId}>
           {(() => {
             // The answer's own thought sits where the answer came, before any work that followed it.
@@ -935,7 +940,7 @@ function ProcessFold({
             );
           })()}
         </div>
-      ) : null}
+      </Collapse>
     </div>
   );
 }

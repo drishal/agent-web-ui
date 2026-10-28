@@ -51,6 +51,8 @@ test("resting on a file's path shows its first lines, and a click still opens th
     await openFold(page);
     const row = page.locator('[data-testid="tool-row"][data-tool="read"]');
     await row.getByRole("button").first().click();
+    // Hover once the panel has grown: while it grows the chat scrolls to keep its end in view, moving the link from under the pointer.
+    await expect(row.locator(".collapse.is-settled").first()).toBeAttached();
     const link = row.getByRole("button", { name: "src/net.ts", exact: true });
     await link.hover();
     const card = page.getByRole("tooltip");

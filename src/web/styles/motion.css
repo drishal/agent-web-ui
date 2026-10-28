@@ -138,9 +138,32 @@
   }
 }
 
-/* Disclosures open with their content easing down; chevrons turn. */
-.drow-body,
-.process-body,
+/* Disclosures grow open and shrink shut (Collapse.tsx): grid rows from 0fr to 1fr, so nothing is measured and
+   the rows below glide instead of jumping; the content fades with it. Chevrons turn. */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.24s var(--ease-out),
+    opacity 0.18s ease;
+}
+
+.collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Done growing: a focus ring or a shadow at the edge is no longer clipped. */
+.collapse.is-settled > .collapse-inner {
+  overflow: visible;
+}
+
 .tool-card-raw[open] > pre {
   animation: slide-in 0.18s var(--ease-out);
 }
@@ -158,11 +181,28 @@
   animation: turn-in var(--dur-enter) var(--ease-out);
 }
 
-.tool-row.is-arriving,
 .notice-row.is-arriving,
 .request-row.is-arriving,
 .process-step.is-arriving {
   animation: slide-in 0.22s var(--ease-out);
+}
+
+/* A call that starts while the chat is on screen grows into its card (the rows under it glide down) as it
+   fades and drops into place. max-height, not interpolate-size, so Firefox does it too; the cap is past a
+   failed row's two lines, and the animation ends, so a taller row is never cut. */
+.tool-row.is-arriving {
+  animation: row-in 0.28s var(--ease-out);
+}
+
+@keyframes row-in {
+  from {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    max-height: 120px;
+  }
 }
 
 .answer.is-arriving {

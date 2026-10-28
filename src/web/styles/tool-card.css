@@ -273,7 +273,7 @@
   white-space: nowrap;
 }
 
-.tool-line > .drow-body {
+.tool-line .drow-body {
   padding: 0;
 }
 
