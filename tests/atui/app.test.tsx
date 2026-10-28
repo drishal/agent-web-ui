@@ -33,7 +33,10 @@ describe("atui", () => {
     ui.keys.pressEnter();
     await ui.until("Echo: showcase tool edit please");
     await idle(ui);
-    const f = await ui.until("Changed 3 files");
+    await ui.until("Changed 3 files");
+    // The answer itself (its ● gutter), not the thought line that also quotes it: the reveal may still be finishing.
+    const f = await ui.until("● Echo: showcase tool edit please");
+    expect(f).toContain("Changed 3 files");
     // neat-render's turn: the prompt behind a ❯, the calls fired together on one tree, each
     // outcome at the end of its line, the answer marked, and a Σ line of what the turn did.
     expect(f).toContain("❯ showcase tool edit please");
