@@ -326,10 +326,10 @@
     phase-in var(--dur-enter) var(--ease-out);
 }
 
+/* It starts part-visible: phases change as often as every 600 ms, and the label must never read as empty. */
 @keyframes phase-in {
   from {
-    opacity: 0;
-    transform: translateY(6px);
-    filter: blur(2px);
+    opacity: 0.4;
+    transform: translateY(4px);
   }
 }

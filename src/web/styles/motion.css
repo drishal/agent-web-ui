@@ -221,8 +221,9 @@
   animation: fade-in 0.3s ease;
 }
 
-/* Working: the label shimmers while the turn, a tool, or a thought runs. */
-.process.is-live .process-label,
+/* Working: the label shimmers while the turn, a tool, or a thought runs. A card's label leaves it
+   to its phase (tool-card.css): one clipped shimmer inside another can paint neither. */
+.process.is-live:not(.process-card) .process-label,
 .tool-row[data-status="running"] .drow-title,
 .drow-head:has(.spinner) .drow-title {
   background: linear-gradient(
