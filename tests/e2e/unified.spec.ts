@@ -427,6 +427,7 @@ test("a saved prompt asks in place before it is deleted; Escape backs out", asyn
   // And the ✓ actually deletes.
   await manager.getByRole("button", { name: /Delete the prompt/ }).click();
   await yes.click();
-  await expect(manager.getByRole("list", { name: "Your saved prompts" })).toContainText("None yet");
+  // Saved prompts are the server's, shared with the other tests: only this one must be gone.
+  await expect(manager.getByRole("list", { name: "Your saved prompts" })).not.toContainText("#delme");
   await page.keyboard.press("Escape");
 });
