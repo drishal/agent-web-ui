@@ -13,7 +13,7 @@ import { ChatError } from "./chats/chat.js";
 declare const AWUI_REPO: string | undefined;
 declare const AWUI_COMMIT: string | undefined;
 
-const DEFAULT_REPO = "github.com/drishal/agent-web-ui";
+const DEFAULT_REPO = "github.com/drishal/awui";
 const ATUI_MAIN = path.join("src", "atui", "main.tsx");
 const TERN_MAIN = path.join("src", "tern", "main.ts");
 const ATUI_PRELOAD = path.join("node_modules", "@opentui", "solid", "scripts", "preload.js");

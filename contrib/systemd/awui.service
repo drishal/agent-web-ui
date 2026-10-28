@@ -19,7 +19,7 @@ ExecStart="@NODE@" "@APP_DIR@/dist/server/server/index.js"
 WorkingDirectory=@APP_DIR@
 # The shell's PATH when installed, so pi, omp, hermes, claude, and the agents'
 # own tools (git, rg, ...) are found. Port, host, and the login come from
-# ~/.config/agentwebui/config.yml; an Environment=PORT=... here would override it.
+# ~/.config/awui/config.yml; an Environment=PORT=... here would override it.
 Environment="PATH=@PATH@"
 # SIGTERM is a clean exit (0), so on-failure would leave it dead after a stray kill.
 Restart=always

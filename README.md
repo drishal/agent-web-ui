@@ -33,7 +33,7 @@ palette, the file viewer, the light theme, and the phone layout are in
 A self-contained `awui` binary runs the whole thing with no Node on the machine — the server, the web bundle, and the harness extensions are all embedded:
 
 ```bash
-curl -fsSL https://github.com/drishal/agent-web-ui/releases/latest/download/awui-linux-x64 -o ~/.local/bin/awui
+curl -fsSL https://github.com/drishal/awui/releases/latest/download/awui-linux-x64 -o ~/.local/bin/awui
 chmod +x ~/.local/bin/awui
 awui                 # web UI + API on http://127.0.0.1:4783
 awui install tui     # also drop the atui terminal client on your PATH (~/.local/bin/atui)
@@ -52,8 +52,8 @@ Build it yourself from a clone (inside `devenv shell`; see below): `bun run scri
 Requirements: Node ≥ 22.19 (24 LTS recommended), npm, and `pi`, `omp`, `hermes`, `claude`, `opencode`, and/or `grok` installed and logged in. A missing harness shows as unavailable instead of crashing the app.
 
 ```bash
-git clone https://github.com/drishal/agent-web-ui.git
-cd agent-web-ui
+git clone https://github.com/drishal/awui.git
+cd awui
 npm run build:binary
 cp dist/bin/linux-x64/awui ~/.local/bin/awui
 awui                 # serves UI + API on http://127.0.0.1:4783

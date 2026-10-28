@@ -22,7 +22,7 @@ in
     Service = {
       ExecStart = "${lib.getExe pkgs.nodejs} ${appDir}/dist/server/server/index.js";
       WorkingDirectory = appDir;
-      # Port, host and the login come from ~/.config/agentwebui/config.yml; anything set here
+      # Port, host and the login come from ~/.config/awui/config.yml; anything set here
       # would override that file.
       Environment = [
         # The shell's toolset: pi and omp live outside the Nix profile, and the

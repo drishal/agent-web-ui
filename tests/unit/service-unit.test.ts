@@ -8,14 +8,14 @@ const template = readFileSync(new URL("../../contrib/systemd/awui.service", impo
 describe("systemd user unit", () => {
   it("runs this checkout's build with this node and the shell's PATH", () => {
     const unit: string = renderUnit(template, {
-      appDir: "/home/me/agent web ui",
+      appDir: "/home/me/my apps/awui",
       node: "/usr/bin/node",
-      pathEnv: "/home/me/agent web ui/node_modules/.bin:/home/me/.local/bin:/usr/bin:/usr/bin:/opt/100%/bin",
+      pathEnv: "/home/me/my apps/awui/node_modules/.bin:/home/me/.local/bin:/usr/bin:/usr/bin:/opt/100%/bin",
     });
     expect(unit).not.toMatch(/@[A-Z_]+@/);
-    expect(unit).toContain('ExecStart="/usr/bin/node" "/home/me/agent web ui/dist/server/server/index.js"');
-    expect(unit).toContain("WorkingDirectory=/home/me/agent web ui\n");
-    expect(unit).toContain("ConditionPathExists=/home/me/agent web ui/dist/server/server/index.js");
+    expect(unit).toContain('ExecStart="/usr/bin/node" "/home/me/my apps/awui/dist/server/server/index.js"');
+    expect(unit).toContain("WorkingDirectory=/home/me/my apps/awui\n");
+    expect(unit).toContain("ConditionPathExists=/home/me/my apps/awui/dist/server/server/index.js");
     // npm run's own bin dirs go, duplicates go, and % is a literal, not a specifier.
     expect(unit).toContain('Environment="PATH=/home/me/.local/bin:/usr/bin:/opt/100%%/bin"');
     expect(unit).toContain("Restart=always");

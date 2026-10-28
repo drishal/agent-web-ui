@@ -13,7 +13,7 @@ let
   q = s: "\"${s}\"";
 in
 {
-  xdg.configFile."agentwebui/theme.yml".text =
+  xdg.configFile."awui/theme.yml".text =
     lib.concatStringsSep "\n" (
       [
         "name: ${q c.scheme}"

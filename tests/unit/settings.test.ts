@@ -24,7 +24,7 @@ function setup(yaml: string, overrides: Partial<SettingsContext> = {}) {
   return { ctx, file, home };
 }
 
-const FILE = `# My agent-web-ui settings
+const FILE = `# My awui settings
 port: 4783 # the usual port
 theme: base16
 autocollapse_sidebar: true
@@ -58,7 +58,7 @@ describe("settings", () => {
     const code = path.join(home, "code");
     const view = writeSettings(ctx, { port: 4800, theme: null, textScale: 1.22, chatWidth: "wide", density: "compact", autocollapseSidebar: false, showStatusBar: false, herdr: false, workspaceRoots: [code] });
     const text = readFileSync(file, "utf8");
-    expect(text).toContain("# My agent-web-ui settings");
+    expect(text).toContain("# My awui settings");
     expect(text).toContain("port: 4800 # the usual port");
     expect(text).not.toContain("theme:");
     expect(text).toContain("text_scale: 1.22");
