@@ -240,7 +240,7 @@ if every test passes.
 - **Fake harnesses are the main tool.** `FakeAdapter` (`src/server/harness/fake.ts`)
   answers deterministic scripts chosen by words in the prompt: `tool`, `big`,
   `ask`, `twice`, `quiz`, `described`, `edit`, `showcase` (one call of every tool
-  kind), `subagents` (a parallel pi-subagents run with live progress and
+  kind, an MCP-like one with JSON arguments and result among them), `subagents` (a parallel pi-subagents run with live progress and
   transcripts), `recall`, `todo`, `bloat`, `slow` (many small chunks, to act
   mid-run), `fail`, `planned` (an ExitPlanMode plan), `ratelimit` (a stop on a
   usage limit), `wait` (a provider wait on the harness's status line),

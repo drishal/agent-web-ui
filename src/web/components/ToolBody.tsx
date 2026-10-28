@@ -6,8 +6,10 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { DiffLine, ToolDiff, ToolItem } from "../../shared/protocol.js";
 import { IconCheck, IconCircle, IconDot, IconFile, IconGlobe, IconSearch, IconTerminal, IconX } from "../icons.js";
+import { parseJsonContainer } from "../json-tree.js";
 import { relativePath } from "../turns.js";
 import { FileLink } from "./FileLink.js";
+import { JsonTree } from "./JsonTree.js";
 
 type Args = Record<string, unknown>;
 
@@ -37,6 +39,9 @@ function display(value: unknown): string {
     return String(value);
   }
 }
+
+/** Whether any argument is an object or array: those read better as a tree than as a block of JSON text. */
+const hasNested = (args: Args): boolean => Object.values(args).some((v) => v !== null && typeof v === "object");
 
 /** Arguments as key-value rows; long or multi-line values get a block of their own. */
 function ArgRows({ args, skip = [] }: { args: Args; skip?: string[] }) {
@@ -200,7 +205,7 @@ function CardHead({ icon, children, meta }: { icon: ReactNode; children: ReactNo
   );
 }
 
-function Output({ item, label = "Output" }: { item: ToolItem; label?: string | null }) {
+function Output({ item, label = "Output", json = false }: { item: ToolItem; label?: string | null; json?: boolean }) {
   const failed = item.status === "error";
   const text = item.output || (item.status === "running" ? "" : "(no output)");
   if (!text && item.status === "running") {
@@ -212,6 +217,16 @@ function Output({ item, label = "Output" }: { item: ToolItem; label?: string | n
           <span />
           <span />
         </span>
+      </div>
+    );
+  }
+  // An output that is JSON (an MCP tool's result most of all) is a tree; Copy gives the raw text.
+  const tree = json && !failed && !item.truncated ? parseJsonContainer(text) : null;
+  if (tree) {
+    return (
+      <div className="io-section">
+        {label ? <span className="io-label">{label}</span> : null}
+        <JsonTree value={tree} raw={text} label="Output as JSON" />
       </div>
     );
   }
@@ -380,7 +395,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
           </>
         ) : null}
       </CardHead>,
-      <Output item={item} label={null} />,
+      <Output item={item} label={null} json />,
     );
   }
 
@@ -397,7 +412,7 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
           <span className="tool-card-prose">{url ?? query}</span>
         )}
       </CardHead>,
-      <Output item={item} label={null} />,
+      <Output item={item} label={null} json />,
     );
   }
 
@@ -418,11 +433,11 @@ export function ToolBody({ item, workspace }: { item: ToolItem; workspace: strin
       {item.args ? (
         <div className="io-section">
           <span className="io-label">Input</span>
-          {args ? <ArgRows args={args} /> : <pre className="io-text">{item.args}</pre>}
+          {args && hasNested(args) ? <JsonTree value={args} raw={item.args} label="Input as JSON" /> : args ? <ArgRows args={args} /> : <pre className="io-text">{item.args}</pre>}
         </div>
       ) : null}
       {item.args ? <div className="io-divider" /> : null}
-      <Output item={item} />
+      <Output item={item} json />
     </>,
   );
 }

@@ -1720,3 +1720,108 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ---- JSON tree (tool arguments and JSON output) ----------------------------------------- */
+
+/* Colours come from the code highlighter's .tk-* classes; this is only layout. */
+.json-tree {
+  position: relative;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.json-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.json-fold,
+.json-leaf {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.json-fold {
+  cursor: pointer;
+}
+
+.json-fold:hover .json-caret,
+.json-fold:focus-visible .json-caret {
+  color: var(--text);
+}
+
+.json-caret {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  color: var(--muted-text);
+  transition: color var(--dur-hover) var(--ease-out);
+}
+
+.json-colon {
+  margin-right: 5px;
+  color: var(--muted-text);
+}
+
+.json-count {
+  color: var(--muted-text);
+}
+
+.json-more {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.json-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--muted-text);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+
+.json-tree:hover .json-copy,
+.json-copy:focus-visible {
+  opacity: 1;
+}
+
+.json-copy:hover {
+  color: var(--text);
+}
+
+@media (pointer: coarse) {
+  .json-copy {
+    opacity: 1;
+  }
+}
+
+.json-capped {
+  margin-top: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+}

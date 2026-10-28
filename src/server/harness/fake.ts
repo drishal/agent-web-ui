@@ -654,6 +654,12 @@ class FakeLiveChat implements LiveChat {
       },
       // omp's and Pi's form: operations on a phased list.
       { name: "todo_write", args: { _i: "Updating progress", ops: [{ op: "done", task: "Normalize each harness's diff" }, { op: "done", task: "Ship the diff view" }] }, output: "Updated" },
+      // An MCP-like call: nested arguments and a JSON result, which the tool card draws as trees.
+      {
+        name: "mcp__tracker__triage_ticket",
+        args: { query: "listen", filter: { state: "open", labels: ["bug", "server"] }, limit: 2 },
+        output: JSON.stringify({ total: 2, items: [{ id: 41, title: "Listen ignores the host", labels: ["bug"], assignee: null }, { id: 57, title: "Log the port", labels: ["server"], assignee: { login: "sam", site_admin: false } }] }),
+      },
     ];
   }
 
