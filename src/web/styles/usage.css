@@ -51,6 +51,9 @@
 }
 
 .segmented button {
+  /* Above the sliding pill (a sibling), so the label stays readable. */
+  position: relative;
+  z-index: 1;
   padding: 4px 13px;
   border: 0;
   border-radius: 999px;
@@ -59,13 +62,38 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.14s ease-out, color 0.14s ease-out;
+  /* Only the text colour shifts; the chosen face sits on the pill, which glides. */
+  transition: color var(--dur-hover) ease-out;
 }
 
 .segmented button.is-on {
-  background: var(--card);
   color: var(--text);
+}
+
+/* The chosen option's face is one element that glides to it (SlidingIndicator):
+   the edge toward the target moves at --dur-lead, the trailing one a beat later. */
+.sliding-indicator.segmented-pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 999px;
+  background: var(--card);
   box-shadow: var(--shadow-soft);
+  pointer-events: none;
+  transition:
+    left var(--dur-lag, 0.22s) var(--ease-out),
+    width var(--dur-lead, 0.16s) var(--ease-out);
+}
+
+.sliding-indicator.segmented-pill[style*="--lead: left"] {
+  transition:
+    left var(--dur-lead, 0.16s) var(--ease-out),
+    width var(--dur-lag, 0.22s) var(--ease-out);
+}
+
+/* Pressing squeezes the pill's face a little; the pill itself does not move. */
+.segmented button:active {
+  transform: scale(0.97);
 }
 
 .usage-busy {
@@ -90,6 +118,8 @@
 /* It scrolls in the dialog's right padding, a thin themed bar with its room kept (the conversation's),
    so the bar sits beside the cards and columns rather than over their edge. */
 .usage-body {
+  /* The sliding pill positions itself inside this scroller's box. */
+  position: relative;
   max-height: min(78dvh, 820px);
   margin: 0 -14px 0 -4px;
   padding: 2px 6px 4px 4px;

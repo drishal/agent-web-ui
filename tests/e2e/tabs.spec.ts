@@ -531,3 +531,33 @@ test("a selection of sessions can be settled at once, and undone", async ({ page
   await expect(page.locator(".session-item", { hasText: "first selectable" })).toHaveCount(1);
   await expect(page.locator(".session-item", { hasText: "second selectable" })).toHaveCount(1);
 });
+
+test("the shown tab's underline glides to the tab picked, and reduced motion makes it jump", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  await sendAndWait(page, "glide alpha");
+  await newTab(page);
+  await sendAndWait(page, "glide beta");
+  const line = page.locator(".tab-active-line");
+  await expect(line).toBeVisible();
+  const betaBox = (await tab(page, "glide beta").boundingBox())!;
+  // On the second tab, the line sits inside its span.
+  const onBeta = (await line.boundingBox())!;
+  expect(onBeta.x + onBeta.width / 2).toBeGreaterThanOrEqual(betaBox.x);
+  expect(onBeta.x + onBeta.width / 2).toBeLessThanOrEqual(betaBox.x + betaBox.width);
+
+  // Picking the first tab starts a glide: the line's transition moves both edges.
+  await tab(page, "glide alpha").click();
+  const transition = await line.evaluate((node) => getComputedStyle(node).transitionProperty);
+  expect(transition).toContain("left");
+  await expect.poll(async () => {
+    const b = (await line.boundingBox())!;
+    const a = (await tab(page, "glide alpha").boundingBox())!;
+    return b.x + b.width / 2 >= a.x && b.x + b.width / 2 <= a.x + a.width;
+  }).toBe(true);
+
+  // Reduced motion: the glide has no duration at all.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const duration = await line.evaluate((node) => getComputedStyle(node).transitionDuration);
+  expect(duration).toBe("0s");
+});

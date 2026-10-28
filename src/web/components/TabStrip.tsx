@@ -15,6 +15,7 @@ import { IconPin, IconPlus, IconX } from "../icons.js";
 import { isBusy } from "../session-groups.js";
 import { clampDrag, dropSlot, slideOf, type TabRect } from "../tab-order.js";
 import type { Tab } from "../tabs.js";
+import { SlidingIndicator } from "./SlidingIndicator.js";
 import { WorkingRing } from "./WorkingRing.js";
 
 export function TabStrip({
@@ -163,6 +164,7 @@ export function TabStrip({
             <div
               key={tab.key}
               role="tab"
+              data-tab-index={i}
               data-tab-key={tab.key}
               aria-selected={selected}
               tabIndex={selected ? 0 : -1}
@@ -215,6 +217,8 @@ export function TabStrip({
             </div>
           );
         })}
+        {/* The active tab's underline glides to it; a drag pins it to the lifted tab. */}
+        <SlidingIndicator target={strip} active={drag ? drag.from : active} of=".session-tab" className="tab-active-line" />
       </div>
       <button type="button" className="icon-btn tab-new" aria-label="New chat in a new tab" title="New chat in a new tab" disabled={newDisabled} onClick={onNew}>
         <IconPlus size={14} />

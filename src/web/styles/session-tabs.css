@@ -13,6 +13,9 @@
 }
 
 .tab-list {
+  /* The sliding underline positions itself inside the list's own box, so a
+     horizontal scroll of an overflowing strip keeps them together. */
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   min-width: 0;
@@ -50,7 +53,6 @@
 .session-tab.is-active {
   background: var(--bg);
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .session-tab:focus-visible {
@@ -150,4 +152,25 @@
   .session-tab-close {
     opacity: 1;
   }
+}
+
+/* The shown tab's accent underline is one element that glides to it (see
+   SlidingIndicator): the edge toward the target moves at --dur-enter, the
+   trailing edge a beat later, so it stretches and settles. A drag pins it to
+   the lifted tab. prefers-reduced-motion (tokens.css) turns the glide off. */
+.sliding-indicator.tab-active-line {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  /* The left edge is the trailing one when gliding right, and the reverse. */
+  transition:
+    left var(--dur-lag, 0.22s) var(--ease-out),
+    width var(--dur-lead, 0.16s) var(--ease-out);
+}
+.sliding-indicator.tab-active-line[style*="--lead: left"] {
+  transition:
+    left var(--dur-lead, 0.16s) var(--ease-out),
+    width var(--dur-lag, 0.22s) var(--ease-out);
 }

@@ -4,7 +4,7 @@
 // bar a day split by harness in its colour, the harnesses and models side by
 // side, and the chats that used the most (a click opens one). Days are the
 // browser's.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HarnessStatus, ProjectSession, UsageLimits, UsageReport, UsageTotals, WorkspaceInfo } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { harnessColor } from "../harness-colors.js";
@@ -14,6 +14,7 @@ import { cacheShare, dayBars, dayLabels, dollars, shortTokens, tokensOf } from "
 import { Dialog } from "./Dialog.js";
 import { LimitsPanel } from "./LimitsMeter.js";
 import { dotted } from "./Dot.js";
+import { SlidingIndicator } from "./SlidingIndicator.js";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -58,6 +59,8 @@ export function UsageDialog({
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
+  /** The range switch's row, for the sliding pill. */
+  const rangesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -93,12 +96,14 @@ export function UsageDialog({
       <div className="usage-body">
         <LimitsPanel limits={limits} />
         <div className="usage-top">
-          <div className="segmented" role="group" aria-label="Range">
+          <div className="segmented" role="group" aria-label="Range" ref={rangesRef}>
             {RANGES.map((n) => (
               <button key={n} type="button" className={n === days ? "is-on" : undefined} aria-pressed={n === days} onClick={() => setDays(n)}>
                 {n} days
               </button>
             ))}
+            {/* The chosen selection's pill glides to it (SlidingIndicator). */}
+            <SlidingIndicator target={rangesRef} active={RANGES.indexOf(days)} of="button" className="segmented-pill" />
           </div>
           {busy ? (
             <span className="usage-busy muted">
