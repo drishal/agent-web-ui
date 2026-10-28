@@ -389,3 +389,16 @@
   stroke-dasharray: 1 2;
   animation: check-draw 0.36s var(--ease-out) 0.08s backwards;
 }
+
+/* A status word that swapped in place (StatusWord.tsx) comes in from a 2px blur. It starts at 0.4 opacity, not 0, so the
+   word is never unreadable. Not for text with background-clip: text (see the shimmer above): it would paint nothing. */
+@keyframes word-in {
+  from {
+    opacity: 0.4;
+    filter: blur(2px);
+  }
+}
+
+.word-in {
+  animation: word-in var(--dur-enter) var(--ease-out);
+}

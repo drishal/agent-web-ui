@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChatSnapshot, HarnessStatus, ProjectSession, SessionsOverview, UsageLimits } from "../../shared/protocol.js";
 import { api, errorText } from "../api.js";
 import { chatActions } from "../chat-actions.js";
+import { StatusWord } from "./StatusWord.js";
 import { STATUS_LABEL, useChatStream } from "../chat-stream.js";
 import type { ChatState } from "../chat-state.js";
 import { harnessColor } from "../harness-colors.js";
@@ -149,7 +150,7 @@ export function SidePane({
                 {harness?.displayName ?? chat.harnessId}
               </span>
               <span className={`status status-${chat.status}`} data-testid="side-status">
-                {STATUS_LABEL[chat.status] ?? chat.status}
+                <StatusWord text={STATUS_LABEL[chat.status] ?? chat.status} />
               </span>
               {conn !== "connected" && conn !== "connecting" ? <span className="muted">
                   <Dot />

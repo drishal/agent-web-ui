@@ -25,6 +25,7 @@ import { checkForNewBuild, rememberBuild, reloadApp, watchForNewBuild } from "./
 import { useBanner } from "./banner.js";
 import { useBootstrap } from "./bootstrap.js";
 import type { ChatState } from "./chat-state.js";
+import { StatusWord } from "./components/StatusWord.js";
 import { chatIdFromHash, CONN_BANNER, setHash, STATUS_LABEL, useChatStream } from "./chat-stream.js";
 import { appCommand } from "./commands.js";
 import { CommandPalette } from "./components/CommandPalette.js";
@@ -1546,7 +1547,7 @@ export function App() {
                       {chatHarness?.displayName ?? chat.harnessId}
                     </span>
                     <span className={`status status-${chat.status}`} data-testid="chat-status">
-                      {STATUS_LABEL[chat.status] ?? chat.status}
+                      <StatusWord text={STATUS_LABEL[chat.status] ?? chat.status} />
                     </span>
                     {chat.harnessId !== "awui" ? (
                       <span className="chat-path" title={chat.workspace.path}>

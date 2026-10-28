@@ -43,3 +43,27 @@ test("a call that settles in view draws its check, and a chat opened later has t
   await page.reload();
   await expect(page.locator(".tool-status svg.check-draw")).toHaveCount(0);
 });
+
+test("the header's status word blurs in when it changes, not on first paint", async ({ page }) => {
+  await signInAndOpen(page);
+  await newChat(page);
+  const status = page.getByTestId("chat-status");
+  await send(page, "slow tool");
+  await expect(status.locator(".word-in")).toHaveCount(1);
+  await expect.poll(() => status.locator(".word-in").evaluate((el) => getComputedStyle(el).animationName)).toBe("word-in");
+  await expect(status).toHaveText("Idle");
+  await page.reload();
+  await expect(page.getByTestId("chat-status")).toHaveText("Idle");
+  await expect(page.getByTestId("chat-status").locator(".word-in")).toHaveCount(0);
+});
+
+test("with reduced motion the drawn check and the blurred word are plain", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signInAndOpen(page);
+  await newChat(page);
+  await send(page, "slow tool");
+  await expect(page.locator(".tool-status svg.check-draw path").first()).toBeAttached();
+  await expect.poll(() => page.locator(".tool-status svg.check-draw path").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+  await expect(page.getByTestId("chat-status").locator(".word-in")).toHaveCount(1);
+  await expect.poll(() => page.getByTestId("chat-status").locator(".word-in").evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+});
