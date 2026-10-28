@@ -407,17 +407,3 @@
   place-items: center;
   color: color-mix(in srgb, var(--ok) 80%, transparent);
 }
-
-.check-draw path {
-  stroke-dasharray: 1;
-  animation: check-draw 360ms var(--ease-out) 80ms backwards;
-}
-
-@keyframes check-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}

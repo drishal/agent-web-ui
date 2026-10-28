@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { createContext, Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconAlertCircle, DrawnCheck, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, RaySpinner, Spinner, ToolIcon } from "../icons.js";
+import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, RaySpinner, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { callsToShow, findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
@@ -844,7 +844,7 @@ function ProcessFold({
     <div ref={root} className={`process process-card${open ? " is-open" : ""}${live ? " is-live" : ""}${failedCalls > 0 ? " has-failed" : ""}`}>
       <div className="process-bar">
         <button type="button" className="process-head" aria-expanded={open} aria-controls={bodyId} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
-          {live ? <RaySpinner size={14} /> : wasLive ? <span className="process-done"><DrawnCheck size={14} /></span> : null}
+          {live ? <RaySpinner size={14} /> : wasLive ? <span className="process-done"><IconCheck size={14} draw /></span> : null}
           {stack.shown.length > 0 ? (
             <span className="kind-stack" data-testid="kind-stack" aria-hidden="true">
               {stack.shown.map((kind) => (

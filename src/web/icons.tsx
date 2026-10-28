@@ -336,15 +336,6 @@ export function RaySpinner({ size = 14 }: { size?: number }) {
   );
 }
 
-/** A check that draws itself when it appears (the path is one unit long, so the stylesheet can animate its dash). */
-export function DrawnCheck({ size = 14 }: { size?: number }) {
-  return (
-    <svg className="check-draw" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M3 8.5l3 3 7-7" pathLength="1" />
-    </svg>
-  );
-}
-
 export function ToolIcon({ category, size, test = false }: { category: ToolCategory; size?: number; test?: boolean }) {
   const props = size ? { size } : {};
   if (test) return <IconFlask {...props} />;
