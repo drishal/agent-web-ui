@@ -1,0 +1,140 @@
+/* The notice stack: cards behind one another, newest in front (slot 0), each one
+   scaled, lowered a few pixels and dimmed by its slot. The stack fans out into a
+   list while the pointer or focus is on it. Only transform and opacity change, so
+   nothing is laid out again; every card has the same fixed height for that reason.
+   toast-stack.ts decides the slots; ToastStack.tsx draws them. */
+.toast-stack {
+  --toast-h: 44px;
+  --toast-gap: 6px;
+  position: fixed;
+  left: 50%;
+  top: calc(64px + env(safe-area-inset-top));
+  z-index: 60;
+  width: min(420px, calc(100vw - 32px));
+  height: var(--toast-h);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* While fanned, the gaps between cards belong to the stack too, so the pointer can cross them. */
+.toast-stack[data-open="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--n) * (var(--toast-h) + var(--toast-gap)));
+  pointer-events: auto;
+}
+
+.toast {
+  --rest-y: calc(var(--slot) * 6px);
+  --rest-scale: calc(1 - var(--slot) * 0.06);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: calc(10 - var(--slot));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--toast-h);
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-float), 0 0 0 1px var(--hairline-strong);
+  font-size: 13px;
+  transform-origin: top center;
+  transform: translateX(var(--dx, 0px)) translateY(var(--rest-y)) scale(var(--rest-scale));
+  opacity: calc(1 - var(--slot) * 0.25);
+  transition:
+    transform var(--dur-enter) var(--ease-out),
+    opacity var(--dur-enter) var(--ease-out);
+  animation: toast-in var(--dur-enter) var(--ease-out);
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+.toast-stack[data-open="true"] .toast {
+  --rest-y: calc(var(--slot) * (var(--toast-h) + var(--toast-gap)));
+  --rest-scale: 1;
+  opacity: 1;
+}
+
+/* Dismissed: it fades and sinks a few pixels while the cards behind it move up. */
+.toast[data-leaving] {
+  opacity: 0 !important;
+  pointer-events: none;
+  transform: translateX(var(--dx, 0px)) translateY(calc(var(--rest-y) + 10px)) scale(var(--rest-scale));
+}
+
+/* Under a finger the card follows it with no easing. */
+.toast[data-dragging] {
+  transition: none;
+}
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.toast-text:hover {
+  text-decoration: underline;
+}
+
+.toast-count {
+  color: var(--muted-text);
+}
+
+.toast kbd {
+  margin-left: 4px;
+  color: var(--muted-text);
+  font: 10.5px var(--font-mono);
+}
+
+.toast-close {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+
+@media (hover: none) {
+  .toast kbd {
+    display: none;
+  }
+
+  .toast-close {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* "+2": the notices past the three drawn. A button, so a touch screen can fan the stack out. */
+.toast-more {
+  position: absolute;
+  right: 6px;
+  top: -8px;
+  z-index: 20;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 80%, var(--card));
+  color: var(--accent-fg);
+  font: 600 11px/20px var(--font-mono);
+  pointer-events: auto;
+  cursor: pointer;
+}

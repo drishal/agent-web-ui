@@ -1,8 +1,9 @@
 // Touch gestures for phones: a swipe in from the left edge opens the sessions
 // drawer and a swipe left closes it; a sheet follows a downward drag on its
 // handle and closes past a threshold; a long press on a message opens its
-// actions. The deciding is pure (swipeIntent, dragCloses, pressIntent) so it
-// can be tested; the hooks only wire it to touch events.
+// actions; a notice card swipes sideways away. The deciding is pure (swipeIntent, dragCloses, pressIntent,
+// lockAxis, toastSwipe) so it can be tested; the hooks
+// only wire it to touch events.
 import { useEffect, useRef, type RefObject } from "react";
 
 /** How close to the left edge a swipe must start to open the drawer, and how far it must travel. */
@@ -37,6 +38,24 @@ export const dragCloses = (dy: number): boolean => dy >= SHEET_CLOSE_PX;
 export function pressIntent(ms: number, moved: Point): "long" | "moved" | "short" {
   if (Math.hypot(moved.x, moved.y) > PRESS_SLOP_PX) return "moved";
   return ms >= LONG_PRESS_MS ? "long" : "short";
+}
+
+/** How far a finger travels before the gesture picks its direction. */
+export const AXIS_SLOP_PX = 8;
+/** A notice card dismissed by a sideways swipe at least this far; a shorter one springs back. */
+export const TOAST_SWIPE_PX = 64;
+
+export type Axis = "x" | "y";
+
+/** Which way a drag goes once it has moved past the slop: the larger of the two wins and stays (null while undecided). */
+export function lockAxis(dx: number, dy: number): Axis | null {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_SLOP_PX) return null;
+  return Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+}
+
+/** What letting go of a notice card does: a long enough, mostly sideways swipe dismisses it, anything else springs back. */
+export function toastSwipe(dx: number, dy: number): "dismiss" | "back" {
+  return Math.abs(dx) >= TOAST_SWIPE_PX && Math.abs(dx) > Math.abs(dy) ? "dismiss" : "back";
 }
 
 /** Drawer mode: the width at which the sessions panel is a drawer (styles/responsive.css's 819px breakpoint). */

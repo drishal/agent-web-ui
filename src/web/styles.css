@@ -17,6 +17,7 @@
 @import "./styles/header.css";
 @import "./styles/controls.css";
 @import "./styles/conversation.css";
+@import "./styles/toasts.css";
 @import "./styles/composer.css";
 @import "./styles/status-stack.css";
 @import "./styles/approvals.css";

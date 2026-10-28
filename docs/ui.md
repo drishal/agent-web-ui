@@ -57,6 +57,7 @@ banners-dialogs.css), so search rather than guess.
 | Usage and limits | `UsageDialog.tsx`, `LimitsMeter.tsx` | `usage.css` | `unified.spec.ts` |
 | Saved prompts, shortcuts | `SavedPromptsDialog.tsx`, `ShortcutSheet.tsx` | `saved-prompts.css`, `shortcuts.css` | `unified.spec.ts` |
 | A chat beside the main one | `SidePane.tsx` | `side-pane.css` | `unified.spec.ts` |
+| Notice cards (finished, needs you, Undo): stacked, fanned on hover, swiped away on a phone | `ToastStack.tsx` (`toast-stack.ts`) | `toasts.css` | `toasts-and-swipes.spec.ts`, `tabs.spec.ts` |
 | Phones: drawer, sheets, long press | `ActionSheet.tsx`, `gestures.ts` | `phones.css`, `responsive.css` | `phone.spec.ts` |
 | Motion and the ripple (turn entrance, streaming caret, start-screen mark) | `ripple.ts`, `arrivals.ts` | `motion.css`, `ripple.css` | `app.spec.ts`, `motion.spec.ts` |
 

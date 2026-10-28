@@ -115,6 +115,7 @@ src/web/                      React 19 + Vite client. App.tsx is the shell; comp
                               offline page (it never caches the app).
   turn-time.ts                A turn's time and speed as hover text: the prompt's clock time, the answer row's "24s · first token 1.2s" (pure; nothing unknown is shown).
   sticky-prompt.ts            The sticky prompt bar: which turn's prompt has scrolled out above the view (pure; StickyPrompt.tsx measures and draws).
+  toast-stack.ts              The notice stack: order, the cap of three plus "+N", merging a chat's repeats, timers that hold while hovered (pure; ToastStack.tsx draws it).
   sidebar-filter.ts           The sidebar's quick filter chips (Running, Needs you, Today): matching, counts, and the narrowed overview.
   turn-markdown.ts            Copy turn as Markdown: the prompt, one line per tool call with the replies between, the answer (pure; no diffs or output, bounded; export.ts is the whole chat).
   find.ts                     Find in chat: matches and the folds to open (Conversation walks and paints the DOM).

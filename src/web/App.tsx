@@ -54,6 +54,7 @@ import { isShortcutsKey, shortcutHint } from "./shortcuts.js";
 import { attentionCount, badgedIcon, chime, primeAudio, titleWith } from "./attention.js";
 import { useEdgeSwipe } from "./gestures.js";
 import { useLaunchActions } from "./launch.js";
+import { ToastStack, useToasts } from "./components/ToastStack.js";
 import { WorkspacePicker } from "./components/WorkspacePicker.js";
 import { PairDialog, RenameDialog } from "./dialogs.js";
 import { ReviewPanel } from "./components/ReviewPanel.js";
@@ -283,6 +284,9 @@ export function App() {
     });
   }, [chat, harnessId, workspace?.path]);
 
+  /** Background notices (a run finished, a question waiting) and mark changes' Undo, stacked. */
+  const toasts = useToasts();
+
   // Background tabs: a tab whose run ended while another was shown gets a dot.
   // Only a run counts; a harness starting up (Starting → Idle) is no news.
   const busyBefore = useRef(new Set<string>());
@@ -291,6 +295,11 @@ export function App() {
     const finished = new Set([...busyBefore.current].filter((id) => !busyNow.has(id) && id !== chatId));
     busyBefore.current = busyNow;
     setTabState((st) => markUnread(st, finished));
+    // The same news as a card that opens the chat; two finishes of one chat are one card.
+    for (const id of finished) {
+      const s = overview.sessions.find((x) => x.liveChatId === id);
+      if (s) toasts.push({ key: `done:${id}`, text: `“${s.title}” finished`, sessionId: s.id, ms: 8000 });
+    }
     if (finished.size > 0 && document.hidden) chime();
   }, [overview, chatId]);
 
@@ -304,6 +313,10 @@ export function App() {
     if (!before) return;
     const fresh = askingIds.filter((id) => !before.has(id));
     if (fresh.length > 0 && (document.hidden || fresh.some((id) => id !== chatId))) chime();
+    for (const id of fresh) {
+      const s = id === chatId ? undefined : overview.sessions.find((x) => x.liveChatId === id);
+      if (s) toasts.push({ key: `ask:${id}`, text: `“${s.title}” needs you`, sessionId: s.id, ms: 12000 });
+    }
   }, [askingIds]);
   useEffect(() => primeAudio(), []);
   const attention = attentionCount(
@@ -1073,14 +1086,9 @@ export function App() {
     }
   };
 
-  /** The last mark change, for its toast's Undo (and Ctrl+Z) while the toast shows. */
-  const [toast, setToast] = useState<{ text: string; undo: () => void } | null>(null);
-  const toastTimer = useRef(0);
-  const showToast = (text: string, undo: () => void) => {
-    window.clearTimeout(toastTimer.current);
-    setToast({ text, undo });
-    toastTimer.current = window.setTimeout(() => setToast(null), 8000);
-  };
+  /** Mark changes show an Undo (and Ctrl+Z) while their card does. */
+  const showToast = (text: string, undo: () => void) => toasts.push({ key: "undo", text, ms: 8000, action: { label: "Undo", run: undo } });
+  const undoToast = toasts.stack.find((t) => t.action && !t.leaving);
 
   const searchWorkspace = chat?.workspace ?? workspace;
   // A file link's hover preview reads from the same project the viewer opens in.
@@ -1090,7 +1098,12 @@ export function App() {
   keysRef.current = {
     step: (step) => stepVisits(step),
     reopen: () => reopenClosedTab(),
-    undo: toast ? toast.undo : null,
+    undo: undoToast?.action
+      ? () => {
+          undoToast.action?.run();
+          toasts.dismiss(undoToast.id);
+        }
+      : null,
     search: () => searchWorkspace && setSearchOpen(true),
     searchAll: () => setChatSearch((q) => (q === null ? "" : null)),
   };
@@ -1105,7 +1118,6 @@ export function App() {
     try {
       markSession(s.id, await api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, ...change } }));
       showToast(markToast(change, s.title), () => {
-        setToast(null);
         void api<SessionMarkState>("/api/sessions/marks", { body: { sessionId: s.id, ...before, replace: true } }).then(
           (mark) => markSession(s.id, mark),
           (e: unknown) => fail(e),
@@ -1124,7 +1136,6 @@ export function App() {
       const result = await api<{ marks: Record<string, SessionMarkState> }>("/api/sessions/marks/bulk", { body: { ids, ...change } });
       for (const [id, mark] of Object.entries(result.marks)) markSession(id, mark);
       showToast(`${ids.length} ${ids.length === 1 ? "session" : "sessions"} updated`, () => {
-        setToast(null);
         // A bulk replace cannot restore different before-marks, so undo is one call each.
         ids.forEach((id, index) => {
           const s = before[index];
@@ -1818,14 +1829,13 @@ export function App() {
           ) : null}
         </div>
       </main>
-      {toast ? (
-        <div className="toast" role="status" data-testid="toast">
-          <span>{toast.text}</span>
-          <button type="button" className="btn btn-small btn-ghost" onClick={toast.undo}>
-            Undo <kbd>Ctrl+Z</kbd>
-          </button>
-        </div>
-      ) : null}
+      <ToastStack
+        toasts={toasts}
+        onOpen={(t) => {
+          const s = overview.sessions.find((x) => x.id === t.sessionId);
+          if (s) void openSession(s);
+        }}
+      />
       <StatusBar conn={conn} chat={chat} harnessName={chatHarness?.displayName ?? null} version={boot.version} />
 
       {pickerOpen ? <WorkspacePicker recent={recent} onOpen={(p) => void openWorkspace(p)} onClose={() => setPickerOpen(false)} error={pickerError} /> : null}
