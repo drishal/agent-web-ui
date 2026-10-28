@@ -5,7 +5,7 @@
 //  - Hermes Desktop: flat-not-boxed, pinned prompts, red only for failures.
 import { createContext, Fragment, memo, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
-import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
+import { IconAlertCircle, DrawnCheck, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, RaySpinner, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { callsToShow, findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
@@ -754,6 +754,33 @@ function useSteadyPhase(wanted: string): string {
   return shown;
 }
 
+/**
+ * The working phase's text. A new phase rises in (the keyed inner span), and the label glides from
+ * the old text's width to the new one with a single Web Animation, so what follows it slides rather
+ * than jumps. Skipped under reduced motion, which CSS cannot switch off for this.
+ */
+function PhaseLabel({ phase }: { phase: string }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const before = useRef(0);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.getAnimations().forEach((a) => a.cancel());
+    const to = el.getBoundingClientRect().width;
+    const from = before.current;
+    before.current = to;
+    if (from === 0 || Math.abs(from - to) < 2 || typeof el.animate !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.animate({ width: [`${from}px`, `${to}px`] }, { duration: 180, easing: getComputedStyle(el).getPropertyValue("--ease-out") || "ease-out" });
+  }, [phase]);
+  return (
+    <span className="phase-glide" ref={box}>
+      <span className="phase" role="status" key={phase}>
+        {phase || "Working"}
+      </span>
+    </span>
+  );
+}
+
 function ProcessFold({
   turn,
   open: turnOpen,
@@ -778,6 +805,11 @@ function ProcessFold({
   const open = foldId === turn.id ? turnOpen : (folds[foldId] ?? (turnOpen || failedCalls > 0));
   const live = turn.live && (place === undefined || place === "last");
   const now = useNow(live);
+  // Seen working: when the run settles in view, the spinner gives way to a check that draws itself.
+  const [wasLive, setWasLive] = useState(live);
+  useEffect(() => {
+    if (live) setWasLive(true);
+  }, [live]);
   const phase = useSteadyPhase(live ? workingPhase(turn, workspace) : "");
   const answerAt = segment ? segment.answerAt : turn.answerAt;
   const toolCount = items.filter((item) => item.kind === "tool").length;
@@ -788,7 +820,7 @@ function ProcessFold({
   const duration =
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
   const leading = place === undefined || place === "first";
-  const label = live ? <span className="phase" role="status" key={phase}>{phase || "Working"}</span> : leading ? (duration ? `Worked for ${duration}` : "Worked") : null;
+  const label = live ? <PhaseLabel phase={phase} /> : leading ? (duration ? `Worked for ${duration}` : "Worked") : null;
   const answerThinking = answerAt >= 0 && turn.answer?.thinking ? turn.answer : null;
   const thought = live && !open ? latestThought(turn) : null;
   const root = useRef<HTMLDivElement>(null);
@@ -812,7 +844,7 @@ function ProcessFold({
     <div ref={root} className={`process process-card${open ? " is-open" : ""}${live ? " is-live" : ""}${failedCalls > 0 ? " has-failed" : ""}`}>
       <div className="process-bar">
         <button type="button" className="process-head" aria-expanded={open} aria-controls={bodyId} onClick={() => onToggle(foldId, open)} data-testid="process-toggle">
-          {live ? <Spinner size={13} /> : null}
+          {live ? <RaySpinner size={14} /> : wasLive ? <span className="process-done"><DrawnCheck size={14} /></span> : null}
           {stack.shown.length > 0 ? (
             <span className="kind-stack" data-testid="kind-stack" aria-hidden="true">
               {stack.shown.map((kind) => (

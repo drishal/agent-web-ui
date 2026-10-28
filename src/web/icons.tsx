@@ -320,6 +320,31 @@ export function Spinner({ size = 14 }: { size?: number }) {
   );
 }
 
+/** The working spinner: eight rays that fade one after another, so it turns without rotating (the stylesheet times each ray). */
+export function RaySpinner({ size = 14 }: { size?: number }) {
+  return (
+    <svg className="rays" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+      <path d="M8 1.5v3" />
+      <path d="M12.6 3.4l-2.1 2.1" />
+      <path d="M14.5 8h-3" />
+      <path d="M12.6 12.6l-2.1-2.1" />
+      <path d="M8 14.5v-3" />
+      <path d="M3.4 12.6l2.1-2.1" />
+      <path d="M1.5 8h3" />
+      <path d="M3.4 3.4l2.1 2.1" />
+    </svg>
+  );
+}
+
+/** A check that draws itself when it appears (the path is one unit long, so the stylesheet can animate its dash). */
+export function DrawnCheck({ size = 14 }: { size?: number }) {
+  return (
+    <svg className="check-draw" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M3 8.5l3 3 7-7" pathLength="1" />
+    </svg>
+  );
+}
+
 export function ToolIcon({ category, size, test = false }: { category: ToolCategory; size?: number; test?: boolean }) {
   const props = size ? { size } : {};
   if (test) return <IconFlask {...props} />;

@@ -311,11 +311,17 @@
 /* The working phase in the header ("Thinking", "Running npm test", "Writing"): a new one rises in
    as the old one is replaced. It shimmers on its own, since the label's shimmer cannot clip a
    layer that moves. */
-.process.is-live .process-label .phase {
+.process.is-live .process-label .phase-glide {
   display: inline-block;
   max-width: 100%;
   overflow: hidden;
   vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.process.is-live .process-label .phase {
+  display: block;
+  overflow: hidden;
   text-overflow: ellipsis;
   background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--text) 50%, var(--muted) 65%, var(--muted) 100%) 0 0 / 200% 100%;
   -webkit-background-clip: text;
@@ -363,5 +369,55 @@
 @media (pointer: coarse) {
   .tool-more {
     min-height: 44px;
+  }
+}
+
+/* The working mark: eight rays that fade one after another (no rotation), then, when the run
+   settles in view, a check that draws itself (a one-unit path whose dash is pulled back; B7's 360 ms
+   and 80 ms delay). Switched off by the reduced-motion rule: the rays then sit lit, the check drawn. */
+.rays {
+  flex: none;
+  color: var(--muted-text);
+}
+
+.rays path {
+  animation: ray-fade 0.8s linear infinite;
+}
+
+.rays path:nth-child(2) { animation-delay: 0.1s; }
+.rays path:nth-child(3) { animation-delay: 0.2s; }
+.rays path:nth-child(4) { animation-delay: 0.3s; }
+.rays path:nth-child(5) { animation-delay: 0.4s; }
+.rays path:nth-child(6) { animation-delay: 0.5s; }
+.rays path:nth-child(7) { animation-delay: 0.6s; }
+.rays path:nth-child(8) { animation-delay: 0.7s; }
+
+@keyframes ray-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.process-done {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: color-mix(in srgb, var(--ok) 80%, transparent);
+}
+
+.check-draw path {
+  stroke-dasharray: 1;
+  animation: check-draw 360ms var(--ease-out) 80ms backwards;
+}
+
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
