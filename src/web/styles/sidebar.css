@@ -861,3 +861,59 @@ body.is-resizing {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Phone rows slide left for Pin, Archive and Snooze (useRowSwipe). The row's own button and ⋯ move; the actions
+   sit behind them, exactly as wide as what is revealed, so nothing shows through. A vertical drag still scrolls. */
+@media (pointer: coarse) {
+  .session-item {
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+
+  .session-item.is-swiped > .session,
+  .session-item.is-swiped > .session-more {
+    translate: calc(-1 * var(--reveal)) 0;
+    transition: translate var(--dur-hover) var(--ease-out);
+  }
+
+  .session-item.is-swiping > .session,
+  .session-item.is-swiping > .session-more {
+    transition: none;
+  }
+
+  .row-swipe-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--reveal);
+    display: flex;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--text) 8%, var(--bg));
+  }
+
+  .row-swipe-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 11px;
+  }
+
+  .row-swipe-actions button:first-child {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .row-swipe-actions button span {
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+}

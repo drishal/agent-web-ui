@@ -12,6 +12,7 @@ import { IconArchive, IconCheck, IconChevronDown, IconChevronLeft, IconChevronUp
 import { copyResumeCommand, useResumeCommand } from "../resume-command.js";
 import type { UsageLimits } from "../../shared/protocol.js";
 import { limitResetAt } from "../../shared/limit-stop.js";
+import { coarse, useRowSwipe } from "../gestures.js";
 import { focusProject, groupByProject, historySections, isBusy, localeWeekStart, movedOrder, projectRows, sidebarSections, snoozeOptions, wakeLabel, type ProjectGroup } from "../session-groups.js";
 import { applyQuick, asQuickFilter, chipsShown, escapeClears, quickCounts, QUICK_LABELS, type QuickFilter } from "../sidebar-filter.js";
 import { load, save } from "../storage.js";
@@ -330,13 +331,23 @@ function SessionRow({
   // A session not saved yet has nothing to mark.
   const markable = !s.id.includes(":live-");
   const { warm } = useContext(RowActions);
+  // On a touch screen a row also slides left for Pin, Archive and Snooze (the menu's own actions); a full swipe is the first.
+  const swipeActions: Array<{ label: string; icon: React.ReactNode; change: MarkChange }> = [
+    { label: s.pinned ? "Unpin" : "Pin", icon: <IconPin size={16} />, change: { pinned: !s.pinned } },
+    { label: s.archived ? "Unarchive" : "Archive", icon: <IconArchive size={16} />, change: { archived: !s.archived } },
+    { label: "Snooze", icon: <IconClock size={16} />, change: { snoozedUntil: snoozeOptions()[0]?.until ?? Date.now() + 3_600_000 } },
+  ];
+  const swipe = useRowSwipe(markable && !selection.on && coarse(), swipeActions.length, () => onMark(swipeActions[0]?.change ?? {}));
   const hover = useRef(0);
   const { anchor: cardAt, show: showCard, hide: hideCard } = useHoverCard(HOVER_CARD_MS);
   const cardId = useId();
   useEffect(() => () => window.clearTimeout(hover.current), []);
   return (
     <li
-      className={`session-item${menuAt ? " is-menu-open" : ""}${drag?.dragging ? " is-dragging" : ""}${drag?.drop ? ` is-drop-${drag.drop}` : ""}`}
+      data-row-swipe=""
+      {...swipe.handlers}
+      style={swipe.reveal > 0 ? ({ "--reveal": `${swipe.reveal}px` } as React.CSSProperties) : undefined}
+      className={`session-item${swipe.reveal > 0 ? " is-swiped" : ""}${swipe.dragging ? " is-swiping" : ""}${menuAt ? " is-menu-open" : ""}${drag?.dragging ? " is-dragging" : ""}${drag?.drop ? ` is-drop-${drag.drop}` : ""}`}
       draggable={drag ? true : undefined}
       onDragStart={drag?.onStart}
       onDragOver={drag?.onOver}
@@ -431,6 +442,23 @@ function SessionRow({
       >
         <IconMore size={14} />
       </button>
+      {swipe.reveal > 0 ? (
+        <div className="row-swipe-actions" role="group" aria-label={`Actions for ${s.title}`}>
+          {swipeActions.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={() => {
+                swipe.close();
+                onMark(a.change);
+              }}
+            >
+              {a.icon}
+              <span>{a.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {cardAt && !menuAt ? <SessionCard s={s} anchor={cardAt} harnessName={harnessName} project={project ?? ""} id={cardId} /> : null}
       {menuAt ? (
         <RowMenu

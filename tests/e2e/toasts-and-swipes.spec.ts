@@ -2,7 +2,7 @@
 // open their chat, and are dismissed by button or by a swipe on a phone) and the
 // phone session row's swipe actions.
 import { expect, test, type Page } from "@playwright/test";
-import { newChat, send, sendAndWait, signInAndOpen } from "./helpers.js";
+import { newChat, send, sendAndWait, showSidebar, signInAndOpen } from "./helpers.js";
 
 const cards = (page: Page) => page.getByTestId("notice");
 const tab = (page: Page, title: string) => page.getByRole("tablist", { name: "Open chats" }).getByRole("tab", { name: new RegExp(title) });
@@ -69,5 +69,44 @@ test.describe("on a phone", () => {
     // Long: it goes, and the other stays.
     await drag(box.x + 250, box.x + 100);
     await expect(cards(page)).toHaveCount(1);
+  });
+
+  /** A finger dragged left along a row, through the DevTools touch input. */
+  async function dragRow(page: Page, title: string, fraction: number) {
+    const row = page.locator(".sidebar").locator(".session", { hasText: title }).first();
+    const box = await row.boundingBox();
+    if (!box) throw new Error("no row");
+    const y = box.y + box.height / 2;
+    const from = box.x + box.width - 20;
+    const to = from - box.width * fraction;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: "touchStart" | "touchMove" | "touchEnd", x?: number) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: x === undefined ? [] : [{ x, y }] });
+    await touch("touchStart", from);
+    for (let i = 1; i <= 6; i++) await touch("touchMove", from + ((to - from) * i) / 6);
+    await touch("touchEnd");
+  }
+
+  test("a session row slides left for its actions, and a full swipe runs the first", async ({ page }) => {
+    await signInAndOpen(page);
+    await newChat(page);
+    await sendAndWait(page, "swipe row one");
+    await newChat(page);
+    await sendAndWait(page, "swipe row two");
+    await showSidebar(page);
+    const sidebar = page.locator(".sidebar");
+
+    // Part way: Pin, Archive and Snooze show.
+    await dragRow(page, "swipe row one", 0.5);
+    const actions = sidebar.getByRole("group", { name: "Actions for swipe row one" });
+    await expect(actions.getByRole("button", { name: "Pin" })).toBeVisible();
+    await expect(actions.getByRole("button", { name: "Snooze" })).toBeVisible();
+    await actions.getByRole("button", { name: "Archive" }).click();
+    await expect(page.getByTestId("toast")).toContainText("Archived “swipe row one”");
+    await expect(sidebar.locator(".session", { hasText: "swipe row one" })).toHaveCount(0);
+
+    // All the way: the first action, Pin, runs.
+    await dragRow(page, "swipe row two", 0.9);
+    await expect(page.getByTestId("toast")).toContainText("Pinned “swipe row two”");
+    await expect(sidebar.getByRole("group", { name: "Actions for swipe row two" })).toHaveCount(0);
   });
 });

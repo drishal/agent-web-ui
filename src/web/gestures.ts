@@ -1,10 +1,11 @@
 // Touch gestures for phones: a swipe in from the left edge opens the sessions
 // drawer and a swipe left closes it; a sheet follows a downward drag on its
 // handle and closes past a threshold; a long press on a message opens its
-// actions; a notice card swipes sideways away. The deciding is pure (swipeIntent, dragCloses, pressIntent,
-// lockAxis, toastSwipe) so it can be tested; the hooks
+// actions; a notice card swipes sideways away; a session row swipes left to
+// show its actions. The deciding is pure (swipeIntent, dragCloses, pressIntent,
+// lockAxis, toastSwipe, rowSwipe, rowRelease) so it can be tested; the hooks
 // only wire it to touch events.
-import { useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 /** How close to the left edge a swipe must start to open the drawer, and how far it must travel. */
 export const EDGE_PX = 24;
@@ -44,6 +45,9 @@ export function pressIntent(ms: number, moved: Point): "long" | "moved" | "short
 export const AXIS_SLOP_PX = 8;
 /** A notice card dismissed by a sideways swipe at least this far; a shorter one springs back. */
 export const TOAST_SWIPE_PX = 64;
+/** The width of one revealed row action, and how much of the row a swipe must cross to run the first action outright. */
+export const ROW_ACTION_PX = 64;
+export const ROW_FULL_FRACTION = 0.7;
 
 export type Axis = "x" | "y";
 
@@ -58,6 +62,35 @@ export function toastSwipe(dx: number, dy: number): "dismiss" | "back" {
   return Math.abs(dx) >= TOAST_SWIPE_PX && Math.abs(dx) > Math.abs(dy) ? "dismiss" : "back";
 }
 
+export interface RowSwipe {
+  /** The locked direction; a row only follows "x", so vertical scrolling wins. */
+  axis: Axis | null;
+  /** How many pixels of actions are shown from the right edge (0 when not following). */
+  reveal: number;
+  /** Past the point where letting go runs the first action. */
+  full: boolean;
+}
+
+/**
+ * A session row dragged by (dx, dy) from where the finger went down. `locked` is the axis already decided
+ * (null before); `open` is a row that already shows its actions, which a drag right closes. `actions` is how
+ * many actions it has, `width` the row's.
+ */
+export function rowSwipe(dx: number, dy: number, locked: Axis | null, o: { actions: number; width: number; open: boolean }): RowSwipe {
+  const axis = locked ?? lockAxis(dx, dy);
+  if (axis !== "x") return { axis, reveal: 0, full: false };
+  const base = o.open ? o.actions * ROW_ACTION_PX : 0;
+  const reveal = Math.min(Math.max(0, base - dx), o.width);
+  return { axis, reveal, full: reveal >= o.width * ROW_FULL_FRACTION };
+}
+
+/** What letting go of a row does: run the first action (full swipe), stay open (past half the actions), or close (also for a cancelled touch, which never calls this). */
+export function rowRelease(swipe: RowSwipe, actions: number): "run" | "open" | "close" {
+  if (swipe.axis !== "x") return "close";
+  if (swipe.full) return "run";
+  return swipe.reveal >= (actions * ROW_ACTION_PX) / 2 ? "open" : "close";
+}
+
 /** Drawer mode: the width at which the sessions panel is a drawer (styles/responsive.css's 819px breakpoint). */
 const DRAWER_QUERY = "(max-width: 819px)";
 
@@ -69,6 +102,11 @@ export function useEdgeSwipe(open: boolean, setOpen: (open: boolean) => void): v
     let start: Point | null = null;
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
+      // A session row swipes left for its own actions; that is not the drawer closing.
+      if ((e.target as Element | null)?.closest?.("[data-row-swipe]")) {
+        start = null;
+        return;
+      }
       start = e.touches.length === 1 && t && window.matchMedia(DRAWER_QUERY).matches ? { x: t.clientX, y: t.clientY } : null;
     };
     const onEnd = (e: TouchEvent) => {
@@ -184,6 +222,94 @@ export function useLongPress(onLongPress: () => void): {
     // The browser's own long-press menu would open on top of ours.
     onContextMenu: (e) => {
       if (coarse() && press.current?.fired) e.preventDefault();
+    },
+  };
+}
+
+/**
+ * A session row that slides left under a finger to show its actions (touch only; a mouse has the ⋯ button).
+ * Spread `handlers` on the row. `reveal` is how many pixels of actions show; `run` is called on a full swipe
+ * (the first action). A drag that is mostly vertical is left to the browser's scroll (`touch-action: pan-y`).
+ */
+export function useRowSwipe(
+  enabled: boolean,
+  actions: number,
+  run: () => void,
+): {
+  reveal: number;
+  dragging: boolean;
+  close: () => void;
+  handlers: {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => void;
+    onPointerUp: () => void;
+    onPointerCancel: () => void;
+    onClickCapture: (e: React.MouseEvent) => void;
+  };
+} {
+  const [view, setView] = useState({ reveal: 0, dragging: false });
+  const drag = useRef<{ x: number; y: number; axis: Axis | null; width: number; open: boolean; last: RowSwipe | null } | null>(null);
+  // The click that follows a swipe (or that lands on an open row) must not open the session.
+  const swallow = useRef(false);
+  const latest = useRef({ run, actions, reveal: view.reveal });
+  latest.current = { run, actions, reveal: view.reveal };
+  const close = useCallback(() => setView({ reveal: 0, dragging: false }), []);
+  // Any press elsewhere closes an open row.
+  useEffect(() => {
+    if (view.reveal === 0 || view.dragging) return;
+    const away = (e: PointerEvent) => {
+      if (!(e.target as Element | null)?.closest?.(".row-swipe-actions")) close();
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [view.reveal, view.dragging, close]);
+  return {
+    ...view,
+    close,
+    handlers: {
+      onPointerDown: (e) => {
+        if (!enabled || e.pointerType !== "touch" || !e.isPrimary) return;
+        swallow.current = false;
+        drag.current = { x: e.clientX, y: e.clientY, axis: null, width: e.currentTarget.clientWidth, open: latest.current.reveal > 0, last: null };
+      },
+      onPointerMove: (e) => {
+        const d = drag.current;
+        if (!d) return;
+        const sw = rowSwipe(e.clientX - d.x, e.clientY - d.y, d.axis, { actions: latest.current.actions, width: d.width, open: d.open });
+        d.axis = sw.axis;
+        if (sw.axis !== "x") return;
+        d.last = sw;
+        swallow.current = true;
+        setView({ reveal: sw.reveal, dragging: true });
+      },
+      onPointerUp: () => {
+        const d = drag.current;
+        drag.current = null;
+        if (!d?.last) return;
+        const outcome = rowRelease(d.last, latest.current.actions);
+        if (outcome === "run") {
+          setView({ reveal: 0, dragging: false });
+          latest.current.run();
+        } else setView({ reveal: outcome === "open" ? latest.current.actions * ROW_ACTION_PX : 0, dragging: false });
+      },
+      // The browser took the touch for a scroll (or it was interrupted): nothing is kept half-way.
+      onPointerCancel: () => {
+        const d = drag.current;
+        drag.current = null;
+        if (d?.last) setView({ reveal: 0, dragging: false });
+      },
+      onClickCapture: (e) => {
+        if ((e.target as Element).closest(".row-swipe-actions")) return;
+        if (swallow.current) {
+          swallow.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (latest.current.reveal > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+        }
+      },
     },
   };
 }
