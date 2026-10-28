@@ -27,6 +27,9 @@ export function ConfirmButton({
 }) {
   const [asking, setAsking] = useState(false);
   const yes = useRef<HTMLButtonElement>(null);
+  const face = useRef<HTMLButtonElement>(null);
+  // Backing out (Escape, ✕) hands focus back to the button, so the keyboard isn't left on the page body.
+  const refocus = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const reset = () => {
@@ -42,10 +45,19 @@ export function ConfirmButton({
   };
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (asking || !refocus.current) return;
+    refocus.current = false;
+    face.current?.focus();
+  }, [asking]);
+  const backOut = () => {
+    refocus.current = true;
+    reset();
+  };
 
   if (!asking) {
     return (
-      <button type="button" className={className} disabled={disabled} aria-label={label} onClick={arm}>
+      <button type="button" ref={face} className={className} disabled={disabled} aria-label={label} onClick={arm}>
         {children}
         {label}
       </button>
@@ -60,7 +72,7 @@ export function ConfirmButton({
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          reset();
+          backOut();
         }
       }}
     >
@@ -79,7 +91,7 @@ export function ConfirmButton({
       >
         ✓
       </button>
-      <button type="button" className="confirm-morph-no" aria-label={`Cancel: ${label}`} onClick={reset}>
+      <button type="button" className="confirm-morph-no" aria-label={`Cancel: ${label}`} onClick={backOut}>
         ✕
       </button>
     </span>
