@@ -11,6 +11,7 @@ import type {
   ChatSnapshot,
   ChatStatus,
   ConfigPatch,
+  ContextPoint,
   ContextUsage,
   ImageAttachment,
   ImageRef,
@@ -27,6 +28,7 @@ import type {
   ToolItem,
   WorkspaceInfo,
 } from "../../shared/protocol.js";
+import { MAX_CONTEXT_HISTORY } from "../../shared/protocol.js";
 import { promises as fs } from "node:fs";
 import { boundText, editShape, historyToItems, NO_RESULT_TEXT, stringifyArgs, toolCategory, toolPaths, toolSummary } from "../harness/agent-events.js";
 import { argsDiff, resultDiff } from "../harness/tool-diff.js";
@@ -75,6 +77,9 @@ async function readEnds(file: string, size: number): Promise<string> {
 
 const MAX_LOG_EVENTS = 5000;
 const DELTA_FLUSH_MS = 30;
+/** A change in the number of attached streams is announced after this long, so a reconnect (one leaves, one arrives) does not flicker. */
+const VIEWERS_DEBOUNCE_MS = 1000;
+
 const SETTLE_TIMEOUT_MS = 20_000;
 
 export function namespacedSessionId(harnessId: string, nativeId: string | null): string | null {
@@ -680,6 +685,10 @@ export class Chat implements CheckpointHost {
   private readonly timing = new Timing();
   private readonly reducer: EventReducer;
   private context: ContextUsage | null = null;
+  private contextHistory: ContextPoint[] = [];
+  /** The viewer count last announced to clients, and the timer that will announce a newer one. */
+  private viewers = 0;
+  private viewersTimer: ReturnType<typeof setTimeout> | null = null;
   private usage: SessionUsage | null = null;
   private todos: TodoItem[] = [];
   private settleWaiters: Array<() => void> = [];
@@ -718,6 +727,7 @@ export class Chat implements CheckpointHost {
     const chat = new Chat(chatId, adapter, workspace, live, config);
     if (live.starting) chat.status = "starting";
     chat.context = context;
+    chat.noteContext(context);
     chat.usage = chat.timing.compose(usage);
     chat.todos = todos;
     chat.reducer.load(items, live.title);
@@ -795,6 +805,8 @@ export class Chat implements CheckpointHost {
       chain: this.chain.map((s) => ({ ...s })),
       chainPaused: this.chainPaused,
       continueAt: this.continueAt,
+      viewers: this.viewers,
+      contextHistory: [...this.contextHistory],
       generation: this.generation,
       lastEventId: this.log.lastEventId,
     };
@@ -808,11 +820,38 @@ export class Chat implements CheckpointHost {
     this.reducer.flushNow();
     this.lastSeen = Date.now();
     const unsubscribe = this.log.subscribe(subscriber, lastEventId, () => this.snapshot());
+    this.noteViewers();
     return () => {
       // The idle clock starts when the last viewer leaves, not at the last message.
       this.lastSeen = Date.now();
       unsubscribe();
+      this.noteViewers();
     };
+  }
+
+  /** Announce the subscriber count a second after it last changed, and only if it ended up different from what clients were told. */
+  private noteViewers(): void {
+    if (this.viewersTimer || this.status === "disposed") return;
+    this.viewersTimer = setTimeout(() => {
+      this.viewersTimer = null;
+      const count = this.log.subscriberCount;
+      if (count === this.viewers || this.status === "disposed") return;
+      this.viewers = count;
+      this.reducer.emit({ type: "viewers", viewers: count });
+    }, VIEWERS_DEBOUNCE_MS);
+    this.viewersTimer.unref();
+  }
+
+  /** Remember a context reading for the sparkline, keeping the newest MAX_CONTEXT_HISTORY. */
+  private noteContext(context: ContextUsage | null): void {
+    if (!context || (context.percent === null && context.tokens === null)) return;
+    this.contextHistory.push({ percent: context.percent, tokens: context.tokens });
+    if (this.contextHistory.length > MAX_CONTEXT_HISTORY) this.contextHistory.splice(0, this.contextHistory.length - MAX_CONTEXT_HISTORY);
+  }
+
+  /** The context readings kept so far (a copy). */
+  get contextReadings(): ContextPoint[] {
+    return [...this.contextHistory];
   }
 
   apply(event: HarnessEvent): void {
@@ -895,6 +934,7 @@ export class Chat implements CheckpointHost {
       if (generation !== this.generation || this.status === "disposed") return;
       if (JSON.stringify(context) === JSON.stringify(this.context)) return;
       this.context = context;
+      this.noteContext(context);
       this.reducer.emit({ type: "context", context });
     } catch {
       // usage is best-effort
@@ -1285,6 +1325,7 @@ export class Chat implements CheckpointHost {
     if (this.status === "disposed") return;
     // A closed chat keeps no timer.
     this.clearContinue(false);
+    if (this.viewersTimer) clearTimeout(this.viewersTimer);
     for (const id of this.reducer.pendingIds()) this.reducer.resolveRequest(id, "Cancelled");
     this.reducer.flushNow();
     this.status = "disposed";

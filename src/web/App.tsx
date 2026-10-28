@@ -1541,6 +1541,11 @@ export function App() {
                         {chat.workspace.name}
                       </span>
                     ) : null}
+                    {chat.viewers >= 2 ? (
+                      <span className="chat-viewers" data-testid="chat-viewers" title={`${chat.viewers} devices have this chat open; you see the same run on each`}>
+                        {chat.viewers} devices
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
               </>

@@ -570,8 +570,24 @@ export interface ChatSnapshot {
   chainPaused: string | null;
   /** When this chat was told to carry on after a usage limit resets: the timer is the server's, so no tab has to stay open. */
   continueAt: number | null;
+  /**
+   * How many streams (browser tabs, devices, atui) are attached to this chat, as last announced (a `viewers` event follows a change after a second).
+   * A count only: no device names or addresses, since a remote device is a signed-in user and who it is is not other devices' business.
+   */
+  viewers: number;
+  /** The context's percent and tokens after each change the harness reported, oldest first, at most 200: what the context panel's sparkline draws. */
+  contextHistory: ContextPoint[];
   generation: number;
   lastEventId: number;
+}
+
+/** How many context readings a chat keeps (server) and a client mirrors. */
+export const MAX_CONTEXT_HISTORY = 200;
+
+/** One reading of the context window, kept per chat so the panel can draw how it grew. */
+export interface ContextPoint {
+  percent: number | null;
+  tokens: number | null;
 }
 
 export type ChatEvent =
@@ -586,6 +602,7 @@ export type ChatEvent =
   | { type: "request_resolved"; requestId: string; outcome: string }
   | { type: "extension_status"; key: string; text: string | null }
   | { type: "context"; context: ContextUsage | null }
+  | { type: "viewers"; viewers: number }
   | { type: "usage"; usage: SessionUsage | null }
   | { type: "todos"; todos: TodoItem[] }
   | { type: "checkpoints"; turns: number[] }

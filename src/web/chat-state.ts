@@ -1,5 +1,5 @@
 // Client-side fold of the chat event stream, reconciled by item id.
-import type { ChatEvent, ChatItem, ChatSnapshot } from "../shared/protocol.js";
+import { type ChatEvent, type ChatItem, type ChatSnapshot, type ContextPoint, type ContextUsage, MAX_CONTEXT_HISTORY } from "../shared/protocol.js";
 
 export type ChatState = ChatSnapshot & { gone?: string };
 
@@ -28,6 +28,12 @@ function replaceItem(items: ChatItem[], item: ChatItem, index: Map<string, numbe
   const copy = items.slice();
   copy[at] = item;
   return copy;
+}
+
+/** The same rule as the server's: a reading with a number in it is kept, the newest MAX_CONTEXT_HISTORY. */
+function pushContextPoint(history: ContextPoint[], context: ContextUsage | null): ContextPoint[] {
+  if (!context || (context.percent === null && context.tokens === null)) return history;
+  return [...history, { percent: context.percent, tokens: context.tokens }].slice(-MAX_CONTEXT_HISTORY);
 }
 
 function apply(state: ChatState | null, event: ChatEvent, index: Map<string, number>): ChatState | null {
@@ -74,7 +80,9 @@ function apply(state: ChatState | null, event: ChatEvent, index: Map<string, num
       return { ...state, extensionStatus };
     }
     case "context":
-      return { ...state, context: event.context };
+      return { ...state, context: event.context, contextHistory: pushContextPoint(state.contextHistory, event.context) };
+    case "viewers":
+      return { ...state, viewers: event.viewers };
     case "usage":
       return { ...state, usage: event.usage };
     case "todos":

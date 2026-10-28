@@ -40,6 +40,24 @@
   white-space: nowrap;
 }
 
+.chat-viewers {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+/* Two overlapping dots: more than just you are watching. */
+.chat-viewers::before {
+  content: "";
+  width: 14px;
+  height: 8px;
+  background:
+    radial-gradient(circle at 4px 4px, var(--accent) 3.5px, transparent 4px),
+    radial-gradient(circle at 10px 4px, color-mix(in srgb, var(--accent) 55%, var(--bg)) 3.5px, transparent 4px);
+}
+
 .status-running::before,
 .status-compacting::before {
   background: var(--accent);
