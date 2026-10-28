@@ -31,7 +31,6 @@ import { OutputPanel } from "./OutputPanel.js";
 import { FileLink } from "./FileLink.js";
 import { HtmlRenderFrame } from "./HtmlRenderFrame.js";
 import { Collapse } from "./Collapse.js";
-import { useUnfurl } from "./use-unfurl.js";
 import { CopyButton } from "./CopyButton.js";
 import { AgentsCard, ChatIdContext } from "./Subagents.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
@@ -180,17 +179,10 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
   const factText = sentence.facts.join(" · ");
   const status = STATUS_WORD[item.status];
   const label = `${sentence.text}${factText ? `, ${factText}` : ""}${time ? `, ${time}` : ""}, ${status}`;
-  // A lone settled call opens as one card whose head unfurls into the card's surface: the
-  // container's height is measured and transitioned (not the body's), so the row reads as
-  // becoming the card rather than a panel opening under a fixed row. A run of calls keeps
-  // the process-card's header, so it never morphs.
-  const lineRef = useRef<HTMLDivElement>(null);
-  const headRef = useRef<HTMLButtonElement>(null);
-  const { height, morphing } = useUnfurl(open && !item.subagents, lineRef, headRef);
   return (
     <div className={`tool-row${arrival}${live ? " is-live" : ""}${failed ? " is-failed" : ""}${open ? " is-open" : ""}`} data-testid="tool-row" data-tool={item.name} data-status={item.status}>
-      <div ref={lineRef} className="drow tool-line" style={height !== undefined ? { height } : undefined} data-morphing={morphing || undefined}>
-        <button ref={headRef} type="button" className="drow-head tool-head" aria-expanded={open} aria-label={label} onClick={() => setOpen((v) => !v)}>
+      <div className="drow tool-line">
+        <button type="button" className="drow-head tool-head" aria-expanded={open} aria-label={label} onClick={() => setOpen((v) => !v)}>
           <KindChip kind={kind} running={running} />
           <span className="tool-sentence">
             <span className="tool-verb">{sentence.verb}</span>
@@ -231,7 +223,7 @@ const ToolRow = memo(function ToolRow({ item, workspace }: { item: ToolItem; wor
             ) : null}
           </div>
         ) : null}
-        <Collapse open={open}>
+        <Collapse open={open} unfurl>
           <div className="drow-body">
             {item.subagents ? (
               <AgentsCard item={item} renderItem={(it) => <ProcessItem item={it} workspace={workspace} />} />
@@ -920,7 +912,7 @@ function ProcessFold({
           <span>{thought}</span>
         </div>
       ) : null}
-      <Collapse open={open || single}>
+      <Collapse open={open || single} unfurl>
         <div className="process-body" id={bodyId}>
           {(() => {
             // The answer's own thought sits where the answer came, before any work that followed it.

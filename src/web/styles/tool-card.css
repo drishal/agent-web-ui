@@ -171,29 +171,6 @@
   border-radius: 0;
 }
 
-/* A lone call that opens as its own card unfurls: the row's surface grows to the card's
-   height (use-unfurl sets the height), so the header unrolls into the card instead of a
-   panel appearing under it. The body fades in behind the growing surface. */
-.tool-row .tool-line[data-morphing] {
-  overflow: hidden;
-  border-radius: var(--r-md);
-  transition: height 0.3s var(--ease-spring);
-}
-
-/* While the container's height morphs, the body's own grow must not double it: the collapse
-   holds its content at full extent (and off under reduced motion) so only the surface moves. */
-.tool-row .tool-line[data-morphing] .collapse {
-  grid-template-rows: 1fr;
-  transition: none;
-}
-.tool-row .tool-line[data-morphing] .collapse-inner {
-  opacity: 0;
-}
-.tool-row .tool-line[data-morphing] .collapse.is-open .collapse-inner {
-  opacity: 1;
-  transition: opacity 0.16s var(--ease-out) 0.08s;
-}
-
 .tool-row.is-failed {
   background: color-mix(in srgb, var(--danger) 7%, transparent);
 }

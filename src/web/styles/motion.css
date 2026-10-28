@@ -163,6 +163,32 @@
   overflow: hidden;
 }
 
+/* A tool card's body unfurls (Collapse.tsx): its measured height grows on --ease-spring, running a little past
+   the body and settling back, so a tall output gives more than a short one. The rows go to 1fr at once, so the
+   body is laid out whole and the moving edge uncovers it, never a blank surface that fills in afterwards; it
+   rides down from a little above as it is uncovered. Closing rolls it back up on the rows' plain ease, the fade
+   held back until the edge has started moving, so the surface never shrinks around nothing. The timings stay
+   within Collapse.tsx's COLLAPSE_MS. */
+.collapse.is-unfurl.is-open {
+  transition: opacity 0.12s var(--ease-out);
+}
+
+.collapse.is-unfurl:not(.is-open) {
+  transition:
+    grid-template-rows 0.24s var(--ease-out),
+    opacity 0.14s ease 0.1s;
+}
+
+.collapse.is-unfurl > .collapse-inner > * {
+  transform: translateY(-10px);
+  transition: transform 0.24s var(--ease-out);
+}
+
+.collapse.is-unfurl.is-open > .collapse-inner > * {
+  transform: none;
+  transition: transform 0.28s var(--ease-spring);
+}
+
 /* Done growing: a focus ring or a shadow at the edge is no longer clipped. */
 .collapse.is-settled > .collapse-inner {
   overflow: visible;
