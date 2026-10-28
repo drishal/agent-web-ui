@@ -10,6 +10,7 @@ import { addToDraft } from "../draft-bus.js";
 import { IconPlan, IconPlus, IconSearch } from "../icons.js";
 import { blanks, matchPrompts, promptGist } from "../prompt-blanks.js";
 import { removePrompt, savePrompt, useSavedPrompts } from "../saved-prompts.js";
+import { ConfirmButton } from "./ConfirmButton.js";
 import { Dialog } from "./Dialog.js";
 
 type Editing = { id: string | null; name: string; text: string };
@@ -156,9 +157,9 @@ export function SavedPromptsDialog({ draft, onClose }: { draft?: string; onClose
             ) : null}
             <div className="prompts-actions">
               {editing.id ? (
-                <button type="button" className="btn btn-small btn-ghost prompts-delete" disabled={busy} onClick={() => void remove()}>
-                  Delete
-                </button>
+                /* Delete is irreversible enough to ask, but the button asking "Sure?"
+                   in place is enough; no dialog. (confirm morph, A3) */
+                <ConfirmButton danger label={`Delete the prompt "${editing.name.trim() || "prompt"}"`} disabled={busy} className="btn btn-small btn-ghost prompts-delete" onConfirm={() => void remove()} />
               ) : null}
               <button
                 type="button"

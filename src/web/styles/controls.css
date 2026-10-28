@@ -146,3 +146,56 @@
   font-size: 0;
   vertical-align: middle;
 }
+
+/* ---- confirm morph ---------------------------------------------------------
+   The button's face turns into "Sure? ✓ ✕" in place (ConfirmButton): the box
+   widens to fit, the label swaps, and a pause or an Escape backs out. */
+
+.confirm-morph {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+  padding: 0 3px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--text-2);
+  background: var(--surface);
+  white-space: nowrap;
+  /* The ✓ and ✕ rise in under the label. */
+  animation: settle-in var(--dur-enter) var(--ease-out);
+}
+
+.confirm-morph-ask {
+  font-weight: 500;
+}
+
+.confirm-morph button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted-text);
+  cursor: pointer;
+}
+
+.confirm-morph button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.confirm-morph.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.confirm-morph.is-danger .confirm-morph-yes {
+  background: var(--danger);
+  color: var(--bg);
+}

@@ -360,3 +360,32 @@ test("a file dropped on the viewer is added to the project and opens", async ({ 
   await expect(viewer).toBeVisible();
   await expect(viewer).toContainText("dropped");
 });
+
+test("a saved prompt asks in place before it is deleted; Escape backs out", async ({ page }) => {
+  await signInAndOpen(page);
+  await openChat(page);
+  await box(page).fill("Delete-test prompt {{x}}");
+  await page.getByRole("button", { name: /^Stash/ }).click();
+  await page.getByRole("menuitem", { name: "Save the draft as a prompt…" }).click();
+  const manager = page.getByRole("dialog", { name: "Saved prompts" });
+  await manager.getByRole("textbox", { name: "Name" }).fill("delme");
+  await manager.getByRole("button", { name: "Save prompt" }).click();
+  await expect(manager.getByRole("list", { name: "Your saved prompts" })).toContainText("#delme");
+
+  // Clicking Delete doesn't: the button itself asks "Sure? ✓ ✕".
+  await manager.getByRole("button", { name: /Delete the prompt/ }).click();
+  const yes = manager.getByRole("button", { name: /Confirm: Delete the prompt/ });
+  await expect(manager.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(yes).toBeFocused();
+
+  // Escape backs out, leaving the prompt alone.
+  await page.keyboard.press("Escape");
+  await expect(manager.getByRole("button", { name: /Delete the prompt/ })).toBeVisible();
+  await expect(manager.getByRole("list", { name: "Your saved prompts" })).toContainText("#delme");
+
+  // And the ✓ actually deletes.
+  await manager.getByRole("button", { name: /Delete the prompt/ }).click();
+  await yes.click();
+  await expect(manager.getByRole("list", { name: "Your saved prompts" })).toContainText("None yet");
+  await page.keyboard.press("Escape");
+});
