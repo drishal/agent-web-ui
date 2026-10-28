@@ -1331,12 +1331,12 @@
   padding: 0;
 }
 
-
 /* A notice's disclosure (a memory recall, say) shares the tool rows' icon weight: the
-   bare ⓘ read fainter than Thought's filled spark, so the row looked shifted. */
+   bare ⓘ reads fainter than Thought's filled spark. */
 .notice-row.notice-detail .drow-lead {
   color: var(--text-2);
 }
+
 .notice-icon {
   display: inline-flex;
   padding-top: 2px;

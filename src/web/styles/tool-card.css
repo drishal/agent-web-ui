@@ -149,9 +149,12 @@
   border-top: 1px solid var(--hairline);
 }
 
-/* Everything in the card shares the header's gutter. */
+/* Everything in the card shares the header's gutter. A notice (a memory recall) and a request wrap their
+   disclosure row in their own element, so they are named here too, or they sit at the card's edge. */
 .process-card .process-body > .drow,
-.process-card .process-body > .process-step {
+.process-card .process-body > .process-step,
+.process-card .process-body > .notice-row,
+.process-card .process-body > .request-row {
   padding-inline: 12px;
 }
 

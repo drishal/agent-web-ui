@@ -1350,6 +1350,15 @@ test("an extension's message (a memory recall) shows as a labelled row, not its 
   // Closed, it is just its label; the text is one click away, without the envelope.
   await expect(row).toHaveText("Memory");
   await expect(page.getByText("<memory>")).toHaveCount(0);
+  // It sits in the card's gutter: its icon lines up with every other row's, not at the card's edge.
+  const centres = await page.locator(".process-card").filter({ has: row }).evaluate((card) =>
+    [...card.querySelectorAll(".process-body .drow-lead, .process-body .kind-chip")].map((n) => {
+      const box = n.getBoundingClientRect();
+      return Math.round(box.left + box.width / 2);
+    }),
+  );
+  expect(centres.length).toBeGreaterThan(1);
+  expect(new Set(centres).size).toBe(1);
   await row.getByRole("button").first().click();
   await expect(row).toContainText("Your memory book: notes about the user.");
   await expect(row).toContainText("- prefers tabs over spaces");
