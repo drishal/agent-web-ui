@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { InteractionAnswer, InteractionRequest } from "../../shared/protocol.js";
 import { useNow } from "../hooks.js";
-import { IconStop } from "../icons.js";
+import { IconCheck, IconStop, IconX } from "../icons.js";
+import type { FoldedRequest } from "../approval-fold.js";
 import { approvalAnswers, isApproval } from "../../shared/approval.js";
 import { choicesOf, splitStep } from "../questions.js";
 import { Dot } from "./Dot.js";
@@ -12,6 +13,26 @@ import { Dot } from "./Dot.js";
 function Countdown({ expiresAt }: { expiresAt: number }) {
   const now = useNow(true);
   return <span className="approval-countdown">{Math.max(0, Math.round((expiresAt - now) / 1000))}s</span>;
+}
+
+/**
+ * An answered request's last moment: the card has fallen away and one quiet
+ * line holds what was decided, its mark drawing itself. It leaves by itself;
+ * the conversation keeps the real record (the request row).
+ */
+export function ApprovalFolded({ folded, onDone }: { folded: FoldedRequest; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2600);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className={`approval-folded${folded.ok ? "" : " is-no"}`} role="status" data-testid="approval-folded">
+      <span className="approval-folded-mark" aria-hidden="true">
+        {folded.ok ? <IconCheck size={14} /> : <IconX size={14} />}
+      </span>
+      <span className="approval-folded-text">{folded.text}</span>
+    </div>
+  );
 }
 
 /** A question as a list: one row per option, numbered (1–9 pick it), its description under it. */

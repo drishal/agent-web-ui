@@ -20,7 +20,8 @@ import { UploadError, uploadToProject } from "../upload.js";
 import { canCaptureScreen, captureScreen } from "../screen-capture.js";
 import { ImageViewer, imageSize } from "./ImageViewer.js";
 import { load, save } from "../storage.js";
-import { ApprovalStack } from "./ApprovalStack.js";
+import { ApprovalFolded, ApprovalStack } from "./ApprovalStack.js";
+import { type FoldedRequest, foldRequest } from "../approval-fold.js";
 import { ChipEditor, type ChipEditorHandle } from "./ChipEditor.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { ContextRing } from "./ContextRing.js";
@@ -89,6 +90,7 @@ export function Composer({
   const [text, setText] = useState(() => load<string>(draftKey, ""));
   const [sending, setSending] = useState(false);
   const [answering, setAnswering] = useState(false);
+  const [folded, setFolded] = useState<FoldedRequest | null>(null);
   const { git, at: gitAt, refresh: refreshGit } = useGitStatus(chat.chatId, chat.status);
   const [gitOpen, setGitOpen] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
@@ -665,6 +667,7 @@ export function Composer({
           }}
         />
       ) : null}
+      {pending.length === 0 && folded ? <ApprovalFolded key={folded.id} folded={folded} onDone={() => setFolded(null)} /> : null}
       {pending.length > 0 ? (
         <ApprovalStack
           pending={pending}
@@ -675,6 +678,7 @@ export function Composer({
             setAnswering(true);
             await onAnswer(request.id, answer);
             setAnswering(false);
+            setFolded(foldRequest(request, answer));
           }}
         />
       ) : (

@@ -239,3 +239,69 @@
 .approval-editor {
   font-family: var(--font-mono);
 }
+
+/* The answered card's last moment (ApprovalFolded): it starts at a card's height, blurred and faint, and
+   glides down to one quiet line whose mark draws itself; it then leaves on its own. The conversation
+   keeps the real record. */
+.approval-folded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 6px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.86em;
+  animation:
+    approval-fold var(--dur-enter) var(--ease-out) both,
+    approval-fold-away 0.3s var(--ease-out) 2.3s forwards;
+}
+
+.approval-folded-mark {
+  display: inline-flex;
+  color: var(--ok);
+}
+
+.approval-folded.is-no .approval-folded-mark {
+  color: var(--warn);
+}
+
+.approval-folded-mark .icon path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: approval-draw 0.35s var(--ease-out) 0.12s forwards;
+}
+
+.approval-folded-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes approval-fold {
+  from {
+    max-height: 7rem;
+    opacity: 0.4;
+    filter: blur(5px);
+  }
+  to {
+    max-height: 2rem;
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes approval-fold-away {
+  to {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+  }
+}
+
+@keyframes approval-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
