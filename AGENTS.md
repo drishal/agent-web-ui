@@ -255,7 +255,7 @@ if every test passes.
   settles with it open), `midcompact` (compact inside a run, then carry on),
   `contended` (refuse a prompt while a run is going), `testrun` (a command
   printing a Vitest summary with one failure), `toolfail` (a command call that
-  errors). Add a word there when a
+  errors), `manycalls` (twelve quick reads, a run long enough to fold). Add a word there when a
   feature needs a new scenario,
   rather than mocking deeper.
 - **herdr** is a stand-in socket (`tests/helpers/fake-herdr.ts`): unit tests give

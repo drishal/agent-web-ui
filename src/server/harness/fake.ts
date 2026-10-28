@@ -15,6 +15,7 @@
 //   "contended" refuse a prompt because a run is going (pi's "already processing")
 //   "ticking" run a command whose output arrives a line at a time
 //   "testrun" run a command that prints a Vitest summary with one failing test
+//   "manycalls" twelve quick reads in a row (a run long enough to fold)
 //   "toolfail" a command call that fails (port in use), then the run carries on
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -544,6 +545,9 @@ class FakeLiveChat implements LiveChat {
         const lines = Array.from({ length: 6 }, (_, i) => ` ✓ tests/unit/step-${i + 1}.test.ts`);
         const updates = lines.map((_, i) => lines.slice(0, i + 1).join("\n"));
         await this.call({ name: "bash", args: { command: "npm test" }, output: `${updates[updates.length - 1]}\n\n Tests  6 passed (6)`, updates }, signal);
+      }
+      if (/\bmanycalls\b/i.test(text)) {
+        for (let n = 1; n <= 12; n++) await this.call({ name: "read", args: { path: `src/part-${n}.ts` }, output: `// part ${n}` }, signal);
       }
       if (/\btestrun\b/i.test(text)) {
         // A test run that ends with one failure, as Vitest prints it.

@@ -333,3 +333,35 @@
     transform: translateY(4px);
   }
 }
+
+/* "Show 7 more calls": the fold of a long run, a quiet full-width row between the ends. */
+.tool-more {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--drow-h) * var(--chat-scale));
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted-text);
+  font-size: calc(var(--chat-small) - 0.6px);
+  text-align: center;
+  transition: background-color var(--dur-hover) ease;
+}
+
+.tool-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.process-card .process-body > .tool-more {
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+}
+
+@media (pointer: coarse) {
+  .tool-more {
+    min-height: 44px;
+  }
+}

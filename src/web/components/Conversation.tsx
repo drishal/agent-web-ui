@@ -7,12 +7,13 @@ import { createContext, Fragment, memo, startTransition, useCallback, useContext
 import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, RequestItem, ToolCategory, ToolItem, UserItem } from "../../shared/protocol.js";
 import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
-import { findOffsets, foldsToOpen, stepMatch } from "../find.js";
+import { callsToShow, findOffsets, foldsToOpen, stepMatch } from "../find.js";
 import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { callTime, toolSentence } from "../tool-sentence.js";
 import { phaseDelay, workingPhase } from "../working-phase.js";
 import { retryLabel, retryPrompt, type RetryMode } from "../tool-retry.js";
+import { foldRun, moreLabel } from "../run-fold.js";
 import { iconStack, monogram, serverHue, toolKinds, usedLabel, type ToolKind } from "../tool-kinds.js";
 import { Dot } from "./Dot.js";
 import { Rolling } from "./Rolling.js";
@@ -780,6 +781,9 @@ function ProcessFold({
   const phase = useSteadyPhase(live ? workingPhase(turn, workspace) : "");
   const answerAt = segment ? segment.answerAt : turn.answerAt;
   const toolCount = items.filter((item) => item.kind === "tool").length;
+  // A long run shows its ends; the button (or Find, for the turn) shows the rest.
+  const [allShown, setAllShown] = useState(false);
+  const fold = foldRun(items, allShown || Boolean(folds[`${foldId}#all`] || folds[`${turn.id}#all`]));
   const stack = iconStack(toolKinds(items));
   const duration =
     turn.startedAt !== undefined ? formatDuration((turn.live ? now : (turn.endedAt ?? turn.startedAt)) - turn.startedAt) : null;
@@ -872,10 +876,16 @@ function ProcessFold({
                 {items.map((item, i) => {
                   const afterTool = seenTool;
                   if (item.kind === "tool") seenTool = true;
+                  const hiddenCalls = fold.more.get(i);
                   return (
                     <Fragment key={item.id}>
                       {i === answerAt ? answerThought : null}
-                      <ProcessItem item={item} workspace={workspace} afterTool={afterTool} thoughtOnly={segment !== undefined} />
+                      {hiddenCalls !== undefined ? (
+                        <button type="button" className="tool-more" onClick={() => setAllShown(true)}>
+                          {moreLabel(hiddenCalls)}
+                        </button>
+                      ) : null}
+                      {fold.hidden[i] ? null : <ProcessItem item={item} workspace={workspace} afterTool={afterTool} thoughtOnly={segment !== undefined} />}
                     </Fragment>
                   );
                 })}
@@ -1383,7 +1393,7 @@ export function Conversation({
   useEffect(() => {
     if (!searched) return;
     setDrawn((d) => (d.chatId === chatId && d.from === 0 ? d : { chatId, from: 0 }));
-    const open = foldsToOpen(turnsRef.current, searched);
+    const open = [...foldsToOpen(turnsRef.current, searched), ...callsToShow(turnsRef.current, searched)];
     if (open.length > 0) setOverrides((prev) => (open.every((id) => prev[id]) ? prev : { ...prev, ...Object.fromEntries(open.map((id) => [id, true])) }));
   }, [searched, chatId]);
   useEffect(() => {
