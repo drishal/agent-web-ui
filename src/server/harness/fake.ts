@@ -17,7 +17,7 @@
 //   "testrun" run a command that prints a Vitest summary with one failing test
 //   "manycalls" twelve quick reads in a row (a run long enough to fold)
 //   "toolfail" a command call that fails (port in use), then the run carries on
-//   "widethought" a call, thinking that narrates with a code line wider than the column, another call
+//   "widethought" a call, thinking shaped like narration with a code line wider than the column, another call
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -536,7 +536,7 @@ class FakeLiveChat implements LiveChat {
         await this.call({ name: "bash", args: { command: "sleep 1" }, output: "" }, signal);
       }
       if (/\bwidethought\b/i.test(text)) {
-        // A call, then a step that only thinks and reads as narration (drawn as Markdown in the card), then another call.
+        // A call, then a step that only thinks, shaped like narration (it still folds as a Thought), then another call.
         await this.call({ name: "bash", args: { command: "ls -l /sys/class/sound/card0" }, output: "card0 -> ../../devices/usb5/5-1.1/5-1.1:1.1/sound/card0" }, signal);
         await this.think(WIDE_THOUGHT, signal);
         await this.call({ name: "bash", args: { command: "udevadm info /sys/class/sound/card0" }, output: "E: ID_MODEL=ACCENTUM_Plus" }, signal);

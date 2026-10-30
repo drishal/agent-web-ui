@@ -62,20 +62,26 @@ test("an opened call is one tile: the sentence keeps its verb and facts, the bod
   await expect(row.getByTestId("tool-error")).toBeVisible();
 });
 
-test("a thought with a line wider than the card wraps inside it, once the card has opened and settled", async ({ page }) => {
+test("thinking shaped like narration folds as a Thought, and its wide line wraps inside the card once opened", async ({ page }) => {
   await signInAndOpen(page);
   await newChat(page);
-  // Two calls with narration between: the thought is drawn as Markdown, with a code line far wider than the column.
+  // Two calls with thinking between that has a list, bold, and a code line far wider than the column: still a thought.
   await sendAndWait(page, "widethought");
   const card = page.locator(".process-card").last();
   const toggle = card.getByTestId("process-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  const text = card.locator(".process-text");
-  await expect(text).toContainText("Key findings:");
-  // Settled, the body stops clipping; its column must still be the card's, the code line scrolling in its block.
-  await expect(card.locator(".collapse.is-settled")).toHaveCount(1);
-  const [cardWidth, textWidth] = await Promise.all([card.evaluate((el) => el.clientWidth), text.evaluate((el) => el.getBoundingClientRect().width)]);
-  expect(textWidth).toBeLessThanOrEqual(cardWidth);
+  await expect(card.locator(".process-text")).toHaveCount(0);
+  const thought = card.getByTestId("thought-row").filter({ hasText: "Key findings:" });
+  await expect(thought).toHaveCount(1);
+  const body = thought.locator(".thought-body");
+  await expect(body).toBeHidden();
+  await thought.getByRole("button").first().click();
+  await expect(body).toBeVisible();
+  // Settled (the card's fold and the thought's both), the bodies stop clipping; the thought's column must still be the card's.
+  await expect(card.locator(".collapse.is-unfurl.is-settled")).toHaveCount(1);
+  await expect(thought.locator(".collapse.is-settled")).toHaveCount(1);
+  const [cardWidth, bodyWidth] = await Promise.all([card.evaluate((el) => el.clientWidth), body.evaluate((el) => el.getBoundingClientRect().width)]);
+  expect(bodyWidth).toBeLessThanOrEqual(cardWidth);
 });
 
 test("a failed call tints its row with the reason, opens its card, and the tally goes to it", async ({ page }) => {

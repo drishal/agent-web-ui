@@ -339,26 +339,6 @@ export function readsAsReply(text: string): boolean {
   return t.length >= 280 || /\n\s*\n|^\s*(?:[-*+]|\d+[.)]|#{1,6}|\||```)\s?/m.test(t);
 }
 
-/**
- * A thinking blob that looks like prose meant for the user (a Kimi/omp stream
- * quirk sends narration on the thinking channel once a tool call interrupts):
- * markdown headings, numbered findings, links, or file paths, in sentences.
- * Deliberately conservative — plain analysis prose stays in the Thought fold.
- */
-export function readsAsNarration(thinking: string): boolean {
-  const lines = thinking.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return false;
-  let signals = 0;
-  if (lines.some((l) => /^#{1,6}\s+\S/.test(l))) signals += 2; // a markdown heading
-  if (lines.some((l) => /^\d+\.\s+\S+/.test(l))) signals += 2; // a numbered list
-  if (lines.some((l) => /https?:\/\/\S/.test(l))) signals += 2; // a URL
-  // A project file path (src/server/app.ts), not any "a/b": reasoning names paths too, so it only adds weight.
-  if (lines.some((l) => /(?:^|[\s`("'])(?:[\w.-]+\/)+[\w-]+\.[A-Za-z0-9]{1,8}\b/.test(l))) signals += 1;
-  if (lines.some((l) => /\*\*\S[^*]*\*\*/.test(l))) signals += 1; // bolded spans
-  if (lines.length >= 3) signals += 1; // multi-line prose block
-  return signals >= 3;
-}
-
 /** A live turn's latest thought as one line: the first sentence of the newest thinking (T3 Code's live row). */
 export function latestThought(turn: Turn): string | null {
   const steps = [...turn.process, ...(turn.answer ? [turn.answer] : []), ...turn.workAfter];

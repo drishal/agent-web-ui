@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../../src/shared/protocol.js";
-import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsNarration, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
+import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, modelName, modelSwitches, relativePath, saysSomething, latestThought, readsAsReply, workAfterSegment, workSegments, toolLabel } from "../../src/web/turns.js";
 
 const tool = (id: string, category: "read" | "edit" | "command", extra: Record<string, unknown> = {}): ChatItem => ({
   kind: "tool",
@@ -275,20 +275,6 @@ describe("stray text between tool calls", () => {
       { kind: "assistant", id: "a2", text: "\n\n\n", thinking: "", streaming: false },
     ];
     expect(buildTurns(items, "idle")[0]?.answer?.id).toBe("a1");
-  });
-});
-
-describe("narration-looking thinking", () => {
-  it("flags prose with headings, numbered findings, or links", () => {
-    expect(readsAsNarration("Three confirmed findings, all match earlier predictions\n\n1. **SERVER_MARKER is embedded** in the decoy page\n2. POST to /p_2x.png returns 404\n\nGET https://workers.dev/x returned empty")).toBe(true);
-    expect(readsAsNarration("## Summary\nI checked the call sites; see src/server/app.ts.")).toBe(true);
-  });
-  it("leaves plain chain-of-thought alone", () => {
-    expect(readsAsNarration("The user asks whether the marker check is enough. The request is risky.")).toBe(false);
-    expect(readsAsNarration("hmm, maybe the constraint is upstream")).toBe(false);
-    // A slash between words is no path, and a long thought that names a file is still a thought.
-    expect(readsAsNarration("The user has a gaming mouse/keyboard and a NixOS desktop.\nIdea: ask about rebuilds.\nBetter: a which-would-you-rather.\nLet me craft it.")).toBe(false);
-    expect(readsAsNarration("The handler lives in src/server/app.ts.\nIt reads the config first.\nSo the bug is upstream of the parse.")).toBe(false);
   });
 });
 

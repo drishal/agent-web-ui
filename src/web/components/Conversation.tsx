@@ -8,7 +8,7 @@ import type { AssistantItem, ChatItem, ChatStatus, ImageRef, NoticeItem, Request
 import { IconAlertCircle, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFile, IconFork, IconImage, IconInfo, IconLink, IconRefresh, IconSearch, IconSpark, IconUndo, IconWarning, IconX, RaySpinner, Spinner, ToolIcon } from "../icons.js";
 import { promptLink } from "../prompt-link.js";
 import { callsToShow, findOffsets, foldsToOpen, stepMatch } from "../find.js";
-import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, readsAsNarration, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
+import { buildTurns, changeStatLabel, countParts, countSummary, formatDuration, latestThought, modelName, modelSwitches, relativePath, sameChangeStat, saysSomething, toolLabel, type ChangeStat, type Turn, workAfterSegment, workSegments, type WorkSegment } from "../turns.js";
 import { useNow } from "../hooks.js";
 import { callTime, toolSentence } from "../tool-sentence.js";
 import { phaseDelay, workingPhase } from "../working-phase.js";
@@ -298,23 +298,16 @@ function RequestRow({ item }: { item: RequestItem }) {
   );
 }
 
-/** Thinking and interim text between tool calls. Pure thought stays in the thought fold; a thinking blob that reads as narration and arrived after a tool renders as plain text. */
-function ProcessAssistant({ item, afterTool, thoughtOnly = false }: { item: AssistantItem; afterTool: boolean; thoughtOnly?: boolean }) {
+/** Thinking and interim text between tool calls. Thinking always folds into a Thought row, however much it looks like prose. */
+function ProcessAssistant({ item, thoughtOnly = false }: { item: AssistantItem; thoughtOnly?: boolean }) {
   const arrival = useArrival(item.id);
   // A reply between tool calls is drawn as a reply after its stretch of work; here only its thought.
   const text = !thoughtOnly && saysSomething(item.text);
   const thinking = item.thinking.trim();
   if (!text && !thinking) return null;
-  const narrated = !text && afterTool && readsAsNarration(thinking);
   return (
     <div className={`process-step${arrival}`}>
-      {thinking ? narrated ? (
-        <div className="process-text">
-          <Markdown text={thinking} />
-        </div>
-      ) : (
-        <ThoughtRow thinking={thinking} streaming={item.streaming && !text} />
-      ) : null}
+      {thinking ? <ThoughtRow thinking={thinking} streaming={item.streaming && !text} /> : null}
       {text ? (
         <div className="process-text">
           <Markdown text={item.text} />
@@ -324,10 +317,10 @@ function ProcessAssistant({ item, afterTool, thoughtOnly = false }: { item: Assi
   );
 }
 
-export function ProcessItem({ item, workspace, afterTool = false, thoughtOnly = false }: { item: ChatItem; workspace: string; afterTool?: boolean; thoughtOnly?: boolean }) {
+export function ProcessItem({ item, workspace, thoughtOnly = false }: { item: ChatItem; workspace: string; thoughtOnly?: boolean }) {
   switch (item.kind) {
     case "assistant":
-      return <ProcessAssistant item={item} afterTool={afterTool} thoughtOnly={thoughtOnly} />;
+      return <ProcessAssistant item={item} thoughtOnly={thoughtOnly} />;
     case "tool":
       return <ToolRow item={item} workspace={workspace} />;
     case "notice":
@@ -919,12 +912,9 @@ function ProcessFold({
           {(() => {
             // The answer's own thought sits where the answer came, before any work that followed it.
             const answerThought = answerThinking ? <ThoughtRow thinking={answerThinking.thinking} streaming={answerThinking.streaming && !answerThinking.text} /> : null;
-            let seenTool = false;
             return (
               <>
                 {items.map((item, i) => {
-                  const afterTool = seenTool;
-                  if (item.kind === "tool") seenTool = true;
                   const hiddenCalls = fold.more.get(i);
                   return (
                     <Fragment key={item.id}>
@@ -934,7 +924,7 @@ function ProcessFold({
                           {moreLabel(hiddenCalls)}
                         </button>
                       ) : null}
-                      {fold.hidden[i] ? null : <ProcessItem item={item} workspace={workspace} afterTool={afterTool} thoughtOnly={segment !== undefined} />}
+                      {fold.hidden[i] ? null : <ProcessItem item={item} workspace={workspace} thoughtOnly={segment !== undefined} />}
                     </Fragment>
                   );
                 })}
